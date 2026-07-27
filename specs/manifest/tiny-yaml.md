@@ -20,6 +20,7 @@ access:
 
 features:
   kv: true
+  blobs: true
   realtime: true
 
 spa:
@@ -53,6 +54,9 @@ spa:
 - Unknown top-level keys are errors in V1 to catch typos.
 - `spa.fallback` must name a normal file in the uploaded release.
 - Enabling a capability that the server/operator disabled is an error.
+- `features.blobs` opts the app into the V1 lightweight app-shared blob
+  capability. It does not name a bucket, path, provider, endpoint, or
+  credential. Missing or `false` means blob routes deny before storage access.
 
 `features` is the V1 spelling for built-in capabilities. A later manifest
 version may add operator-approved external capability bindings. Those bindings

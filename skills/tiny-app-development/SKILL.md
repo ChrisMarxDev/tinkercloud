@@ -46,8 +46,22 @@ Viewer OTP requests (JSON or form) expose only an opaque transaction and the
 same generic accepted shape. Keep form fields bounded and escaped; verification
 atomically consumes the challenge and sets a host-only secure app cookie.
 At the disk write-stop watermark, expect app creation, deployment, and KV
-mutation to fail safely; static reads and revocations must still work. Cleanup
-is server-side, database-led, and never a reason to expose release paths.
+mutation and blob upload to fail safely; static/blob reads, deletion when safe,
+and revocations must still work. Cleanup is server-side, database-led, and never
+a reason to expose release or blob paths.
+V1 lightweight blobs are an opt-in app-shared capability with the same viewer
+authority model as KV. Use only opaque server-issued blob IDs: filenames are
+bounded display metadata, never paths or storage keys. Uploads stream into
+unreachable private staging and become readable only after exact byte evidence
+and SQLite metadata reach `ready`; uncertain, staging, deleting, orphaned, or
+metadata/storage-disagreeing state denies. Downloads stay behind the
+authenticated gateway with attachment, no-sniff, and private/no-store behavior.
+Never add a public/signed URL, app selector, bucket, mount, provider endpoint,
+or credential to the SDK. V1 uses the local adapter; FUSE/rclone/s3fs/
+Mountpoint, a standalone object-store server, and remote drivers remain out of
+scope. Before implementing or reporting blobs complete, follow
+`specs/capabilities/blob-contract.md`, run the two-app and partial-write failure
+matrix, update `features.blobs`, the SDK/examples, and every copied skill.
 Archive uploads use the configured archive byte limit, independently of the
 small JSON control-body limit. Keep deployment bundles streaming through a
 mode-0600 temporary file; use a fresh random idempotency key per deploy
@@ -159,7 +173,7 @@ signature verification as a routine update shortcut. Build the SDK artifact
 with the release task's temporary npm cache; do not depend on or mutate an
 operator's user-level package cache.
 SDK capability calls are same-origin and never accept an app ID or secret.
-Use capability discovery before KV or live work. Handle
+Use capability discovery before KV, blob, or live work. Handle
 `TinyVersionIncompatibleError` by upgrading `@tinyhost/sdk`; do not add an app
 selector or fall back to control credentials. Raw HTTP clients may omit the SDK
 version header, while a supplied unsupported major receives a typed upgrade

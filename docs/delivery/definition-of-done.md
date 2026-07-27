@@ -52,6 +52,20 @@
 - Tenant keys/indexes preserve app scope.
 - Roll-forward recovery is documented; destructive downgrade is not assumed.
 
+## Blob/storage change
+
+- SQLite catalog state and byte-store state have an explicit interruption
+  model; only ready metadata can serve bytes.
+- Uploads, downloads, and cleanup accept no app ID, filesystem path, storage
+  key, bucket, endpoint, public URL, or provider credential from app input.
+- Wrong-app, revoked, partial-write, quota/disk, cancellation, missing/corrupt
+  bytes, orphan, and metadata/storage disagreement cases fail closed.
+- Download headers prevent the supported API from treating uploaded active
+  content as an inline TinyHost app-origin document.
+- Local storage remains inside the configured private data directory; any
+  future remote adapter is direct and server-side, not a FUSE mount or browser
+  credential.
+
 ## Release candidate
 
 - All milestone exit gates pass.

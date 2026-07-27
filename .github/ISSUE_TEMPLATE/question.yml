@@ -1,7 +1,7 @@
 name: Question or support
 description: Ask for help using or understanding TinyHost
 title: "question: "
-labels: ["question", "needs-triage"]
+labels: ["question", "inbox"]
 body:
   - type: markdown
     attributes:

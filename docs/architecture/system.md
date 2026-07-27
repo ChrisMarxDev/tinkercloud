@@ -71,9 +71,10 @@ Request
        ├── static files
        ├── current user
        ├── JSON key-value store
+       ├── lightweight app-scoped blobs
        ├── authenticated WebSocket hub
        ├── OTP/session endpoints (special pre-auth routes)
-       └── later: blobs / backend proxy
+       └── later: backend proxy
 ```
 
 Authentication endpoints are intentionally reachable before a session exists,
@@ -105,6 +106,11 @@ data/
 │       └── <deployment-id>/       # immutable after validation
 ├── staging/
 │   └── <upload-id>/               # never served
+├── blobs/
+│   └── <app-id>/
+│       └── <blob-id>              # server-derived, ready metadata required
+├── blob-staging/
+│   └── <blob-id>                  # bounded, private, never served
 ├── keys/
 ├── update-rollback/                # bounded, internal upgrade recovery only
 └── tmp/                            # bounded, cleanup-safe work
@@ -114,6 +120,10 @@ The active deployment ID lives in SQLite. Static serving opens files from a
 validated release root identified by that record. A symlink is therefore not
 required for correctness; an optional pointer can remain an operational
 optimization.
+
+Blob listing, readiness, and quota state come from SQLite. The local byte store
+is addressed only by server-derived app/blob IDs; filenames remain display
+metadata. V1 does not mount remote storage or run a second object-store service.
 
 ## Concurrency model
 

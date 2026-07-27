@@ -134,10 +134,12 @@ and restored automatically if any gate fails.
 - V1 is a modular Go monolith distributed as one self-contained `tinyhost`
   server binary plus a separate small `tiny` deployer CLI.
 - V1 supports static apps, current-user/capability APIs, a deliberately small
-  JSON key-value store, and ephemeral app-scoped realtime channels.
+  JSON key-value store, lightweight app-shared local blobs, and ephemeral
+  app-scoped realtime channels.
 - The TypeScript client SDK is a first-class V1 product surface, not an optional
   wrapper around raw HTTP.
-- Blob storage and durable or multi-node realtime are post-V1.
+- Remote blob backends, public object URLs, and durable or multi-node realtime
+  are post-V1. V1 blobs stay private, local, bounded, and gateway-authorized.
 - Backend processes, arbitrary containers, custom app domains, and clustering
   are not V1 work.
 - The first deployment targets are clean, dedicated Hetzner Cloud Ubuntu 24.04

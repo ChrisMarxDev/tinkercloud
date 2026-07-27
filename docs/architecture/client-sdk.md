@@ -50,6 +50,11 @@ tiny.kv.set(key, value, options?)
 tiny.kv.delete(key, options?)
 tiny.kv.list({ prefix, limit, cursor })
 
+tiny.blobs.upload(file, options?)
+tiny.blobs.get(id, options?)
+tiny.blobs.list({ limit, cursor })
+tiny.blobs.delete(id, options?)
+
 tiny.live.channel(name).connect()
 tiny.live.channel(name).on(event, handler)
 tiny.live.channel(name).publish(event, payload)
@@ -69,6 +74,7 @@ The SDK calls same-origin reserved endpoints:
 ```text
 /_tiny/api/v1/me
 /_tiny/api/v1/kv/*
+/_tiny/api/v1/blobs/*
 /_tiny/api/v1/capabilities
 /_tiny/ws/v1
 ```
@@ -165,10 +171,13 @@ and redaction, and returns a bounded result.
   revocation, quotas, slow consumers, and reconnect recovery.
 - Browser tests cover cookies, redirects, CSP, network cancellation, and errors.
 - Two-app tests prove no SDK input can select another app.
+- Blob tests prove opaque server-issued IDs, app-shared authorization, bounded
+  streaming/cancellation, attachment-only downloads, quotas, and no
+  path/bucket/provider input.
 - Examples compile against the minimum supported TypeScript configuration.
 - A real-listener contract runs the built SDK through the composed gateway with
-  a host-derived app session; it covers identity, capabilities, KV CRUD,
-  cross-app denial, and compatibility errors.
+  a host-derived app session; it covers identity, capabilities, KV CRUD, blob
+  upload/get/list/delete, cross-app denial, and compatibility errors.
 - Bundle-size regression and dependency/license checks run in CI.
 - Distribution checks synchronize npm, JSR, and exported versions, inspect the
   exact package contents, and install/import the npm tarball offline.

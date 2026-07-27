@@ -2,8 +2,8 @@
 
 This contract defines the app-capability seam. The gateway constructs a typed
 authorization context after resolving the host, session, and current policy.
-KV, live, and capability dispatchers accept that context; callers never supply
-an app ID or viewer identity.
+KV, blob, live, and capability dispatchers accept that context; callers never
+supply an app ID or viewer identity.
 
 ## KV v1
 
@@ -42,11 +42,21 @@ an app ID or viewer identity.
   pong is closed no later than the configured idle bound. These controls do
   not create a delivery, replay, history, ordering, or durability guarantee.
 
+## Lightweight blobs v1
+
+The V1 blob surface is defined normatively in
+[`blob-contract.md`](blob-contract.md). It provides app-shared, opt-in,
+local-disk-backed upload/get/list/delete through opaque server-issued IDs.
+SQLite is the catalog and only ready metadata can serve bytes. There is no
+public URL, path, bucket, mount, provider credential, remote adapter, replace,
+resumable upload, inline-hosting promise, or per-viewer ACL in V1.
+
 ## Deny-path charter
 
-Anonymous/malformed authorization contexts, cross-app keys/channels, invalid
-JSON, over-limit values/lists, stale versions, reserved channels, and revoked
-sessions must fail without a mutation or delivery to another app.
+Anonymous/malformed authorization contexts, cross-app keys/blob IDs/channels,
+invalid JSON/blob metadata, over-limit values/uploads/lists, stale versions,
+reserved channels, and revoked sessions must fail without a mutation, byte
+disclosure, or delivery to another app.
 
 Live transport denial and failure charter: authentication and exact
 same-origin validation occur before the WebSocket upgrade; a missing or invalid
@@ -58,10 +68,11 @@ subscriber. Session, policy, and app revocation immediately close matching
 connections and a buffered inbound frame from that detached connection cannot
 publish afterward.
 
-A capability-disabled app must not use KV as an existence, timing, or prefix
-oracle: get, set, delete, and list deny before any repository call.
+A capability-disabled app must not use KV or blobs as an existence, timing,
+prefix, ID, or quota oracle: every operation denies before a repository or byte
+store call.
 
-Cookie-authenticated KV mutations and WebSocket upgrades require an exact
+Cookie-authenticated KV/blob mutations and WebSocket upgrades require an exact
 same-origin `Origin` header; GET remains usable without one. The gateway emits
 same-origin CSP (`default-src 'self'`, restricted `connect-src`, no object,
 base, or frame ancestors) and never emits wildcard CORS.
@@ -80,10 +91,11 @@ base, or frame ancestors) and never emits wildcard CORS.
   dependency and retry; they do not add an app ID or control-plane credential.
 
 The real-listener SDK contract test proves current user, current app,
-capability discovery, KV get/set/list/delete, typed error mapping, no
-caller-selected app, header negotiation, and the compatible raw/absent-header
-path. It uses a real gateway, authorization context, session, and app-scoped
-repository rather than a mocked fetch handler.
+capability discovery, KV get/set/list/delete, blob upload/get/list/delete, typed
+error mapping, no caller-selected app/storage key, header negotiation, and the
+compatible raw/absent-header path. It uses a real gateway, authorization
+context, session, app-scoped repositories, and byte store rather than a mocked
+fetch handler.
 
 ## Public example application contract
 
@@ -99,17 +111,23 @@ The repository ships three human-readable, deployable SDK examples:
   prefix aggregation, optimistic vote changes, deletion, and ephemeral live
   refresh hints.
 
+Before the V1 exit gate, one gallery example must also demonstrate blob
+capability discovery, bounded upload, attachment retrieval, cursor listing,
+deletion, cancellation, typed quota/error handling, and the local-disk
+durability disclaimer.
+
 Each example is an ordinary static TinyHost project with a private,
 owner-only-by-default `tiny.yaml`. Its explicit build step copies the built ESM
 SDK into the release and rewrites only the package import to that local file.
 The deployable release contains no remote script, CDN dependency, app ID,
 viewer token, deployer token, provider secret, or database credential.
 
-Examples discover capabilities before calling KV or live methods. A missing KV
-grant leaves the app unavailable without probing KV. A missing live grant
-degrades to explicit/manual refresh where the app can remain useful. Live
-events carry bounded hints only; rendering and reconnect recovery always read
-current KV. Every network-backed boot or refresh path accepts an
+Examples discover capabilities before calling KV, blob, or live methods. A
+missing KV/blob grant leaves that feature unavailable without probing its
+repository or byte store. A missing live grant degrades to explicit/manual
+refresh where the app can remain useful. Live events carry bounded hints only;
+rendering and reconnect recovery always read current KV. Every network-backed
+boot or refresh path accepts an
 `AbortSignal`, and typed errors show safe actionable copy plus a request ID
 when one exists.
 

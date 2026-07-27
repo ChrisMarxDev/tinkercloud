@@ -39,7 +39,7 @@
         <p class="eyebrow">Scope</p>
         <ul>
           <li>Browser-first TypeScript and ESM package.</li>
-          <li>Current user, JSON KV, realtime, app info, and capability discovery.</li>
+          <li>Current user, JSON KV, lightweight blobs, realtime, app info, and capability discovery.</li>
           <li>Typed errors, cancellation, versions, and limits.</li>
           <li>Framework-neutral, tree-shakeable runtime.</li>
           <li>Executable examples and agent-skill integration.</li>
@@ -65,6 +65,7 @@ const item = await tiny.kv.get("reviews/42");
 await tiny.kv.set("reviews/42", next, {
   expectedVersion: item?.version,
 });
+const attachment = await tiny.blobs.upload(file);
 
 tiny.live.onKvChange({ prefix: "reviews/" }, refresh);
 const enabled = await tiny.capabilities.list();</pre>

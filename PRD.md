@@ -111,8 +111,8 @@ using stricter app ownership and per-app access rules.
    assembling Docker, a reverse proxy, a database service, or an auth provider.
 2. A deployer can publish a protected static app with one command.
 3. A non-technical viewer can authenticate by email and access only allowed apps.
-4. A static app can identify its viewer and persist app-scoped data through one
-   typed SDK.
+4. A static app can identify its viewer and persist app-scoped JSON state and
+   bounded files through one typed SDK.
 5. A static app can subscribe and publish app-scoped live events without
    provisioning a backend.
 6. A coding agent can build, deploy, and independently verify an app using
@@ -134,7 +134,7 @@ These are release gates, not aspirational analytics:
   failure cases.
 - Failed self-update health gate: prior healthy binary/state automatically
   restored.
-- Cross-app isolation matrix: zero unauthorized reads or writes.
+- Cross-app KV/blob isolation matrix: zero unauthorized reads or writes.
 - Every public SDK method has compiled examples and an agent-skill reference.
 - Wrong-app, revoked, suspended, and anonymous WebSocket attempts never establish
   a usable channel.
@@ -191,6 +191,8 @@ can be established through local test and release evidence.
 - Current app information and capability discovery.
 - Current viewer identity.
 - Rudimentary app-scoped JSON key-value storage.
+- Lightweight app-scoped blob storage with bounded upload, download, list,
+  metadata, and delete operations backed by the private local data directory.
 - App-scoped WebSocket channels and KV change events.
 - Typed errors, versions, limits, cancellation, and compiled examples.
 - No SDK secret, database credential, app ID, viewer token, or deployer token.
@@ -207,14 +209,13 @@ can be established through local test and release evidence.
 ### 5.2 Explicitly excluded from V1
 
 - Arbitrary backend processes, containers, serverless functions, cron, or jobs.
-- Blob/file upload capability.
 - LLM, Jira, data warehouse, or internal-service adapters.
 - Operator/provider secret management beyond TinyHost’s own required secrets.
 - Generic authenticated HTTP proxy or raw secret injection.
 - Custom domains per app.
 - Teams, organizations, advanced roles, billing, marketplace, or discovery.
 - Multi-node operation, clustering, high availability, external PostgreSQL,
-  Redis, queues, or object storage.
+  Redis, queues, or remote object-storage backends.
 - Operator backups, remote disaster recovery, or durability guarantees suitable
   for business-critical apps.
 - Docker as the primary installation.
@@ -225,8 +226,8 @@ can be established through local test and release evidence.
 ### 5.3 Product disclaimer
 
 V1 is for replaceable toy, prototype, and utility applications. Losing the VPS
-can lose app releases and KV state. The UI and documentation must state this
-before operators or deployers store important data.
+can lose app releases, KV state, and blobs. The UI and documentation must state
+this before operators or deployers store important data.
 
 ## 6. Actors and permissions
 
@@ -597,7 +598,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-SDK-002:** The core SDK MUST be browser-first TypeScript, ESM,
   framework-neutral, tree-shakeable, and dependency-light.
 - **FR-SDK-003:** The SDK MUST expose current user, app information, capability
-  discovery, KV, and live channels.
+  discovery, KV, blobs, and live channels.
 - **FR-SDK-004:** The SDK MUST use same-origin relative endpoints.
 - **FR-SDK-005:** The SDK MUST NOT accept an app ID or any database/provider/
   platform secret.
@@ -653,7 +654,46 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-LIVE-010:** Origin, session, policy, and channel tests MUST cover the
   upgrade and ongoing message lifecycle.
 
-### 8.12 Admin and deployer web UI
+### 8.12 Lightweight blob capability
+
+- **FR-BLOB-001:** The SDK MUST expose bounded `upload`, `get`, `list`, and
+  `delete` operations. V1 has no replace, folders, public/signed URLs,
+  resumable/multipart upload, transformations, thumbnails, search, or
+  per-viewer ACL model.
+- **FR-BLOB-002:** The app ID, viewer identity, and storage key MUST be derived
+  by the server. Callers supply display metadata and bytes, never an app ID,
+  filesystem path, bucket, endpoint, or storage credential.
+- **FR-BLOB-003:** A blob belongs to one app-wide shared namespace, matching V1
+  KV semantics. Every currently authorized viewer of an app with the enabled
+  blob capability may upload, read, list, and delete blobs in that app.
+- **FR-BLOB-004:** Blob IDs MUST be opaque and server-issued. Original
+  filenames are bounded display metadata only and MUST NOT participate in
+  filesystem path construction or authorization.
+- **FR-BLOB-005:** Uploads MUST stream through private bounded staging and
+  become readable only after byte storage and SQLite metadata reach a committed
+  `ready` state. Partial, staging, deleting, orphaned, or inconsistent records
+  MUST never be served.
+- **FR-BLOB-006:** Downloads MUST pass through the authenticated gateway and
+  use attachment-oriented, no-sniff response handling. V1 exposes no raw
+  filesystem, mount, bucket, or independently usable object URL.
+- **FR-BLOB-007:** Per-file bytes, total app bytes, object count, list page,
+  metadata, upload rate, and request duration MUST be bounded. Disk write-stop
+  and storage-source failure deny upload without blocking safe reads or
+  revocation.
+- **FR-BLOB-008:** Every metadata lookup and storage key MUST begin from the
+  server-derived app ID. Cross-app reads, lists, deletes, guessed IDs, and
+  client-selected keys MUST fail at gateway, service, repository, and storage
+  layers.
+- **FR-BLOB-009:** Cleanup and crash recovery MUST reconcile SQLite and storage
+  from server-derived IDs, never a client path. An unavailable backend or
+  disagreement fails closed and remains diagnosable without revealing private
+  paths or provider details.
+- **FR-BLOB-010:** V1 uses a private local-filesystem storage adapter behind a
+  narrow internal blob-store interface. FUSE mounts, a second storage server,
+  remote object stores, provider credentials, and cloud durability claims are
+  excluded from V1.
+
+### 8.13 Admin and deployer web UI
 
 - **FR-UI-001:** UI MUST use embedded server-rendered HTML with minimal local
   JavaScript.
@@ -668,7 +708,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-UI-006:** Destructive or access-broadening actions MUST show the exact
   target and require confirmation.
 
-### 8.13 Agent skills
+### 8.14 Agent skills
 
 - **FR-SKILL-001:** The repository MUST first create one generic Tiny platform
   skill containing the canonical shared principles, SDK/capability model,
@@ -1050,6 +1090,10 @@ values require benchmark validation:
 | KV JSON value | 64 KiB |
 | KV keys per app | 10,000 |
 | KV total per app | 100 MB |
+| Blob file | 25 MB |
+| Blob objects per app | 1,000 |
+| Blob total per app | 250 MB |
+| Blob list page | 100 |
 | WebSocket connections per app | 100 |
 | WebSocket connections per viewer/app | 5 |
 | Subscriptions per connection | 32 |
@@ -1278,20 +1322,22 @@ Deliver:
 Exit: `tiny deploy` returns a working protected URL; attack corpus and
 interruption recovery pass.
 
-### M4 — SDK, KV, and realtime
+### M4 — SDK, KV, lightweight blobs, and realtime
 
 Deliver:
 
 - current viewer/app;
 - capability discovery;
 - rudimentary versioned JSON KV;
+- bounded app-scoped blob upload, download, list, metadata, and delete backed by
+  the private local data directory;
 - in-memory app-scoped WebSocket channels and KV change events;
 - TypeScript SDK and examples;
 - generic platform skill followed by self-contained specialized skill copies.
 
-Exit: two-app KV/live isolation, quotas/conflicts, reconnect/current-state
-recovery, revocation disconnects, browser security, SDK compatibility, and skill
-tasks pass.
+Exit: two-app KV/blob/live isolation, quotas/conflicts, partial-write and
+storage-disagreement recovery, reconnect/current-state recovery, revocation
+disconnects, browser security, SDK compatibility, and skill tasks pass.
 
 ### M5 — Operable Hetzner-first release
 
@@ -1309,39 +1355,32 @@ security matrix, and release checklist pass.
 
 ## 21. Post-V1 direction
 
-### 21.1 First post-V1 milestone — app-scoped blob/file storage
+### 21.1 Blob backend extensions
 
-Blob/file storage is the committed first slice after the M0–M5 V1 exit gate.
-It deliberately uses the TinyHost server's private local data directory rather
-than adding object storage or a second storage service. High throughput,
-multi-node distribution, and business-critical durability are not goals.
+V1 deliberately ships only the private local-filesystem blob adapter. A later
+usage-driven extension may add a direct S3-compatible adapter behind the same
+internal blob-store interface. It must use object operations rather than
+presenting remote object storage as a mounted POSIX filesystem, and it must not
+make a provider bucket, object URL, endpoint, or credential browser-visible.
 
-The first slice provides bounded streaming upload, download, list, metadata,
-and deletion through the typed SDK. Blob identity, app identity, and viewer
-authority are server-derived; every operation passes through the gateway and
-the typed authorization boundary. Blob bytes live in an app-scoped private
-filesystem namespace, metadata and quota state live in SQLite, and no raw
-filesystem path, alternate listener, or independently guessable public URL is
-exposed.
-
-Before implementation, add a technology-neutral blob capability contract and
-deny charter covering anonymous, wrong-app, revoked, malformed, oversized,
-quota-exceeded, partial-write, disk-pressure, and metadata/filesystem
-disagreement paths. Failure preserves the prior valid state, temporary files
-remain unservable, and cleanup never accepts a client-controlled path.
+FUSE mounts and standalone object-store servers remain outside the supported
+TinyHost topology. They add a service/mount lifecycle and weaker filesystem
+semantics without changing the gateway authorization, SQLite metadata, quota,
+or reconciliation work TinyHost must perform itself.
 
 ### 21.2 Later candidates
 
 Rank after usage evidence:
 
-1. Durable realtime history/replay or multi-node fan-out if usage demands it.
-2. Operator-governed LLM capability.
-3. Central SSO exchange.
-4. Wildcard DNS-provider adapters.
-5. Temporary invitations and groups.
-6. Internal/Jira/data-warehouse capability adapters.
-7. Operator backups and disaster recovery.
-8. Backend runtime only through a separate security concept.
+1. Direct S3-compatible blob-store adapter if local-disk limits become real.
+2. Durable realtime history/replay or multi-node fan-out if usage demands it.
+3. Operator-governed LLM capability.
+4. Central SSO exchange.
+5. Wildcard DNS-provider adapters.
+6. Temporary invitations and groups.
+7. Internal/Jira/data-warehouse capability adapters.
+8. Operator backups and disaster recovery.
+9. Backend runtime only through a separate security concept.
 
 Future provider access follows:
 
@@ -1365,23 +1404,31 @@ No blocking product questions remain for the manual implementation handoff.
 ### D1 — V1 delivery scope
 
 Implement milestones M0–M5. V1 includes the secure static platform, rudimentary
-KV, and realtime WebSocket channels. It excludes blobs, external provider
-capabilities, backups, and backend runtimes.
+KV, lightweight local blob storage, and realtime WebSocket channels. It excludes
+remote blob backends, external provider capabilities, backups, and backend
+runtimes.
 
-### D2 — V1 public data API
+### D2 — V1 public data APIs
 
-Expose a deliberately small KV API:
+Expose deliberately small KV and blob APIs:
 
 ```ts
 await tiny.kv.set("poll/options", options);
 const current = await tiny.kv.get("poll/options");
 const page = await tiny.kv.list({ prefix: "poll/", limit: 100 });
 await tiny.kv.delete("poll/options", { expectedVersion: current.version });
+
+const stored = await tiny.blobs.upload(file);
+const downloaded = await tiny.blobs.get(stored.id);
+const blobs = await tiny.blobs.list({ limit: 100 });
+await tiny.blobs.delete(stored.id);
 ```
 
 Values are JSON, mutations are versioned, and list is prefix/cursor/limit
 bounded. There are no collections, schemas, joins, filters, or arbitrary
-queries in V1.
+queries in V1. Blob IDs are opaque and server-issued; names are display metadata
+only. Blobs are app-shared, immutable after upload, attachment-oriented on
+download, local-disk backed, and cursor/size/count/quota bounded.
 
 ### D3 — Public apps
 
@@ -1487,11 +1534,15 @@ configuration.
 - [ ] Cross-app HTTP/service/repository matrix passes.
 - [ ] Restart/interruption recovery is deterministic for every durable state.
 
-### SDK, KV, and realtime
+### SDK, KV, lightweight blobs, and realtime
 
 - [ ] App can read viewer/app/capability information through the SDK.
 - [ ] KV supports app-scoped get/set/delete/prefix-list, version conflicts, and
       enforced limits.
+- [ ] Blobs support app-scoped upload/get/list/delete with opaque IDs, bounded
+      local storage, attachment downloads, and partial-write recovery.
+- [ ] Cross-app, revoked, disk-stop, and metadata/storage disagreement blob
+      tests expose zero unauthorized or uncertain bytes.
 - [ ] Authenticated sockets support app channels and KV change events.
 - [ ] Revocation closes affected live connections; reconnect recovers through
       a KV read, never replay.
@@ -1502,8 +1553,8 @@ configuration.
 ### Security and release
 
 - [ ] Route registry proves every surface is classified.
-- [ ] Anonymous-denial matrix covers HTML, assets, fallback, API, WebSocket,
-      and reserved routes.
+- [ ] Anonymous-denial matrix covers HTML, assets, fallback, KV/blob API,
+      WebSocket, and reserved routes.
 - [ ] Host/path/manifest/archive fuzz targets pass.
 - [ ] Race detector and relevant failure injection pass.
 - [ ] Logs/audit pass secret scanning.

@@ -114,11 +114,13 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   independent disk write gate, and rendering the chart performs no mutation.
 - Resource limits default to: 20 apps/deployer, 100 MiB archive, 250 MiB
   expanded release, 10,000 files, 50 MiB file, 20 deployment attempts/hour,
-  10 inactive releases plus the active release, and 80%/90% disk watermarks.
+  10 inactive releases plus the active release, 25 MB/blob, 1,000 blobs/app,
+  250 MB total blobs/app, and 80%/90% disk watermarks.
   Configuration may tune these only inside the server's bounded V1 ranges.
 - At the 90% critical disk watermark, app creation, new deployment creation,
-  and KV mutation deny closed. Existing authorized static reads, session
-  revocation, policy revocation, and suspension remain available.
+  KV mutation, and blob upload deny closed. Existing authorized static/blob
+  reads, blob deletion when safe, session revocation, policy revocation, and
+  suspension remain available.
 - Cleanup selects only database-derived, inactive immutable release hashes;
   it never accepts a client path, never deletes the active release, retains at
   least one recovery release, and leaves metadata intact if deletion fails.

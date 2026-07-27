@@ -29,6 +29,8 @@
 | [0027](0027-immutable-deployment-descriptions-and-stable-launch.md) | Immutable deployment descriptions and stable dashboard launch | Accepted |
 | [0028](0028-operator-supplied-tls-for-vpn-only.md) | Operator-supplied TLS for the first VPN-only topology | Accepted post-V1 direction |
 | [0029](0029-updater-candidate-doctor-rollback-snapshot.md) | Candidate doctor tolerates only its expected rollback snapshot | Accepted for V1 |
+| [0030](0030-v1-lightweight-local-blob-storage.md) | Lightweight local blob storage behind a provider-neutral seam | Accepted for V1 |
+| [0031](0031-trusted-issue-loop-draft-prs.md) | Trusted issue loop proposes changes through draft pull requests | Accepted for repository delivery |
 
 ## Decision rule
 

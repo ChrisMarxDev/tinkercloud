@@ -55,8 +55,10 @@ Teaches an agent to:
 7. build a static artifact;
 8. run local contract checks.
 
-It includes KV state-recovery and ephemeral realtime guidance: socket events
-are hints, while current KV state is authoritative.
+It includes KV state-recovery, lightweight blob, and ephemeral realtime
+guidance: socket events are hints, current KV state is authoritative, and blobs
+use opaque IDs plus bounded app-shared local storage rather than paths, mounts,
+buckets, public URLs, or browser credentials.
 
 ## `tiny-deploy`
 

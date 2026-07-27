@@ -86,12 +86,21 @@ feature without changing release identity.
 app_kv
   app_id, key, value_json, version, size_bytes, created_at, updated_at
 
+app_blobs
+  id, app_id, state, display_name, content_type, size_bytes, content_hash,
+  created_by_identity_id, created_at, updated_at
+
 app_quota_usage
   app_id, metric, used, limit, measured_at
 ```
 
 The `app_kv` primary key is `(app_id, key)`. Repository APIs
 bind it from `AuthorizationContext`.
+
+The blob catalog is also app-scoped. Only `ready` rows are listable/readable;
+`staging` and `deleting` rows are recovery state. Byte-store keys are derived
+from `(app_id,id)` and never accepted from a request. SQLite listing avoids
+depending on local-directory or future object-provider listing semantics.
 
 Realtime subscriptions and events are intentionally absent from the durable
 model. The V1 hub is in memory; a committed KV write emits a best-effort change

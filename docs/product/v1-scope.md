@@ -19,7 +19,7 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 |---|---|---|
 | Secure gateway | Host resolution, OTP, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
 | Deployment | Deployer login, archive upload, validation, immutable release, atomic activation, rollback | One command returns a verified protected URL |
-| App primitives | First-class TypeScript SDK, capability discovery, current-user, JSON KV, and ephemeral realtime | A static app persists current state and receives live notifications without auth or database ceremony |
+| App primitives | First-class TypeScript SDK, capability discovery, current-user, JSON KV, lightweight local blobs, and ephemeral realtime | A static app persists current state and bounded attachments and receives live notifications without auth, database, bucket, or mount ceremony |
 | Operations | Hetzner-first setup, status, administration, signed update/rollback | Operator initializes a clean VPS with one command |
 | Hardening | Rate limits, fuzzing, failure injection, resource limits, reproducible release | Security and recovery gates are repeatable |
 
@@ -28,9 +28,10 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 The first production-capable cut should not implement every initially proposed
 primitive at once.
 
-- **Ship a tiny KV primitive and ephemeral realtime together.** KV remains the
-  source of truth; sockets provide the immediate, collaborative feeling without
-  promising history, replay, or multi-node fan-out.
+- **Ship tiny KV, lightweight local blobs, and ephemeral realtime together.**
+  KV remains current JSON state, blobs hold bounded app-shared attachments, and
+  sockets provide the immediate collaborative feeling without promising
+  history, replay, multi-node fan-out, public files, or remote durability.
 - **Ship one-time codes before polishing magic-link exchange.** Codes work across
   devices and avoid redirect-state complexity.
 - **Use server-rendered operator/deployer pages.** The gateway, deployment
@@ -46,7 +47,8 @@ primitive at once.
 - App-scoped opaque viewer sessions.
 - Scoped deployer/API tokens with hashed-at-rest secrets.
 - Static archive deployment and SPA fallback.
-- Current-user, bounded JSON KV, and app-scoped WebSocket APIs.
+- Current-user, bounded JSON KV, app-shared local blob, and app-scoped
+  WebSocket APIs.
 - Browser-first `@tinyhost/sdk` and app capability discovery.
 - Local audit events, structured operational logs, and bounded retention.
 - Signed self-update with health verification and local update rollback state.
@@ -58,6 +60,8 @@ primitive at once.
 - Multi-node operation, high availability, external PostgreSQL, or distributed
   queues.
 - Public object URLs, direct bucket access, or browser-visible platform secrets.
+- Remote blob backends, FUSE mounts, standalone object-store services,
+  resumable uploads, transformations, and per-viewer blob ACLs.
 - General-purpose database features for apps.
 - Durable event history, replay guarantees, ordered delivery, or multi-node
   realtime.

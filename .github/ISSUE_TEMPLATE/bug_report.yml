@@ -1,7 +1,7 @@
 name: Bug report
 description: Report a reproducible TinyHost defect
 title: "bug: "
-labels: ["bug", "needs-triage"]
+labels: ["bug", "inbox"]
 body:
   - type: markdown
     attributes:

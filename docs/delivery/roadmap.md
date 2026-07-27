@@ -9,8 +9,8 @@ the implementing team after spikes.
 Outcome: an authenticated operator can use the admin board to see and manage
 the complete set of normalized email identities allowed to deploy apps,
 including authorizing an email that has never signed in. This is the next
-implementation priority. It is followed by the M5 host resource overview and
-then the planned M5 guided operator setup.
+implementation priority. It is followed by the M4 lightweight blob capability,
+the M5 host resource overview, and then the planned M5 guided operator setup.
 
 Trust boundary and ownership:
 
@@ -56,6 +56,30 @@ Exit evidence:
   unchanged; and
 - suspension or revocation denies the deployer's next control request and does
   not resurrect prior credentials when re-authorized.
+
+## Cross-cutting delivery evidence — trusted GitHub issue loop
+
+Outcome: written GitHub issues can be triaged, planned, and—after explicit
+trusted maintainer approval—implemented by a recurring agent into a draft pull
+request without granting merge or release authority.
+
+Evidence implemented:
+
+- issue forms place written reports in `inbox`; there is no in-app feedback
+  source or special feedback label in this slice;
+- deterministic prefetch exits without a model call for an empty queue,
+  `open` alone, untrusted `implement`, or any `pending` issue;
+- approval is derived from the current `implement` label event actor and a
+  configured maintainer allowlist;
+- one approved issue maps to one `feature/issue-*` branch and draft PR, never a
+  direct implementation push to `main`; and
+- fake-GitHub deny tests cover empty, intake, open-only, trusted approval,
+  untrusted approval, event lookup failure, and pending precedence.
+
+Contract:
+[`specs/delivery/github-issue-loop-contract.md`](../../specs/delivery/github-issue-loop-contract.md).
+Decision:
+[`docs/decisions/0031-trusted-issue-loop-draft-prs.md`](../decisions/0031-trusted-issue-loop-draft-prs.md).
 
 ## M0 — Architecture proving ground
 
@@ -210,15 +234,17 @@ Exit gate:
 - restart at each transition recovers deterministically;
 - CLI refuses success when an anonymous probe retrieves content.
 
-## M4 — SDK, KV, and realtime
+## M4 — SDK, KV, lightweight blobs, and realtime
 
-Outcome: a static app can identify the viewer, persist scoped JSON values, and
-react to app events immediately.
+Outcome: a static app can identify the viewer, persist scoped JSON values and
+bounded files, and react to app events immediately.
 
 Components:
 
 - current-user API;
 - bounded V1 JSON KV model with versions, prefix listing, and quotas;
+- bounded app-scoped blob upload, download, list, metadata, and delete backed
+  by the private local data directory;
 - single-node in-memory realtime hub with custom channels and KV change events;
 - first-class TypeScript/browser SDK and capability discovery;
 - CSP/CORS/CSRF browser tests.
@@ -250,10 +276,71 @@ credential-like browser configuration. Every live flow rereads current KV
 after events, reconnects, and visible-tab recovery rather than claiming replay
 or delivery history.
 
+### Planned M4 slice — lightweight app-scoped blobs
+
+Outcome: an authenticated static app can store and retrieve small attachments
+through `@tinyhost/sdk` without operating a bucket, mount, storage server, or
+backend process.
+
+Contract and decision:
+
+- implement
+  [`specs/capabilities/blob-contract.md`](../../specs/capabilities/blob-contract.md)
+  and ADR
+  [`0030`](../decisions/0030-v1-lightweight-local-blob-storage.md);
+- update `tiny.yaml`, capability discovery, the sealed authorization context,
+  gateway route registry, HTTP contract, SDK, examples, and self-contained
+  TinyHost skills together;
+- use a narrow internal streaming blob-store interface with a private local
+  adapter for V1; and
+- spike a small native local adapter against Go CDK `blob`/`fileblob` before
+  accepting a new security-critical dependency. Do not add FUSE, rclone,
+  s3fs, Mountpoint, MinIO, a remote driver, or a second listener in V1.
+
+Vertical path:
+
+- add an opt-in `features.blobs` manifest capability, disabled by default;
+- add SQLite-owned `staging`, `ready`, and `deleting` metadata plus exact
+  app-scoped quota accounting;
+- stream each upload into unreachable private storage under a server-issued
+  blob ID, making it readable only after storage close/sync and the `ready`
+  metadata commit;
+- expose app-shared SDK `upload`, `get`, bounded `list`, and `delete` methods
+  using same-origin viewer sessions and no app ID, path, key, bucket, URL, or
+  credential input;
+- serve downloads only through the authenticated gateway with attachment,
+  no-sniff, and private/no-store behavior; and
+- reconcile interrupted staging/deleting rows, unreachable orphans, and
+  missing/corrupt ready bytes from server-derived IDs without serving uncertain
+  state.
+
+Default product bounds are 25 MB per blob, 1,000 blobs and 250 MB total per app,
+and 100 records per list page. Upload concurrency/rate, metadata, filename,
+content type, and duration are also finite.
+
+Exit evidence:
+
+- anonymous, wrong-app, revoked, suspended, capability-disabled, malformed,
+  oversized, quota-exceeded, disk-stop, and cross-origin mutations produce no
+  ready blob and expose zero bytes;
+- interruption and injected short-write, close/sync/rename, SQLite, disk-source,
+  and metadata/storage disagreement failures never serve a partial or foreign
+  blob and reconcile exact quotas;
+- every repository lookup and storage key begins with the server-derived app
+  identity, while filenames remain display metadata only;
+- a two-app real-gateway and SDK matrix proves upload/get/list/delete isolation,
+  typed errors, cancellation, bounded pagination, and no inline uploaded
+  document execution; and
+- app deletion, cleanup, SDK examples, manifest verification, and agent skills
+  include blobs before the V1 exit gate can pass.
+
 Exit gate:
 
-- two-app isolation matrix passes at HTTP and repository layers;
+- two-app KV/blob isolation matrix passes at HTTP, repository, storage, and SDK
+  layers;
 - quota and concurrency conflicts are deterministic;
+- partial blob uploads and metadata/storage disagreement fail closed and
+  recover without serving uncertain bytes;
 - unauthorized upgrades fail and revocation closes affected connections;
 - reconnecting clients can recover by rereading current KV state;
 - SDK contains no long-lived secret or selectable app ID.
@@ -448,60 +535,17 @@ VPN membership must not replace TinyHost app identity, session, or policy
 checks. Users retain TinyHost email OTP login and per-app authorization in the
 first VPN-only mode; central SSO remains a separate later candidate. This work
 is not authorized to weaken the M5 public proof and is not scheduled ahead of
-the committed M6 blob slice.
-
-## M6 — App-scoped local blob storage
-
-Outcome: immediately after the V1 M0–M5 exit gate, a static app can upload,
-download, list, inspect, and delete bounded files through `@tinyhost/sdk`
-without provisioning object storage or another server.
-
-Components:
-
-- a technology-neutral blob capability contract and deny charter;
-- an ADR fixing the local-disk persistence, atomic commit, cleanup, and
-  metadata/filesystem recovery model;
-- streaming gateway handlers requiring the typed authorization context;
-- app-scoped metadata and quota state in SQLite;
-- private local blob and staging namespaces under the TinyHost data directory;
-- typed SDK operations with cancellation, bounded metadata, and actionable
-  quota/disk-pressure errors; and
-- cleanup and disagreement recovery that never accepts a client path or serves
-  a partial file.
-
-Constraints:
-
-- local VPS disk is the only blob byte store for this slice; high throughput,
-  multi-node distribution, object storage, and business-critical durability are
-  explicit non-goals;
-- blob/app/viewer identity is server-derived on every operation;
-- no second file server, raw filesystem URL, public listener, selectable app
-  ID, or browser-visible storage credential is introduced;
-- uploads stream into private staging, validate size/quota/metadata, and become
-  readable only through an atomic committed metadata-and-file state; and
-- disk warning/write-stop policy, app suspension, policy/session revocation,
-  quotas, audit, and cleanup apply immediately and fail closed.
-
-Exit gate:
-
-- anonymous, wrong-app, revoked, malformed, oversized, quota-exceeded, and
-  disk-stop operations expose no blob bytes and create no committed blob;
-- interruption or injected filesystem/SQLite failure never makes a partial
-  upload readable and preserves prior valid metadata/file state;
-- two-app repository, HTTP, and SDK isolation matrices pass;
-- deleting or cleaning a blob cannot escape its server-derived app namespace;
-  and
-- the SDK examples and TinyHost agent skills cover upload, download, list,
-  delete, limits, denial verification, and the local-disk durability disclaimer.
+the committed V1 blob slice.
 
 ## Later post-V1 candidates
 
 Rank only after usage evidence:
 
-1. Durable realtime history/replay and multi-node fan-out.
-2. Central SSO exchange.
-3. Wildcard DNS provider adapters.
-4. Temporary invitations/groups.
-5. Backend runtime (separate security concept).
-6. Operator backup and disaster recovery.
-7. Operator-governed LLM and internal-service capability broker.
+1. Direct S3-compatible blob-store adapter if local-disk limits become real.
+2. Durable realtime history/replay and multi-node fan-out.
+3. Central SSO exchange.
+4. Wildcard DNS provider adapters.
+5. Temporary invitations/groups.
+6. Backend runtime (separate security concept).
+7. Operator backup and disaster recovery.
+8. Operator-governed LLM and internal-service capability broker.

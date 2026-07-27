@@ -14,14 +14,15 @@ Every protected surface runs the same actor variants.
 | source map / dotfile | deny or unavailable | deny | deny | policy + file rules | deny |
 | `/_tiny/api/me` | 401 | 403/401 | 403 | scoped identity | deny |
 | `/_tiny/api/kv/*` | 401 | deny | deny | scoped operation | deny |
-| later blob download | deny, zero bytes | deny | deny | stream | deny |
+| `/_tiny/api/blobs` upload/list | deny, no mutation | deny | deny | bounded operation | deny |
+| `/_tiny/api/blobs/*` get/delete | deny, zero bytes/no mutation | deny | deny | bounded operation | deny |
 | `/_tiny/ws/v1` | reject upgrade | reject | disconnect/reject | app-scoped connect | reject/disconnect |
 
 ## Cross-tenant matrix
 
 Create App A and App B with different owners, viewers, releases, sessions, KV
-entries, channels, and connections. For every repository, HTTP, and WebSocket
-operation, prove credentials for A
+entries, blobs, channels, and connections. For every repository, storage, HTTP,
+and WebSocket operation, prove credentials for A
 cannot observe or mutate B by:
 
 - path or query app ID;
@@ -29,6 +30,7 @@ cannot observe or mutate B by:
 - session cookie replay;
 - guessed record/release IDs;
 - duplicate KV key or channel name;
+- guessed blob ID, display filename, cursor, or storage key;
 - rollback/deployment ID;
 - token scope escalation.
 
@@ -86,12 +88,14 @@ At each stage, inject:
 - SQLite busy/unavailable;
 - disk full/critical watermark;
 
-  - app creation, deployment creation, and KV mutations deny at the exact
+  - app creation, deployment creation, KV mutations, and blob uploads deny at the exact
     stop boundary and when disk measurement fails;
   - existing authorized static reads and security revocations still succeed;
   - cleanup rejects path traversal/symlinks, preserves active plus recovery
     release, and remains retryable after a read-only filesystem failure.
 - filesystem permission or rename failure;
+- blob short write, close/sync failure, staging/ready/deleting interruption,
+  orphan bytes, missing ready bytes, and metadata/storage size/hash disagreement;
 - fsync/walk failure while sealing a candidate, and an existing
   content-addressed directory whose bytes or file manifest were corrupted;
 - process interruption before and after durable state change;
@@ -100,8 +104,9 @@ At each stage, inject:
 - audit append failure;
 - probe timeout.
 
-Expected outcome: no unauthorized content, no partial active release, previous
-release preserved, durable diagnosable state, cleanup retry safe.
+Expected outcome: no unauthorized content or blob bytes, no readable partial
+blob or active release, previous release preserved, exact reconciled quota,
+durable diagnosable state, cleanup retry safe.
 
 ## Revocation timing
 

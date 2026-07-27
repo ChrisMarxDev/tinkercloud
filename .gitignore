@@ -52,3 +52,7 @@ tmp/
 .vscode/
 *.swp
 *.swo
+
+# Autonomous GitHub issue-loop runtime and local credential fallback
+.hermes-task-loop/
+GITHUB_TOKEN

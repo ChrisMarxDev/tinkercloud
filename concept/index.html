@@ -67,7 +67,8 @@
           <li>Resend email OTP and app-scoped sessions.</li>
           <li>Private-only email/domain policy with implicit owner access.</li>
           <li>Immutable static releases, activation, and rollback.</li>
-          <li>Current-user, bounded JSON KV, and ephemeral realtime APIs.</li>
+          <li>Current-user, bounded JSON KV, lightweight local blobs, and
+            ephemeral realtime APIs.</li>
           <li>First-class TypeScript SDK and capability discovery.</li>
           <li>Audit, quotas, signed self-update/rollback, and diagnostics.</li>
         </ul>
@@ -79,8 +80,8 @@
           <li>No arbitrary backend processes or containers.</li>
           <li>No custom domains, teams, billing, or marketplace.</li>
           <li>No multi-node clustering or external database.</li>
-          <li>No public object URLs or browser secrets.</li>
-          <li>No blobs or durable/multi-node realtime in V1.</li>
+          <li>No public object URLs, remote blob backend, or browser secrets.</li>
+          <li>No mounted object store, per-viewer blob ACL, or durable/multi-node realtime in V1.</li>
           <li>No operator backup/disaster recovery in the first release.</li>
           <li>No provider secrets, LLM/Jira adapters, or arbitrary proxy in V1.</li>
         </ul>
@@ -185,10 +186,10 @@ dispatchProtected(authz, classifiedEndpoint)</pre>
       <p><strong>Do:</strong> The problem is concrete, the structural solution
         is differentiated, and the secure static slice has high value for
         internal tools, review apps, dashboards, and AI-generated interfaces.</p>
-      <p><strong>Don’t:</strong> Adding backend execution, blobs, durable
-        realtime, custom domains, and organization features before the
-        deployment denial proof would multiply attack surface and delay the
-        defining user value.</p>
+      <p><strong>Don’t:</strong> Adding backend execution, remote/public blob
+        infrastructure, durable realtime, custom domains, and organization
+        features before the deployment denial proof would multiply attack
+        surface and delay the defining user value.</p>
       <p class="muted">Decision basis: impact 5/5, full-concept complexity 5/5,
         scoped V1 yield 4/5, primary risk severity 5/5. Proceed only with
         evidence-gated milestones and the gateway invariant as a release blocker.</p>

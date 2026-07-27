@@ -11,6 +11,12 @@ documentation fixes, tests, and focused implementation changes.
 - Use the question form for setup and usage help.
 - Search existing issues before opening a duplicate.
 
+New issue-form submissions enter the `inbox` state for maintainer/agent
+triage. Refinement to `open` means the issue is ready, not that implementation
+is authorized. Only a trusted maintainer may apply `implement`; `pending`
+always blocks work. Approved agent work is proposed through a draft pull
+request and remains subject to normal review and CI.
+
 TinyHost is pre-release and V1 scope is intentionally narrow. A proposal that
 adds public apps, backend runtimes, a second public listener, a second storage
 authority, generic secret injection, or a backup product is outside the current
@@ -81,6 +87,10 @@ evidence.
 
 Maintainers may ask for a smaller slice or additional deny-path evidence before
 reviewing the implementation.
+
+The autonomous issue-loop contract and local operation are documented in
+[`specs/delivery/github-issue-loop-contract.md`](specs/delivery/github-issue-loop-contract.md)
+and [`loop/README.md`](loop/README.md).
 
 ## Licensing
 

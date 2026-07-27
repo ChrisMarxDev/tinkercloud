@@ -67,6 +67,10 @@ GET    /_tiny/api/v1/kv/{key}
 PUT    /_tiny/api/v1/kv/{key}
 DELETE /_tiny/api/v1/kv/{key}
 GET    /_tiny/api/v1/kv?prefix=&limit=&cursor=
+POST   /_tiny/api/v1/blobs
+GET    /_tiny/api/v1/blobs?limit=&cursor=
+GET    /_tiny/api/v1/blobs/{id}
+DELETE /_tiny/api/v1/blobs/{id}
 GET    /_tiny/ws/v1
 ```
 
@@ -89,7 +93,7 @@ Current app:
 ```json
 {
   "slug": "invoice-review",
-  "features": { "kv": true, "realtime": true }
+  "features": { "kv": true, "blobs": true, "realtime": true }
 }
 ```
 
@@ -127,6 +131,30 @@ KV list response:
 `entries` is always a JSON array, including an empty page. `next_cursor` is
 always present and is the empty string when there is no following page.
 
+Blob upload is `multipart/form-data` with exactly one bounded `file` part and
+no extra fields or parts. The server issues the blob ID; the submitted filename
+and content type are display metadata only.
+
+Blob metadata response:
+
+```json
+{
+  "id": "blb_...",
+  "name": "invoice.pdf",
+  "size": 48213,
+  "content_type": "application/pdf",
+  "created_at": "2026-07-27T12:00:00Z"
+}
+```
+
+Blob list returns `{ "blobs": [], "next_cursor": "" }`; `blobs` is always an
+array. Blob download returns the recorded bytes only after ordinary app
+authorization and ready-state validation, with `Content-Disposition:
+attachment`, `X-Content-Type-Options: nosniff`, and private/no-store caching.
+It never redirects to a local/provider URL. Missing or unavailable IDs use the
+generic bounded not-found/unavailable envelope and disclose no cross-app
+existence.
+
 Capability discovery:
 
 ```json
@@ -142,6 +170,16 @@ Capability discovery:
       "limits": {
         "value_bytes": 65536,
         "keys_per_app": 10000
+      }
+    },
+    {
+      "name": "blobs",
+      "version": 1,
+      "limits": {
+        "blob_bytes": 25000000,
+        "blobs_per_app": 1000,
+        "total_bytes_per_app": 250000000,
+        "list_limit": 100
       }
     },
     {

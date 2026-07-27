@@ -244,6 +244,19 @@ Set(ctx AuthorizationContext, key Key, value JSONValue, expectedVersion?):
        AND version matches expectedVersion
 ```
 
+### `blobs`
+
+Owns the V1 app-shared upload, download, bounded list, metadata, delete, quota,
+and reconciliation workflow. It receives only the authorization context plus
+opaque blob/display inputs. SQLite is the canonical catalog; a narrow internal
+store holds bytes by server-derived app/blob IDs. Only `ready` metadata can
+open bytes, and every download stays behind the gateway as an attachment.
+
+The V1 adapter is the private local data directory. The domain does not depend
+on a mounted filesystem, provider listing, bucket URL, signed URL, or storage
+credential, leaving a later direct S3-compatible adapter possible without
+changing the SDK.
+
 ### `live`
 
 Owns the single-node in-memory WebSocket hub. It authenticates before upgrade,
