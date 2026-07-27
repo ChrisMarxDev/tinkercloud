@@ -658,8 +658,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 - **FR-BLOB-001:** The SDK MUST expose bounded `upload`, `get`, `list`, and
   `delete` operations. V1 has no replace, folders, public/signed URLs,
-  resumable/multipart upload, transformations, thumbnails, search, or
-  per-viewer ACL model.
+  resumable or multi-request chunked upload, transformations, thumbnails,
+  search, or per-viewer ACL model.
 - **FR-BLOB-002:** The app ID, viewer identity, and storage key MUST be derived
   by the server. Callers supply display metadata and bytes, never an app ID,
   filesystem path, bucket, endpoint, or storage credential.
@@ -691,7 +691,9 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-BLOB-010:** V1 uses a private local-filesystem storage adapter behind a
   narrow internal blob-store interface. FUSE mounts, a second storage server,
   remote object stores, provider credentials, and cloud durability claims are
-  excluded from V1.
+  excluded from V1. Blob support MUST preserve the production shape of one
+  `tinyhost` process, one SQLite database, one private data directory, and one
+  systemd service.
 
 ### 8.13 Admin and deployer web UI
 

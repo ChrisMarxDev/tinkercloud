@@ -1,0 +1,4 @@
+interface:
+  display_name: "TinyHost Full-Stack Test"
+  short_description: "Run safe opt-in TinyHost VPS acceptance tests"
+  default_prompt: "Use $tiny-full-stack-test to run TinyHost's unattended VPS acceptance workflow."

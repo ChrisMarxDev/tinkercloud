@@ -292,10 +292,10 @@ Contract and decision:
   gateway route registry, HTTP contract, SDK, examples, and self-contained
   TinyHost skills together;
 - use a narrow internal streaming blob-store interface with a private local
-  adapter for V1; and
-- spike a small native local adapter against Go CDK `blob`/`fileblob` before
-  accepting a new security-critical dependency. Do not add FUSE, rclone,
-  s3fs, Mountpoint, MinIO, a remote driver, or a second listener in V1.
+  standard-library adapter for V1; and
+- preserve one server process, one SQLite database, one private data directory,
+  and one systemd service. Do not add Go CDK, FUSE, rclone, s3fs, Mountpoint,
+  MinIO, a remote driver, another package, or a second listener in V1.
 
 Vertical path:
 
@@ -305,6 +305,9 @@ Vertical path:
 - stream each upload into unreachable private storage under a server-issued
   blob ID, making it readable only after storage close/sync and the `ready`
   metadata commit;
+- implement the local byte store with bounded standard-library I/O,
+  same-filesystem temporary files, and atomic rename; do not buffer a complete
+  blob in memory;
 - expose app-shared SDK `upload`, `get`, bounded `list`, and `delete` methods
   using same-origin viewer sessions and no app ID, path, key, bucket, URL, or
   credential input;
@@ -330,9 +333,12 @@ Exit evidence:
   identity, while filenames remain display metadata only;
 - a two-app real-gateway and SDK matrix proves upload/get/list/delete isolation,
   typed errors, cancellation, bounded pagination, and no inline uploaded
-  document execution; and
+  document execution;
 - app deletion, cleanup, SDK examples, manifest verification, and agent skills
-  include blobs before the V1 exit gate can pass.
+  include blobs before the V1 exit gate can pass; and
+- the release evidence records the binary-size and idle-memory deltas and proves
+  blobs add no process, service, listener, mount, package, credential, or
+  storage-network activity.
 
 Exit gate:
 

@@ -85,7 +85,9 @@ export TINYHOST_VPS_VIEWER_EMAIL='viewer@example.com'
 export TINYHOST_VPS_EMAIL_FROM='tiny@example.com'
 export TINYHOST_VPS_ACME_EMAIL='operator@example.com'
 export TINYHOST_VPS_RESEND_API_KEY_FILE="$PWD/.tiny/vps/resend-api-key"
-export TINYHOST_VPS_OTP_COMMAND="$PWD/.tiny/vps/read-tinyhost-otp"
+export TINYHOST_RESEND_READER_API_KEY_FILE="$PWD/.tiny/vps/resend-reader-api-key"
+export TINYHOST_RESEND_OTP_LEDGER_FILE="$PWD/.tiny/vps/resend-otp-consumed.json"
+export TINYHOST_VPS_OTP_COMMAND="$PWD/skills/tiny-full-stack-test/scripts/read-resend-otp.py"
 ```
 
 The OTP helper is called directly as:
@@ -123,3 +125,33 @@ step is repeated between readiness attempts.
 [The checked-in VPS smoke app](../../examples/test-apps/vps-smoke/) is a
 manifest fixture and documentation example. The live suite instead creates a
 fresh archive with a randomized slug and marker for each run.
+
+## Unattended Resend OTP reading
+
+For an unattended real-OTP test, keep a Resend reader key **only on this local
+machine**. It needs sent-email read access (Resend Full access) and must never
+be placed in the VPS secret file, server configuration, browser, SDK, or Git.
+Create and lock down the file once:
+
+```bash
+umask 077
+mkdir -p "$PWD/.tiny/vps"
+${EDITOR:-vi} "$PWD/.tiny/vps/resend-reader-api-key"
+chmod 600 "$PWD/.tiny/vps/resend-reader-api-key"
+```
+
+The shipped reader is dependency-free and uses only Resend's fixed HTTPS API.
+It polls for at most 60 seconds, accepts one exact recent TinyHost OTP for the
+requested deployer/viewer and host, records an opaque consumed message ID in
+the local mode-`0600` ledger, then prints only the code to the existing test
+harness. It never reads TinyHost/VPS state or logs. A malformed, stale,
+ambiguous, unrelated, already-consumed, or provider-error response stops the
+run without printing a code.
+
+For a disposable test-only setup, set
+`TINYHOST_RESEND_READER_API_KEY_FILE` to the existing local send-key file only
+if that key has been deliberately granted sent-email read permission. Do not
+broaden a production VPS key solely for testing. Prefer separate least-
+privilege sending and local reader keys; for tonight's disposable test, the
+current full-access file may be used for both variables, then rotate or narrow
+it afterwards.

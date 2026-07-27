@@ -65,6 +65,11 @@
 - Local storage remains inside the configured private data directory; any
   future remote adapter is direct and server-side, not a FUSE mount or browser
   credential.
+- V1 remains one process, database, data directory, and service; it gains no
+  storage daemon/listener, mount, provider credential, network-backed storage,
+  runtime package, or third-party blob module.
+- Release evidence records binary-size and idle-memory deltas and proves
+  streaming memory is bounded independently of blob size.
 
 ## Release candidate
 

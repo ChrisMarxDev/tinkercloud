@@ -53,7 +53,8 @@
         <ul>
           <li>No public or signed object URLs.</li>
           <li>No filesystem paths, directories, or user-selected keys.</li>
-          <li>No resumable/multipart upload, replace, versioning, or search.</li>
+          <li>No resumable or multi-request chunked upload, replace, versioning,
+            or search.</li>
           <li>No thumbnails, transformations, or inline media-hosting promise.</li>
           <li>No per-viewer blob ACLs in V1.</li>
           <li>No FUSE/rclone/s3fs/Mountpoint or standalone MinIO service.</li>
@@ -96,21 +97,27 @@ await tiny.blobs.delete(stored.id);</pre>
       <h2>Use an object seam, not a mounted object store</h2>
       <p>Mountpoint, rclone, and s3fs can present S3 as files, but add a
         mount/daemon lifecycle and weaker rename, locking, cache, and
-        coordination semantics. Go CDK offers a credible portable local/S3 blob
-        API. V1 will spike that library against a small native adapter before
-        accepting a dependency, while keeping the public contract independent
-        of either choice.</p>
+        coordination semantics. MinIO adds another service. Go CDK avoids those
+        runtime costs, but its local driver is primarily positioned for
+        development, includes a generic blob/telemetry layer, and does not
+        replace TinyHost’s SQLite state machine. V1 therefore uses a small
+        standard-library adapter while keeping the public contract independent
+        of storage mechanics.</p>
+      <p><strong>Lightweight gate:</strong> one TinyHost process, one SQLite
+        database, one private data directory, one systemd service, bounded
+        streaming memory, and no mount, package, provider credential, or
+        storage-network dependency.</p>
     </section>
 
     <section id="questions" class="caution">
       <p class="eyebrow">Open questions</p>
       <ul>
-        <li>Does Go CDK <code>fileblob</code> earn its dependency cost over a
-          narrow native local adapter under TinyHost failure injection?</li>
         <li>Which bounded filename and content-type normalization gives useful
           display metadata without implying safe inline rendering?</li>
         <li>What upload rate and concurrency defaults fit the smallest supported
           VPS while leaving deployment and revocation responsive?</li>
+        <li>What binary-size and idle-memory deltas should become permanent
+          release regression limits after the first implementation?</li>
         <li>Which gallery app best proves attachments without adding a broad
           media-management product?</li>
       </ul>

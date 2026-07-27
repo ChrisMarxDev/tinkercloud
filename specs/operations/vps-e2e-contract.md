@@ -28,6 +28,8 @@ invalid values prevent the live run from starting.
 | `TINYHOST_VPS_ACME_EMAIL` | ACME contact email. |
 | `TINYHOST_VPS_RESEND_API_KEY_FILE` | Absolute path to the existing local Resend-key file. |
 | `TINYHOST_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
+| `TINYHOST_RESEND_READER_API_KEY_FILE` | Required by the shipped unattended Resend reader: absolute local mode-`0600`, non-symlink Resend key with sent-email read access. It must never be copied to the VPS. |
+| `TINYHOST_RESEND_OTP_LEDGER_FILE` | Optional absolute local mode-`0600`, non-symlink consumed-message ledger for the shipped reader. Defaults beside the reader key and is never copied to the VPS. |
 | `TINYHOST_VPS_RELEASE_DIR` | Optional absolute verified release directory. If absent, the suite builds and signs a temporary release locally. |
 | `TINYHOST_VPS_REUSE` | Optional exact value `1`; permits an already-initialized disposable host only when its root-owned suite marker exactly matches the platform host, app suffix, and SSH target. |
 
@@ -58,6 +60,31 @@ It must print only a 4--12 digit code on stdout. If no helper is set, a
 terminal run prompts locally for the code; a noninteractive run fails.
 The suite never reads OTP challenges or secrets from the VPS database, files,
 HTTP endpoints, or logs.
+
+### Local Resend OTP reader
+
+`skills/tiny-full-stack-test/scripts/read-resend-otp.py` is an opt-in local
+mail-reader for unattended acceptance. It is not part of TinyHost production
+and does not alter the deployed gateway, its database, or its authentication
+flow. It calls only the fixed HTTPS `https://api.resend.com` origin with a
+local reader credential. The reader accepts only an exact recipient, exact
+configured sender, exact `Your sign-in code` subject, a bounded recent
+timestamp, a valid requested platform/app hostname shape, and the exact
+TinyHost text body `Your code: NNNN...`. It fetches one matching message and
+records its opaque message ID in a private consumed-ID ledger before emitting
+only the 4--12 digit code on stdout.
+
+Ambiguous matches, malformed provider responses, unreadable or unsafe key or
+ledger files, provider errors, invalid permission responses, stale messages,
+and timeouts all fail closed. Diagnostics on stderr must be generic: they must
+not include a provider body, key, key path, email body, OTP, or message ID.
+The reader never queries the VPS, TinyHost logs, SQLite, app state, or a test
+only bypass. Its full-access Resend key is local-only, gitignored, mode `0600`,
+and revocable. Prefer a separate least-privilege sending key for the VPS and a
+local reader key. A disposable setup may deliberately point both local
+variables at the current full-access key only when it has the required
+sent-email read permission; that broader key then reaches the VPS for that
+test and must be rotated or narrowed afterwards.
 
 ## Initialization readiness retry
 

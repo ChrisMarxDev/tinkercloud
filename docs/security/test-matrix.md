@@ -14,8 +14,8 @@ Every protected surface runs the same actor variants.
 | source map / dotfile | deny or unavailable | deny | deny | policy + file rules | deny |
 | `/_tiny/api/me` | 401 | 403/401 | 403 | scoped identity | deny |
 | `/_tiny/api/kv/*` | 401 | deny | deny | scoped operation | deny |
-| `/_tiny/api/blobs` upload/list | deny, no mutation | deny | deny | bounded operation | deny |
-| `/_tiny/api/blobs/*` get/delete | deny, zero bytes/no mutation | deny | deny | bounded operation | deny |
+| `/_tiny/api/v1/blobs` upload/list | deny, no mutation | deny | deny | bounded operation | deny |
+| `/_tiny/api/v1/blobs/*` get/delete | deny, zero bytes/no mutation | deny | deny | bounded operation | deny |
 | `/_tiny/ws/v1` | reject upgrade | reject | disconnect/reject | app-scoped connect | reject/disconnect |
 
 ## Cross-tenant matrix

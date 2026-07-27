@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 src=skills/tiny-platform/SKILL.md
-for dst in skills/tiny-app-development/SKILL.md skills/tiny-deploy/SKILL.md skills/tiny-operator/SKILL.md; do
+for dst in skills/tiny-app-development/SKILL.md skills/tiny-deploy/SKILL.md skills/tiny-operator/SKILL.md skills/tiny-full-stack-test/SKILL.md; do
   a=$(sed -n '/<!-- shared:security:start -->/,/<!-- shared:security:end -->/p' "$src")
   b=$(sed -n '/<!-- shared:security:start -->/,/<!-- shared:security:end -->/p' "$dst")
   test "$a" = "$b" || { echo "shared skill block drift: $dst" >&2; exit 1; }

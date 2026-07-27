@@ -16,6 +16,8 @@ end-to-end denial proofs:
   assertions for local operator secrets and the committed release public key;
 - socket inventory and origin bypass checks;
 - signed update integrity, failed-health rollback, and root recovery.
+- unattended local Resend OTP-reader file, provider-response, ambiguity, and
+  no-bypass denial cases.
 
 The detailed matrix lives in
 [`docs/security/test-matrix.md`](../../docs/security/test-matrix.md).

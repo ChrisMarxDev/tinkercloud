@@ -31,6 +31,7 @@
 | [0029](0029-updater-candidate-doctor-rollback-snapshot.md) | Candidate doctor tolerates only its expected rollback snapshot | Accepted for V1 |
 | [0030](0030-v1-lightweight-local-blob-storage.md) | Lightweight local blob storage behind a provider-neutral seam | Accepted for V1 |
 | [0031](0031-trusted-issue-loop-draft-prs.md) | Trusted issue loop proposes changes through draft pull requests | Accepted for repository delivery |
+| [0032](0032-local-resend-reader-for-unattended-vps-acceptance.md) | Local Resend reader for unattended VPS acceptance | Accepted for V1 acceptance evidence |
 
 ## Decision rule
 

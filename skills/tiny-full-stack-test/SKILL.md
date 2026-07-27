@@ -1,6 +1,6 @@
 ---
-name: tiny-platform
-description: Build and verify private TinyHost static apps and platform capabilities.
+name: tiny-full-stack-test
+description: Run and maintain TinyHost's opt-in unattended full-stack VPS acceptance workflow, including local Resend OTP retrieval, SSH trust, deployment, viewer authorization, and negative security evidence. Use when configuring, debugging, or executing real end-to-end TinyHost tests against a disposable VPS.
 ---
 
 <!-- shared:security:start -->
@@ -204,9 +204,43 @@ final manifest makes the read model unavailable, while intermediate records
 without final metadata have no description.
 <!-- shared:security:end -->
 
-## Capability workflow
+## Unattended VPS workflow
 
-Use `@tinyhost/sdk` with same-origin endpoints. Discover grants before using a
-capability; handle typed errors and cancellation. Persist recovery state in KV
-and reread it after every live reconnect. Verify anonymous HTML, asset, API,
-and socket denial before reporting a deployment as successful.
+1. Read `specs/operations/vps-e2e-contract.md` and
+   `test/security/unattended-vps-otp-reader-denial-charter.md` first.
+2. Run offline gates before connecting anywhere:
+
+   ```bash
+   PYTHONDONTWRITEBYTECODE=1 python3 skills/tiny-full-stack-test/scripts/test_read_resend_otp.py
+   ./scripts/check-skill-drift
+   go test ./test/vps -count=1
+   git diff --check
+   ```
+
+3. Keep `TINYHOST_RESEND_READER_API_KEY_FILE` local, absolute, regular,
+   non-symlink, owned by the invoking user, and mode `0600`. Keep the
+   consumed-message ledger local and mode `0600`. Never copy either to the VPS
+   or print its contents.
+4. Set `TINYHOST_VPS_OTP_COMMAND` to the absolute path of
+   `scripts/read-resend-otp.py`. Supply exact platform/app host and sender
+   environment values. The reader receives only `deployer|viewer EMAIL HOST`;
+   it must print only a 4--12 digit code.
+5. Require `TINYHOST_VPS_E2E=1`, the exact target acknowledgement, a checked
+   known-hosts file, and normal `TINYHOST_VPS_REUSE=1` marker gating. Never
+   weaken SSH trust or introduce an OTP/auth bypass.
+6. Run one deliberate acceptance pass only:
+
+   ```bash
+   go test ./test/vps -run TestVPSAcceptance -count=1 -v
+   ```
+
+Do not create an infinite deploy loop. On ambiguity, malformed provider data,
+timeouts, unsafe local state, or any failed denial assertion, stop and retain
+only redacted diagnostics. The acceptance result proves Resend API acceptance
+and TinyHost OTP flow; perform an occasional manual mailbox-delivery smoke
+separately.
+
+## Bundled scripts
+
+- `scripts/read-resend-otp.py`: fixed-origin, fail-closed Resend reader.
+- `scripts/test_read_resend_otp.py`: offline deterministic reader tests.

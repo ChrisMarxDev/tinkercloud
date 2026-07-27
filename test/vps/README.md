@@ -19,7 +19,9 @@ export TINYHOST_VPS_VIEWER_EMAIL=viewer@example.com
 export TINYHOST_VPS_EMAIL_FROM=operator@example.com
 export TINYHOST_VPS_ACME_EMAIL=operator@example.com
 export TINYHOST_VPS_RESEND_API_KEY_FILE=/absolute/path/to/resend-key
-export TINYHOST_VPS_OTP_COMMAND=/absolute/path/to/read-tinyhost-otp
+export TINYHOST_RESEND_READER_API_KEY_FILE=/absolute/path/to/local-resend-reader-key
+export TINYHOST_RESEND_OTP_LEDGER_FILE=/absolute/path/to/local-consumed-otp-ledger.json
+export TINYHOST_VPS_OTP_COMMAND=$PWD/skills/tiny-full-stack-test/scripts/read-resend-otp.py
 go test ./test/vps -run TestVPSAcceptance -count=1 -v
 ```
 
@@ -38,3 +40,12 @@ pre-initialized test host, `TINYHOST_VPS_REUSE=1` requires the root-owned suite
 marker at `/var/lib/tinyhost-vps-e2e/marker` to exactly match the SSH target,
 platform host, and app suffix. It does not create a test-only authorization or
 network path.
+
+For unattended real OTPs, use the local-only Resend reader documented in the
+[VPS guide](../../docs/operations/vps-e2e.md#unattended-resend-otp-reading).
+It reads sent mail through Resend rather than TinyHost/VPS state, filters one
+exact fresh message, and emits only its numeric code. The reader key and its
+consumed-ID ledger must be absolute local mode-`0600` non-symlink files and
+are never copied to the VPS. The existing `TINYHOST_VPS_E2E`, target
+acknowledgement, strict SSH trust, and `TINYHOST_VPS_REUSE=1` marker rules
+remain mandatory.

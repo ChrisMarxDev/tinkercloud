@@ -33,7 +33,10 @@ Several existing storage tools were evaluated:
   object API with local-filesystem and S3-compatible drivers. Its
   [fileblob](https://pkg.go.dev/gocloud.dev/blob/fileblob) adapter uses a
   temporary file plus rename, while its S3 driver can address S3-compatible
-  stores directly.
+  stores directly. However, the Go CDK documentation positions local drivers
+  primarily for testing and local development, the generic blob layer imports
+  OpenTelemetry, and `fileblob` owns filename escaping and optional sidecar
+  metadata that TinyHost does not need.
 - A standalone store such as
   [MinIO](https://min.io/docs/minio/linux/operations/install-deploy-manage/deploy-minio-single-node-multi-drive.html)
   adds another service, listener, credential, upgrade lifecycle, and resource
@@ -43,6 +46,37 @@ Mounting object storage does not remove TinyHost's need for server-derived
 tenancy, SQLite metadata, quota accounting, staging visibility, cleanup, and
 failure reconciliation. It instead hides weaker remote-object semantics behind
 filesystem calls.
+
+### Lightweight acceptance gate
+
+For TinyHost, a storage implementation is lightweight only when all of these
+remain true:
+
+- production still consists of one `tinyhost` process, one SQLite database, one
+  private data directory, and one systemd service;
+- installation requires no FUSE/kernel extension, mount unit, extra package,
+  daemon, listener, provider account, storage credential, or separate health,
+  upgrade, and restart lifecycle;
+- disabling blobs starts no storage process and performs no storage-network
+  activity;
+- upload and download memory remain bounded independently of blob size;
+- SQLite remains the only catalog, list, readiness, ordering, and quota source
+  of truth; and
+- a dependency is accepted only when it materially reduces TinyHost-owned
+  security or recovery code, with its module graph, binary-size delta, idle
+  memory delta, failure modes, maintenance state, and license recorded in an
+  ADR amendment.
+
+Mountpoint, rclone mount, s3fs, and MinIO fail the production-shape and operator
+setup portions of this gate. Go CDK passes the no-extra-process portion, but
+does not remove TinyHost's state machine and adds a generic dependency layer.
+
+Measurement baseline on 2026-07-27: with Go 1.25.12,
+`CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath ./cmd/tinyhost`
+produced a 21,982,869-byte server binary before blob implementation. The blob
+slice records its before/after result with the same command plus idle RSS on
+the smallest supported VPS. This measurement is evidence, not a permanent byte
+cap across compiler upgrades.
 
 ## Decision
 
@@ -59,23 +93,20 @@ app authorization.
 The blob domain depends on a narrow internal streaming store interface keyed
 only by server-derived app and blob IDs. It does not depend on POSIX paths,
 rename, storage-native listing, signed URLs, or provider-specific attributes.
-The local adapter may use private same-filesystem staging and atomic rename,
-but those mechanics do not enter the domain or public contract.
+The V1 local adapter is implemented inside TinyHost with the Go standard
+library. It uses private same-filesystem temporary files, bounded streaming,
+hashing, sync/close, and atomic rename beneath the existing data directory.
+Those mechanics do not enter the domain or public contract.
 
 TinyHost will not use Mountpoint, rclone mount, s3fs, another FUSE filesystem,
 or a standalone S3-compatible server in V1. V1 also will not compile or
-configure a remote provider driver.
-
-Before implementation chooses a third-party storage dependency, a focused
-dependency and failure-injection spike must compare a small native local
-adapter with Go CDK `blob`/`fileblob`. Go CDK's portable API is a credible
-future implementation option, but adopting it does not replace TinyHost's
-SQLite state machine, reconciliation, or security tests. A security-critical
-dependency must remain narrow and be justified by an ADR amendment.
+configure a remote provider driver. It will not depend on Go CDK for the V1
+local adapter.
 
 A later direct S3-compatible adapter may implement the same internal interface
 with object operations. It remains server-side, is not mounted, and introduces
-no public bucket/object URL or browser credential.
+no public bucket/object URL or browser credential. Go CDK may be reconsidered
+for that later adapter, but only through the lightweight acceptance gate above.
 
 ## Consequences
 
@@ -83,6 +114,8 @@ no public bucket/object URL or browser credential.
   bucket, or provider account.
 - The `tinyhost` binary, SQLite database, and private data directory remain the
   complete V1 operational shape.
+- The native adapter is deliberately small and uses no new Go module. TinyHost
+  owns the few filesystem operations and their failure-injection tests.
 - The public SDK remains stable if a later operator selects a direct remote
   adapter because storage-native identities never cross the domain boundary.
 - App viewers have the same app-shared mutation authority as V1 KV. Apps
@@ -98,6 +131,6 @@ no public bucket/object URL or browser credential.
 
 Reconsider the local-only adapter after real usage shows that blob capacity,
 durability, or migration—not hypothetical scale—is the limiting factor. At
-that point compare a direct Go CDK/AWS SDK S3-compatible adapter against the
-same contract. Do not introduce a FUSE mount merely to avoid implementing the
-storage interface.
+that point compare a small direct S3-compatible adapter, Go CDK, and the AWS SDK
+against the same contract and lightweight gate. Do not introduce a FUSE mount
+merely to avoid implementing the storage interface.

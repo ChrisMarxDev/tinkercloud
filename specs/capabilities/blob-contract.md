@@ -43,9 +43,9 @@ session. It accepts no app ID, bucket, endpoint, path, storage key, signed URL,
 or provider credential.
 
 V1 intentionally has no replace, append, directories, public/signed URLs,
-resumable/multipart upload, range API, inline hosting contract, thumbnails,
-transformations, metadata search, deduplication, version history, or
-per-viewer ACLs.
+resumable or multi-request chunked upload, range API, inline hosting contract,
+thumbnails, transformations, metadata search, deduplication, version history,
+or per-viewer ACLs.
 
 ## Default limits
 
@@ -158,6 +158,8 @@ public SDK or treating object storage as POSIX.
 
 FUSE mounts, rclone/s3fs/Mountpoint runtime dependencies, standalone
 object-store servers, and remote storage drivers are not supported in V1.
+The V1 local adapter uses the Go standard library and adds no process, service,
+listener, mount, package, provider credential, or storage-network dependency.
 
 ## Deny-path charter
 

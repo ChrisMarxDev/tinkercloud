@@ -59,7 +59,10 @@ authenticated gateway with attachment, no-sniff, and private/no-store behavior.
 Never add a public/signed URL, app selector, bucket, mount, provider endpoint,
 or credential to the SDK. V1 uses the local adapter; FUSE/rclone/s3fs/
 Mountpoint, a standalone object-store server, and remote drivers remain out of
-scope. Before implementing or reporting blobs complete, follow
+scope. Implement the V1 byte adapter as small Go standard-library code inside
+`tinyhost`; do not add Go CDK, another runtime package, process, service,
+listener, mount, provider credential, or storage-network dependency. Before
+implementing or reporting blobs complete, follow
 `specs/capabilities/blob-contract.md`, run the two-app and partial-write failure
 matrix, update `features.blobs`, the SDK/examples, and every copied skill.
 Archive uploads use the configured archive byte limit, independently of the

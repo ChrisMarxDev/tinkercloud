@@ -11,15 +11,16 @@ capability only when the gateway has:
 4. produced an authorization context for that request.
 
 This is the primary asset. Confidentiality of operator/deployer credentials,
-viewer identity, release content, KV state, keys, and update artifacts follows
-from it.
+viewer identity, release content, KV state, blob content and metadata, keys,
+and update artifacts follows from it.
 
 ## Trust boundaries
 
 ```text
 Untrusted internet
   │
-  ├── host, path, headers, cookies, archives, JSON, WebSocket frames
+  ├── host, path, headers, cookies, archives, JSON, blob bytes/metadata,
+  │   WebSocket frames
   ▼
 Public gateway
   │ typed authorization context
@@ -43,19 +44,20 @@ trusted in V1.
 |---|---|---|---|
 | Host confusion | `app.apps.example.com.evil.test` | strict canonical suffix parser | host fuzz tests |
 | Auth bypass | unwrapped new route | typed protected-handler registry | route enumeration test |
-| Cross-app access | supply another app ID to KV or live channel | derive app ID from auth context | two-app HTTP/socket isolation suite |
+| Cross-app access | supply another app ID, KV key, blob ID, or live channel | derive app ID from auth context; scope every lookup | two-app HTTP/storage/socket isolation suite |
 | Session bleed | parent-domain cookie | host-only app cookie | cookie contract tests |
 | Policy staleness | removed viewer still accesses | revision invalidation / current read | revocation latency test |
 | OTP enumeration | response differs by allowlist | generic response and comparable flow | black-box response tests |
 | OTP brute force | repeated codes | attempt and layered rate limits | audit alert |
 | CSRF | app JS mutates platform data | separate origin/cookies; CSRF on control plane | browser integration tests |
 | Open redirect | crafted return URL | server-side transaction + relative path only | redirect corpus |
-| Path traversal | encoded `../` or symlink | open beneath root, no links | archive/path fuzzing |
+| Path traversal | encoded `../`, symlink, or filename used as a blob path | open beneath root, no links; blob keys use only server IDs | archive/path/blob-ID fuzzing |
 | Archive bomb | huge expansion | entry/byte/depth budgets | rejected deployment telemetry |
 | Zip collision | Unicode/case duplicate | canonical collision rejection | archive corpus |
 | Stored XSS in admin | malicious app name | contextual escaping and CSP | browser tests |
+| Uploaded active content | HTML/SVG blob executes in the app origin | authenticated attachment download, `nosniff`, no public/inline URL | browser download/header tests |
 | Secret leakage | logs contain token/OTP | structured allowlisted logging | log scanning tests |
-| Disk exhaustion | deployments/KV fill disk | quotas and watermarks | health alert; reject writes |
+| Disk exhaustion | deployments/KV/blobs fill disk | quotas and watermarks | health alert; reject growth writes |
 | Malicious/broken update | compromised or incompatible binary | signature, compatibility gate, local rollback state | post-restart health gate |
 | Direct origin bypass | alternate TinyHost process/port | process-level TCP 80/443 bind confinement plus operator-owned firewall | TinyHost-owned socket inventory check |
 | Supply-chain compromise | unsafe dependency/update | pin, scan, sign, reproduce | release provenance |
@@ -84,7 +86,9 @@ app resolution, status, quotas, security headers, and protected dispatch.
 
 Same-origin makes browser use simple but does not relax authorization. The
 current app comes from the host. State-changing methods validate content type,
-origin where meaningful, request size, feature flags, and app quota.
+exact origin where meaningful, request size, feature flags, and app quota.
+Blob downloads are authorized like every other app-plane request and are sent
+as private attachment responses with MIME sniffing disabled.
 
 ### Future operator-managed capabilities
 
@@ -102,7 +106,7 @@ Use layered token buckets with bounded state:
 - normalized-email keyed hash;
 - app;
 - deployer/token;
-- global email and upload budgets.
+- global email, deployment-upload, and blob-upload budgets.
 
 Limits are configuration with safe minimum/maximum bounds. Rejected requests
 should be cheap and should not disclose which dimension fired.

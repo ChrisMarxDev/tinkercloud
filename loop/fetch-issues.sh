@@ -135,8 +135,8 @@ for issue in by_number.values():
             events.append(page)
 
     implement_events = [
-        event
-        for event in events
+        (index, event)
+        for index, event in enumerate(events)
         if event.get("event") in {"labeled", "unlabeled"}
         and (event.get("label") or {}).get("name") == "implement"
     ]
@@ -144,7 +144,14 @@ for issue in by_number.values():
         issue["approvalLookupFailed"] = True
         continue
 
-    latest = implement_events[-1]
+    _, latest = max(
+        implement_events,
+        key=lambda item: (
+            item[1].get("created_at") or "",
+            item[1].get("id") if isinstance(item[1].get("id"), int) else -1,
+            item[0],
+        ),
+    )
     actor = (latest.get("actor") or {}).get("login")
     issue["approvalActor"] = actor
     issue["implementationApproved"] = (
@@ -181,4 +188,3 @@ payload = {
 out_file.write_text(json.dumps(payload, indent=2) + "\n")
 print(json.dumps(payload["counts"], sort_keys=True))
 PY
-
