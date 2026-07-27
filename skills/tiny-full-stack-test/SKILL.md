@@ -237,8 +237,12 @@ without final metadata have no description.
    part and prove no catalog mutation, then authenticate a viewer and prove
    upload/list/exact-byte attachment download/delete. Prove anonymous and a
    second app's guessed-ID download contain no blob bytes. Restart the service
-   before delete and reread the same blob. Never query the VPS filesystem,
-   SQLite, or logs to substitute for this gateway evidence.
+   before delete and reread the same blob through a bounded,
+   context-cancellable readiness retry. Retry only connection-startup transport
+   failures or 502/503/504; a redirect, denial, other status, wrong bytes, or
+   wrong attachment/private-no-store/nosniff headers fails immediately. Never
+   query the VPS filesystem, SQLite, or logs to substitute for this gateway
+   evidence.
 7. Reuse never re-initializes or wipes the VPS. It requires an explicit local
    `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
    key and use only `tinyhost update` with its active-app health gate. The

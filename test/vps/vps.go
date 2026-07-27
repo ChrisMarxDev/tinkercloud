@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -26,6 +27,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/tinyhost/tiny/internal/client"
@@ -40,6 +42,15 @@ const (
 
 	initReadinessAttempts = 8
 	initReadinessDelay    = 15 * time.Second
+
+	// A systemd restart returns once the process has been asked to start, not
+	// once the HTTPS listener can serve an authenticated request. Keep the
+	// post-restart durability proof bounded, but do not insert a blind sleep
+	// after the restart.
+	restartBlobReadinessAttempts = 10
+	restartBlobReadinessBudget   = 45 * time.Second
+	restartBlobInitialDelay      = 500 * time.Millisecond
+	restartBlobMaxDelay          = 5 * time.Second
 )
 
 var numericCode = regexp.MustCompile(`^[0-9]{4,12}$`)
@@ -153,6 +164,9 @@ type Suite struct {
 	// RetryWait is test-only injection for the bounded init readiness wait. A
 	// nil value uses a cancellation-aware timer in production.
 	RetryWait func(context.Context, time.Duration) error
+	// RestartReadinessWait is test-only injection for the bounded post-restart
+	// blob readiness retry. A nil value uses a cancellation-aware timer.
+	RestartReadinessWait func(context.Context, time.Duration) error
 }
 
 func (s *Suite) runner() Runner {
@@ -224,6 +238,31 @@ func (s *Suite) waitInitRetry(ctx context.Context) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+func (s *Suite) waitRestartBlobReadiness(ctx context.Context, delay time.Duration) error {
+	if s.RestartReadinessWait != nil {
+		return s.RestartReadinessWait(ctx, delay)
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func restartBlobDelay(attempt int) time.Duration {
+	delay := restartBlobInitialDelay
+	for retry := 1; retry < attempt && delay < restartBlobMaxDelay; retry++ {
+		delay *= 2
+		if delay > restartBlobMaxDelay {
+			return restartBlobMaxDelay
+		}
+	}
+	return delay
 }
 
 // initWithReadinessRetry retries only the persisted final public-health step.
@@ -1054,16 +1093,51 @@ func (s *Suite) anonymousBlobDenied(ctx context.Context, host, id string) error 
 }
 
 func (s *Suite) verifyBlobPersistsAfterRestart(ctx context.Context, h *http.Client, host, id string) error {
-	r, err := blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
-	if err != nil {
-		return err
+	// The caller's viewer cookie is preserved, but redirects are always surfaced
+	// to this verifier. A restarted gateway that sends a viewer to another host
+	// is never evidence of durable access to the original protected blob.
+	hc := *h
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	retryCtx, cancel := context.WithTimeout(ctx, restartBlobReadinessBudget)
+	defer cancel()
+
+	var lastErr error
+	for attempt := 1; attempt <= restartBlobReadinessAttempts; attempt++ {
+		if err := retryCtx.Err(); err != nil {
+			return fmt.Errorf("blob restart readiness exhausted: %w", err)
+		}
+		r, err := blobRequest(retryCtx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+		if err != nil {
+			return err
+		}
+		x, err := hc.Do(r)
+		if err == nil {
+			if x.StatusCode == http.StatusBadGateway || x.StatusCode == http.StatusServiceUnavailable || x.StatusCode == http.StatusGatewayTimeout {
+				io.Copy(io.Discard, io.LimitReader(x.Body, 1<<20))
+				x.Body.Close()
+				lastErr = fmt.Errorf("blob gateway is still starting: status=%d", x.StatusCode)
+			} else {
+				return verifyRestartedBlobResponse(x)
+			}
+		} else if transientRestartTransportError(err) {
+			lastErr = fmt.Errorf("blob gateway is not ready: %w", err)
+		} else {
+			return fmt.Errorf("blob restart readiness transport failure: %w", err)
+		}
+
+		if attempt == restartBlobReadinessAttempts {
+			break
+		}
+		if err := s.waitRestartBlobReadiness(retryCtx, restartBlobDelay(attempt)); err != nil {
+			return fmt.Errorf("blob restart readiness wait: %w", err)
+		}
 	}
-	x, err := h.Do(r)
-	if err != nil {
-		return err
-	}
+	return fmt.Errorf("blob restart readiness did not succeed after %d attempts: %w", restartBlobReadinessAttempts, lastErr)
+}
+
+func verifyRestartedBlobResponse(x *http.Response) error {
+	defer x.Body.Close()
 	b, err := io.ReadAll(io.LimitReader(x.Body, int64(len(vpsBlobBytes)+1)))
-	x.Body.Close()
 	if err != nil {
 		return err
 	}
@@ -1071,6 +1145,14 @@ func (s *Suite) verifyBlobPersistsAfterRestart(ctx context.Context, h *http.Clie
 		return fmt.Errorf("blob download/durability evidence failed: status=%d", x.StatusCode)
 	}
 	return nil
+}
+
+func transientRestartTransportError(err error) bool {
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr) && (networkErr.Timeout() || networkErr.Temporary())
 }
 
 func (s *Suite) deleteBlobAndVerify(ctx context.Context, h *http.Client, host, id string) error {

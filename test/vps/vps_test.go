@@ -8,9 +8,12 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -306,6 +309,111 @@ func TestAnonymousDeniedRequiresEverySurfaceToDenyWithoutMarker(t *testing.T) {
 		if err := tc.suite.anonymousDenied(context.Background(), "app.example.test", "MARKER"); err == nil {
 			t.Fatalf("%s response was accepted", tc.name)
 		}
+	}
+}
+
+func TestRestartBlobReadinessRetriesOnlyTransientStartupFailures(t *testing.T) {
+	attempts, waits := 0, []time.Duration{}
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		attempts++
+		switch attempts {
+		case 1:
+			return nil, &url.Error{Op: "Get", URL: r.URL.String(), Err: syscall.ECONNREFUSED}
+		case 2:
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("starting")), Request: r}, nil
+		case 3:
+			headers := make(http.Header)
+			headers.Set("Cache-Control", "private, no-store")
+			headers.Set("X-Content-Type-Options", "nosniff")
+			headers.Set("Content-Disposition", "attachment; filename=exact-bytes.bin")
+			return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(bytes.NewReader(vpsBlobBytes)), Request: r}, nil
+		default:
+			t.Fatalf("unexpected readiness attempt %d", attempts)
+			return nil, nil
+		}
+	})}
+	s := Suite{RestartReadinessWait: func(ctx context.Context, delay time.Duration) error {
+		if ctx.Err() != nil {
+			t.Fatal("readiness wait received cancelled context")
+		}
+		waits = append(waits, delay)
+		return nil
+	}}
+	if err := s.verifyBlobPersistsAfterRestart(context.Background(), h, "app.example.test", "blob_1"); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts=%d, want 3", attempts)
+	}
+	if want := []time.Duration{restartBlobInitialDelay, restartBlobInitialDelay * 2}; !slices.Equal(waits, want) {
+		t.Fatalf("waits=%v, want %v", waits, want)
+	}
+}
+
+func TestRestartBlobReadinessRejectsNonTransientOrInvalidEvidenceWithoutRetry(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		response func(*http.Request) (*http.Response, error)
+	}{
+		{
+			name: "authorization denial",
+			response: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusUnauthorized, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("denied")), Request: r}, nil
+			},
+		},
+		{
+			name: "redirect",
+			response: func(r *http.Request) (*http.Response, error) {
+				headers := make(http.Header)
+				headers.Set("Location", "https://other.example.test/")
+				return &http.Response{StatusCode: http.StatusFound, Header: headers, Body: io.NopCloser(strings.NewReader("redirect")), Request: r}, nil
+			},
+		},
+		{
+			name: "wrong bytes with success status",
+			response: func(r *http.Request) (*http.Response, error) {
+				headers := make(http.Header)
+				headers.Set("Cache-Control", "private, no-store")
+				headers.Set("X-Content-Type-Options", "nosniff")
+				headers.Set("Content-Disposition", "attachment; filename=exact-bytes.bin")
+				return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(strings.NewReader("wrong")), Request: r}, nil
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts, waits := 0, 0
+			h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				return tc.response(r)
+			})}
+			s := Suite{RestartReadinessWait: func(context.Context, time.Duration) error { waits++; return nil }}
+			if err := s.verifyBlobPersistsAfterRestart(context.Background(), h, "app.example.test", "blob_1"); err == nil {
+				t.Fatal("invalid restart evidence accepted")
+			}
+			if attempts != 1 || waits != 0 {
+				t.Fatalf("attempts=%d waits=%d, want one request and no retry", attempts, waits)
+			}
+		})
+	}
+}
+
+func TestRestartBlobReadinessWaitHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attempts := 0
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		attempts++
+		return nil, &url.Error{Op: "Get", URL: r.URL.String(), Err: syscall.ECONNREFUSED}
+	})}
+	s := Suite{RestartReadinessWait: func(got context.Context, _ time.Duration) error {
+		cancel()
+		return got.Err()
+	}}
+	if err := s.verifyBlobPersistsAfterRestart(ctx, h, "app.example.test", "blob_1"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context cancellation", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts=%d, want 1", attempts)
 	}
 }
 

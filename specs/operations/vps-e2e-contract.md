@@ -170,8 +170,13 @@ values.
    containing a second part without changing the catalog, then upload, list,
    download, and delete one binary fixture. Download bytes must be exact and
    have attachment, `private, no-store`, and `nosniff` headers. Anonymous and
-   guessed cross-app reads must return denial without fixture bytes. A service
-   restart must preserve the ready blob before the delete assertion.
+   guessed cross-app reads must return denial without fixture bytes. After the
+   service restart, the suite performs a bounded, context-cancellable gateway
+   readiness retry only for connection-startup transport failures or 502/503/
+   504 responses; every successful retry response must still prove the exact
+   blob bytes and attachment, `private, no-store`, and `nosniff` headers before
+   the delete assertion. Redirects, denials, all other statuses, wrong bytes,
+   and wrong headers fail immediately.
 8. In reuse mode, after a newly active probe app exists, copy no new secrets
    and invoke only `tinyhost verify-artifact` followed by the supported local
    signed `tinyhost update` path. It verifies the candidate against the
