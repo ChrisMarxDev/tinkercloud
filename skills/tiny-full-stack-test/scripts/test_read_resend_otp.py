@@ -94,5 +94,13 @@ class ReaderTests(unittest.TestCase):
     def test_detail_recipient_comparison_is_case_normalized(self):
         self.assertEqual(reader.extract_code({"from": "tiny@example.test", "to": ["VIEWER@EXAMPLE.TEST"], "subject": "Your sign-in code", "text": "Your code: 123456"}, "viewer@example.test", "tiny@example.test"), "123456")
 
+    def test_parses_resend_short_offset_timestamp_shapes(self):
+        self.assertEqual(reader.parse_time("2026-07-27 12:34:56.12345+00"), dt.datetime(2026, 7, 27, 12, 34, 56, 123450, tzinfo=dt.timezone.utc))
+        self.assertEqual(reader.parse_time("2026-07-27 12:34:56.123456-02"), dt.datetime(2026, 7, 27, 14, 34, 56, 123456, tzinfo=dt.timezone.utc))
+
+    def test_rejects_naive_and_malformed_timestamps(self):
+        for value in ("2026-07-27 12:34:56", "2026-07-27 12:34:56.123456+0", "2026-07-27T12:34:56+001", "not-a-time"):
+            self.assertIsNone(reader.parse_time(value))
+
 
 if __name__ == "__main__": unittest.main()

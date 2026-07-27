@@ -28,6 +28,7 @@ BODY = re.compile(r"\AYour code: ([0-9]{4,12})\Z")
 MESSAGE_ID = re.compile(r"\A[A-Za-z0-9_-]{1,200}\Z")
 HOST = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
 EMAIL = re.compile(r"\A[^\s@]+@[^\s@]+\.[^\s@]+\Z")
+TIMESTAMP = re.compile(r"\A\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)\Z")
 
 
 class ReaderError(Exception):
@@ -130,10 +131,16 @@ def save_ledger(path: Path, ids: Iterable[str]) -> None:
 
 
 def parse_time(raw: Any) -> dt.datetime | None:
-    if not isinstance(raw, str):
+    if not isinstance(raw, str) or not TIMESTAMP.fullmatch(raw):
         return None
+    normalized = raw
+    normalized = re.sub(r"\.(\d{1,6})(?=Z|[+-])", lambda match: "." + match.group(1).ljust(6, "0"), normalized)
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    elif re.search(r"[+-]\d{2}\Z", normalized):
+        normalized += ":00"
     try:
-        parsed = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        parsed = dt.datetime.fromisoformat(normalized)
     except ValueError:
         return None
     if parsed.tzinfo is None:
