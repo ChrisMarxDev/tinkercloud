@@ -1,0 +1,184 @@
+package client
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"strings"
+	"testing"
+)
+
+type rt func(*http.Request) (*http.Response, error)
+
+func (f rt) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+func TestDeployActivatesVerified(t *testing.T) {
+	n := 0
+	c := New("https://tiny.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		n++
+		if n <= 2 && r.Header.Get("Authorization") != "Bearer secret-token" {
+			t.Fatal("bearer")
+		}
+		if n == 1 {
+			return &http.Response{StatusCode: 202, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+		}
+		if n == 2 && (r.URL.Path != "/api/v1/apps/demo/deployments/d/activate" || r.Header.Get("Idempotency-Key") == "") {
+			t.Fatal(r.URL, r.Header)
+		}
+		if n == 2 {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		}
+		if n != 3 || r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
+		}
+		return anonymousDenied(r), nil
+	})}
+	o, e := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+	if e != nil || o.DeploymentID != "d" {
+		t.Fatal(o, e)
+	}
+}
+
+func anonymousDenied(r *http.Request) *http.Response {
+	h := make(http.Header)
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Request-ID", "req_0123456789abcdef01234567")
+	return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"not_authorized","message":"This request is not authorized.","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+}
+
+func deployedClient(probe func(*http.Request) (*http.Response, error)) Client {
+	n := 0
+	c := New("https://tiny.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		n++
+		switch n {
+		case 1:
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+		case 2:
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		default:
+			return probe(r)
+		}
+	})}
+	return c
+}
+
+func TestDeployRejectsInvalidPublicGatewayEvidence(t *testing.T) {
+	for name, probe := range map[string]func(*http.Request) (*http.Response, error){
+		"404 is not app denial": func(r *http.Request) (*http.Response, error) {
+			out := anonymousDenied(r)
+			out.StatusCode = http.StatusNotFound
+			return out, nil
+		},
+		"public 200 is not app denial": func(r *http.Request) (*http.Response, error) {
+			out := anonymousDenied(r)
+			out.StatusCode = http.StatusOK
+			return out, nil
+		},
+		"malformed envelope": func(r *http.Request) (*http.Response, error) {
+			out := anonymousDenied(r)
+			out.Body = io.NopCloser(strings.NewReader(`{"error":{"code":"not_found"}}`))
+			return out, nil
+		},
+		"mismatched request id": func(r *http.Request) (*http.Response, error) {
+			out := anonymousDenied(r)
+			out.Header.Set("X-Request-ID", "req_abcdefabcdefabcdefabcdef")
+			return out, nil
+		},
+		"oversized body": func(r *http.Request) (*http.Response, error) {
+			out := anonymousDenied(r)
+			out.Body = io.NopCloser(strings.NewReader(strings.Repeat("x", int(maxAnonymousDenyEvidenceBytes+1))))
+			return out, nil
+		},
+		"transport failure": func(*http.Request) (*http.Response, error) {
+			return nil, errors.New("dial failed")
+		},
+		"redirect is not a denial": func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": []string{"https://evil.example/"}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := deployedClient(probe).Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+			if !errors.Is(err, ErrDeploymentEvidence) {
+				t.Fatalf("error = %v, want deployment evidence denial", err)
+			}
+		})
+	}
+}
+
+func TestDeployPublicProbeUsesNoCookieJarOrBearer(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := deployedClient(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("Authorization"); got != "" {
+			t.Fatalf("deployer authorization leaked to app host: %q", got)
+		}
+		if got := r.Header.Get("Cookie"); got != "" {
+			t.Fatalf("cookie leaked to app host: %q", got)
+		}
+		return anonymousDenied(r), nil
+	})
+	c.HTTP.Jar = jar
+	// The app-origin cookie proves this is stronger than merely avoiding a
+	// manually-added Cookie header on the request.
+	appURL, _ := http.NewRequest(http.MethodGet, "https://demo.tiny.test/", nil)
+	jar.SetCookies(appURL.URL, []*http.Cookie{{Name: "session", Value: "viewer"}})
+	if _, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeployRejectsUnexpectedPublicURL(t *testing.T) {
+	c := New("https://tiny.test", "secret-token")
+	n := 0
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		n++
+		if n == 1 {
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://other.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+	})}
+	if _, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload"); !errors.Is(err, ErrDeploymentEvidence) {
+		t.Fatalf("error = %v, want deployment evidence denial", err)
+	}
+	if n != 2 {
+		t.Fatalf("unexpected public probe to untrusted URL: %d requests", n)
+	}
+}
+
+func TestExpectedAppURLUsesServerDerivedSuffixNotControlHost(t *testing.T) {
+	// Production commonly exposes control at tiny.example.com while the
+	// wildcard app gateway is *.apps.example.com. The activation response's
+	// server-derived suffix, rather than the control base URL, binds that host.
+	u, err := expectedAppURL("demo", "apps.example.com", "https://demo.apps.example.com/")
+	if err != nil || u.String() != "https://demo.apps.example.com/" {
+		t.Fatalf("expected documented app URL, got %v %v", u, err)
+	}
+	if _, err := expectedAppURL("demo", "apps.example.com", "https://demo.apps.example.com.evil/"); err == nil {
+		t.Fatal("accepted a suffix-confusion app URL")
+	}
+}
+
+func TestDeployActivationEvidenceDenied(t *testing.T) {
+	c := New("https://tiny.test", "secret")
+	n := 0
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		n++
+		body := `{"deployment_id":"d","state":"verified"}`
+		if n == 2 {
+			body = `{"deployment_id":"d"}`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: r}, nil
+	})}
+	_, e := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "k")
+	if e == nil || strings.Contains(e.Error(), "secret") {
+		t.Fatal(e)
+	}
+}

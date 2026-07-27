@@ -1,0 +1,14 @@
+{{define "content"}}
+<main class="tiny-auth" id="main">
+  <section class="tiny-auth-card" aria-labelledby="error-title">
+    <a class="tiny-brand" href="{{.Href}}" aria-label="TinyHost">
+      <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
+      <span>tinyhost</span>
+    </a>
+    <p class="tiny-eyebrow">Safe next step</p>
+    <h1 id="error-title">{{.Title}}</h1>
+    <div class="tiny-notice tiny-notice--warning" role="alert"><p>{{.Message}}</p></div>
+    <a class="tiny-button tiny-button--primary tiny-button--full" href="{{.Href}}">{{.Label}}</a>
+  </section>
+</main>
+{{end}}

@@ -1,0 +1,65 @@
+name: Feature request
+description: Propose a focused TinyHost product change
+title: "feat: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        V1 scope is intentionally narrow. Read PRINCIPLES.md and docs/product/v1-scope.md before proposing a change.
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Who is blocked, and what observable outcome do they need?
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Roadmap fit
+      options:
+        - M0 — contract and denial harness
+        - M1 — gateway boundary
+        - M2 — identity and policy
+        - M3 — deployment loop
+        - M4 — SDK, KV, and realtime
+        - M5 — operable release
+        - Post-V1 or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Smallest useful outcome
+      description: Describe a narrow vertical slice, not a broad implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: trust
+    attributes:
+      label: Trust boundary and data ownership
+      description: Identify any authority, tenant data, credential, listener, persistence, or public-interface change.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Explicit non-goals
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Scope checks
+      options:
+        - label: I read the core principles and searched existing issues.
+          required: true
+        - label: I have not included secrets, personal data, or private infrastructure details.
+          required: true

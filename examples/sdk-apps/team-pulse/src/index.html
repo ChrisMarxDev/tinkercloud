@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A private team pulse board powered by TinyHost KV and ephemeral live channels."
+    >
+    <title>Team Pulse</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◌</span>
+          <span>Team Pulse</span>
+        </div>
+        <div class="viewer" title="Current TinyHost viewer">
+          <span id="viewer-avatar" class="avatar" aria-hidden="true">?</span>
+          <span id="viewer-email" class="viewer-email">Connecting…</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p id="app-name" class="eyebrow">Private workspace</p>
+            <h1 id="page-title">How is the room, right now?</h1>
+            <p class="lede">
+              Leave a small signal for the team. This is shared current state,
+              not attendance tracking or durable presence history.
+            </p>
+          </div>
+          <div id="live-status" class="status" data-tone="warning" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="live-copy">Discovering capabilities</span>
+          </div>
+        </section>
+
+        <div id="notice" class="notice" data-tone="danger" role="alert" hidden>
+          <strong id="notice-title"></strong>
+          <span id="notice-message"></span>
+          <small id="notice-request"></small>
+        </div>
+
+        <section class="workspace" aria-label="Team pulse workspace">
+          <aside class="panel">
+            <div class="panel-body">
+              <p class="eyebrow">Your pulse</p>
+              <h2>Pick the closest signal</h2>
+              <form id="pulse-form">
+                <div class="choice-grid field" role="group" aria-label="Pulse">
+                  <button class="choice" type="button" data-pulse="focused">
+                    <span class="choice-copy">
+                      <span class="choice-emoji" aria-hidden="true">◎</span>
+                      <span><strong>Focused</strong><small>Heads down</small></span>
+                    </span>
+                  </button>
+                  <button class="choice" type="button" data-pulse="open">
+                    <span class="choice-copy">
+                      <span class="choice-emoji" aria-hidden="true">✦</span>
+                      <span><strong>Open</strong><small>Happy to help</small></span>
+                    </span>
+                  </button>
+                  <button class="choice" type="button" data-pulse="blocked">
+                    <span class="choice-copy">
+                      <span class="choice-emoji" aria-hidden="true">△</span>
+                      <span><strong>Blocked</strong><small>Could use a hand</small></span>
+                    </span>
+                  </button>
+                  <button class="choice" type="button" data-pulse="away">
+                    <span class="choice-copy">
+                      <span class="choice-emoji" aria-hidden="true">☕</span>
+                      <span><strong>Away</strong><small>Back later</small></span>
+                    </span>
+                  </button>
+                </div>
+
+                <div class="field">
+                  <label for="pulse-note">Optional note</label>
+                  <textarea
+                    id="pulse-note"
+                    name="note"
+                    maxlength="80"
+                    placeholder="A little context…"
+                  ></textarea>
+                  <p class="hint">Up to 80 characters. Visible to app viewers.</p>
+                </div>
+
+                <div class="button-row">
+                  <button id="save-pulse" class="button button-primary" type="submit">
+                    Share pulse
+                  </button>
+                  <button id="clear-pulse" class="button button-secondary" type="button">
+                    Clear mine
+                  </button>
+                </div>
+              </form>
+              <div class="meta-row">
+                <span id="pulse-count">0 signals</span>
+                <span>Current state only</span>
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel" aria-labelledby="room-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="room-title">The room</h2>
+                <p>Live messages trigger a KV reread.</p>
+              </div>
+              <button id="refresh" class="button button-secondary" type="button">
+                Refresh
+              </button>
+            </div>
+            <div id="pulse-grid" class="pulse-grid"></div>
+            <div id="empty" class="empty">
+              <div class="empty-icon" aria-hidden="true">◌</div>
+              <h3>Quiet for now</h3>
+              <p>Share the first pulse. It remains until that viewer clears it.</p>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>Private app-scoped state · no attendance history</span>
+        <span>Reconnect means reread, never replay.</span>
+      </footer>
+    </div>
+  </body>
+</html>

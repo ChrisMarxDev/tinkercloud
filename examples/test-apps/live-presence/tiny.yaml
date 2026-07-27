@@ -1,0 +1,8 @@
+version: 1
+name: live-presence
+description: Private live presence example.
+build:
+  output: .
+features:
+  kv: true
+  realtime: true

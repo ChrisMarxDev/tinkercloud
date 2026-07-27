@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost — Development Concept</title>
+  <link rel="stylesheet" href="assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="#value">Value</a>
+      <a href="#scope">Scope</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#delivery">Delivery</a>
+      <a href="#questions">Questions</a>
+      <a href="#decision">Decision</a>
+      <a href="../PRD.md">Canonical PRD</a>
+      <a href="features/index.html">Feature ranking</a>
+    </nav>
+    <p class="eyebrow">Implementation concept · July 2026</p>
+    <h1>A private app gateway that happens to deploy apps.</h1>
+    <p class="lede">TinyHost lets one technical operator provide a safe,
+      self-hosted deployment destination to people and agents who should not
+      need to understand infrastructure or implement authentication.</p>
+    <p class="promise">No private app file, API, socket, blob, or backend request
+      is reachable until TinyHost has authenticated and authorized it.</p>
+  </header>
+
+  <main>
+    <section id="value">
+      <p class="eyebrow">Reason for existing</p>
+      <h2>Move the hardest recurring requirement outside generated apps</h2>
+      <div class="grid">
+        <div class="two-thirds">
+          <p>Small internal and client-facing apps are cheap to create but
+            surprisingly expensive to expose safely. Authentication is repeated,
+            inconsistently implemented, and easy for AI-generated software to
+            omit. TinyHost makes privacy a property of the hosting boundary,
+            independent of app framework or developer discipline.</p>
+          <p>The smallest compelling experience is one command that returns a
+            protected URL and verifies that anonymous requests receive no app
+            bytes.</p>
+          <p><strong>North star:</strong> Shopify Quick's folder-to-secure-URL,
+            client capability APIs, bundled agent skills, and “keep it simple,
+            embrace the constraints” philosophy—adapted to TinyHost's stricter
+            per-app authorization model.</p>
+          <p><a href="../docs/product/north-star-quick.md">Quick comparison and
+            decision filter</a></p>
+        </div>
+        <div class="third card">
+          <div class="metric"><span>User impact</span><span class="score">5 / 5</span></div>
+          <div class="metric"><span>V1 complexity</span><span class="score">5 / 5</span></div>
+          <div class="metric"><span>Scoped yield</span><span class="score">4 / 5</span></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">V1 scope</p>
+        <h2>One protected static loop</h2>
+        <ul>
+          <li>One <code>tinyhost</code> server binary on a clean Hetzner VPS.</li>
+          <li>A separate small <code>tiny</code> deployer CLI.</li>
+          <li>Operator and deployer control plane.</li>
+          <li>Resend email OTP and app-scoped sessions.</li>
+          <li>Private-only email/domain policy with implicit owner access.</li>
+          <li>Immutable static releases, activation, and rollback.</li>
+          <li>Current-user, bounded JSON KV, and ephemeral realtime APIs.</li>
+          <li>First-class TypeScript SDK and capability discovery.</li>
+          <li>Audit, quotas, signed self-update/rollback, and diagnostics.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <h2>Do not become a PaaS in V1</h2>
+        <ul>
+          <li>No arbitrary backend processes or containers.</li>
+          <li>No custom domains, teams, billing, or marketplace.</li>
+          <li>No multi-node clustering or external database.</li>
+          <li>No public object URLs or browser secrets.</li>
+          <li>No blobs or durable/multi-node realtime in V1.</li>
+          <li>No operator backup/disaster recovery in the first release.</li>
+          <li>No provider secrets, LLM/Jira adapters, or arbitrary proxy in V1.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="architecture">
+      <p class="eyebrow">Implementation sketch</p>
+      <h2>A modular monolith with one typed security transition</h2>
+      <div class="flow" aria-label="Authorized request flow">
+        <span>Public request</span><b>→</b>
+        <span>Canonical host</span><b>→</b>
+        <span>Active app</span><b>→</b>
+        <span>App session</span><b>→</b>
+        <span>Current policy</span><b>→</b>
+        <span>AuthorizationContext</span><b>→</b>
+        <span>Protected dispatcher</span>
+      </div>
+      <div class="grid" style="margin-top: 1rem">
+        <div class="third card">
+          <h3>Gateway</h3>
+          <p class="muted">Owns public listeners, canonical host routing, app
+            resolution, session validation, current policy, and dispatcher
+            composition.</p>
+        </div>
+        <div class="third card">
+          <h3>Deployment</h3>
+          <p class="muted">Streams into staging, treats archives as hostile,
+            creates immutable releases, atomically activates, probes denial, and
+            restores the prior release on failure.</p>
+        </div>
+        <div class="third card">
+          <h3>Persistence</h3>
+          <p class="muted">SQLite holds authority and metadata; a private data
+            directory holds immutable release bytes. Durable intermediate states
+            bridge database and filesystem operations.</p>
+        </div>
+        <div class="third card">
+          <h3>Client SDK</h3>
+          <p class="muted">A small typed SDK is the primary app-development
+            surface for identity, KV, ephemeral realtime, capability discovery,
+            and future operator-governed integrations.</p>
+        </div>
+      </div>
+      <pre>if resolve/session/policy fails:
+    deny
+
+authz = authorize(activeApp, appScopedSession, currentPolicy)
+dispatchProtected(authz, classifiedEndpoint)</pre>
+      <p><a href="../docs/architecture/components.md">Detailed component map</a>
+        · <a href="../docs/architecture/state-machines.md">State machines</a>
+        · <a href="../docs/security/threat-model.md">Threat model</a></p>
+    </section>
+
+    <section id="delivery">
+      <p class="eyebrow">Delivery</p>
+      <h2>Five evidence-gated milestones</h2>
+      <table>
+        <thead><tr><th>Milestone</th><th>User outcome</th><th>Required evidence</th></tr></thead>
+        <tbody>
+          <tr><td>M0 · Spikes</td><td>Risky choices are decided</td><td>Host, archive, SQLite, cookie, and ACME proofs</td></tr>
+          <tr><td>M1 · Gateway</td><td>Allowed viewer sees operator-created app</td><td>Anonymous/wrong-app/revoked requests get zero bytes</td></tr>
+          <tr><td>M2 · Control</td><td>Deployer can own app and policy</td><td>RBAC, audit, token revocation, tenant denial</td></tr>
+          <tr><td>M3 · Deploy</td><td>One command returns protected URL</td><td>Attack archives, interruption recovery, public denial probes</td></tr>
+          <tr><td>M4 · SDK + live state</td><td>Static app persists KV state and reacts live</td><td>Two-app matrix, socket revocation, quotas, reconnect recovery</td></tr>
+          <tr><td>M5 · Operate</td><td>Operator initializes and updates a clean Hetzner host</td><td>One-command install, failed-update rollback, socket inventory, signed release</td></tr>
+        </tbody>
+      </table>
+      <p>The AI loop separates planner, implementer, adversary, reviewer, and
+        verifier roles. Every protected path gets negative tests before its
+        happy path is considered complete.</p>
+      <p><a href="../docs/delivery/ai-development-loop.md">AI development loop</a>
+        · <a href="../docs/delivery/agent-skills.md">Agent skill system</a>
+        · <a href="../docs/delivery/roadmap.md">Full roadmap</a></p>
+    </section>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Open questions</p>
+      <h2>Resolve with bounded spikes, not incidental code</h2>
+      <ol>
+        <li>Does per-host HTTP-challenge ACME meet creation rates and operational
+          simplicity, or is a manual wildcard escape hatch required?</li>
+        <li>Which CGO-free SQLite driver meets performance, migration,
+          update-rollback, and security requirements under real concurrent
+          workloads?</li>
+        <li>What exact Linux file-opening primitives guarantee beneath-root,
+          no-symlink behavior across supported distributions?</li>
+        <li>Should a failed post-activation public denial probe automatically
+          roll back, quarantine the entire app, or both?</li>
+        <li>What operator recovery credential and ceremony work when email is
+          unavailable without creating a second remote auth bypass?</li>
+        <li>Which CSP defaults remain useful for arbitrary static apps without
+          creating false confidence?</li>
+        <li>Which concrete Quick API conventions should TinyHost preserve, and
+          where should stricter authorization remain visibly explicit?</li>
+      </ol>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Build the secure static slice; defer the general runtime</h2>
+      <p><strong>Do:</strong> The problem is concrete, the structural solution
+        is differentiated, and the secure static slice has high value for
+        internal tools, review apps, dashboards, and AI-generated interfaces.</p>
+      <p><strong>Don’t:</strong> Adding backend execution, blobs, durable
+        realtime, custom domains, and organization features before the
+        deployment denial proof would multiply attack surface and delay the
+        defining user value.</p>
+      <p class="muted">Decision basis: impact 5/5, full-concept complexity 5/5,
+        scoped V1 yield 4/5, primary risk severity 5/5. Proceed only with
+        evidence-gated milestones and the gateway invariant as a release blocker.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Offline planning artifact. See <a href="../PRD.md">the canonical PRD</a>,
+      <a href="../README.md">the repository guide</a>, and
+      <a href="features/index.html">planned-feature ranking</a>.</p>
+  </footer>
+</body>
+</html>

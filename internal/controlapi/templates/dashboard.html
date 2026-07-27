@@ -1,0 +1,293 @@
+{{define "content"}}
+<div class="tiny-shell">
+  <header class="tiny-topbar">
+    <a class="tiny-brand" href="/dashboard" aria-label="TinyHost dashboard">
+      <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
+      <span>tinyhost</span>
+    </a>
+    <div class="tiny-topbar__account">
+      <div class="tiny-account">
+        <strong>{{.Actor.Email}}</strong>
+        <span>{{.Actor.Role}}</span>
+      </div>
+      <form class="tiny-inline-form" method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <button class="tiny-button tiny-button--quiet tiny-button--small" type="submit">Sign out</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="tiny-main" id="main">
+    <div class="tiny-page-heading">
+      <div class="tiny-page-heading__copy">
+        <p class="tiny-eyebrow">Private by default</p>
+        <h1>Your tiny cloud.</h1>
+        <p>Apps, access, releases, and server health—kept small enough to understand.</p>
+      </div>
+      <span class="tiny-status" data-state="active">Control plane active</span>
+    </div>
+
+    <div class="tiny-notice tiny-notice--warning" role="status">
+      <p>
+        <strong>Replaceable utility data only.</strong>
+        V1 has no backup or disaster-recovery service. Your VPS remains the recovery authority.
+      </p>
+    </div>
+    {{if .Notice}}
+      <div class="tiny-notice tiny-notice--success" role="status"><p>{{.Notice}}</p></div>
+    {{end}}
+
+    <section class="tiny-section" aria-labelledby="overview-title">
+      <div class="tiny-section-header">
+        <div><p class="tiny-eyebrow">At a glance</p><h2 id="overview-title">Platform overview</h2></div>
+      </div>
+      <div class="tiny-grid tiny-grid--3">
+        <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Your apps</p><p class="tiny-stat__value">{{len .View.Apps}}</p></article>
+        {{if eq .Actor.Role "operator"}}
+          <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Deployers</p><p class="tiny-stat__value">{{len .View.Deployers}}</p></article>
+        {{end}}
+        <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Health checks</p><p class="tiny-stat__value">{{len .View.Health}}</p></article>
+      </div>
+    </section>
+
+    <section class="tiny-section" aria-labelledby="apps-title">
+      <div class="tiny-section-header">
+        <div><p class="tiny-eyebrow">Private applications</p><h2 id="apps-title">Your apps</h2></div>
+        <p>Every active app stays behind its current owner and allowlist policy.</p>
+      </div>
+      {{if .View.Apps}}
+        <div class="tiny-app-filter" data-tiny-app-filter hidden>
+          <label class="tiny-field" for="app-filter-query">
+            <span class="tiny-label">Search apps</span>
+            <input class="tiny-input" id="app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="app-list" data-tiny-app-filter-query>
+          </label>
+          <label class="tiny-field" for="app-filter-status">
+            <span class="tiny-label">Status</span>
+            <select class="tiny-select" id="app-filter-status" aria-controls="app-list" data-tiny-app-filter-status>
+              <option value="">All statuses</option>
+              <option value="creating">creating</option>
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="deleting">deleting</option>
+              <option value="deleted">deleted</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <p class="tiny-app-filter__count" data-tiny-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tiny-grid tiny-grid--2" id="app-list" data-tiny-app-list>
+          {{range .View.Apps}}
+            {{$app := .}}
+            <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="{{.Slug}}" data-tiny-app-description="{{.Description}}" data-tiny-app-status="{{.Status}}">
+              <div class="tiny-app-card__summary">
+                <div class="tiny-card__header">
+                  <div><p class="tiny-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tiny-card__meta">{{.Description}}</p>{{end}}</div>
+                  {{if .StableURL}}<a class="tiny-button tiny-button--secondary tiny-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>{{end}}
+                  <span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span>
+                </div>
+                <p class="tiny-card__meta">Current policy: {{.Access.Mode}} (revision {{.Access.Revision}}); releases: {{len .Releases}}; tokens: {{len .Tokens}}</p>
+              </div>
+              <div class="tiny-app-card__body">
+                <details class="tiny-details">
+                  <summary>Access policy</summary>
+                  <div class="tiny-details__body tiny-stack">
+                    <div class="tiny-notice">
+                      <p id="policy-help-{{$app.Slug}}">
+                        You are always an implicit viewer.
+                        {{if or .Access.Emails .Access.Domains}}
+                          These are the additional viewers allowed by the current policy.
+                        {{else}}
+                          This app is owner-only: no additional email or domain viewers are allowed.
+                        {{end}}
+                        A future deployment can replace this policy with its immutable <code>tiny.yaml</code> allowlist.
+                      </p>
+                    </div>
+                    {{if or .Access.Emails .Access.Domains}}
+                      <dl class="tiny-definition">
+                        {{if .Access.Emails}}<dt>Emails</dt><dd>{{range $index, $email := .Access.Emails}}{{if $index}}, {{end}}{{$email}}{{end}}</dd>{{end}}
+                        {{if .Access.Domains}}<dt>Domains</dt><dd>{{range $index, $domain := .Access.Domains}}{{if $index}}, {{end}}{{$domain}}{{end}}</dd>{{end}}
+                      </dl>
+                    {{end}}
+                    <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/access">
+                      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                      <input type="hidden" name="expected_revision" value="{{.Access.Revision}}">
+                      <label class="tiny-field" for="emails-{{$app.Slug}}">
+                        <span class="tiny-label">Allowed emails</span>
+                        <textarea class="tiny-textarea" id="emails-{{$app.Slug}}" name="emails" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Emails}}{{.}}
+{{end}}</textarea>
+                        <span class="tiny-help">One exact email per line or comma-separated.</span>
+                      </label>
+                      <label class="tiny-field" for="domains-{{$app.Slug}}">
+                        <span class="tiny-label">Allowed domains</span>
+                        <textarea class="tiny-textarea" id="domains-{{$app.Slug}}" name="domains" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Domains}}{{.}}
+{{end}}</textarea>
+                        <span class="tiny-help">Use domains such as <code>acme.com</code>.</span>
+                      </label>
+                      <label class="tiny-choice">
+                        <input class="tiny-checkbox" type="checkbox" name="confirm_broadening" value="confirm">
+                        <span>I confirm that adding any new email or domain broadens access.</span>
+                      </label>
+                      <button class="tiny-button tiny-button--primary" type="submit">Replace current policy</button>
+                    </form>
+                  </div>
+                </details>
+
+                <details class="tiny-details">
+                  <summary>Tokens</summary>
+                  <div class="tiny-details__body tiny-stack">
+                    <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/tokens">
+                      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                      <label class="tiny-field">
+                        <span class="tiny-label">Scopes</span>
+                        <input class="tiny-input tiny-mono" name="scopes" value="app:read">
+                        <span class="tiny-help">Comma-separated, least-privilege scopes.</span>
+                      </label>
+                      <label class="tiny-field">
+                        <span class="tiny-label">Lifetime in seconds</span>
+                        <input class="tiny-input tiny-mono" name="expires_in_seconds" value="3600" inputmode="numeric">
+                      </label>
+                      <button class="tiny-button tiny-button--primary" type="submit">Create display-once token</button>
+                    </form>
+                    {{range .Tokens}}
+                      <div class="tiny-cluster tiny-cluster--between">
+                        <div>
+                          <strong class="tiny-mono">{{.ID}}</strong>
+                          <p class="tiny-card__meta">{{range $index, $scope := .Scopes}}{{if $index}}, {{end}}{{$scope}}{{end}}</p>
+                        </div>
+                        <form method="post" action="/apps/{{$app.Slug}}/tokens/{{.ID}}/revoke">
+                          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                          <button class="tiny-button tiny-button--danger tiny-button--small" type="submit">Revoke</button>
+                        </form>
+                      </div>
+                    {{end}}
+                  </div>
+                </details>
+
+                <details class="tiny-details">
+                  <summary>Releases and rollback</summary>
+                  <div class="tiny-details__body tiny-stack">
+                    {{if .Releases}}
+                      {{range .Releases}}
+                        <div class="tiny-cluster tiny-cluster--between">
+                          <div><strong class="tiny-mono">{{.ID}}</strong><p class="tiny-card__meta">{{.State}} · {{.CreatedAt}}</p>{{if .Description}}<p class="tiny-card__meta">{{.Description}}</p>{{end}}</div>
+                          <form method="post" action="/apps/{{$app.Slug}}/rollback">
+                            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                            <input type="hidden" name="deployment" value="{{.ID}}">
+                            <button class="tiny-button tiny-button--secondary tiny-button--small" type="submit">Roll back</button>
+                          </form>
+                        </div>
+                      {{end}}
+                    {{else}}
+                      <p class="tiny-card__meta">No immutable releases found.</p>
+                    {{end}}
+                  </div>
+                </details>
+
+                <details class="tiny-details">
+                  <summary>App controls</summary>
+                  <div class="tiny-details__body tiny-stack">
+                    {{if eq .Status "active"}}
+                      <form method="post" action="/apps/{{.Slug}}/suspend">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <button class="tiny-button tiny-button--secondary" type="submit">Suspend app</button>
+                      </form>
+                    {{else if eq .Status "suspended"}}
+                      <form method="post" action="/apps/{{.Slug}}/resume">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <button class="tiny-button tiny-button--primary" type="submit">Resume app</button>
+                      </form>
+                    {{end}}
+                    <div class="tiny-danger-zone">
+                      <h3>Delete {{.Slug}}</h3>
+                      <p class="tiny-card__meta">Deletion revokes access first. Confirm the exact target to continue.</p>
+                      <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/delete">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <label class="tiny-field">
+                          <span class="tiny-label">Type <code>delete:{{.Slug}}</code></span>
+                          <input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off">
+                        </label>
+                        <button class="tiny-button tiny-button--danger" type="submit">Delete app</button>
+                      </form>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </article>
+          {{end}}
+        </div>
+        <div class="tiny-empty tiny-app-filter__no-results" data-tiny-app-filter-empty hidden>
+          <div class="tiny-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Try a different app slug, description, or status filter. Your authorized apps have not changed.</p>
+        </div>
+      {{else}}
+        <div class="tiny-empty">
+          <div class="tiny-empty__icon" aria-hidden="true">→</div>
+          <h3>No apps yet.</h3>
+          <p>Build a static app, then run <code>tiny deploy ./dist</code> to create its private URL.</p>
+        </div>
+      {{end}}
+    </section>
+
+    {{if eq .Actor.Role "operator"}}
+      <section class="tiny-section" aria-labelledby="deployers-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Operator only</p><h2 id="deployers-title">Deployers</h2></div>
+          <p>Authorization grants narrow deployment power, never server or viewer authority.</p>
+        </div>
+        {{if .View.Deployers}}
+          <div class="tiny-stack">
+            {{range .View.Deployers}}
+              <article class="tiny-card tiny-card--flat">
+                <div class="tiny-cluster tiny-cluster--between">
+                  <div><strong>{{.Email}}</strong><div><span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span></div></div>
+                  <div class="tiny-cluster">
+                    {{if eq .Status "active"}}
+                      <form method="post" action="/deployers/{{.Email}}/suspend"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="confirmation" value="suspend:{{.Email}}"><button class="tiny-button tiny-button--secondary tiny-button--small" type="submit">Suspend</button></form>
+                      <form method="post" action="/deployers/{{.Email}}/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="confirmation" value="revoke:{{.Email}}"><button class="tiny-button tiny-button--danger tiny-button--small" type="submit">Revoke</button></form>
+                    {{else}}
+                      <form method="post" action="/deployers/{{.Email}}/authorize"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="confirmation" value="authorize:{{.Email}}"><button class="tiny-button tiny-button--primary tiny-button--small" type="submit">Authorize</button></form>
+                    {{end}}
+                  </div>
+                </div>
+              </article>
+            {{end}}
+          </div>
+        {{else}}
+          <div class="tiny-empty"><div class="tiny-empty__icon" aria-hidden="true">+</div><h3>No deployers found.</h3><p>Authorize deployers locally from the VPS before they can sign in or create apps.</p></div>
+        {{end}}
+      </section>
+
+      <section class="tiny-section" aria-labelledby="audit-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Recent activity</p><h2 id="audit-title">Audit</h2></div></div>
+        {{if .View.Audit}}
+          <div class="tiny-table-wrap">
+            <table class="tiny-table">
+              <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Target</th></tr></thead>
+              <tbody>{{range .View.Audit}}<tr><td>{{.OccurredAt}}</td><td>{{.Action}}</td><td>{{.Outcome}}</td><td>{{.Target}}</td></tr>{{end}}</tbody>
+            </table>
+          </div>
+        {{else}}
+          <div class="tiny-empty"><h3>No recent audit events.</h3><p>Audited mutations will appear here without raw credentials or request bodies.</p></div>
+        {{end}}
+      </section>
+    {{end}}
+
+    <section class="tiny-section" aria-labelledby="health-title">
+      <div class="tiny-section-header">
+        <div><p class="tiny-eyebrow">Fail closed</p><h2 id="health-title">Server health</h2></div>
+        <p>Run <code>tinyhost doctor</code> on the VPS for local credential and dependency diagnostics.</p>
+      </div>
+      <div class="tiny-grid tiny-grid--2">
+        {{range .View.Health}}
+          <article class="tiny-card tiny-card--flat">
+            <div class="tiny-card__header"><h3>{{.Name}}</h3><span class="tiny-status" data-state="{{.State}}">{{.State}}</span></div>
+            <p class="tiny-card__meta">{{.Detail}}</p>
+          </article>
+        {{end}}
+      </div>
+    </section>
+    <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
+  </main>
+</div>
+{{end}}

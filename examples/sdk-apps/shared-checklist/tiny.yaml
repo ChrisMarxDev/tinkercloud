@@ -1,0 +1,16 @@
+version: 1
+name: shared-checklist
+description: A private shared task checklist.
+
+build:
+  output: dist
+
+access:
+  mode: private
+  allow:
+    emails: []
+    domains: []
+
+features:
+  kv: true
+  realtime: true

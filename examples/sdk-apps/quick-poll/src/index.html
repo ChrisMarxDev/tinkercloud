@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A private collaborative poll powered by TinyHost identity, KV, and ephemeral live hints."
+    >
+    <title>Quick Poll</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◫</span>
+          <span>Quick Poll</span>
+        </div>
+        <div class="viewer" title="Current TinyHost viewer">
+          <span id="viewer-avatar" class="avatar" aria-hidden="true">?</span>
+          <span id="viewer-email" class="viewer-email">Connecting…</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p id="app-name" class="eyebrow">Private workspace</p>
+            <h1 id="page-title">One question. A quick direction.</h1>
+            <p class="lede">
+              Change your mind whenever you like. Results are current shared KV
+              state; live events only tell this page when to reread it.
+            </p>
+          </div>
+          <div id="live-status" class="status" data-tone="warning" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="live-copy">Loading poll</span>
+          </div>
+        </section>
+
+        <div id="notice" class="notice" data-tone="danger" role="alert" hidden>
+          <strong id="notice-title"></strong>
+          <span id="notice-message"></span>
+          <small id="notice-request"></small>
+        </div>
+
+        <section class="workspace" aria-label="Poll workspace">
+          <aside class="panel">
+            <div class="panel-body">
+              <p class="eyebrow">Your answer</p>
+              <h2 id="poll-question">Loading the current question…</h2>
+              <p class="lede lede-compact">
+                This utility poll is not a secret or tamper-proof ballot.
+                Allowed viewers share one app capability boundary.
+              </p>
+              <div id="vote-choices" class="button-row"></div>
+              <div class="meta-row">
+                <span id="your-vote">No vote yet</span>
+                <button
+                  id="withdraw"
+                  class="button button-quiet button-danger"
+                  type="button"
+                >
+                  Withdraw
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel" aria-labelledby="results-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="results-title">Current results</h2>
+                <p id="vote-count">0 responses</p>
+              </div>
+              <button id="refresh" class="button button-secondary" type="button">
+                Refresh
+              </button>
+            </div>
+            <div id="results"></div>
+            <div id="empty" class="empty">
+              <div class="empty-icon" aria-hidden="true">◫</div>
+              <h3>No responses yet</h3>
+              <p>Choose an option to add the first response.</p>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>Private utility poll · app-scoped current state</span>
+        <span>No secret-ballot or durability guarantee.</span>
+      </footer>
+    </div>
+  </body>
+</html>

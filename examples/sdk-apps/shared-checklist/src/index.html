@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A private collaborative checklist powered by TinyHost KV and live change events."
+    >
+    <title>Shared Checklist</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">✓</span>
+          <span>Shared Checklist</span>
+        </div>
+        <div class="viewer" title="Current TinyHost viewer">
+          <span id="viewer-avatar" class="avatar" aria-hidden="true">?</span>
+          <span id="viewer-email" class="viewer-email">Connecting…</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p id="app-name" class="eyebrow">Private workspace</p>
+            <h1 id="page-title">Tiny tasks, held together.</h1>
+            <p class="lede">
+              A conflict-aware checklist for the people already allowed into
+              this app. Every change is app-scoped and updates nearby viewers.
+            </p>
+          </div>
+          <div id="sync-status" class="status" data-tone="warning" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="sync-copy">Loading current state</span>
+          </div>
+        </section>
+
+        <div id="notice" class="notice" data-tone="danger" role="alert" hidden>
+          <strong id="notice-title"></strong>
+          <span id="notice-message"></span>
+          <small id="notice-request"></small>
+        </div>
+
+        <section class="workspace" aria-label="Checklist workspace">
+          <aside class="panel">
+            <div class="panel-body">
+              <p class="eyebrow">Add something</p>
+              <h2>What needs doing?</h2>
+              <form id="task-form">
+                <div class="field">
+                  <label for="task-title">Task</label>
+                  <input
+                    id="task-title"
+                    name="title"
+                    type="text"
+                    maxlength="120"
+                    autocomplete="off"
+                    required
+                  >
+                  <p class="hint">1–120 characters. Saved as JSON in app KV.</p>
+                </div>
+                <button id="add-task" class="button button-primary" type="submit">
+                  Add task
+                </button>
+              </form>
+
+              <div class="meta-row">
+                <span id="task-count">0 tasks</span>
+                <button
+                  id="clear-complete"
+                  class="button button-quiet button-danger"
+                  type="button"
+                >
+                  Clear completed
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel" aria-labelledby="list-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="list-title">Current list</h2>
+                <p>KV is the source of truth.</p>
+              </div>
+              <button id="refresh" class="button button-secondary" type="button">
+                Refresh
+              </button>
+            </div>
+            <ul id="task-list" class="list"></ul>
+            <div id="empty" class="empty">
+              <div class="empty-icon" aria-hidden="true">✓</div>
+              <h3>All clear</h3>
+              <p>Add the first task. Other signed-in viewers will see it too.</p>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>Utility-grade state · private TinyHost app</span>
+        <span>Live events refresh KV; they are not history.</span>
+      </footer>
+    </div>
+  </body>
+</html>

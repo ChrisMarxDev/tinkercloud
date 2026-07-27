@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost — Planned Features</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav><a href="../index.html">TinyHost concept</a><a href="../../docs/delivery/roadmap.md">Roadmap</a></nav>
+    <p class="eyebrow">Planned-feature index</p>
+    <h1>Ranked by secure user value, not novelty.</h1>
+    <p class="lede">Only unimplemented work belongs here. Yield is practical
+      impact relative to complexity and risk.</p>
+  </header>
+  <main>
+    <section>
+      <table>
+        <thead>
+          <tr><th>Rank</th><th>Planned slice</th><th>Impact</th><th>Complexity</th><th>Yield</th><th>Decision</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><a href="secure-static-gateway.html">Secure static gateway</a></td>
+            <td>5</td><td>4</td><td>5</td>
+            <td>Build first; it is the product’s defining proof.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><a href="../../docs/delivery/roadmap.md">Immutable deploy + rollback</a></td>
+            <td>5</td><td>4</td><td>4</td>
+            <td>Build immediately after the protected read path.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><a href="../../docs/architecture/components.md">Deployer control plane + scoped tokens</a></td>
+            <td>4</td><td>3</td><td>4</td>
+            <td>Required for self-service and agent use.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><a href="client-sdk.html">Client SDK + current user + KV + realtime</a></td>
+            <td>4</td><td>3</td><td>4</td>
+            <td>First-class app surface; prove tenant scoping before expansion.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><a href="agent-skills.html">Coding-agent skill system</a></td>
+            <td>5</td><td>3</td><td>5</td>
+            <td>Required for low-ceremony, safe agent-built apps.</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><a href="hetzner-one-command-install.html">Hetzner install, diagnostics, signed update</a></td>
+            <td>5</td><td>4</td><td>4</td>
+            <td>Mandatory for the easiest production-capable path.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td><a href="capability-broker.html">Operator-governed LLM and service capabilities</a></td>
+            <td>5</td><td>5</td><td>3</td>
+            <td>Strong direction after SDK/KV/live; never deliver raw secrets to apps.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Blob storage</td>
+            <td>3</td><td>3</td><td>3</td>
+            <td>Defer until real apps demonstrate a need beyond JSON KV.</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Durable realtime history and multi-node fan-out</td>
+            <td>2</td><td>5</td><td>1</td>
+            <td>Defer; V1 already has bounded, ephemeral single-node channels.</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td>Central app SSO exchange</td>
+            <td>3</td><td>4</td><td>2</td>
+            <td>Wait for evidence that per-app login is the dominant pain.</td>
+          </tr>
+          <tr>
+            <td>11</td>
+            <td>Backend application runtime</td>
+            <td>4</td><td>5</td><td>1</td>
+            <td>Refuse in V1; requires a separate security concept.</td>
+          </tr>
+          <tr>
+            <td>12</td>
+            <td>Operator backup and disaster recovery</td>
+            <td>3</td><td>4</td><td>2</td>
+            <td>Advanced feature; toy and utility apps do not justify delaying V1.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="decision">
+      <h2>Ranking rule</h2>
+      <p>A capability moves upward only when it strengthens the protected
+        deployment loop, removes a demonstrated operator/deployer obstacle, or
+        has usage evidence. Features that broaden the runtime move downward
+        unless their isolation and recovery cost is independently funded.</p>
+    </section>
+  </main>
+  <footer><p>Scores use a 1–5 scale. Re-rank when base behavior ships or evidence changes.</p></footer>
+</body>
+</html>

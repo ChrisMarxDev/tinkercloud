@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyHost native web system</title>
+  <link rel="stylesheet" href="assets/tinyhost.css?v=1">
+  <script src="assets/tinyhost.js" defer></script>
+</head>
+<body>
+  <a class="tiny-skip" href="#main">Skip to content</a>
+  <div class="tiny-shell">
+    <header class="tiny-topbar">
+      <a class="tiny-brand" href="#">
+        <span class="tiny-brand__mark" aria-hidden="true">
+          <img src="assets/tiny-cloud-mark.svg" alt="">
+        </span>
+        <span>tinyhost</span>
+      </a>
+      <div class="tiny-topbar__account">
+        <div class="tiny-account">
+          <strong>operator@acme.com</strong>
+          <span>operator</span>
+        </div>
+        <button class="tiny-button tiny-button--quiet tiny-button--small" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main class="tiny-main" id="main">
+      <div class="tiny-page-heading">
+        <div class="tiny-page-heading__copy">
+          <p class="tiny-eyebrow">Native web system</p>
+          <h1>Small, warm, and secure.</h1>
+          <p>
+            Shared foundations and states for TinyHost login, dashboard,
+            diagnostics, tokens, and operations.
+          </p>
+        </div>
+        <span class="tiny-status" data-state="active">Ready to use</span>
+      </div>
+
+      <section class="tiny-section" aria-labelledby="actions-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Actions</p><h2 id="actions-title">Buttons and status</h2></div>
+        </div>
+        <div class="tiny-card tiny-stack">
+          <div class="tiny-cluster">
+            <button class="tiny-button tiny-button--primary" type="button">Primary action</button>
+            <button class="tiny-button tiny-button--secondary" type="button">Secondary</button>
+            <button class="tiny-button tiny-button--quiet" type="button">Quiet action</button>
+            <button class="tiny-button tiny-button--danger" type="button">Destructive</button>
+            <button class="tiny-button tiny-button--primary" type="button" data-state="busy" aria-busy="true" disabled>Saving policy</button>
+          </div>
+          <div class="tiny-cluster">
+            <span class="tiny-status" data-state="active">active</span>
+            <span class="tiny-status" data-state="degraded">degraded</span>
+            <span class="tiny-status" data-state="suspended">suspended</span>
+            <span class="tiny-status" data-state="validating">validating</span>
+            <span class="tiny-status" data-state="offline">offline</span>
+            <span class="tiny-status" data-state="unknown">unknown</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="feedback-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Feedback</p><h2 id="feedback-title">Notices carry words, not just color</h2></div>
+        </div>
+        <div class="tiny-grid tiny-grid--2">
+          <div class="tiny-notice" role="status"><p><strong>Private policy updated.</strong> The next request uses revision 8.</p></div>
+          <div class="tiny-notice tiny-notice--success" role="status"><p><strong>Deployment active.</strong> Anonymous denial was verified.</p></div>
+          <div class="tiny-notice tiny-notice--warning" role="status"><p><strong>Email degraded.</strong> Existing sessions continue; new sign-ins are paused.</p></div>
+          <div class="tiny-notice tiny-notice--danger" role="alert"><p><strong>Writes disabled.</strong> Free disk space on the VPS before retrying.</p></div>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="overlays-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Overlays</p><h2 id="overlays-title">Toasts and dialogs</h2></div>
+          <p>Short feedback stays light. Decisions still name the exact consequence.</p>
+        </div>
+        <div class="tiny-card tiny-stack">
+          <div class="tiny-cluster">
+            <button
+              class="tiny-button tiny-button--primary"
+              type="button"
+              data-tiny-toast-message="The next request uses policy revision 8."
+              data-tiny-toast-title="Private policy updated"
+              data-tiny-toast-tone="success"
+            >Show success toast</button>
+            <button
+              class="tiny-button tiny-button--secondary"
+              type="button"
+              data-tiny-toast-message="Email is unavailable. Existing sessions continue."
+              data-tiny-toast-title="Email degraded"
+              data-tiny-toast-tone="warning"
+            >Show warning toast</button>
+            <button
+              class="tiny-button tiny-button--danger"
+              type="button"
+              data-tiny-dialog-open="suspend-dialog"
+            >Open confirmation dialog</button>
+          </div>
+          <p class="tiny-card__meta">
+            Toasts announce non-blocking results. Dialogs use the native browser
+            focus loop, Escape handling, and focus return.
+          </p>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="disclosure-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Progressive disclosure</p><h2 id="disclosure-title">Expandable cards</h2></div>
+          <p>Important state stays visible while secondary controls remain tucked away.</p>
+        </div>
+        <div class="tiny-grid tiny-grid--2">
+          <details class="tiny-disclosure-card" open>
+            <summary>
+              <span class="tiny-disclosure-card__summary">
+                <span class="tiny-disclosure-card__title">Access policy</span>
+                <span class="tiny-disclosure-card__meta">Owner + everyone at acme.com</span>
+              </span>
+            </summary>
+            <div class="tiny-disclosure-card__body">
+              <dl class="tiny-definition">
+                <dt>Owner</dt><dd>operator@acme.com</dd>
+                <dt>Domain</dt><dd><code>acme.com</code></dd>
+                <dt>Revision</dt><dd>8</dd>
+              </dl>
+            </div>
+          </details>
+          <details class="tiny-disclosure-card">
+            <summary>
+              <span class="tiny-disclosure-card__summary">
+                <span class="tiny-disclosure-card__title">Releases and rollback</span>
+                <span class="tiny-disclosure-card__meta">4 immutable releases · current rel_01J</span>
+              </span>
+            </summary>
+            <div class="tiny-disclosure-card__body">
+              <p>Rollback selects a verified release and keeps the current one active until checks pass.</p>
+              <button class="tiny-button tiny-button--secondary" type="button">View releases</button>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="forms-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Forms</p><h2 id="forms-title">Plain inputs, exact consequences</h2></div>
+        </div>
+        <div class="tiny-auth-preview">
+          <article class="tiny-auth-card" aria-labelledby="auth-example-title">
+            <a class="tiny-brand" href="#">
+              <span class="tiny-brand__mark" aria-hidden="true"><img src="assets/tiny-cloud-mark.svg" alt=""></span>
+              <span>protected by tinyhost</span>
+            </a>
+            <p class="tiny-eyebrow">Private app</p>
+            <h1 id="auth-example-title">Sign in to continue.</h1>
+            <p class="tiny-auth-card__intro">Use an email address the app owner has allowed.</p>
+            <form class="tiny-stack">
+              <label class="tiny-field">
+                <span class="tiny-label">Email address</span>
+                <input class="tiny-input" type="email" autocomplete="email">
+              </label>
+              <button class="tiny-button tiny-button--primary tiny-button--full" type="button">Send one-time code</button>
+            </form>
+            <p class="tiny-auth-card__footer">This app is on the open internet, securely gated by TinyHost.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="form-controls-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Controls</p><h2 id="form-controls-title">Policy and confirmation forms</h2></div>
+        </div>
+        <div class="tiny-grid tiny-grid--2">
+          <article class="tiny-card tiny-stack">
+            <label class="tiny-field" data-state="invalid">
+              <span class="tiny-label">Email address</span>
+              <input class="tiny-input" type="email" value="viewer@acme" aria-invalid="true" aria-describedby="viewer-email-help viewer-email-error">
+              <span class="tiny-help" id="viewer-email-help">One exact viewer identity.</span>
+              <span class="tiny-error" id="viewer-email-error">Enter a complete email address.</span>
+            </label>
+            <label class="tiny-field">
+              <span class="tiny-label">Allowed domains</span>
+              <textarea class="tiny-textarea">acme.com</textarea>
+              <span class="tiny-help">One normalized domain per line.</span>
+            </label>
+            <label class="tiny-field">
+              <span class="tiny-label">Policy mode</span>
+              <select class="tiny-select"><option>Exact viewers and domains</option><option>Exact viewers only</option></select>
+            </label>
+            <label class="tiny-choice">
+              <input class="tiny-checkbox" type="checkbox">
+              <span>I confirm this change broadens access.</span>
+            </label>
+            <label class="tiny-choice">
+              <input class="tiny-radio" type="radio" name="policy-preview" checked>
+              <span>Preview policy before replacing it.</span>
+            </label>
+            <button class="tiny-button tiny-button--primary" type="button">Replace private policy</button>
+          </article>
+
+          <article class="tiny-card tiny-card--danger tiny-stack">
+            <div>
+              <p class="tiny-eyebrow">Danger zone</p>
+              <h3>Delete payroll-preview</h3>
+              <p class="tiny-card__meta">Access is revoked before deletion continues.</p>
+            </div>
+            <label class="tiny-field">
+              <span class="tiny-label">Type <code>delete:payroll-preview</code></span>
+              <input class="tiny-input tiny-mono" autocomplete="off">
+            </label>
+            <button class="tiny-button tiny-button--danger" type="button">Delete app</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="app-filter-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Progressive list filter</p><h2 id="app-filter-title">Find an authorized app</h2></div>
+          <p>The controls appear only after local enhancement; without it every app remains visible.</p>
+        </div>
+        <div class="tiny-app-filter" data-tiny-app-filter hidden>
+          <label class="tiny-field" for="showcase-app-filter-query">
+            <span class="tiny-label">Search apps</span>
+            <input class="tiny-input" id="showcase-app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="showcase-app-list" data-tiny-app-filter-query>
+          </label>
+          <label class="tiny-field" for="showcase-app-filter-status">
+            <span class="tiny-label">Status</span>
+            <select class="tiny-select" id="showcase-app-filter-status" aria-controls="showcase-app-list" data-tiny-app-filter-status>
+              <option value="">All statuses</option>
+              <option value="creating">creating</option>
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="deleting">deleting</option>
+              <option value="deleted">deleted</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <p class="tiny-app-filter__count" data-tiny-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tiny-grid tiny-grid--2" id="showcase-app-list" data-tiny-app-list>
+          <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="payroll-preview" data-tiny-app-description="Payroll review for finance" data-tiny-app-status="active">
+            <div class="tiny-app-card__summary"><div class="tiny-card__header"><div><h3>payroll-preview</h3><p class="tiny-card__meta">Payroll review for finance</p></div><a class="tiny-button tiny-button--secondary tiny-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><span class="tiny-status" data-state="active">active</span></div><p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
+          </article>
+          <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="migration-sandbox" data-tiny-app-description="Safe migration rehearsal" data-tiny-app-status="suspended">
+            <div class="tiny-app-card__summary"><div class="tiny-card__header"><h3>migration-sandbox</h3><span class="tiny-status" data-state="suspended">suspended</span></div><p class="tiny-card__meta">Private policy r3 · 1 release · 0 tokens</p></div>
+          </article>
+        </div>
+        <div class="tiny-empty tiny-app-filter__no-results" data-tiny-app-filter-empty hidden>
+          <div class="tiny-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Try a different app slug, description, or status filter. Your authorized apps have not changed.</p>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="data-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Operational data</p><h2 id="data-title">Cards, details, and tables</h2></div>
+        </div>
+        <article class="tiny-card tiny-app-card">
+          <div class="tiny-app-card__summary">
+            <div class="tiny-card__header">
+              <div><p class="tiny-eyebrow">Application</p><h3>payroll-preview</h3></div>
+              <span class="tiny-status" data-state="active">active</span>
+            </div>
+            <p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p>
+          </div>
+          <div class="tiny-app-card__body">
+            <details class="tiny-details" open>
+              <summary>Access policy</summary>
+              <div class="tiny-details__body">
+                <dl class="tiny-definition">
+                  <dt>Owner</dt><dd>operator@acme.com</dd>
+                  <dt>Domains</dt><dd><code>acme.com</code></dd>
+                  <dt>Revision</dt><dd>7</dd>
+                </dl>
+              </div>
+            </details>
+            <details class="tiny-details"><summary>Tokens</summary><div class="tiny-details__body"><p>One active app-scoped token.</p></div></details>
+            <details class="tiny-details"><summary>Releases and rollback</summary><div class="tiny-details__body"><p>Four immutable releases.</p></div></details>
+          </div>
+        </article>
+
+        <div class="tiny-table-wrap">
+          <table class="tiny-table">
+            <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Target</th></tr></thead>
+            <tbody>
+              <tr><td>2 minutes ago</td><td>policy.replaced</td><td><span class="tiny-status" data-state="succeeded">succeeded</span></td><td>payroll-preview</td></tr>
+              <tr><td>Yesterday</td><td>deployment.activated</td><td><span class="tiny-status" data-state="succeeded">succeeded</span></td><td>rel_01J</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="states-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Server states</p><h2 id="states-title">Visible failure paths and durable progress</h2></div>
+          <p>These are server-rendered states. No client-side state grants access or hides a denial.</p>
+        </div>
+        <div class="tiny-grid tiny-grid--2">
+          <article class="tiny-state tiny-state--loading" role="status">
+            <p class="tiny-state__title">Loading deployments</p>
+            <p class="tiny-state__copy">Fetching the current deployment list from this TinyHost server.</p>
+          </article>
+          <article class="tiny-state tiny-state--stale" role="status">
+            <p class="tiny-state__title">Showing cached deployment data</p>
+            <p class="tiny-state__copy">The latest safe list is still visible while refresh continues.</p>
+            <p class="tiny-state__meta">Last safe update: 10:42 UTC</p>
+          </article>
+          <article class="tiny-state tiny-state--unavailable" role="alert">
+            <p class="tiny-state__title">Deployment status is unavailable</p>
+            <p class="tiny-state__copy">Try again from this page. Do not assume an activation completed.</p>
+          </article>
+          <article class="tiny-state tiny-state--error" role="alert">
+            <p class="tiny-state__title">Deployment validation failed</p>
+            <p class="tiny-state__copy">Your previous release remains active. Review the safe validation summary before retrying.</p>
+          </article>
+        </div>
+        <div class="tiny-card tiny-stack tiny-stack--spaced">
+          <div class="tiny-progress" aria-labelledby="progress-title">
+            <div class="tiny-card__header"><div><h3 id="progress-title">Release validation</h3><p class="tiny-card__meta">Step 2 of 4: checking the staged archive.</p></div><span class="tiny-status" data-state="validating">validating</span></div>
+            <progress value="2" max="4">2 of 4 stages complete</progress>
+            <ol class="tiny-stage-list">
+              <li data-state="complete">Upload received</li>
+              <li aria-current="step">Archive validation in progress</li>
+              <li>Anonymous denial probe</li>
+              <li>Atomic activation</li>
+            </ol>
+          </div>
+          <nav class="tiny-pagination" aria-label="Deployment history pages">
+            <span aria-disabled="true">Previous</span>
+            <a href="?page=1" aria-current="page">1<span class="tiny-visually-hidden">, current page</span></a>
+            <a href="?page=2">2</a>
+            <a href="?page=2">Next</a>
+          </nav>
+        </div>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="empty-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">List state</p><h2 id="empty-title">Empty is still useful</h2></div>
+        </div>
+        <div class="tiny-empty">
+          <div class="tiny-empty__icon" aria-hidden="true">→</div>
+          <h3>No apps yet.</h3>
+          <p>Build a static app, then run <code>tiny deploy ./dist</code> to create its private URL.</p>
+        </div>
+      </section>
+
+      <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
+    </main>
+  </div>
+
+  <dialog class="tiny-dialog" id="suspend-dialog" aria-labelledby="suspend-dialog-title">
+    <div class="tiny-dialog__header">
+      <div>
+        <p class="tiny-eyebrow">Confirm suspension</p>
+        <h2 id="suspend-dialog-title">Suspend payroll-preview?</h2>
+      </div>
+      <form method="dialog">
+        <button class="tiny-dialog__close" type="submit" value="cancel" aria-label="Close dialog">×</button>
+      </form>
+    </div>
+    <div class="tiny-dialog__body">
+      <p>
+        Viewers will lose access on their next request and affected live
+        connections will close. The current release remains stored.
+      </p>
+      <div class="tiny-notice tiny-notice--warning">
+        <p><strong>Exact target:</strong> <code>payroll-preview</code></p>
+      </div>
+    </div>
+    <div class="tiny-dialog__actions">
+      <form method="dialog">
+        <button class="tiny-button tiny-button--secondary" type="submit" value="cancel">Keep app active</button>
+        <button
+          class="tiny-button tiny-button--danger"
+          type="submit"
+          value="confirm"
+          data-tiny-toast-message="Demo only — no server mutation was performed."
+          data-tiny-toast-title="Suspension reviewed"
+          data-tiny-toast-tone="danger"
+          data-tiny-toast-duration="0"
+        >Suspend payroll-preview</button>
+      </form>
+    </div>
+  </dialog>
+
+  <div
+    class="tiny-toast-region"
+    data-tiny-toast-region
+    aria-live="polite"
+    aria-label="Notifications"
+  ></div>
+</body>
+</html>

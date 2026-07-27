@@ -1,0 +1,125 @@
+# VPS end-to-end acceptance contract
+
+This contract describes the explicit black-box acceptance run in `test/vps`.
+It is for a dedicated Ubuntu 24.04 LTS/amd64 or Ubuntu 26.04 LTS/amd64 VPS and
+is not selected by default tests. The test runner performs remote installation
+through SSH; TinyHost is still the only process allowed to serve the deployed
+app publicly.
+
+## Required environment
+
+Required variables are fail-closed: missing, empty, multiline, unreadable, or
+invalid values prevent the live run from starting.
+
+| Variable | Requirement |
+| --- | --- |
+| `TINYHOST_VPS_E2E` | Exact value `1`. |
+| `TINYHOST_VPS_SSH_TARGET` | Root SSH destination in exact `root@host` form, with no whitespace or option-like prefix. |
+| `TINYHOST_VPS_ACKNOWLEDGE` | Exact value of `TINYHOST_VPS_SSH_TARGET`. It is the dedicated-host acknowledgement. |
+| `TINYHOST_VPS_KNOWN_HOSTS_FILE` | Absolute path to an existing regular file containing the target's trusted host key. |
+| `TINYHOST_VPS_SSH_PORT` | Optional decimal SSH port. |
+| `TINYHOST_VPS_SSH_IDENTITY_FILE` | Optional absolute existing private-key path. |
+| `TINYHOST_VPS_PLATFORM_HOST` | Existing public platform hostname. |
+| `TINYHOST_VPS_APP_SUFFIX` | Existing wildcard app suffix that resolves to the VPS. |
+| `TINYHOST_VPS_OPERATOR_EMAIL` | Initial operator email used during host initialization. |
+| `TINYHOST_VPS_DEPLOYER_EMAIL` | Email authorized as the deployer used in the control login. |
+| `TINYHOST_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply a distinct identity from the deployer. |
+| `TINYHOST_VPS_EMAIL_FROM` | Verified Resend sender. |
+| `TINYHOST_VPS_ACME_EMAIL` | ACME contact email. |
+| `TINYHOST_VPS_RESEND_API_KEY_FILE` | Absolute path to the existing local Resend-key file. |
+| `TINYHOST_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
+| `TINYHOST_VPS_RELEASE_DIR` | Optional absolute verified release directory. If absent, the suite builds and signs a temporary release locally. |
+| `TINYHOST_VPS_REUSE` | Optional exact value `1`; permits an already-initialized disposable host only when its root-owned suite marker exactly matches the platform host, app suffix, and SSH target. |
+
+The VPS must already have public DNS for the platform host and wildcard app
+suffix, plus a verified Resend sending domain. The suite does not create DNS
+records or retrieve credentials from the VPS.
+
+## SSH, secrets, and OTP
+
+SSH and SCP receive structured arguments with `BatchMode=yes`,
+`StrictHostKeyChecking=yes`, and `UserKnownHostsFile` set to the supplied
+known-hosts file. A mismatch stops the run. The suite does not accept new host
+keys, disable checking, or execute a user-supplied SSH target through a local
+shell.
+
+The suite creates a fresh root-owned remote staging directory named
+`/root/tinyhost-vps-e2e-*`. It copies the signed release artifacts, the local
+Resend key, and a locally generated HMAC key there; the two secret files are
+set to mode `0600` and passed to `tinyhost init` only as remote file paths.
+
+When configured, the OTP helper is executed directly with this exact argv:
+
+```text
+${TINYHOST_VPS_OTP_COMMAND} deployer|viewer EMAIL HOSTNAME
+```
+
+It must print only a 4--12 digit code on stdout. If no helper is set, a
+terminal run prompts locally for the code; a noninteractive run fails.
+The suite never reads OTP challenges or secrets from the VPS database, files,
+HTTP endpoints, or logs.
+
+## Initialization readiness retry
+
+`tinyhost init` persists each completed durable step. Its final, public
+platform-health proof can remain incomplete while first ACME issuance or DNS
+propagation becomes reachable. The VPS suite therefore runs the identical
+non-interactive init argv at most eight times, with a 15-second
+cancellation-aware wait between attempts. It retries only when both of the
+following independently observable conditions hold:
+
+1. the failed command reports the stable `tinyhost: public_health_failed`
+   readiness result; and
+2. the root-owned init-state record is valid and its next incomplete step is
+   exactly `verified`.
+
+All other init failures are terminal for the suite: in particular, preflight,
+config, credential, install, local-service, SSH, and state-read failures do
+not receive another mutation attempt. The suite does not re-install artifacts,
+rewrite secrets, or run broad setup work between retries; resumable init state
+makes each retry a final-proof attempt. Context cancellation stops immediately.
+
+## Performed lifecycle and assertions
+
+### Local deployer authorization command
+
+The root-only server command has one positional and flag grammar:
+
+```text
+tinyhost deployers ACTION [--config PATH] EMAIL
+```
+
+`ACTION` is exactly one of `authorize`, `suspend`, or `revoke`. Flags follow
+the action and precede the single email argument. `--config` defaults to
+`/etc/tinyhost/config.yaml`. Unknown actions or flags, flags after `EMAIL`,
+and extra positional arguments fail with a stable typed error without changing
+deployer state. The command delegates email normalization and validation to the
+persistence boundary; its diagnostic output does not disclose paths or secret
+values.
+
+1. Confirm the explicit gate, acknowledgement, file inputs, strict SSH trust,
+   and a clean host unless `TINYHOST_VPS_REUSE=1` is explicitly supplied with
+   a matching suite marker.
+2. Verify supplied release artifacts or build a temporary signed release,
+   install it, initialize TinyHost on a clean host (allowing only the bounded
+   final-readiness retry defined above), run `tinyhost doctor`, and confirm
+   TinyHost owns listeners on ports 80 and 443 with no additional non-loopback
+   listener owned by TinyHost. Operator-owned SSH, firewall policy, and
+   pre-existing listeners remain outside TinyHost's mutation scope.
+3. Authorize `TINYHOST_VPS_DEPLOYER_EMAIL` locally on the VPS; authenticate
+   that deployer through the control OTP flow.
+4. Create a unique app, restrict its access policy to
+   `TINYHOST_VPS_VIEWER_EMAIL`, and build the smoke archive with the same
+   canonical private `tiny.yaml` allowlist. Warm its normal ACME path and
+   deploy that immutable verified release. Activation installs the archive's
+   manifest policy atomically, so the archive—not the earlier control request—
+   remains the source of the active viewer allowlist.
+5. Before viewer login, deny the generated app's HTML, private asset, current-
+   viewer API, and WebSocket-upgrade request without returning its random
+   marker or completing a WebSocket upgrade.
+6. Authenticate the viewer through the app OTP flow. Verify the host-only
+   session returns the generated marker and that `/_tiny/api/v1/me` reports
+   the configured viewer email.
+
+On any failed step, the suite exits non-zero and leaves the VPS state in place
+for operator investigation.

@@ -1,0 +1,9 @@
+# Default ownership. Protect this file through the main-branch ruleset.
+* @ChrisMarxDev
+/.github/ @ChrisMarxDev
+/docs/security/ @ChrisMarxDev
+/internal/gateway/ @ChrisMarxDev
+/internal/appauth/ @ChrisMarxDev
+/internal/controlauth/ @ChrisMarxDev
+/internal/update/ @ChrisMarxDev
+/scripts/ @ChrisMarxDev

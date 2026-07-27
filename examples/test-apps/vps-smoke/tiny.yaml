@@ -1,0 +1,8 @@
+version: 1
+name: vps-smoke
+description: Protected VPS smoke-check app.
+build:
+  output: .
+features:
+  kv: false
+  realtime: false

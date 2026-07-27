@@ -1,0 +1,9 @@
+{
+  "name": "tinyhost-sdk-example-apps",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm --prefix ../../sdk/typescript run build && node ./build.mjs",
+    "check": "npm --prefix ../../sdk/typescript run build && node ./build.mjs --check"
+  }
+}

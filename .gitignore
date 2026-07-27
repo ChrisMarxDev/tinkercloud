@@ -1,0 +1,54 @@
+# Go build products and test output
+/bin/
+/tiny
+/tinyhost
+*.test
+*.prof
+coverage.out
+coverage/
+.coverprofile
+
+# Local TinyHost state: databases, release trees, runtime configuration, and keys
+/data/
+/runtime/
+/state/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+tinyhost.yaml
+tinyhost.local.yaml
+tinyhost-vps-known_hosts
+resend-api-key
+*-resend.key
+*-hmac.key
+.tiny/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+!packaging/release-public-key.pem
+
+# Node package installs and generated package outputs
+**/node_modules/
+sdk/typescript/dist/
+examples/sdk-apps/*/dist/
+*.tgz
+npm-debug.log*
+
+# Independently versioned and hosted website checkout
+/landing/
+
+# Tool caches and editor/OS noise
+.cache/
+.tmp/
+tmp/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

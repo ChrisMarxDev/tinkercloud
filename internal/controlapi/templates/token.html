@@ -1,0 +1,27 @@
+{{define "content"}}
+<main class="tiny-auth" id="main">
+  <section class="tiny-auth-card" aria-labelledby="token-title">
+    <a class="tiny-brand" href="/dashboard">
+      <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
+      <span>tinyhost</span>
+    </a>
+    <p class="tiny-eyebrow">Display once</p>
+    <h1 id="token-title">Your token is ready.</h1>
+    <div class="tiny-notice tiny-notice--warning" role="alert">
+      <p><strong>Copy it now.</strong> TinyHost will not display this value again.</p>
+    </div>
+    <p class="tiny-token">{{.Token.Token}}</p>
+    <dl class="tiny-definition">
+      <dt>Expires</dt>
+      <dd>{{.Token.ExpiresAt}}</dd>
+      {{if .Token.Scopes}}
+        <dt>Scopes</dt>
+        <dd>{{range $index, $scope := .Token.Scopes}}{{if $index}}, {{end}}<code>{{$scope}}</code>{{end}}</dd>
+      {{end}}
+    </dl>
+    <a class="tiny-button tiny-button--primary tiny-button--full" href="/dashboard">
+      Return to dashboard
+    </a>
+  </section>
+</main>
+{{end}}

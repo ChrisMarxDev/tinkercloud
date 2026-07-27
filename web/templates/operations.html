@@ -1,0 +1,33 @@
+{{define "operations"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TinyHost operations</title>
+  <style>{{tinyCSS}}</style>
+</head>
+<body>
+  <a class="tiny-skip" href="#main">Skip to content</a>
+  <main class="tiny-auth" id="main">
+    <section class="tiny-auth-card" aria-labelledby="operations-title">
+      <div class="tiny-brand">
+        <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
+        <span>tinyhost</span>
+      </div>
+      <p class="tiny-eyebrow">Local operation</p>
+      <h1 id="operations-title">Confirm the target.</h1>
+      <p class="tiny-auth-card__intro">Current state: <strong>{{.Status}}</strong></p>
+      {{if .Warning}}
+        <div class="tiny-notice tiny-notice--warning" role="alert"><p>{{.Warning}}</p></div>
+      {{end}}
+      <form class="tiny-stack" method="post" action="{{.Action}}">
+        <label class="tiny-field">
+          <span class="tiny-label">Exact target</span>
+          <input class="tiny-input tiny-mono" name="confirm" required autocomplete="off">
+        </label>
+        <button class="tiny-button tiny-button--danger tiny-button--full" type="submit">Confirm operation</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>{{end}}

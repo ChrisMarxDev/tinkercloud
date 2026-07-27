@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost — Hetzner One-Command Install</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
+    <p class="eyebrow">Rank 5 · Planned feature</p>
+    <h1>Hetzner-first native deployment</h1>
+    <p class="lede">Turn a clean, dedicated Hetzner VPS into a working TinyHost
+      server with a thin install script and one signed server binary.</p>
+    <p class="promise">The script downloads; the binary owns setup, validation,
+      service installation, diagnostics, update, and recovery.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="value">
+        <p class="eyebrow">Reason and value</p>
+        <h2>Operational ease is part of the product</h2>
+        <p>A technically capable operator should not need to assemble a reverse
+          proxy, container stack, certificate service, database, or migration
+          runner. One supported clean-host shape makes installation predictable,
+          diagnosis actionable, and AI-guided operation reliable.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">4 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">4 / 5</span></div>
+      </section>
+    </div>
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>Clean Hetzner Cloud Linux VPS with systemd.</li>
+          <li>Signed <code>tinyhost</code> server binary and systemd unit.</li>
+          <li>Interactive, resumable initialization and DNS/email/TLS checks.</li>
+          <li>Dedicated unprivileged service user and private data directory.</li>
+          <li>Root-only operator recovery independent of email.</li>
+          <li>Signed self-update with health-gated automatic rollback.</li>
+          <li>Separate small <code>tiny</code> client distribution.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No Docker, Kubernetes, external reverse proxy, or multi-host setup.</li>
+          <li>No unattended silent updates in V1.</li>
+          <li>No operator backup or disaster-recovery system.</li>
+          <li>No promise of every Linux distribution on day one.</li>
+          <li>No remote recovery endpoint that bypasses normal authentication.</li>
+        </ul>
+      </section>
+    </div>
+    <section id="implementation">
+      <p class="eyebrow">Implementation sketch</p>
+      <h2>Small script, authoritative binary</h2>
+      <pre>install.sh:
+  detect architecture
+  download tinyhost
+  verify checksum and signature
+  exec "tinyhost install-service"
+
+tinyhost init:
+  validate clean host + DNS
+  create user, config, secrets, data directory
+  initialize SQLite
+  test Resend
+  provision TLS
+  start systemd service
+  run health + anonymous-denial probes
+  print dashboard and recovery commands</pre>
+      <p><a href="../../docs/operations/hetzner-deployment.md">Detailed deployment
+        flow</a> · <a href="../../docs/decisions/0005-split-server-and-client-binaries.md">Binary split decision</a></p>
+    </section>
+    <section id="questions" class="caution">
+      <p class="eyebrow">Open questions</p>
+      <ul>
+        <li>Which exact Linux image and architectures form the first tested
+          support matrix?</li>
+        <li>What signing mechanism and trust-root rotation ceremony are simplest
+          for operators?</li>
+        <li>How should migrations declare whether automatic binary rollback is
+          safe or requires a forward recovery?</li>
+        <li>Should an opt-in systemd timer for updates ship in V1 or immediately
+          after?</li>
+      </ul>
+    </section>
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Build one excellent host path</h2>
+      <p><strong>Do:</strong> A narrow Hetzner-first path directly serves the
+        initial operator, supports deterministic testing, and preserves the
+        single-server-binary promise.</p>
+      <p><strong>Don’t:</strong> Do not generalize into containers and universal
+        Linux packaging before the native clean-host loop is dependable. The
+        self-contained binary keeps those later options feasible.</p>
+    </section>
+  </main>
+  <footer><p>Planned feature; remove from the ranking after base behavior ships.</p></footer>
+</body>
+</html>

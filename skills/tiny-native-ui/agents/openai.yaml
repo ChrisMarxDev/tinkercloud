@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tiny Native UI"
+  short_description: "Build and extend TinyHost native UI"
+  default_prompt: "Use $tiny-native-ui to create or update a TinyHost native UI component."
