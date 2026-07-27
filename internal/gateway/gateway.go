@@ -82,6 +82,7 @@ const (
 	AppInfo
 	Capabilities
 	KV
+	Blobs
 	Live
 	ProtectedStatic
 )
@@ -105,6 +106,8 @@ func ClassifyRoute(method, p string) Endpoint {
 			return Capabilities
 		case strings.HasPrefix(p, "/_tiny/api/v1/kv"):
 			return KV
+		case p == "/_tiny/api/v1/blobs" || strings.HasPrefix(p, "/_tiny/api/v1/blobs/"):
+			return Blobs
 		case method == "GET" && p == "/_tiny/ws/v1":
 			return Live
 		}
@@ -113,7 +116,7 @@ func ClassifyRoute(method, p string) Endpoint {
 	return ProtectedStatic
 }
 func Registry() map[Endpoint]string {
-	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Live: "protected", ProtectedStatic: "protected"}
+	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Blobs: "protected", Live: "protected", ProtectedStatic: "protected"}
 }
 
 // ProtectedDispatcher is the only extension point for protected app surfaces.

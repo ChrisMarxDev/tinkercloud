@@ -248,3 +248,31 @@ func TestActivateCommitFailurePreservesPreviousRelease(t *testing.T) {
 		t.Fatalf("activation was partially committed: old=%s next=%s", old.State, next.State)
 	}
 }
+
+type recoveryEvidence map[string]bool
+
+func (e recoveryEvidence) Valid(_ context.Context, r Record) bool { return e[r.ID] }
+
+func TestRecoverStartupFailsIncompleteAndUnverifiableStatesIdempotently(t *testing.T) {
+	repo := &MemoryRepository{Records: map[string]Record{
+		"upload": {Deployment: releases.Deployment{ID: "upload", AppID: "a", State: releases.Uploading}},
+		"verify": {Deployment: releases.Deployment{ID: "verify", AppID: "b", State: releases.Verified}},
+		"active": {Deployment: releases.Deployment{ID: "active", AppID: "c", State: releases.Active}},
+		"good":   {Deployment: releases.Deployment{ID: "good", AppID: "d", State: releases.Superseded}},
+	}, Current: map[string]string{"c": "active"}}
+	s := &Service{Repo: repo}
+	if err := s.RecoverStartup(context.Background(), recoveryEvidence{"good": true}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"upload", "verify", "active"} {
+		if repo.Records[id].State != releases.Failed {
+			t.Fatalf("%s=%s", id, repo.Records[id].State)
+		}
+	}
+	if repo.Records["good"].State != releases.Superseded || repo.Current["c"] != "" {
+		t.Fatal("recovery served invalid active evidence")
+	}
+	if err := s.RecoverStartup(context.Background(), recoveryEvidence{"good": true}); err != nil {
+		t.Fatal(err)
+	}
+}

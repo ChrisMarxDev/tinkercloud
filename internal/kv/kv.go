@@ -22,11 +22,23 @@ var (
 	ErrQuotaExceeded         = errors.New("kv quota exceeded")
 	ErrInvalidListLimit      = errors.New("invalid list limit")
 	ErrCapabilityUnavailable = errors.New("kv capability unavailable")
+	ErrRateLimited           = errors.New("kv rate limited")
 )
 
-type Limits struct{ KeyBytes, ValueBytes, KeysPerApp, TotalBytesPerApp, ListLimit int }
+type Limits struct {
+	KeyBytes, ValueBytes, KeysPerApp, TotalBytesPerApp, ListLimit int
+	RequestWindow                                                 time.Duration
+	// RequestsPerWindow is retained as the default for the viewer bucket so
+	// existing callers keep their per-viewer budget when upgrading. New code
+	// should set the three explicit bucket limits below.
+	RequestsPerWindow                             int
+	ViewerRequestsPerWindow, AppRequestsPerWindow int
+	GlobalRequestsPerWindow, MaxRateScopes        int
+}
 
-func DefaultLimits() Limits { return Limits{256, 64 << 10, 10000, 100 << 20, 100} }
+func DefaultLimits() Limits {
+	return Limits{KeyBytes: 256, ValueBytes: 64 << 10, KeysPerApp: 10000, TotalBytesPerApp: 100 << 20, ListLimit: 100, RequestWindow: time.Minute, RequestsPerWindow: 120, ViewerRequestsPerWindow: 120, AppRequestsPerWindow: 600, GlobalRequestsPerWindow: 10000, MaxRateScopes: 10000}
+}
 
 type Entry struct {
 	Key       string          `json:"key"`
@@ -63,13 +75,16 @@ type Service struct {
 	apps   map[string]map[string]Entry
 	sink   ChangeSink
 	repo   Repository
+	rates  map[string][]time.Time
+	global []time.Time
 }
 
 func New(limits Limits, sink ChangeSink) *Service {
 	if limits.KeyBytes == 0 {
 		limits = DefaultLimits()
 	}
-	s := &Service{limits: limits, now: time.Now, apps: map[string]map[string]Entry{}, sink: sink}
+	limits = normalizedLimits(limits)
+	s := &Service{limits: limits, now: time.Now, apps: map[string]map[string]Entry{}, rates: map[string][]time.Time{}, sink: sink}
 	s.repo = memoryRepo{s}
 	return s
 }
@@ -77,7 +92,31 @@ func NewWithRepository(limits Limits, sink ChangeSink, repo Repository) *Service
 	if limits.KeyBytes == 0 {
 		limits = DefaultLimits()
 	}
-	return &Service{limits: limits, now: time.Now, sink: sink, repo: repo}
+	limits = normalizedLimits(limits)
+	return &Service{limits: limits, now: time.Now, rates: map[string][]time.Time{}, sink: sink, repo: repo}
+}
+
+func normalizedLimits(l Limits) Limits {
+	d := DefaultLimits()
+	if l.RequestWindow <= 0 {
+		l.RequestWindow = d.RequestWindow
+	}
+	if l.RequestsPerWindow <= 0 {
+		l.RequestsPerWindow = d.RequestsPerWindow
+	}
+	if l.ViewerRequestsPerWindow <= 0 {
+		l.ViewerRequestsPerWindow = l.RequestsPerWindow
+	}
+	if l.AppRequestsPerWindow <= 0 {
+		l.AppRequestsPerWindow = d.AppRequestsPerWindow
+	}
+	if l.GlobalRequestsPerWindow <= 0 {
+		l.GlobalRequestsPerWindow = d.GlobalRequestsPerWindow
+	}
+	if l.MaxRateScopes <= 0 {
+		l.MaxRateScopes = d.MaxRateScopes
+	}
+	return l
 }
 
 type memoryRepo struct{ s *Service }
@@ -161,30 +200,100 @@ func validKey(key string, max int) bool {
 func validateValue(value json.RawMessage, max int) bool {
 	return len(value) > 0 && len(value) <= max && json.Valid(value)
 }
-func (s *Service) app(auth appauth.AuthorizationContext) (string, error) {
+func (s *Service) app(auth appauth.AuthorizationContext) (string, string, error) {
 	// Check the server-derived manifest capability before resolving scope or
 	// reaching a repository. A disabled capability must never become a storage
 	// oracle through any operation, including prefix listing.
 	if auth == nil || !auth.KVEnabled() {
-		return "", ErrCapabilityUnavailable
+		return "", "", ErrCapabilityUnavailable
 	}
-	app, _, _, err := capabilities.Scope(auth)
-	return app, err
+	app, viewer, _, err := capabilities.Scope(auth)
+	return app, viewer, err
+}
+
+func (s *Service) allow(app, viewer string) error {
+	now := s.now()
+	cutoff := now.Add(-s.limits.RequestWindow)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, events := range s.rates {
+		i := 0
+		for i < len(events) && !events[i].After(cutoff) {
+			i++
+		}
+		if i == len(events) {
+			delete(s.rates, k)
+		} else if i > 0 {
+			s.rates[k] = append([]time.Time(nil), events[i:]...)
+		}
+	}
+	s.global = retainRecent(s.global, cutoff)
+
+	// The viewer bucket is deliberately app-scoped: an identity's activity in
+	// one app cannot consume its budget in another. The app and global buckets
+	// prevent a large allowlist from multiplying the available request rate.
+	viewerKey := "viewer\x00" + app + "\x00" + viewer
+	appKey := "app\x00" + app
+	viewerEvents, viewerExists := s.rates[viewerKey]
+	appEvents, appExists := s.rates[appKey]
+	if len(viewerEvents) >= s.limits.ViewerRequestsPerWindow ||
+		len(appEvents) >= s.limits.AppRequestsPerWindow ||
+		len(s.global) >= s.limits.GlobalRequestsPerWindow {
+		return ErrRateLimited
+	}
+
+	newScopes := 0
+	if !viewerExists {
+		newScopes++
+	}
+	if !appExists {
+		newScopes++
+	}
+	// MaxRateScopes bounds only dynamic app/viewer scopes. The one global
+	// bucket is a fixed-size part of every service and cannot be used to grow
+	// state with untrusted app or viewer identifiers.
+	if len(s.rates)+newScopes > s.limits.MaxRateScopes {
+		return ErrRateLimited
+	}
+
+	// All three checks happen before any append. A denied request therefore
+	// consumes no bucket and cannot starve another authorized scope.
+	s.rates[viewerKey] = append(viewerEvents, now)
+	s.rates[appKey] = append(appEvents, now)
+	s.global = append(s.global, now)
+	return nil
+}
+
+func retainRecent(events []time.Time, cutoff time.Time) []time.Time {
+	i := 0
+	for i < len(events) && !events[i].After(cutoff) {
+		i++
+	}
+	if i == len(events) {
+		return nil
+	}
+	if i == 0 {
+		return events
+	}
+	return append([]time.Time(nil), events[i:]...)
 }
 func clone(e Entry) Entry { e.Value = append(json.RawMessage(nil), e.Value...); return e }
 
 func (s *Service) Get(ctx context.Context, auth appauth.AuthorizationContext, key string) (*Entry, error) {
-	app, err := s.app(auth)
+	app, viewer, err := s.app(auth)
 	if err != nil {
 		return nil, err
 	}
 	if !validKey(key, s.limits.KeyBytes) {
 		return nil, ErrInvalidKey
 	}
+	if err := s.allow(app, viewer); err != nil {
+		return nil, err
+	}
 	return s.repo.Get(ctx, app, key)
 }
 func (s *Service) Set(ctx context.Context, auth appauth.AuthorizationContext, key string, value json.RawMessage, expected *uint64) (Entry, error) {
-	app, err := s.app(auth)
+	app, viewer, err := s.app(auth)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -193,6 +302,9 @@ func (s *Service) Set(ctx context.Context, auth appauth.AuthorizationContext, ke
 	}
 	if !validateValue(value, s.limits.ValueBytes) {
 		return Entry{}, ErrInvalidValue
+	}
+	if err := s.allow(app, viewer); err != nil {
+		return Entry{}, err
 	}
 	e, err := s.repo.Set(ctx, app, key, value, expected)
 	if err != nil {
@@ -204,12 +316,15 @@ func (s *Service) Set(ctx context.Context, auth appauth.AuthorizationContext, ke
 	return clone(e), nil
 }
 func (s *Service) Delete(ctx context.Context, auth appauth.AuthorizationContext, key string, expected *uint64) (bool, error) {
-	app, err := s.app(auth)
+	app, viewer, err := s.app(auth)
 	if err != nil {
 		return false, err
 	}
 	if !validKey(key, s.limits.KeyBytes) {
 		return false, ErrInvalidKey
+	}
+	if err := s.allow(app, viewer); err != nil {
+		return false, err
 	}
 	deleted, mutation, err := s.repo.Delete(ctx, app, key, expected)
 	if err != nil {
@@ -224,7 +339,7 @@ func (s *Service) Delete(ctx context.Context, auth appauth.AuthorizationContext,
 	return true, nil
 }
 func (s *Service) List(ctx context.Context, auth appauth.AuthorizationContext, prefix, cursor string, limit int) (ListResult, error) {
-	app, err := s.app(auth)
+	app, viewer, err := s.app(auth)
 	if err != nil {
 		return ListResult{}, err
 	}
@@ -233,6 +348,9 @@ func (s *Service) List(ctx context.Context, auth appauth.AuthorizationContext, p
 	}
 	if limit < 1 || limit > s.limits.ListLimit {
 		return ListResult{}, ErrInvalidListLimit
+	}
+	if err := s.allow(app, viewer); err != nil {
+		return ListResult{}, err
 	}
 	result, err := s.repo.List(ctx, app, prefix, cursor, limit)
 	if err != nil {

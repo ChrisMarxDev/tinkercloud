@@ -8,6 +8,7 @@ SDK:
 | [`shared-checklist`](shared-checklist/) | Viewer/app identity, capability discovery, KV create/list/update/delete, cursors, optimistic versions, cancellation, KV change subscriptions |
 | [`team-pulse`](team-pulse/) | Viewer-keyed current state, custom live channels, publish/subscribe, connection status, close, reconnect recovery through KV |
 | [`quick-poll`](quick-poll/) | Current poll state, viewer-keyed votes, prefix aggregation, vote changes/deletion, typed errors, ephemeral refresh hints |
+| [`attachment-shelf`](attachment-shelf/) | Blob capability discovery, bounded upload/download, cursor listing, deletion, cancellation, typed quota errors, and the local-VPS durability boundary |
 
 All manifests are private and owner-only by default. Add viewer emails or
 domains to the selected app's `tiny.yaml` before sharing it.

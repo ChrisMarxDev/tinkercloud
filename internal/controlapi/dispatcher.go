@@ -98,7 +98,7 @@ const (
 )
 
 type Login interface {
-	RequestOTP(context.Context, string, LoginChannel) (string, error)
+	RequestOTP(context.Context, string, LoginChannel, string) (string, error)
 	VerifyOTP(context.Context, string, string, LoginChannel) (string, error)
 }
 
@@ -164,15 +164,15 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			write(w, 400, nil, "validation_failed")
 			return
 		}
-		if d.RateLimits != nil && !d.RateLimits.Allow(ratelimit.OTPRequest, r.RemoteAddr, v.Email, "control") {
+		if d.RateLimits != nil && !d.RateLimits.AllowRequest(ratelimit.OTPRequest, r, v.Email, "control") {
 			write(w, http.StatusTooManyRequests, nil, "rate_limited")
 			return
 		}
 		tx := ""
 		if d.Login != nil {
-			tx, _ = d.Login.RequestOTP(r.Context(), v.Email, CLILoginChannel)
+			tx, _ = d.Login.RequestOTP(r.Context(), v.Email, CLILoginChannel, ratelimit.RequestFingerprint(r))
 			if tx != "" && d.RateLimits != nil {
-				d.RateLimits.BindTransaction(tx, v.Email)
+				d.RateLimits.BindTransactionRequest(tx, v.Email, r)
 			}
 		}
 		if tx == "" {
@@ -192,7 +192,7 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			write(w, 401, nil, "not_authorized")
 			return
 		}
-		if d.RateLimits != nil && !d.RateLimits.AllowTransaction(ratelimit.OTPVerify, r.RemoteAddr, v.Transaction, "control") {
+		if d.RateLimits != nil && !d.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, v.Transaction, "control") {
 			write(w, http.StatusTooManyRequests, nil, "rate_limited")
 			return
 		}

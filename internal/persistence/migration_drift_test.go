@@ -104,7 +104,7 @@ func TestControlCredentialMigrationUpgradesAndDeniesLegacyChallenge(t *testing.T
 	if err = db.QueryRow("SELECT consumed_at FROM otp_challenges WHERE id='legacy'").Scan(&consumed); err != nil || consumed.Valid {
 		t.Fatalf("legacy challenge mutated: %#v err=%v", consumed, err)
 	}
-	cliChallenge, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel)
+	cliChallenge, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel, "test")
 	if err != nil || cliChallenge == "" || outbox.m.Code == "" {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestControlCredentialMigrationUpgradesAndDeniesLegacyChallenge(t *testing.T
 	if _, err = store.AuthenticateToken(context.Background(), newBearer, "app:read", "", now); err != nil {
 		t.Fatalf("fresh CLI bearer denied: %v", err)
 	}
-	browserChallenge, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+	browserChallenge, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || browserChallenge == "" || outbox.m.Code == "" {
 		t.Fatal(err)
 	}
@@ -137,7 +137,14 @@ func TestControlCredentialMigrationUpgradesAndDeniesLegacyChallenge(t *testing.T
 		t.Fatalf("rerun revoked fresh CLI bearer: %v", err)
 	}
 	var n int
-	if err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2,3)").Scan(&n); err != nil || n != 2 {
-		t.Fatalf("migration 2/3 evidence n=%d err=%v", n, err)
+	if err = db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (2,3,4)").Scan(&n); err != nil || n != 3 {
+		t.Fatalf("migration 2/3/4 evidence n=%d err=%v", n, err)
+	}
+	var table, index string
+	if err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='app_blobs'").Scan(&table); err != nil || table != "app_blobs" {
+		t.Fatalf("blob table missing after legacy upgrade: %q err=%v", table, err)
+	}
+	if err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_app_blobs_ready_order'").Scan(&index); err != nil || index != "idx_app_blobs_ready_order" {
+		t.Fatalf("blob index missing after legacy upgrade: %q err=%v", index, err)
 	}
 }

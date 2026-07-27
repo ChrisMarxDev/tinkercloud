@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -324,6 +325,9 @@ func (s *Suite) Run(ctx context.Context) error {
 	if err := s.cleanGuard(ctx); err != nil {
 		return err
 	}
+	if s.Config.Reuse && s.Config.ReleaseDir == "" {
+		return errors.New("reuse requires TINYHOST_VPS_RELEASE_DIR so the current build can be verified and health-gated")
+	}
 	dir := s.Temp
 	if dir == "" {
 		var e error
@@ -365,14 +369,31 @@ func (s *Suite) Run(ctx context.Context) error {
 	if err = s.remote(ctx, "mkdir", "-p", remoteDir+"/packaging/systemd"); err != nil {
 		return err
 	}
-	for _, v := range []struct{ local, remote string }{{filepath.Join(release, "tinyhost-linux-amd64"), remoteDir + "/tinyhost-linux-amd64"}, {filepath.Join(release, "tinyhost-linux-amd64.metadata.json"), remoteDir + "/tinyhost-linux-amd64.metadata.json"}, {filepath.Join(release, "tinyhost-linux-amd64.signature"), remoteDir + "/tinyhost-linux-amd64.signature"}, {prepared.publicKey, remoteDir + "/packaging/release-public-key.pem"}, {repoPath("packaging", "install.sh"), remoteDir + "/packaging/install.sh"}, {repoPath("packaging", "systemd", "tinyhost.service"), remoteDir + "/packaging/systemd/tinyhost.service"}, {s.Config.ResendKeyFile, remoteDir + "/resend.key"}, {hmac, remoteDir + "/hmac.key"}, {markerPath, remoteDir + "/marker"}} {
+	files := []struct{ local, remote string }{
+		{filepath.Join(release, "tinyhost-linux-amd64"), remoteDir + "/tinyhost-linux-amd64"},
+		{filepath.Join(release, "tinyhost-linux-amd64.metadata.json"), remoteDir + "/tinyhost-linux-amd64.metadata.json"},
+		{filepath.Join(release, "tinyhost-linux-amd64.signature"), remoteDir + "/tinyhost-linux-amd64.signature"},
+	}
+	if !s.Config.Reuse {
+		files = append(files,
+			struct{ local, remote string }{prepared.publicKey, remoteDir + "/packaging/release-public-key.pem"},
+			struct{ local, remote string }{repoPath("packaging", "install.sh"), remoteDir + "/packaging/install.sh"},
+			struct{ local, remote string }{repoPath("packaging", "systemd", "tinyhost.service"), remoteDir + "/packaging/systemd/tinyhost.service"},
+			struct{ local, remote string }{s.Config.ResendKeyFile, remoteDir + "/resend.key"},
+			struct{ local, remote string }{hmac, remoteDir + "/hmac.key"},
+			struct{ local, remote string }{markerPath, remoteDir + "/marker"},
+		)
+	}
+	for _, v := range files {
 		if err = s.copy(ctx, v.local, v.remote); err != nil {
 			return err
 		}
 	}
-	for _, p := range []string{remoteDir + "/resend.key", remoteDir + "/hmac.key"} {
-		if err = s.remote(ctx, "chmod", "0600", p); err != nil {
-			return err
+	if !s.Config.Reuse {
+		for _, p := range []string{remoteDir + "/resend.key", remoteDir + "/hmac.key"} {
+			if err = s.remote(ctx, "chmod", "0600", p); err != nil {
+				return err
+			}
 		}
 	}
 	if !s.Config.Reuse {
@@ -398,7 +419,7 @@ func (s *Suite) Run(ctx context.Context) error {
 	if err = s.remote(ctx, "/usr/local/bin/tinyhost", "deployers", "authorize", s.Config.DeployerEmail); err != nil {
 		return err
 	}
-	return s.exercise(ctx)
+	return s.exercise(ctx, remoteDir)
 }
 
 func commandEnv(ctx context.Context, values []string, name string, args ...string) error {
@@ -531,47 +552,59 @@ var setTerminalEcho = func(ctx context.Context, enabled bool) error {
 	return c.Run()
 }
 
-func (s *Suite) exercise(ctx context.Context) error {
+func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	base := "https://" + s.Config.PlatformHost
 	login, err := client.Login(ctx, base, otpPrompt{ctx: ctx, config: s.Config, purpose: "deployer", host: s.Config.PlatformHost})
 	if err != nil {
 		return fmt.Errorf("deployer OTP login: %w", err)
 	}
 	c := client.New(base, login.Token)
+	// A reused VPS may deliberately be on a pre-blob release. Deploy a legacy
+	// manifest solely to create the updater's active anonymous-denial probe,
+	// then upgrade through the signed health-gated path before any blob feature
+	// is requested or parsed by that old server.
+	if s.Config.Reuse {
+		probeSuffix, e := randomID()
+		if e != nil {
+			return e
+		}
+		probeSlug := "vps-update-probe-" + probeSuffix
+		if _, _, e = s.deploySmokeApp(ctx, c, probeSlug, false); e != nil {
+			return fmt.Errorf("deploy legacy update probe: %w", e)
+		}
+		if e = s.applyReuseUpdate(ctx, remoteDir, probeSlug); e != nil {
+			return e
+		}
+	}
 	suffix, err := randomID()
 	if err != nil {
 		return err
 	}
 	slug := "vps-" + suffix
-	key, _ := client.IdempotencyKey()
-	if err = c.Do(ctx, http.MethodPost, "/api/v1/apps", key, map[string]string{"slug": slug}, nil); err != nil {
-		return fmt.Errorf("create app: %w", err)
-	}
-	policy := map[string]any{"mode": "private", "expected_revision": 1, "confirm_broadening": true, "allow": map[string]any{"emails": []string{s.Config.ViewerEmail}, "domains": []string{}}}
-	key, _ = client.IdempotencyKey()
-	if err = c.Do(ctx, http.MethodPut, "/api/v1/apps/"+slug+"/access", key, policy, nil); err != nil {
-		return fmt.Errorf("set access policy: %w", err)
-	}
-	appHost := slug + "." + s.Config.AppSuffix
-	if err = s.warmCertificate(ctx, appHost); err != nil {
-		return err
-	}
-	archive, size, marker, err := smokeArchive(slug, s.Config.ViewerEmail)
+	appHost, marker, err := s.deploySmokeApp(ctx, c, slug, true)
 	if err != nil {
-		return err
-	}
-	key, _ = client.IdempotencyKey()
-	deployed, err := c.Deploy(ctx, slug, bytes.NewReader(archive), size, key)
-	if err != nil {
-		return fmt.Errorf("deploy smoke app: %w", err)
-	}
-	if err = deployed.Verified(); err != nil {
 		return err
 	}
 	if err = s.anonymousDenied(ctx, appHost, marker); err != nil {
 		return err
 	}
-	return s.viewerFlow(ctx, appHost, marker)
+	viewer, blobID, err := s.viewerFlow(ctx, appHost, marker)
+	if err != nil {
+		return err
+	}
+	if err := s.anonymousBlobDenied(ctx, appHost, blobID); err != nil {
+		return err
+	}
+	if err := s.remote(ctx, "systemctl", "restart", "tinyhost.service"); err != nil {
+		return fmt.Errorf("restart service for blob durability check: %w", err)
+	}
+	if err := s.verifyBlobPersistsAfterRestart(ctx, viewer, appHost, blobID); err != nil {
+		return err
+	}
+	if err := s.crossAppBlobDenied(ctx, c, slug, blobID); err != nil {
+		return err
+	}
+	return s.deleteBlobAndVerify(ctx, viewer, appHost, blobID)
 }
 
 // warmCertificate intentionally uses the gateway's pre-auth app route. This
@@ -601,7 +634,91 @@ func (s *Suite) warmCertificate(ctx context.Context, host string) error {
 	}
 }
 
+func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug string) error {
+	// The updater verifies the supplied artifacts against the installed binary's
+	// compiled public key, stages a bounded rollback snapshot, restarts the
+	// unprivileged service, and performs its own platform plus anonymous app
+	// health checks. This is the only reuse upgrade path.
+	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "verify-artifact",
+		"--binary", remoteDir+"/tinyhost-linux-amd64",
+		"--metadata", remoteDir+"/tinyhost-linux-amd64.metadata.json",
+		"--signature", remoteDir+"/tinyhost-linux-amd64.signature"); err != nil {
+		return fmt.Errorf("reuse release is not trusted by installed server: %w", err)
+	}
+	return s.remote(ctx, "/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
+		"--binary", remoteDir+"/tinyhost-linux-amd64",
+		"--metadata", remoteDir+"/tinyhost-linux-amd64.metadata.json",
+		"--signature", remoteDir+"/tinyhost-linux-amd64.signature",
+		"--app-slug", probeSlug)
+}
+
+func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSlug, blobID string) error {
+	suffix, err := randomID()
+	if err != nil {
+		return err
+	}
+	slug := "vps-isolation-" + suffix
+	host, marker, err := s.deploySmokeApp(ctx, c, slug, true)
+	if err != nil {
+		return fmt.Errorf("deploy isolation app: %w", err)
+	}
+	viewer, _, err := s.viewerFlow(ctx, host, marker)
+	if err != nil {
+		return err
+	}
+	r, err := blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+blobID, nil, "")
+	if err != nil {
+		return err
+	}
+	x, err := viewer.Do(r)
+	if err != nil {
+		return err
+	}
+	b, err := io.ReadAll(io.LimitReader(x.Body, int64(len(vpsBlobBytes)+1024)))
+	x.Body.Close()
+	if err != nil {
+		return err
+	}
+	if x.StatusCode != http.StatusNotFound || bytes.Contains(b, vpsBlobBytes) {
+		return fmt.Errorf("cross-app guessed blob ID leaked data from %s: status=%d", firstSlug, x.StatusCode)
+	}
+	return nil
+}
+
+func (s *Suite) deploySmokeApp(ctx context.Context, c client.Client, slug string, blobs bool) (string, string, error) {
+	key, _ := client.IdempotencyKey()
+	if err := c.Do(ctx, http.MethodPost, "/api/v1/apps", key, map[string]string{"slug": slug}, nil); err != nil {
+		return "", "", fmt.Errorf("create app: %w", err)
+	}
+	policy := map[string]any{"mode": "private", "expected_revision": 1, "confirm_broadening": true, "allow": map[string]any{"emails": []string{s.Config.ViewerEmail}, "domains": []string{}}}
+	key, _ = client.IdempotencyKey()
+	if err := c.Do(ctx, http.MethodPut, "/api/v1/apps/"+slug+"/access", key, policy, nil); err != nil {
+		return "", "", fmt.Errorf("set access policy: %w", err)
+	}
+	host := slug + "." + s.Config.AppSuffix
+	if err := s.warmCertificate(ctx, host); err != nil {
+		return "", "", err
+	}
+	archive, size, marker, err := smokeArchiveWithBlobs(slug, s.Config.ViewerEmail, blobs)
+	if err != nil {
+		return "", "", err
+	}
+	key, _ = client.IdempotencyKey()
+	deployed, err := c.Deploy(ctx, slug, bytes.NewReader(archive), size, key)
+	if err != nil {
+		return "", "", fmt.Errorf("deploy app: %w", err)
+	}
+	if err = deployed.Verified(); err != nil {
+		return "", "", err
+	}
+	return host, marker, nil
+}
+
 func smokeArchive(slug, viewerEmail string) ([]byte, int64, string, error) {
+	return smokeArchiveWithBlobs(slug, viewerEmail, true)
+}
+
+func smokeArchiveWithBlobs(slug, viewerEmail string, blobs bool) ([]byte, int64, string, error) {
 	d, e := os.MkdirTemp("", "tinyhost-vps-app-")
 	if e != nil {
 		return nil, 0, "", e
@@ -621,7 +738,32 @@ func smokeArchive(slug, viewerEmail string) ([]byte, int64, string, error) {
 	if e = os.WriteFile(filepath.Join(d, "dist", "private.js"), []byte("window.privateMarker='"+marker+"'"), 0644); e != nil {
 		return nil, 0, "", e
 	}
-	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\naccess:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
+	// This tiny browser fixture is intentionally SDK-equivalent: it discovers
+	// capability state, then uses same-origin multipart upload/list/download/
+	// delete requests with no app selector or credential. The black-box suite
+	// below performs the exact operations after real viewer OTP authentication.
+	fixture := `const api = "/_tiny/api/v1";
+const request = (path, init = {}) => fetch(api + path, { credentials: "same-origin", ...init });
+export async function blobSmoke(file) {
+  const capabilities = await request("/capabilities").then(r => r.json());
+  if (!capabilities.capabilities.some(c => c.name === "blobs")) throw new Error("blobs unavailable");
+  const form = new FormData(); form.append("file", file, file.name);
+  const uploaded = await request("/blobs", { method: "POST", body: form }).then(r => r.json());
+  const listed = await request("/blobs").then(r => r.json());
+  const bytes = await request("/blobs/" + encodeURIComponent(uploaded.id)).then(r => r.blob());
+  await request("/blobs/" + encodeURIComponent(uploaded.id), { method: "DELETE" });
+  return { capabilities, uploaded, listed, bytes };
+}`
+	if blobs {
+		if e = os.WriteFile(filepath.Join(d, "dist", "blob-smoke.js"), []byte(fixture), 0644); e != nil {
+			return nil, 0, "", e
+		}
+	}
+	features := ""
+	if blobs {
+		features = "features:\n  blobs: true\n"
+	}
+	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\n" + features + "access:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
 	if e = os.WriteFile(filepath.Join(d, "tiny.yaml"), manifest, 0644); e != nil {
 		return nil, 0, "", e
 	}
@@ -659,10 +801,10 @@ func (s *Suite) anonymousDenied(ctx context.Context, host, marker string) error 
 	}
 	return nil
 }
-func (s *Suite) viewerFlow(ctx context.Context, host, marker string) error {
+func (s *Suite) viewerFlow(ctx context.Context, host, marker string) (*http.Client, string, error) {
 	jar, e := cookiejar.New(nil)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	h := s.httpClient()
 	hc := *h
@@ -671,60 +813,60 @@ func (s *Suite) viewerFlow(ctx context.Context, host, marker string) error {
 	form := url.Values{"email": {s.Config.ViewerEmail}, "return": {"/"}}
 	r, e := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+host+"/_tiny/auth/otp", strings.NewReader(form.Encode()))
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	x, e := hc.Do(r)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	b, e := io.ReadAll(io.LimitReader(x.Body, 1<<20))
 	x.Body.Close()
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	tx := hiddenValue(string(b), "transaction")
 	if tx == "" {
-		return errors.New("viewer OTP transaction missing")
+		return nil, "", errors.New("viewer OTP transaction missing")
 	}
 	code, e := readOTP(ctx, s.Config, "viewer", s.Config.ViewerEmail, host)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	form = url.Values{"email": {s.Config.ViewerEmail}, "transaction": {tx}, "code": {code}, "return": {"/"}}
 	r, e = http.NewRequestWithContext(ctx, http.MethodPost, "https://"+host+"/_tiny/auth/verify", strings.NewReader(form.Encode()))
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	x, e = hc.Do(r)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	x.Body.Close()
 	if x.StatusCode != http.StatusSeeOther {
-		return fmt.Errorf("viewer OTP verify: status=%d", x.StatusCode)
+		return nil, "", fmt.Errorf("viewer OTP verify: status=%d", x.StatusCode)
 	}
 	r, e = http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	x, e = hc.Do(r)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	b, _ = io.ReadAll(io.LimitReader(x.Body, 1<<20))
 	x.Body.Close()
 	if x.StatusCode != 200 || !bytes.Contains(b, []byte(marker)) {
-		return fmt.Errorf("viewer app access failed: status=%d", x.StatusCode)
+		return nil, "", fmt.Errorf("viewer app access failed: status=%d", x.StatusCode)
 	}
 	r, e = http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/_tiny/api/v1/me", nil)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	x, e = hc.Do(r)
 	if e != nil {
-		return e
+		return nil, "", e
 	}
 	defer x.Body.Close()
 	var me struct {
@@ -733,7 +875,230 @@ func (s *Suite) viewerFlow(ctx context.Context, host, marker string) error {
 		} `json:"identity"`
 	}
 	if x.StatusCode != 200 || json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&me) != nil || !strings.EqualFold(me.Identity.Email, s.Config.ViewerEmail) {
-		return errors.New("current viewer identity was not server-derived")
+		return nil, "", errors.New("current viewer identity was not server-derived")
+	}
+	if err := expectBlobCapability(ctx, &hc, host); err != nil {
+		return nil, "", err
+	}
+	if err := rejectExtraBlobPartWithoutMutation(ctx, &hc, host); err != nil {
+		return nil, "", err
+	}
+	blobID, err := uploadBlob(ctx, &hc, host, []byte("tinyhost-vps-blob-exact-bytes\x00\xff"))
+	if err != nil {
+		return nil, "", err
+	}
+	return &hc, blobID, nil
+}
+
+func appURL(host, path string) string { return "https://" + host + path }
+
+func expectBlobCapability(ctx context.Context, h *http.Client, host string) error {
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/capabilities"), nil)
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	defer x.Body.Close()
+	var out struct {
+		Capabilities []struct {
+			Name string `json:"name"`
+		} `json:"capabilities"`
+	}
+	if x.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&out) != nil {
+		return errors.New("blob capability discovery failed")
+	}
+	for _, c := range out.Capabilities {
+		if c.Name == "blobs" {
+			return nil
+		}
+	}
+	return errors.New("blob capability is absent from discovery")
+}
+
+func blobList(ctx context.Context, h *http.Client, host string) ([]struct {
+	ID string `json:"id"`
+}, error) {
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/blobs"), nil)
+	if err != nil {
+		return nil, err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return nil, err
+	}
+	defer x.Body.Close()
+	var out struct {
+		Blobs []struct {
+			ID string `json:"id"`
+		} `json:"blobs"`
+	}
+	if x.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&out) != nil || out.Blobs == nil {
+		return nil, errors.New("blob list failed")
+	}
+	return out.Blobs, nil
+}
+
+func blobRequest(ctx context.Context, method, host, path string, body io.Reader, contentType string) (*http.Request, error) {
+	r, err := http.NewRequestWithContext(ctx, method, appURL(host, path), body)
+	if err != nil {
+		return nil, err
+	}
+	if contentType != "" {
+		r.Header.Set("Content-Type", contentType)
+	}
+	if method != http.MethodGet {
+		r.Header.Set("Origin", "https://"+host)
+	}
+	return r, nil
+}
+
+func rejectExtraBlobPartWithoutMutation(ctx context.Context, h *http.Client, host string) error {
+	before, err := blobList(ctx, h, host)
+	if err != nil {
+		return err
+	}
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	p, err := w.CreateFormFile("file", "one.txt")
+	if err != nil {
+		return err
+	}
+	if _, err = p.Write([]byte("one")); err != nil {
+		return err
+	}
+	if err = w.WriteField("unexpected", "two"); err != nil {
+		return err
+	}
+	if err = w.Close(); err != nil {
+		return err
+	}
+	r, err := blobRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/blobs", &body, w.FormDataContentType())
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	io.Copy(io.Discard, io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if x.StatusCode != http.StatusBadRequest {
+		return fmt.Errorf("extra multipart part accepted: status=%d", x.StatusCode)
+	}
+	after, err := blobList(ctx, h, host)
+	if err != nil {
+		return err
+	}
+	if len(before) != len(after) {
+		return errors.New("extra multipart part mutated blob catalog")
+	}
+	return nil
+}
+
+func uploadBlob(ctx context.Context, h *http.Client, host string, want []byte) (string, error) {
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+	p, err := w.CreateFormFile("file", "exact-bytes.bin")
+	if err != nil {
+		return "", err
+	}
+	if _, err = p.Write(want); err != nil {
+		return "", err
+	}
+	if err = w.Close(); err != nil {
+		return "", err
+	}
+	r, err := blobRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/blobs", &body, w.FormDataContentType())
+	if err != nil {
+		return "", err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return "", err
+	}
+	defer x.Body.Close()
+	var out struct {
+		ID   string `json:"id"`
+		Size int64  `json:"size"`
+		Name string `json:"name"`
+	}
+	if x.StatusCode != http.StatusCreated || json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&out) != nil || out.ID == "" || out.Size != int64(len(want)) || out.Name != "exact-bytes.bin" {
+		return "", errors.New("SDK-equivalent blob upload failed")
+	}
+	return out.ID, nil
+}
+
+var vpsBlobBytes = []byte("tinyhost-vps-blob-exact-bytes\x00\xff")
+
+func (s *Suite) anonymousBlobDenied(ctx context.Context, host, id string) error {
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/blobs/"+id), nil)
+	if err != nil {
+		return err
+	}
+	x, err := s.httpClient().Do(r)
+	if err != nil {
+		return err
+	}
+	b, err := io.ReadAll(io.LimitReader(x.Body, int64(len(vpsBlobBytes)+1024)))
+	x.Body.Close()
+	if err != nil {
+		return err
+	}
+	if x.StatusCode != http.StatusUnauthorized || bytes.Contains(b, vpsBlobBytes) || bytes.Equal(b, vpsBlobBytes) {
+		return fmt.Errorf("anonymous blob download leaked bytes: status=%d", x.StatusCode)
+	}
+	return nil
+}
+
+func (s *Suite) verifyBlobPersistsAfterRestart(ctx context.Context, h *http.Client, host, id string) error {
+	r, err := blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	b, err := io.ReadAll(io.LimitReader(x.Body, int64(len(vpsBlobBytes)+1)))
+	x.Body.Close()
+	if err != nil {
+		return err
+	}
+	if x.StatusCode != http.StatusOK || !bytes.Equal(b, vpsBlobBytes) || x.Header.Get("Cache-Control") != "private, no-store" || x.Header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(x.Header.Get("Content-Disposition"), "attachment;") {
+		return fmt.Errorf("blob download/durability evidence failed: status=%d", x.StatusCode)
+	}
+	return nil
+}
+
+func (s *Suite) deleteBlobAndVerify(ctx context.Context, h *http.Client, host, id string) error {
+	r, err := blobRequest(ctx, http.MethodDelete, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	io.Copy(io.Discard, io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK {
+		return fmt.Errorf("blob delete failed: status=%d", x.StatusCode)
+	}
+	r, err = blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+	if err != nil {
+		return err
+	}
+	x, err = h.Do(r)
+	if err != nil {
+		return err
+	}
+	b, _ := io.ReadAll(io.LimitReader(x.Body, int64(len(vpsBlobBytes)+1)))
+	x.Body.Close()
+	if x.StatusCode != http.StatusNotFound || bytes.Contains(b, vpsBlobBytes) {
+		return errors.New("deleted blob remained readable")
 	}
 	return nil
 }

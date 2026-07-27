@@ -180,7 +180,11 @@ Use capability discovery before KV, blob, or live work. Handle
 `TinyVersionIncompatibleError` by upgrading `@tinyhost/sdk`; do not add an app
 selector or fall back to control credentials. Raw HTTP clients may omit the SDK
 version header, while a supplied unsupported major receives a typed upgrade
-error. Compile examples and run the real-listener SDK contract after SDK
+error. Blob uploads use exactly one `file` multipart part; blob IDs are opaque,
+downloads are attachment bytes, and callers never pass a path, bucket, or
+storage key. Custom live channels call `subscribe()` before `connect()` and
+`unsubscribe()` when delivery is no longer wanted; reconnect recovery rereads
+KV rather than replaying events. Compile examples and run the real-listener SDK contract after SDK
 changes. Verify the packed SDK contains only its README, Apache-2.0 license,
 declarations, and runtime module. Keep the npm manifest, JSR manifest, exported
 SDK version, and release version identical; install-test the npm tarball and
@@ -228,7 +232,32 @@ without final metadata have no description.
 5. Require `TINYHOST_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINYHOST_VPS_REUSE=1` marker gating. Never
    weaken SSH trust or introduce an OTP/auth bypass.
-6. Run one deliberate acceptance pass only:
+6. Treat blob evidence as a complete capability sequence, not just a 2xx:
+   discover the enabled capability, reject a multipart request with an extra
+   part and prove no catalog mutation, then authenticate a viewer and prove
+   upload/list/exact-byte attachment download/delete. Prove anonymous and a
+   second app's guessed-ID download contain no blob bytes. Restart the service
+   before delete and reread the same blob. Never query the VPS filesystem,
+   SQLite, or logs to substitute for this gateway evidence.
+7. Reuse never re-initializes or wipes the VPS. It requires an explicit local
+   `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
+   key and use only `tinyhost update` with its active-app health gate. The
+   unattended wrapper fails before offline gates unless this is an absolute,
+   existing, caller-owned non-symlink directory. A
+   temporary test signing key cannot update a reused host.
+8. For one noninteractive run using already-exported environment, invoke only
+   the checked-in wrapper. It runs the offline gates before exactly one live
+   pass. Its offline VPS package gate explicitly skips `^TestVPSAcceptance$`,
+   requires the shipped local Resend reader and strict SSH inputs, and
+   leaves a private redacted timestamped status artifact. It never sources an
+   env file, evaluates environment values as shell, retries the suite, or
+   prints secrets:
+
+   ```bash
+   skills/tiny-full-stack-test/scripts/run-unattended.sh
+   ```
+
+9. For a terminal-guided run, execute one deliberate acceptance pass only:
 
    ```bash
    go test ./test/vps -run TestVPSAcceptance -count=1 -v
@@ -244,3 +273,7 @@ separately.
 
 - `scripts/read-resend-otp.py`: fixed-origin, fail-closed Resend reader.
 - `scripts/test_read_resend_otp.py`: offline deterministic reader tests.
+- `scripts/run-unattended.sh`: one-pass noninteractive wrapper with a private
+  redacted status artifact.
+- `scripts/test_run_unattended.sh`: deterministic no-network wrapper
+  preflight, ordering, single-live-pass, and report self-test.

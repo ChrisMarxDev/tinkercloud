@@ -227,6 +227,15 @@ archives exactly the four intended deployment files. Local preview is explicitly
 presentation evidence only; it does not stand in for TinyHost authentication,
 TLS, activation, or anonymous-denial evidence.
 
+Evidence implemented: restart recovery is database-led and evaluates stable
+durable deployment records one at a time. Incomplete states fail rather than
+resume, and verified/active/superseded records survive only when their
+server-derived immutable release hash and complete file evidence match. A
+malformed historical record is isolated so it cannot block a healthy app; a
+corrupt current record atomically clears that app's pointer and makes it
+unavailable. Recovery never discovers authority by scanning release or staging
+directories, and persistence tests prove repeat recovery is idempotent.
+
 Exit gate:
 
 - failed upload/validation/activation retains prior release;
@@ -265,7 +274,7 @@ JSR artifact, and exported SDK version synchronized. The npm tarball has an
 exact file allowlist and must install and import in an offline clean consumer;
 registry publication remains blocked pending namespace ownership.
 
-Evidence implemented: the public SDK gallery contains three deployable private
+Evidence implemented: the public SDK gallery contains four deployable private
 apps covering current viewer/app information, capability discovery, every V1
 KV operation, bounded cursors, optimistic concurrency, cancellation, typed
 error presentation, KV change subscriptions, and custom live channel
@@ -276,7 +285,7 @@ credential-like browser configuration. Every live flow rereads current KV
 after events, reconnects, and visible-tab recovery rather than claiming replay
 or delivery history.
 
-### Planned M4 slice — lightweight app-scoped blobs
+### Implemented M4 slice — lightweight app-scoped blobs
 
 Outcome: an authenticated static app can store and retrieve small attachments
 through `@tinyhost/sdk` without operating a bucket, mount, storage server, or
@@ -284,73 +293,66 @@ backend process.
 
 Contract and decision:
 
-- implement
-  [`specs/capabilities/blob-contract.md`](../../specs/capabilities/blob-contract.md)
-  and ADR
-  [`0030`](../decisions/0030-v1-lightweight-local-blob-storage.md);
-- update `tiny.yaml`, capability discovery, the sealed authorization context,
-  gateway route registry, HTTP contract, SDK, examples, and self-contained
-  TinyHost skills together;
-- use a narrow internal streaming blob-store interface with a private local
-  standard-library adapter for V1; and
-- preserve one server process, one SQLite database, one private data directory,
-  and one systemd service. Do not add Go CDK, FUSE, rclone, s3fs, Mountpoint,
-  MinIO, a remote driver, another package, or a second listener in V1.
+- [`specs/capabilities/blob-contract.md`](../../specs/capabilities/blob-contract.md)
+  and ADR [`0030`](../decisions/0030-v1-lightweight-local-blob-storage.md)
+  define the public and persistence boundary;
+- `tiny.yaml`, capability discovery, the sealed authorization context, gateway
+  route registry, HTTP contract, SDK, deployable Attachment Shelf example, and
+  TinyHost skills move together;
+- the implementation uses a narrow internal streaming blob-store interface and
+  a private standard-library local adapter; and
+- the deployment shape remains one server process, one SQLite database, one
+  private data directory, and one systemd service—no Go CDK, FUSE, rclone,
+  s3fs, Mountpoint, MinIO, remote driver, extra package, or listener.
 
-Vertical path:
+Evidence implemented:
 
-- add an opt-in `features.blobs` manifest capability, disabled by default;
-- add SQLite-owned `staging`, `ready`, and `deleting` metadata plus exact
-  app-scoped quota accounting;
-- stream each upload into unreachable private storage under a server-issued
-  blob ID, making it readable only after storage close/sync and the `ready`
-  metadata commit;
-- implement the local byte store with bounded standard-library I/O,
-  same-filesystem temporary files, and atomic rename; do not buffer a complete
-  blob in memory;
-- expose app-shared SDK `upload`, `get`, bounded `list`, and `delete` methods
-  using same-origin viewer sessions and no app ID, path, key, bucket, URL, or
-  credential input;
-- serve downloads only through the authenticated gateway with attachment,
-  no-sniff, and private/no-store behavior; and
-- reconcile interrupted staging/deleting rows, unreachable orphans, and
-  missing/corrupt ready bytes from server-derived IDs without serving uncertain
-  state.
+- `features.blobs` is opt-in and disabled by default; the gateway constructs
+  the app and viewer authority before every blob operation;
+- SQLite owns `staging`, `ready`, and `deleting` metadata and exact app-scoped
+  quota accounting; private local bytes are addressed only by server-derived
+  `(app, blob ID)`;
+- uploads stream through bounded standard-library I/O into a same-filesystem
+  private temporary object and become readable only after close/sync, atomic
+  finalization, and the `ready` catalog commit;
+- the SDK exposes app-shared `upload`, `get`, bounded `list`, and `delete`
+  without app ID, path, key, bucket, URL, or credential input;
+- downloads remain behind the authenticated gateway and are attachment-only,
+  `nosniff`, and `private, no-store`; and
+- startup/bounded reconciliation removes interrupted staging/deleting rows,
+  unreachable orphans, and missing/corrupt ready metadata without serving
+  uncertain bytes.
 
 Default product bounds are 25 MB per blob, 1,000 blobs and 250 MB total per app,
 and 100 records per list page. Upload concurrency/rate, metadata, filename,
 content type, and duration are also finite.
 
-Exit evidence:
+Local and real-listener evidence implemented:
 
 - anonymous, wrong-app, revoked, suspended, capability-disabled, malformed,
-  oversized, quota-exceeded, disk-stop, and cross-origin mutations produce no
-  ready blob and expose zero bytes;
-- interruption and injected short-write, close/sync/rename, SQLite, disk-source,
-  and metadata/storage disagreement failures never serve a partial or foreign
-  blob and reconcile exact quotas;
-- every repository lookup and storage key begins with the server-derived app
+  oversized, quota-exceeded, disk-stop, and cross-origin mutation paths are
+  covered with no ready blob or disclosed bytes;
+- injected stream, close/sync/rename, SQLite, disk-source, and
+  metadata/storage-disagreement failures leave no readable partial/foreign blob
+  and reconcile catalog/accounting state;
+- every repository lookup and storage key begins with server-derived app
   identity, while filenames remain display metadata only;
-- a two-app real-gateway and SDK matrix proves upload/get/list/delete isolation,
-  typed errors, cancellation, bounded pagination, and no inline uploaded
-  document execution;
-- app deletion, cleanup, SDK examples, manifest verification, and agent skills
-  include blobs before the V1 exit gate can pass; and
-- the release evidence records the binary-size and idle-memory deltas and proves
-  blobs add no process, service, listener, mount, package, credential, or
-  storage-network activity.
+- real-gateway and built-SDK coverage proves two-app upload/get/list/delete
+  isolation, typed errors, cancellation, bounded pagination, and no inline
+  uploaded-document execution; and
+- manifest verification, SDK examples, and skills include the blob capability
+  while preserving the single-process/local-storage boundary.
 
-Exit gate:
+Remaining release evidence:
 
-- two-app KV/blob isolation matrix passes at HTTP, repository, storage, and SDK
-  layers;
-- quota and concurrency conflicts are deterministic;
-- partial blob uploads and metadata/storage disagreement fail closed and
-  recover without serving uncertain bytes;
-- unauthorized upgrades fail and revocation closes affected connections;
-- reconnecting clients can recover by rereading current KV state;
-- SDK contains no long-lived secret or selectable app ID.
-- SDK examples and `tiny-app-development` skill pass contract tests.
+- The updated blob-enabled production binary must still be installed through
+  the signed update path on the disposable VPS and pass the unattended SSH/OTP
+  suite. That gate is pending until release-key approval permits installation
+  of this exact build; prior VPS success is not evidence for it.
+- The final V1 run must record the two-app KV/blob matrix at HTTP, repository,
+  storage, SDK, and updated-VPS layers; deterministic quota/concurrency;
+  partial/disagreement recovery; revocation; reconnect KV recovery; SDK secret/
+  app-selector absence; and example/skill drift checks.
 
 ## M5 — Operable Hetzner-first release
 

@@ -56,6 +56,7 @@ func (s *SQLiteStore) ResolveActive(ctx context.Context, slug string) (apps.App,
 	a.ReleaseEvidence = releases.FileManifest{Files: expected, Hash: hash}
 	a.SPAFallback = m.SPAFallback != ""
 	a.KVEnabled = m.KV
+	a.BlobsEnabled = m.Blobs
 	a.RealtimeEnabled = m.Realtime
 	return a, nil
 }

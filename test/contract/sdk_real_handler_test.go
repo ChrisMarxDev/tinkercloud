@@ -1,8 +1,10 @@
 package contract
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tinyhost/tiny/internal/apps"
+	"github.com/tinyhost/tiny/internal/blob"
 	"github.com/tinyhost/tiny/internal/compose"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/identity"
@@ -23,6 +26,66 @@ import (
 	"github.com/tinyhost/tiny/internal/policies"
 	"github.com/tinyhost/tiny/internal/sessions"
 )
+
+type contractBlob struct {
+	metadata blob.Metadata
+	bytes    []byte
+}
+
+// contractBlobs is an app-first byte-store seam. The SDK test therefore
+// crosses the real gateway, multipart dispatcher, authorization context and
+// blob service without substituting a browser fetch handler.
+type contractBlobs struct {
+	mu   sync.Mutex
+	data map[string]map[string]contractBlob
+}
+
+func (r *contractBlobs) Upload(_ context.Context, app, _ string, m blob.Metadata, src io.Reader, _ blob.Limits) (blob.Metadata, error) {
+	b, err := io.ReadAll(src)
+	if err != nil {
+		return blob.Metadata{}, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.data[app] == nil {
+		r.data[app] = map[string]contractBlob{}
+	}
+	m.Size = int64(len(b))
+	m.CreatedAt = time.Now().UTC()
+	r.data[app][m.ID] = contractBlob{metadata: m, bytes: append([]byte(nil), b...)}
+	return m, nil
+}
+func (r *contractBlobs) Open(_ context.Context, app, id string) (io.ReadCloser, blob.Metadata, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.data[app][id]
+	if !ok {
+		return nil, blob.Metadata{}, os.ErrNotExist
+	}
+	return io.NopCloser(bytes.NewReader(append([]byte(nil), b.bytes...))), b.metadata, nil
+}
+func (r *contractBlobs) List(_ context.Context, app, cursor string, limit int) (blob.ListResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := blob.ListResult{Blobs: []blob.Metadata{}}
+	for id, b := range r.data[app] {
+		if id > cursor && len(out.Blobs) < limit {
+			out.Blobs = append(out.Blobs, b.metadata)
+		}
+	}
+	sort.Slice(out.Blobs, func(i, j int) bool { return out.Blobs[i].ID < out.Blobs[j].ID })
+	return out, nil
+}
+func (r *contractBlobs) Delete(_ context.Context, app, id string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.data[app][id]; !ok {
+		return false, nil
+	}
+	delete(r.data[app], id)
+	return true, nil
+}
+func (*contractBlobs) Reconcile(context.Context) error { return nil }
 
 // contractKV is deliberately a repository rather than a mocked HTTP surface:
 // the SDK test crosses the real composed gateway and service boundary.
@@ -101,14 +164,14 @@ func TestBuiltSDKAgainstComposedGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	appsRepo := apps.NewMemoryRepository(
-		apps.App{ID: "alpha-id", Slug: "alpha", Status: apps.Active, KVEnabled: true, RealtimeEnabled: true},
-		apps.App{ID: "beta-id", Slug: "beta", Status: apps.Active, KVEnabled: true, RealtimeEnabled: true},
+		apps.App{ID: "alpha-id", Slug: "alpha", Status: apps.Active, KVEnabled: true, BlobsEnabled: true, RealtimeEnabled: true},
+		apps.App{ID: "beta-id", Slug: "beta", Status: apps.Active, KVEnabled: true, BlobsEnabled: true, RealtimeEnabled: true},
 	)
 	policy := &policies.MemoryStore{Policies: map[string]policies.Policy{
 		"alpha-id": {AppID: "alpha-id", OwnerIdentityID: "viewer", Valid: true},
 		"beta-id":  {AppID: "beta-id", OwnerIdentityID: "viewer", Valid: true},
 	}}
-	h := compose.AppPlane(config.Config{PlatformHost: "platform.localhost", AppSuffix: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, live.New(live.DefaultLimits()), compose.Login{})
+	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{PlatformHost: "platform.localhost", AppSuffix: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, &contractBlobs{data: map[string]map[string]contractBlob{}}, live.New(live.DefaultLimits()), compose.Login{}, nil)
 	// Node resolves the reserved `*.localhost` test suffix to IPv6 loopback.
 	// Keep the listener local while allowing the browser-style fetch URL to
 	// retain a host-derived app name.

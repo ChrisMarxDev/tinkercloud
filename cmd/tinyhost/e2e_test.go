@@ -65,7 +65,10 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 		p, e := verification.ProbeCandidate(ctx, cfg, root, r)
 		return e == nil && p.Passed()
 	}}
-	h, _ := buildHandler(cfg, config.Secrets{}, s, gates)
+	h, _, err := buildHandler(cfg, config.Secrets{}, s, gates)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ts := httptest.NewTLSServer(h)
 	defer ts.Close()
 	addr := ts.Listener.Addr().String()

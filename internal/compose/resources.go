@@ -6,6 +6,7 @@ package compose
 
 import (
 	"github.com/tinyhost/tiny/internal/archive"
+	"github.com/tinyhost/tiny/internal/blob"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/operations"
@@ -41,6 +42,9 @@ func (r ResourceControls) ConfigureDeployments(service *deployments.Service) {
 
 func (r ResourceControls) KVRepository(store *persistence.SQLiteStore) persistence.KVRepository {
 	return persistence.KVRepository{Store: store, WriteGate: r.Gate}
+}
+func (r ResourceControls) BlobRepository(store *persistence.SQLiteStore) *persistence.BlobRepository {
+	return &persistence.BlobRepository{Store: store, Bytes: blob.LocalStore{Root: store.DataRoot}, WriteGate: r.Gate}
 }
 
 func (r ResourceControls) ConfigureControl(service *persistence.ControlService) {

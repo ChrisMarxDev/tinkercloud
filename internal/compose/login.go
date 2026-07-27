@@ -163,7 +163,7 @@ type Login struct {
 	RateLimits *ratelimit.Limiter
 }
 type AtomicAppLogin interface {
-	Request(context.Context, string, string, bool) (string, error)
+	Request(context.Context, string, string, bool, string) (string, error)
 	VerifyAndCreateSession(context.Context, string, string, string, string, time.Time) (string, error)
 }
 type OTPRequesterVerifier interface {
@@ -206,7 +206,7 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 			writePreAuthDenied(w, http.StatusUnauthorized)
 			return
 		}
-		allowed := l.RateLimits == nil || l.RateLimits.Allow(ratelimit.OTPRequest, r.RemoteAddr, b.Email, app.ID)
+		allowed := l.RateLimits == nil || l.RateLimits.AllowRequest(ratelimit.OTPRequest, r, b.Email, app.ID)
 		email, e := identity.Normalize(b.Email)
 		eligible := false
 		if e == nil && l.Policies != nil {
@@ -217,10 +217,10 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 		transaction := opaqueTransaction()
 		if allowed && e == nil {
 			if l.Atomic != nil {
-				if id, err := l.Atomic.Request(r.Context(), app.ID, email, eligible); err == nil && id != "" {
+				if id, err := l.Atomic.Request(r.Context(), app.ID, email, eligible, ratelimit.RequestFingerprint(r)); err == nil && id != "" {
 					transaction = id
 					if l.RateLimits != nil {
-						l.RateLimits.BindTransaction(transaction, email)
+						l.RateLimits.BindTransactionRequest(transaction, email, r)
 					}
 				}
 			} else {
@@ -264,7 +264,7 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 			writePreAuthDenied(w, http.StatusUnauthorized)
 			return
 		}
-		if l.RateLimits != nil && !l.RateLimits.AllowTransaction(ratelimit.OTPVerify, r.RemoteAddr, b.Transaction, app.ID) {
+		if l.RateLimits != nil && !l.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, b.Transaction, app.ID) {
 			if !form {
 				writeRateLimited(w)
 				return

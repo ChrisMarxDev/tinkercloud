@@ -235,6 +235,12 @@
           <div><p class="tiny-eyebrow">Operator only</p><h2 id="deployers-title">Deployers</h2></div>
           <p>Authorization grants narrow deployment power, never server or viewer authority.</p>
         </div>
+        <form class="tiny-card tiny-card--flat tiny-stack" method="post" action="/deployers/authorize">
+          <div><h3>Authorize a deployer</h3><p class="tiny-card__meta" id="authorize-deployer-help">They can request a control-plane sign-in code after authorization. This grants no viewer or server authority.</p></div>
+          <label class="tiny-field" for="authorize-deployer-email"><span class="tiny-label">Deployer email address</span><input class="tiny-input" id="authorize-deployer-email" name="email" type="email" autocomplete="email" required aria-describedby="authorize-deployer-help"></label>
+          <input type="hidden" name="csrf" value="{{.CSRF}}">
+          <div><button class="tiny-button tiny-button--primary" type="submit">Authorize deployer</button></div>
+        </form>
         {{if .View.Deployers}}
           <div class="tiny-stack">
             {{range .View.Deployers}}
@@ -254,7 +260,7 @@
             {{end}}
           </div>
         {{else}}
-          <div class="tiny-empty"><div class="tiny-empty__icon" aria-hidden="true">+</div><h3>No deployers found.</h3><p>Authorize deployers locally from the VPS before they can sign in or create apps.</p></div>
+          <div class="tiny-empty"><div class="tiny-empty__icon" aria-hidden="true">+</div><h3>No deployers found.</h3><p>Use the authorization form above before a deployer can sign in or create apps.</p></div>
         {{end}}
       </section>
 

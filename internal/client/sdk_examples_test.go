@@ -10,12 +10,16 @@ import (
 )
 
 func TestSDKExampleAppsRemainPrivateCapabilityProjects(t *testing.T) {
-	examples := map[string]string{
-		"shared-checklist": "shared-checklist",
-		"team-pulse":       "team-pulse",
-		"quick-poll":       "quick-poll",
+	examples := map[string]struct {
+		slug                string
+		kv, blobs, realtime bool
+	}{
+		"shared-checklist": {slug: "shared-checklist", kv: true, realtime: true},
+		"team-pulse":       {slug: "team-pulse", kv: true, realtime: true},
+		"quick-poll":       {slug: "quick-poll", kv: true, realtime: true},
+		"attachment-shelf": {slug: "attachment-shelf", blobs: true},
 	}
-	for directory, slug := range examples {
+	for directory, expected := range examples {
 		t.Run(directory, func(t *testing.T) {
 			project := filepath.Join("..", "..", "examples", "sdk-apps", directory)
 			raw, err := os.ReadFile(filepath.Join(project, "tiny.yaml"))
@@ -26,8 +30,9 @@ func TestSDKExampleAppsRemainPrivateCapabilityProjects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if manifest.Name != slug || manifest.BuildOutput != "dist" ||
-				!manifest.KV || !manifest.Realtime ||
+			if manifest.Name != expected.slug || manifest.BuildOutput != "dist" ||
+				manifest.KV != expected.kv || manifest.Blobs != expected.blobs ||
+				manifest.Realtime != expected.realtime ||
 				len(manifest.Emails) != 0 || len(manifest.Domains) != 0 {
 				t.Fatalf("example expanded its manifest boundary: %#v", manifest)
 			}

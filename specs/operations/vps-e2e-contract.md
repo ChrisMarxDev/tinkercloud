@@ -30,12 +30,30 @@ invalid values prevent the live run from starting.
 | `TINYHOST_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
 | `TINYHOST_RESEND_READER_API_KEY_FILE` | Required by the shipped unattended Resend reader: absolute local mode-`0600`, non-symlink Resend key with sent-email read access. It must never be copied to the VPS. |
 | `TINYHOST_RESEND_OTP_LEDGER_FILE` | Optional absolute local mode-`0600`, non-symlink consumed-message ledger for the shipped reader. Defaults beside the reader key and is never copied to the VPS. |
-| `TINYHOST_VPS_RELEASE_DIR` | Optional absolute verified release directory. If absent, the suite builds and signs a temporary release locally. |
+| `TINYHOST_VPS_RELEASE_DIR` | Optional absolute verified release directory. If absent, a clean-host run builds and signs a temporary release locally. **Required with reuse**: before any offline gate, the wrapper requires an existing caller-owned non-symlink directory; the live suite verifies it against the installed server's pinned signing key. |
 | `TINYHOST_VPS_REUSE` | Optional exact value `1`; permits an already-initialized disposable host only when its root-owned suite marker exactly matches the platform host, app suffix, and SSH target. |
+| `TINYHOST_VPS_UNATTENDED_REPORT_DIR` | Optional absolute local mode-`0700` directory for `run-unattended.sh` redacted timestamped status artifacts. Defaults to `.tiny/vps/unattended-reports/`; it is never copied to the VPS. |
 
 The VPS must already have public DNS for the platform host and wildcard app
 suffix, plus a verified Resend sending domain. The suite does not create DNS
 records or retrieve credentials from the VPS.
+
+## Unattended wrapper
+
+`skills/tiny-full-stack-test/scripts/run-unattended.sh` is the sole
+noninteractive convenience command. It reads only already-exported variables;
+it does not source an env file or evaluate environment content as shell. It
+requires the checked-in absolute Resend reader path, explicit local reader-key
+and ledger paths, exact `TINYHOST_VPS_E2E=1` acknowledgement, and safe local
+files before running anything. It creates a local owner-only, mode-`0600`,
+timestamped redacted status artifact in a mode-`0700` report directory.
+
+The wrapper runs its offline reader self-test, shared-skill drift check, VPS
+package test (explicitly skipping `^TestVPSAcceptance$`), and `git diff --check`
+in that order. Only if all pass does it
+invoke exactly one `TestVPSAcceptance` run. It has no retry loop, no SSH
+fallback, no OTP bypass, and no report field for a secret, OTP, email body,
+provider response, or message ID.
 
 ## SSH, secrets, and OTP
 
@@ -146,7 +164,20 @@ values.
    marker or completing a WebSocket upgrade.
 6. Authenticate the viewer through the app OTP flow. Verify the host-only
    session returns the generated marker and that `/_tiny/api/v1/me` reports
-   the configured viewer email.
+   the configured viewer email. The deployed fixture has `features.blobs:
+   true` and contains a same-origin SDK-equivalent blob client example.
+7. With that real viewer session, discover `blobs`, reject a multipart upload
+   containing a second part without changing the catalog, then upload, list,
+   download, and delete one binary fixture. Download bytes must be exact and
+   have attachment, `private, no-store`, and `nosniff` headers. Anonymous and
+   guessed cross-app reads must return denial without fixture bytes. A service
+   restart must preserve the ready blob before the delete assertion.
+8. In reuse mode, after a newly active probe app exists, copy no new secrets
+   and invoke only `tinyhost verify-artifact` followed by the supported local
+   signed `tinyhost update` path. It verifies the candidate against the
+   installed binary's pinned key, uses the normal rollback/health gates, and
+   never re-runs init or removes existing host state. A temporary E2E signing
+   authority is therefore forbidden with reuse.
 
 On any failed step, the suite exits non-zero and leaves the VPS state in place
 for operator investigation.

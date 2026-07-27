@@ -1,6 +1,6 @@
 # TinyHost VPS acceptance test
 
-`go test ./test/vps -run TestVPSAcceptance -v` is a destructive, opt-in black-box acceptance run for a **disposable dedicated Ubuntu 24.04 LTS or Ubuntu 26.04 LTS amd64 VPS**. It cross-builds and uploads `tinyhost`, runs native initialization, authorizes a second deployer, performs real deployer and viewer OTP logins, deploys an app, proves anonymous content denial, then proves the allowed viewer can access the app and server-derived identity endpoint. The SSH target must be a root SSH destination in exact `root@host` form.
+`go test ./test/vps -run TestVPSAcceptance -v` is a destructive, opt-in black-box acceptance run for a **disposable dedicated Ubuntu 24.04 LTS or Ubuntu 26.04 LTS amd64 VPS**. It cross-builds and uploads `tinyhost`, runs native initialization, authorizes a second deployer, performs real deployer and viewer OTP logins, deploys an app, proves anonymous content denial, then proves the allowed viewer can access the app and server-derived identity endpoint. The deployed fixture enables blobs and proves SDK-equivalent capability discovery, one-file multipart upload/list/exact binary attachment download/delete, multipart extra-part denial without mutation, anonymous and cross-app denial without blob bytes, and restart persistence. The SSH target must be a root SSH destination in exact `root@host` form.
 
 It never reads OTP data from SQLite, the server filesystem, or logs. Configure a local OTP reader executable; TinyHost invokes it with exactly three arguments: `deployer|viewer`, email, hostname. Its stdout must contain only a 4–12 digit code.
 
@@ -25,6 +25,22 @@ export TINYHOST_VPS_OTP_COMMAND=$PWD/skills/tiny-full-stack-test/scripts/read-re
 go test ./test/vps -run TestVPSAcceptance -count=1 -v
 ```
 
+After exporting the required values, the sole noninteractive wrapper is:
+
+```sh
+skills/tiny-full-stack-test/scripts/run-unattended.sh
+```
+
+It does not load an env file. It fail-closes on an unsafe reader key/ledger,
+untrusted SSH input, acknowledgement mismatch, or failed offline gate; then it
+runs exactly one real `TestVPSAcceptance` pass (the offline package gate
+explicitly skips it). Its private timestamped status
+artifact defaults to `.tiny/vps/unattended-reports/`; override that location
+only with an absolute owner-only mode-`0700`
+`TINYHOST_VPS_UNATTENDED_REPORT_DIR`.
+In reuse mode it also requires an absolute, existing, caller-owned,
+non-symlink `TINYHOST_VPS_RELEASE_DIR` before it begins offline gates.
+
 For the recommended repo-local, gitignored key, pinned host key, and SSH config
 layout, follow [the external VPS setup guide](../../docs/operations/vps-e2e.md).
 The helper is:
@@ -38,8 +54,11 @@ Optional `TINYHOST_VPS_SSH_PORT` and `TINYHOST_VPS_SSH_IDENTITY_FILE` are passed
 By default the suite refuses hosts containing TinyHost paths. For a disposable
 pre-initialized test host, `TINYHOST_VPS_REUSE=1` requires the root-owned suite
 marker at `/var/lib/tinyhost-vps-e2e/marker` to exactly match the SSH target,
-platform host, and app suffix. It does not create a test-only authorization or
-network path.
+platform host, and app suffix. Reuse also requires
+`TINYHOST_VPS_RELEASE_DIR`: the suite verifies the supplied candidate against
+the installed server's pinned key and uses only the normal signed update and
+health-gate path after a new active probe app exists. It does not create a
+test-only authorization or network path, re-initialize, or clean the host.
 
 For unattended real OTPs, use the local-only Resend reader documented in the
 [VPS guide](../../docs/operations/vps-e2e.md#unattended-resend-otp-reading).

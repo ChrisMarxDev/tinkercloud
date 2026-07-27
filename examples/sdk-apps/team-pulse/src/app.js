@@ -226,6 +226,7 @@ document.addEventListener("visibilitychange", () => {
 
 async function startLive() {
   channel = tiny.live.channel("team-pulse");
+  channel.subscribe();
   stopChannelEvents = channel.on(
     "pulse.changed",
     () => void refreshPulses(),

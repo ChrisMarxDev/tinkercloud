@@ -45,7 +45,7 @@ func TestAppAuthTemplatesKeepTrustedScriptInsideBody(t *testing.T) {
 
 type fakeAtomic struct{}
 
-func (fakeAtomic) Request(context.Context, string, string, bool) (string, error) {
+func (fakeAtomic) Request(context.Context, string, string, bool, string) (string, error) {
 	return "otp_test", nil
 }
 func (fakeAtomic) VerifyAndCreateSession(context.Context, string, string, string, string, time.Time) (string, error) {
@@ -57,7 +57,7 @@ type denyAtomic struct {
 	requests int
 }
 
-func (f *denyAtomic) Request(_ context.Context, _ string, _ string, eligible bool) (string, error) {
+func (f *denyAtomic) Request(_ context.Context, _ string, _ string, eligible bool, _ string) (string, error) {
 	f.eligible = eligible
 	f.requests++
 	return "otp_fake", nil

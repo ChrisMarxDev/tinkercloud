@@ -28,9 +28,11 @@ authorized static request verifies once before returning content.
 
 ## Current implementation seam
 
-M1 uses repository interfaces and an in-memory implementation for executable
-gateway evidence. SQLite, Resend, ACME, and WebSocket remain unselected M0
-spikes; adding their dependencies/providers needs approval under PRD §25.
+The composed V1 server uses repository interfaces with SQLite persistence,
+the configured OTP delivery adapter, and the single public gateway. Test
+harnesses may substitute in-memory repositories, but that seam must not alter
+the gateway's sealed authorization-context boundary or permit a second public
+listener. Static, capability, and WebSocket routes remain gateway-owned.
 
 Static files are served only from a private immutable release root through
 `os.OpenRoot` with Go 1.25.12 pinned, after the evidence verification above.
@@ -63,9 +65,15 @@ never mutates state.
 
 Before policy lookup, challenge creation, or email-provider work, app and
 control OTP request and verify routes pass a bounded, in-memory rolling-window
-guard. It derives the source only from the server-provided `RemoteAddr` (never
-forwarded request headers), uses HMAC-keyed normalized-email values, and layers
-IP, email, app, and global budgets. Raw addresses are neither retained nor
-logged. Request throttling retains the normal generic acceptance response;
-JSON verification/control callers receive only the typed `rate_limited` error,
-which never reveals eligibility. Rejected dimensions are indistinguishable.
+guard. It layers IP, bounded request-fingerprint, HMAC-keyed normalized-email,
+app, and global budgets. The fingerprint is a keyed, bounded abuse-control
+hint derived from the canonical `RemoteAddr` peer IP plus bounded
+`User-Agent`/`Accept-Language`; it excludes cookies, URLs, and every forwarded
+header, is never an identity claim, and is never retained raw. Verification
+binds the opaque transaction to keyed email and fingerprint digests so changing
+browser hints cannot bypass the original request's email budget. Raw addresses,
+emails, and fingerprints are neither retained nor logged. Exhausted dynamic
+state fails closed instead of evicting an active bucket. Request throttling
+retains the normal generic acceptance response; JSON verification/control
+callers receive only the typed `rate_limited` error, which never reveals
+eligibility. Rejected dimensions are indistinguishable.

@@ -13,7 +13,7 @@ func TestPersistentOTPDoesNotStoreRawAndConsumesOnce(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	now := time.Now()
-	m, e := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", "fp", []byte("key"), true, now, time.Minute)
+	m, e := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", []byte("fp"), []byte("key"), true, now, time.Minute)
 	if e != nil || m == nil {
 		t.Fatal(e)
 	}
@@ -35,7 +35,7 @@ func TestPersistentOTPWrongAttemptCommitsConfiguredLimit(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	now := time.Now()
-	m, err := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", "fp", []byte("key"), true, now, time.Minute)
+	m, err := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", []byte("fp"), []byte("key"), true, now, time.Minute)
 	if err != nil || m == nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestPersistentOTPSuccessConsumesOnceConcurrently(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	now := time.Now()
-	m, err := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", "fp", []byte("key"), true, now, time.Minute)
+	m, err := s.CreateChallenge(context.Background(), "a", "viewer", "a@example.com", []byte("fp"), []byte("key"), true, now, time.Minute)
 	if err != nil || m == nil {
 		t.Fatal(err)
 	}

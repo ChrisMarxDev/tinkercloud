@@ -15,9 +15,13 @@ func TestAppLoginWrongAttemptCommitsConfiguredLimit(t *testing.T) {
 	}
 	o := &captureOutbox{}
 	login := AppLogin{Store: s, HMACKey: []byte("key"), Outbox: o, MaxAttempts: 2}
-	challenge, err := login.Request(context.Background(), "a", "viewer@example.com", true)
+	challenge, err := login.Request(context.Background(), "a", "viewer@example.com", true, "test-fingerprint")
 	if err != nil || challenge == "" || o.m.Code == "" {
 		t.Fatal(err)
+	}
+	var fingerprint []byte
+	if err := s.DB.QueryRow("SELECT request_fingerprint_hash FROM otp_challenges WHERE id=?", challenge).Scan(&fingerprint); err != nil || string(fingerprint) == "test-fingerprint" || len(fingerprint) == 0 {
+		t.Fatalf("fingerprint must be a non-raw keyed digest: %q %v", fingerprint, err)
 	}
 	for i := 0; i < 2; i++ {
 		if _, err = login.VerifyAndCreateSession(context.Background(), "a", "viewer@example.com", challenge, "000000", time.Now().Add(time.Hour)); !errors.Is(err, ErrOTP) {

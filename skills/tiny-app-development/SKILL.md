@@ -180,7 +180,11 @@ Use capability discovery before KV, blob, or live work. Handle
 `TinyVersionIncompatibleError` by upgrading `@tinyhost/sdk`; do not add an app
 selector or fall back to control credentials. Raw HTTP clients may omit the SDK
 version header, while a supplied unsupported major receives a typed upgrade
-error. Compile examples and run the real-listener SDK contract after SDK
+error. Blob uploads use exactly one `file` multipart part; blob IDs are opaque,
+downloads are attachment bytes, and callers never pass a path, bucket, or
+storage key. Custom live channels call `subscribe()` before `connect()` and
+`unsubscribe()` when delivery is no longer wanted; reconnect recovery rereads
+KV rather than replaying events. Compile examples and run the real-listener SDK contract after SDK
 changes. Verify the packed SDK contains only its README, Apache-2.0 license,
 declarations, and runtime module. Keep the npm manifest, JSR manifest, exported
 SDK version, and release version identical; install-test the npm tarball and

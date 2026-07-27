@@ -19,6 +19,13 @@ supply an app ID or viewer identity.
 - Every successful mutation gets a monotonically increasing per-key version.
 - Limits default to 10,000 keys and 100 MiB per app. This is utility-grade
   state, not a business-critical durability promise.
+- Every KV request is admitted before repository access against bounded,
+  server-derived viewer-within-app, app, and fixed global rolling-window
+  buckets. The viewer bucket prevents one viewer from consuming an app's
+  share, while the app and global buckets prevent a large allowlist from
+  multiplying capacity. Dynamic viewer/app scope state has a configured hard
+  maximum; a new scope at that bound, or any exhausted bucket, returns
+  `rate_limited` without appending to any bucket or touching the repository.
 
 ## Live v1
 
@@ -91,15 +98,15 @@ base, or frame ancestors) and never emits wildcard CORS.
   dependency and retry; they do not add an app ID or control-plane credential.
 
 The real-listener SDK contract test proves current user, current app,
-capability discovery, KV get/set/list/delete, blob upload/get/list/delete, typed
-error mapping, no caller-selected app/storage key, header negotiation, and the
-compatible raw/absent-header path. It uses a real gateway, authorization
-context, session, app-scoped repositories, and byte store rather than a mocked
-fetch handler.
+capability discovery, KV get/set/list/delete, blob upload/get/list/delete,
+typed error mapping, explicit live subscribe/unsubscribe behavior, no
+caller-selected app/storage key, header negotiation, and the compatible
+raw/absent-header path. It uses a real gateway, authorization context, session,
+app-scoped repositories, and byte store rather than a mocked fetch handler.
 
 ## Public example application contract
 
-The repository ships three human-readable, deployable SDK examples:
+The repository ships four human-readable, deployable SDK examples:
 
 - a shared checklist demonstrates current viewer/app reads, capability
   discovery, bounded prefix pagination, create/update/delete with optimistic

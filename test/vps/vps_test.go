@@ -340,7 +340,7 @@ func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 		t.Fatalf("archive A: bytes=%d size=%d marker=%q err=%v", len(a), sizeA, markerA, err)
 	}
 	m := smokeManifest(t, a)
-	if m.Name != "vps-smoke-a" || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
+	if m.Name != "vps-smoke-a" || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
 		t.Fatalf("smoke policy = %#v", m)
 	}
 	_, _, markerB, err := smokeArchive("vps-smoke-b", viewer)

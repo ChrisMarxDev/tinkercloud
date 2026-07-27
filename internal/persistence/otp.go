@@ -17,7 +17,7 @@ var ErrOTP = errors.New("otp denied")
 
 type ChallengeMessage struct{ ID, Code, Email, AppID, Purpose string }
 
-func (s *SQLiteStore) CreateChallenge(ctx context.Context, appID, purpose, rawEmail, fingerprint string, key []byte, eligible bool, now time.Time, ttl time.Duration) (*ChallengeMessage, error) {
+func (s *SQLiteStore) CreateChallenge(ctx context.Context, appID, purpose, rawEmail string, fingerprintHash, key []byte, eligible bool, now time.Time, ttl time.Duration) (*ChallengeMessage, error) {
 	email, e := identity.Normalize(rawEmail)
 	if e != nil {
 		return nil, nil
@@ -41,7 +41,7 @@ func (s *SQLiteStore) CreateChallenge(ctx context.Context, appID, purpose, rawEm
 		if _, e := tx.ExecContext(ctx, "UPDATE otp_challenges SET invalidated_at=? WHERE app_id=? AND purpose=? AND normalized_email=? AND consumed_at IS NULL AND invalidated_at IS NULL", now.UTC().Format(time.RFC3339Nano), appID, purpose, email); e != nil {
 			return e
 		}
-		_, e := tx.ExecContext(ctx, "INSERT INTO otp_challenges(id,app_id,purpose,normalized_email,code_hash,expires_at,attempts,request_fingerprint_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?)", id, appID, purpose, email, h.Sum(nil), now.Add(ttl).UTC().Format(time.RFC3339Nano), 0, []byte(fingerprint), now.UTC().Format(time.RFC3339Nano))
+		_, e := tx.ExecContext(ctx, "INSERT INTO otp_challenges(id,app_id,purpose,normalized_email,code_hash,expires_at,attempts,request_fingerprint_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?)", id, appID, purpose, email, h.Sum(nil), now.Add(ttl).UTC().Format(time.RFC3339Nano), 0, fingerprintHash, now.UTC().Format(time.RFC3339Nano))
 		return e
 	})
 	if e != nil {

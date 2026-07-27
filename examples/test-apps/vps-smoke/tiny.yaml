@@ -5,4 +5,5 @@ build:
   output: .
 features:
   kv: false
+  blobs: true
   realtime: false

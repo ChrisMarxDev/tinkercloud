@@ -150,6 +150,7 @@ func safeTokenRouteID(id string) bool {
 type ControlService struct {
 	Store       *SQLiteStore
 	Live        interface{ Revoke(string, string) }
+	BlobCleanup interface{ Reconcile(context.Context) error }
 	Deployments *deployments.Service
 	AppSuffix   string
 	// WriteGate protects only resource-growing mutations. It is deliberately
@@ -837,6 +838,12 @@ func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug,
 	})
 	if err == nil && fresh && s.Live != nil {
 		s.Live.Revoke(appID, "")
+	}
+	// The database state is already deleted and therefore gateway-inaccessible.
+	// Reconciliation owns the only server-derived byte cleanup path; do not
+	// make this revocation-sensitive request wait on local disk I/O.
+	if err == nil && fresh && s.BlobCleanup != nil {
+		go func() { _ = s.BlobCleanup.Reconcile(context.Background()) }()
 	}
 	return err
 }

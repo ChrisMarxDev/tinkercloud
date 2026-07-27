@@ -61,7 +61,7 @@ func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testi
 	}
 	outbox := &captureOutbox{}
 	login := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: outbox}
-	tx, err := login.RequestOTP(ctx, "owner@example.com", controlapi.BrowserLoginChannel)
+	tx, err := login.RequestOTP(ctx, "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || tx == "" || outbox.m.Code == "" {
 		t.Fatal(err)
 	}

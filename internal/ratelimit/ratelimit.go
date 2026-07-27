@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -24,11 +25,11 @@ const (
 	OTPVerify  Kind = "otp_verify"
 )
 
-// Policy is a rolling-window limit. All four dimensions must allow a request.
+// Policy is a rolling-window limit. All five dimensions must allow a request.
 type Policy struct {
-	Window                  time.Duration
-	PerIP, PerEmail, PerApp int
-	Global                  int
+	Window                                  time.Duration
+	PerIP, PerFingerprint, PerEmail, PerApp int
+	Global                                  int
 }
 
 // Config is purpose-specific. MaxKeys bounds memory even under a distributed
@@ -41,16 +42,16 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
-		Request: Policy{Window: 10 * time.Minute, PerIP: 10, PerEmail: 3, PerApp: 100, Global: 1000},
-		Verify:  Policy{Window: 10 * time.Minute, PerIP: 20, PerEmail: 10, PerApp: 200, Global: 2000},
+		Request: Policy{Window: 10 * time.Minute, PerIP: 10, PerFingerprint: 10, PerEmail: 3, PerApp: 100, Global: 1000},
+		Verify:  Policy{Window: 10 * time.Minute, PerIP: 20, PerFingerprint: 20, PerEmail: 10, PerApp: 200, Global: 2000},
 		MaxKeys: 10000,
 	}
 }
 
 type bucket struct{ events []time.Time }
 type transactionBinding struct {
-	emailDigest string
-	expiresAt   time.Time
+	emailDigest, fingerprintDigest string
+	expiresAt                      time.Time
 }
 
 // Limiter is concurrency-safe. It has no persistence by design: this is a
@@ -68,7 +69,7 @@ func New(key []byte, cfg Config) *Limiter {
 	if len(key) == 0 {
 		return nil
 	}
-	if !validPolicy(cfg.Request) || !validPolicy(cfg.Verify) || cfg.MaxKeys < 4 || cfg.MaxKeys > 100000 {
+	if !validPolicy(cfg.Request) || !validPolicy(cfg.Verify) || cfg.MaxKeys < 5 || cfg.MaxKeys > 100000 {
 		return nil
 	}
 	return &Limiter{key: append([]byte(nil), key...), cfg: cfg, now: time.Now, buckets: make(map[string]bucket), transactions: make(map[string]transactionBinding)}
@@ -83,7 +84,19 @@ func validPolicy(p Policy) bool {
 			return false
 		}
 	}
+	if p.PerFingerprint != 0 && (p.PerFingerprint < 1 || p.PerFingerprint > 1000000) {
+		return false
+	}
 	return true
+}
+
+func fingerprintLimit(p Policy) int {
+	// A zero value keeps old explicit test configurations conservative while
+	// production defaults always set a separate fingerprint budget.
+	if p.PerFingerprint == 0 {
+		return p.PerIP
+	}
+	return p.PerFingerprint
 }
 
 // SetClock is test-only composition support. Calls must not race with Check.
@@ -97,6 +110,21 @@ func (l *Limiter) SetClock(now func() time.Time) {
 // intentionally never consulted; accepting them would give callers control of
 // the IP bucket. Raw IP and raw email are used only during this call.
 func (l *Limiter) Allow(kind Kind, remoteAddr, email, app string) bool {
+	return l.AllowFingerprint(kind, remoteAddr, "", email, app)
+}
+
+// AllowRequest derives the bounded, non-persistent request fingerprint before
+// applying the OTP request budget. Forwarded headers are intentionally ignored.
+func (l *Limiter) AllowRequest(kind Kind, r *http.Request, email, app string) bool {
+	if r == nil {
+		return l.AllowFingerprint(kind, "", "", email, app)
+	}
+	return l.AllowFingerprint(kind, r.RemoteAddr, RequestFingerprint(r), email, app)
+}
+
+// AllowFingerprint applies all OTP request dimensions. The fingerprint is
+// immediately HMACed inside the limiter and is never retained in raw form.
+func (l *Limiter) AllowFingerprint(kind Kind, remoteAddr, fingerprint, email, app string) bool {
 	if l == nil { // nil is an intentional development/test bypass, never production composition.
 		return true
 	}
@@ -104,13 +132,27 @@ func (l *Limiter) Allow(kind Kind, remoteAddr, email, app string) bool {
 	if !ok {
 		return false
 	}
-	return l.allow(kind, remoteAddr, l.digest(normalizedOrOpaque(email)), app)
+	return l.allow(kind, remoteAddr, l.digest(normalizedOrOpaque(fingerprint)), l.digest(normalizedOrOpaque(email)), app)
 }
 
 // BindTransaction associates an opaque login transaction with the email HMAC
 // used by VerifyTransaction. The raw email is never retained. Call this only
 // after a request has passed its request budget and a transaction was issued.
 func (l *Limiter) BindTransaction(transaction, email string) {
+	l.BindTransactionFingerprint(transaction, email, "")
+}
+
+// BindTransactionRequest keeps the request's fingerprint attached to the
+// opaque transaction without retaining the raw request characteristic.
+func (l *Limiter) BindTransactionRequest(transaction, email string, r *http.Request) {
+	fingerprint := ""
+	if r != nil {
+		fingerprint = RequestFingerprint(r)
+	}
+	l.BindTransactionFingerprint(transaction, email, fingerprint)
+}
+
+func (l *Limiter) BindTransactionFingerprint(transaction, email, fingerprint string) {
 	if l == nil || transaction == "" {
 		return
 	}
@@ -121,13 +163,24 @@ func (l *Limiter) BindTransaction(transaction, email string) {
 	if _, exists := l.transactions[transaction]; !exists && len(l.transactions) >= l.cfg.MaxKeys {
 		return
 	}
-	l.transactions[transaction] = transactionBinding{emailDigest: l.digest(normalizedOrOpaque(email)), expiresAt: now.Add(l.cfg.Request.Window)}
+	l.transactions[transaction] = transactionBinding{emailDigest: l.digest(normalizedOrOpaque(email)), fingerprintDigest: l.digest(normalizedOrOpaque(fingerprint)), expiresAt: now.Add(l.cfg.Request.Window)}
 }
 
 // AllowTransaction uses the email HMAC previously associated with an opaque
 // transaction. Unknown transactions use an HMAC of the transaction instead:
 // they remain rate-limited without learning whether a transaction exists.
 func (l *Limiter) AllowTransaction(kind Kind, remoteAddr, transaction, app string) bool {
+	return l.AllowTransactionFingerprint(kind, remoteAddr, "", transaction, app)
+}
+
+func (l *Limiter) AllowTransactionRequest(kind Kind, r *http.Request, transaction, app string) bool {
+	if r == nil {
+		return l.AllowTransactionFingerprint(kind, "", "", transaction, app)
+	}
+	return l.AllowTransactionFingerprint(kind, r.RemoteAddr, RequestFingerprint(r), transaction, app)
+}
+
+func (l *Limiter) AllowTransactionFingerprint(kind Kind, remoteAddr, fingerprint, transaction, app string) bool {
 	if l == nil {
 		return true
 	}
@@ -140,13 +193,15 @@ func (l *Limiter) AllowTransaction(kind Kind, remoteAddr, transaction, app strin
 	}
 	l.mu.Unlock()
 	mail := l.digest("transaction:" + transaction)
+	print := l.digest("transaction:" + transaction)
 	if ok {
 		mail = binding.emailDigest
+		print = binding.fingerprintDigest
 	}
-	return l.allow(kind, remoteAddr, mail, app)
+	return l.allow(kind, remoteAddr, print, mail, app)
 }
 
-func (l *Limiter) allow(kind Kind, remoteAddr, emailDigest, app string) bool {
+func (l *Limiter) allow(kind Kind, remoteAddr, fingerprintDigest, emailDigest, app string) bool {
 	p, ok := l.policy(kind)
 	if !ok {
 		return false
@@ -154,11 +209,12 @@ func (l *Limiter) allow(kind Kind, remoteAddr, emailDigest, app string) bool {
 	ip := remoteIP(remoteAddr)
 	keys := []string{
 		string(kind) + ":ip:" + l.digest(ip),
+		string(kind) + ":fingerprint:" + fingerprintDigest,
 		string(kind) + ":email:" + emailDigest,
 		string(kind) + ":app:" + safeApp(app),
 		string(kind) + ":global",
 	}
-	limits := []int{p.PerIP, p.PerEmail, p.PerApp, p.Global}
+	limits := []int{p.PerIP, fingerprintLimit(p), p.PerEmail, p.PerApp, p.Global}
 	now := l.now()
 	cutoff := now.Add(-p.Window)
 
@@ -181,6 +237,30 @@ func (l *Limiter) allow(kind Kind, remoteAddr, emailDigest, app string) bool {
 		l.buckets[k] = b
 	}
 	return true
+}
+
+// RequestFingerprint binds bounded browser hints to the canonical RemoteAddr
+// peer IP. It excludes cookies, URLs, and forwarded headers. It is an
+// abuse-control hint, never an identity claim; callers immediately HMAC it
+// before retention.
+func RequestFingerprint(r *http.Request) string {
+	if r == nil {
+		return "absent"
+	}
+	return "ip:" + remoteIP(r.RemoteAddr) + "|ua:" + boundedHeader(r.Header.Get("User-Agent")) + "|lang:" + boundedHeader(r.Header.Get("Accept-Language"))
+}
+
+func boundedHeader(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 512 {
+		value = value[:512]
+	}
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, value)
 }
 
 func (l *Limiter) policy(kind Kind) (Policy, bool) {

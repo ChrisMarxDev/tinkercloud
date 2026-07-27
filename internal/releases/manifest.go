@@ -18,13 +18,13 @@ import (
 var ErrManifest = errors.New("invalid manifest")
 
 type Manifest struct {
-	Version         int
-	Name            string
-	Description     string
-	Emails, Domains []string
-	KV, Realtime    bool
-	SPAFallback     string
-	BuildOutput     string
+	Version             int
+	Name                string
+	Description         string
+	Emails, Domains     []string
+	KV, Blobs, Realtime bool
+	SPAFallback         string
+	BuildOutput         string
 }
 
 var slug = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -47,6 +47,7 @@ type rawManifest struct {
 	} `yaml:"access"`
 	Features struct {
 		KV       bool `yaml:"kv"`
+		Blobs    bool `yaml:"blobs"`
 		Realtime bool `yaml:"realtime"`
 	} `yaml:"features"`
 	SPA struct {
@@ -97,7 +98,7 @@ func ParseManifest(data []byte) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, ErrManifest
 	}
-	m := Manifest{Version: raw.Version, Name: strings.ToLower(raw.Name), Description: description, KV: raw.Features.KV, Realtime: raw.Features.Realtime, SPAFallback: raw.SPA.Fallback, BuildOutput: raw.Build.Output}
+	m := Manifest{Version: raw.Version, Name: strings.ToLower(raw.Name), Description: description, KV: raw.Features.KV, Blobs: raw.Features.Blobs, Realtime: raw.Features.Realtime, SPAFallback: raw.SPA.Fallback, BuildOutput: raw.Build.Output}
 	if m.BuildOutput == "" {
 		m.BuildOutput = "."
 	}

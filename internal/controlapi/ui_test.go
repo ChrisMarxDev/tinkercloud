@@ -30,7 +30,7 @@ type uiLogin struct {
 	requests  int
 }
 
-func (l *uiLogin) RequestOTP(_ context.Context, email string, channel LoginChannel) (string, error) {
+func (l *uiLogin) RequestOTP(_ context.Context, email string, channel LoginChannel, _ string) (string, error) {
 	l.email = email
 	l.channel = channel
 	l.requests++
@@ -355,6 +355,41 @@ func TestPlatformUIMutationsRequireActorOriginCSRFAndConfirmation(t *testing.T) 
 	}
 	if w = request("/deployers/a%40example.test/suspend", "confirmation=suspend%3Aa%40example.test", "https://tiny.test"); w.Code != http.StatusForbidden || len(actions.calls) != 1 {
 		t.Fatalf("deployer escalated: %d %#v", w.Code, actions.calls)
+	}
+}
+
+func TestPlatformUIOperatorCanAuthorizeFreshDeployer(t *testing.T) {
+	actions := &uiActions{}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "operator", Email: "root@example.test", Role: "operator", Active: true}}, Actions: actions}
+	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `action="/deployers/authorize"`) || !strings.Contains(w.Body.String(), `name="email"`) || !strings.Contains(w.Body.String(), `autocomplete="email"`) {
+		t.Fatalf("authorization form missing: %d %s", w.Code, w.Body.String())
+	}
+	var csrf *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("missing csrf")
+	}
+	post := func(email string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "https://tiny.test/deployers/authorize", strings.NewReader("email="+url.QueryEscape(email)+"&csrf="+url.QueryEscape(csrf.Value)))
+		r.Host = "tiny.test"
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Origin", "https://tiny.test")
+		r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+		r.AddCookie(csrf)
+		out := httptest.NewRecorder()
+		p.ServeHTTP(out, r)
+		return out
+	}
+	if w = post("New@Example.test"); w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "deployer:operator:New@example.test:active" {
+		t.Fatalf("fresh authorization: %d %#v", w.Code, actions.calls)
+	}
+	if w = post("not-an-email"); w.Code != http.StatusBadRequest || len(actions.calls) != 1 {
+		t.Fatalf("malformed email authorized: %d %#v", w.Code, actions.calls)
 	}
 }
 

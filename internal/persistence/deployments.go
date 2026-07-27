@@ -11,11 +11,132 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type DeploymentRepository struct{ Store *SQLiteStore }
+
+// RecoveryRecords is database-led: it enumerates only durable deployment rows,
+// never the release filesystem. Callers verify just their derived immutable
+// evidence locations.
+func (s DeploymentRepository) RecoveryRecords(ctx context.Context) ([]deployments.Record, error) {
+	// Do not call Get here. Get intentionally rejects malformed release
+	// metadata for request-time callers, but startup recovery must classify a
+	// corrupt historical row as failed and continue serving unrelated apps.
+	// Casting the durable columns keeps type corruption local to a record; only
+	// query/scan/transaction failures remain startup errors.
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT
+        CAST(d.id AS TEXT), CAST(d.app_id AS TEXT), CAST(a.slug AS TEXT),
+        COALESCE(CAST(d.created_by AS TEXT), ''),
+        COALESCE(CAST(d.idempotency_key AS TEXT), ''),
+        COALESCE(CAST(d.release_hash AS TEXT), ''),
+        COALESCE(CAST(d.manifest_json AS BLOB), X''), CAST(d.state AS TEXT)
+        FROM deployments d JOIN applications a ON a.id=d.app_id
+        ORDER BY d.app_id,d.id`)
+	if err != nil {
+		return nil, err
+	}
+	// SQLiteStore intentionally has one connection. Read the complete raw
+	// deployment cursor before asking for any per-record file evidence.
+	type rawRecord struct {
+		record   deployments.Record
+		manifest []byte
+	}
+	var raw []rawRecord
+	for rows.Next() {
+		var r deployments.Record
+		var manifest []byte
+		var state string
+		if err := rows.Scan(&r.ID, &r.AppID, &r.AppSlug, &r.OwnerID, &r.IdempotencyKey, &r.ReleaseHash, &manifest, &state); err != nil {
+			return nil, err
+		}
+		r.State = releases.State(state)
+		raw = append(raw, rawRecord{record: r, manifest: manifest})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	out := make([]deployments.Record, 0, len(raw))
+	for _, item := range raw {
+		r := item.record
+		if r.State == releases.Verified || r.State == releases.Active || r.State == releases.Superseded {
+			if len(item.manifest) == 0 || json.Unmarshal(item.manifest, &r.Manifest) != nil || r.Manifest.Name == "" {
+				r.RecoveryCorrupt = true
+			}
+			files, corrupt, err := s.recoveryFiles(ctx, r.ID)
+			if err != nil {
+				return nil, err
+			}
+			r.Files = files
+			r.RecoveryCorrupt = r.RecoveryCorrupt || corrupt
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// recoveryFiles reads only the manifest evidence for one database record. A
+// malformed row is evidence corruption, not a database outage, so it is
+// returned as corrupt for per-record failure classification.
+func (s DeploymentRepository) recoveryFiles(ctx context.Context, deploymentID string) ([]releases.File, bool, error) {
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT
+        CAST(relative_path AS TEXT), CAST(size AS TEXT), CAST(content_hash AS TEXT)
+        FROM deployment_files WHERE deployment_id=? ORDER BY relative_path`, deploymentID)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	var files []releases.File
+	corrupt := false
+	for rows.Next() {
+		var path, sizeText, hash string
+		if err := rows.Scan(&path, &sizeText, &hash); err != nil {
+			return nil, false, err
+		}
+		size, err := strconv.ParseInt(sizeText, 10, 64)
+		if err != nil {
+			corrupt = true
+			continue
+		}
+		files = append(files, releases.File{Path: path, Size: size, Hash: hash})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	return files, corrupt, nil
+}
+
+// ApplyRecovery is deliberately idempotent. If the active release cannot be
+// verified, it also disables the app and clears its pointer so the gateway can
+// never serve bytes from an unverifiable active release.
+func (s DeploymentRepository) ApplyRecovery(ctx context.Context, id string, next releases.State) error {
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var state, appID string
+		if err := tx.QueryRowContext(ctx, "SELECT state,app_id FROM deployments WHERE id=?", id).Scan(&state, &appID); err != nil {
+			return err
+		}
+		if next != releases.Failed {
+			return errors.New("invalid recovery classification")
+		}
+		if state != string(releases.Failed) {
+			if _, err := tx.ExecContext(ctx, "UPDATE deployments SET state='failed' WHERE id=?", id); err != nil {
+				return err
+			}
+		}
+		// Clear a dangling current pointer regardless of the row's claimed state.
+		// This is stricter than trusting "active": a corrupt row pointing at a
+		// supposedly verified release must not leave an app available either.
+		_, err := tx.ExecContext(ctx, "UPDATE applications SET status='failed',current_deployment_id=NULL,updated_at=datetime('now') WHERE id=? AND current_deployment_id=?", appID, id)
+		return err
+	})
+}
 
 func (s DeploymentRepository) DeploymentAttempts(ctx context.Context, ownerID string, since time.Time) (int, error) {
 	if s.Store == nil || ownerID == "" {
