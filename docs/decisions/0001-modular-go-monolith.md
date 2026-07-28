@@ -35,6 +35,29 @@ Suggested baseline:
   coordination need explicit tests.
 - “Single executable” does not mean one undifferentiated package.
 
+## Rejected V1 alternative: SlateDB over S3-compatible storage
+
+Using an S3-compatible store for blobs and
+[SlateDB](https://slatedb.io/) for app KV is technically coherent for a future
+stateless or multi-reader platform, but it is rejected for V1:
+
+- TinyHost would still need SQLite for identities, policies, sessions,
+  deployments, audit, jobs, and relational integrity, creating two persistence
+  authorities and cross-store recovery work.
+- SlateDB's official Go binding requires cgo and a separately loaded Rust
+  library, conflicting with the self-contained CGO-free server artifact.
+- Durable writes depend on remote object-store latency and availability, while
+  compaction, garbage collection, caching, bucket credentials, and provider
+  recovery expand the operational model.
+- Self-hosting the S3-compatible store adds another service; using a managed
+  store adds an external recovery authority and provider secret.
+
+V1 therefore keeps app KV in SQLite and blob bytes in TinyHost's native private
+local adapter. This alternative is reconsidered only if measured needs justify
+stateless compute or multiple readers and the runtime, object-store conditional
+write compatibility, outage behavior, quotas, recovery, and migration path all
+pass a separate architecture spike.
+
 ## Reconsider when
 
 One node can no longer meet measured load/recovery needs, or an independently

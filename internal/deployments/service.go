@@ -37,6 +37,11 @@ type Record struct {
 	ArchiveHash                               [32]byte
 	Manifest                                  releases.Manifest
 	Files                                     []releases.File
+	// RecoveryCorrupt is set only by the database-led recovery reader when a
+	// durable row cannot be safely reconstructed. It deliberately remains part
+	// of the record passed to recovery rather than turning one bad historical
+	// row into a startup-wide repository error.
+	RecoveryCorrupt bool
 }
 type Repository interface {
 	Create(context.Context, Record) error
@@ -45,6 +50,43 @@ type Repository interface {
 	CommitActivation(context.Context, Record, *Record, string) error
 	CommitRollback(context.Context, Record, Record, string) error
 	Fail(context.Context, string) error
+}
+
+// RecoveryRepository is the single database-led startup seam. It returns
+// durable records only; callers never discover releases by scanning disk.
+type RecoveryRepository interface {
+	RecoveryRecords(context.Context) ([]Record, error)
+	ApplyRecovery(context.Context, string, releases.State) error
+}
+
+// EvidenceVerifier checks only the content-addressed location derived from a
+// durable record and returns no filesystem path to callers.
+type EvidenceVerifier interface {
+	Valid(context.Context, Record) bool
+}
+
+// RecoverStartup deterministically classifies every durable deployment state.
+// It never resumes incomplete work and is idempotent: applying an already
+// classified state is a no-op in the repository.
+func (s *Service) RecoverStartup(ctx context.Context, evidence EvidenceVerifier) error {
+	r, ok := s.Repo.(RecoveryRepository)
+	if !ok || evidence == nil {
+		return ErrDenied
+	}
+	records, err := r.RecoveryRecords(ctx)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		valid := evidence.Valid(ctx, record)
+		next := Recover(record, valid)
+		if next != record.State {
+			if err := r.ApplyRecovery(ctx, record.ID, next); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // AttemptCounter is optional so pure in-memory/unit repositories remain small.
@@ -56,13 +98,22 @@ type AttemptCounter interface {
 // Recover classifies interrupted durable deployment records. Persistence adapters
 // may retry a verified candidate; incomplete filesystem work is failed closed.
 func Recover(r Record, releaseExists bool) releases.State {
-	if r.State == releases.Active && !releaseExists {
+	if r.RecoveryCorrupt {
 		return releases.Failed
 	}
-	if (r.State == releases.Uploading || r.State == releases.Uploaded || r.State == releases.Validating || r.State == releases.Staged) && !releaseExists {
+	switch r.State {
+	case releases.Uploading, releases.Uploaded, releases.Validating, releases.Staged:
+		return releases.Failed
+	case releases.Verified, releases.Active, releases.Superseded:
+		if !releaseExists {
+			return releases.Failed
+		}
+		return r.State
+	case releases.Rejected, releases.Failed:
+		return r.State
+	default:
 		return releases.Failed
 	}
-	return r.State
 }
 
 type Gates interface {
@@ -368,6 +419,29 @@ func (m *MemoryRepository) Fail(_ context.Context, id string) error {
 	r := m.Records[id]
 	r.State = releases.Failed
 	m.Records[id] = r
+	return nil
+}
+func (m *MemoryRepository) RecoveryRecords(_ context.Context) ([]Record, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Record, 0, len(m.Records))
+	for _, r := range m.Records {
+		out = append(out, r)
+	}
+	return out, nil
+}
+func (m *MemoryRepository) ApplyRecovery(_ context.Context, id string, next releases.State) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.Records[id]
+	if !ok {
+		return os.ErrNotExist
+	}
+	r.State = next
+	m.Records[id] = r
+	if next == releases.Failed && m.Current[r.AppID] == id {
+		delete(m.Current, r.AppID)
+	}
 	return nil
 }
 func HashFile(p string) ([32]byte, error) {

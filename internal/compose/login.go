@@ -161,9 +161,13 @@ type Login struct {
 	SessionTTL time.Duration
 	Atomic     AtomicAppLogin
 	RateLimits *ratelimit.Limiter
+	// IdentityBroker is optional only for isolated legacy/local harnesses. A
+	// deployed broker owns every browser viewer-session issuance path; direct
+	// app OTP endpoints are retired so they cannot mint parentless sessions.
+	IdentityBroker *IdentityBroker
 }
 type AtomicAppLogin interface {
-	Request(context.Context, string, string, bool) (string, error)
+	Request(context.Context, string, string, bool, string) (string, error)
 	VerifyAndCreateSession(context.Context, string, string, string, string, time.Time) (string, error)
 }
 type OTPRequesterVerifier interface {
@@ -179,14 +183,32 @@ type SessionIssuerValidatorRevoker interface {
 func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.ResponseWriter, r *http.Request) {
 	switch ep {
 	case gateway.AppLogin:
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
 		ret, ok := gateway.ValidReturnPath(r.URL.Query().Get("return"))
 		if !ok {
 			ret = "/"
 		}
+		if l.IdentityBroker != nil {
+			if l.IdentityBroker.AppLogin(app.ID, ret, w, r) {
+				return
+			}
+			// Once global identity is configured, browser navigation must not
+			// silently fall back to the legacy per-app OTP path on broker failure.
+			writeFormRetry(w, http.StatusServiceUnavailable, ret)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		_ = appLoginTemplate.Execute(w, ret)
+	case gateway.AppIdentityCallback:
+		if l.IdentityBroker != nil && l.IdentityBroker.AppCallback(app.ID, w, r) {
+			return
+		}
+		writeFormRetry(w, http.StatusUnauthorized, "/")
 	case gateway.AppOTPRequest:
+		if l.IdentityBroker != nil {
+			l.retiredDirectOTP(w, r)
+			return
+		}
 		var b struct {
 			Email string `json:"email"`
 		}
@@ -206,7 +228,7 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 			writePreAuthDenied(w, http.StatusUnauthorized)
 			return
 		}
-		allowed := l.RateLimits == nil || l.RateLimits.Allow(ratelimit.OTPRequest, r.RemoteAddr, b.Email, app.ID)
+		allowed := l.RateLimits == nil || l.RateLimits.AllowRequest(ratelimit.OTPRequest, r, b.Email, app.ID)
 		email, e := identity.Normalize(b.Email)
 		eligible := false
 		if e == nil && l.Policies != nil {
@@ -217,10 +239,10 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 		transaction := opaqueTransaction()
 		if allowed && e == nil {
 			if l.Atomic != nil {
-				if id, err := l.Atomic.Request(r.Context(), app.ID, email, eligible); err == nil && id != "" {
+				if id, err := l.Atomic.Request(r.Context(), app.ID, email, eligible, ratelimit.RequestFingerprint(r)); err == nil && id != "" {
 					transaction = id
 					if l.RateLimits != nil {
-						l.RateLimits.BindTransaction(transaction, email)
+						l.RateLimits.BindTransactionRequest(transaction, email, r)
 					}
 				}
 			} else {
@@ -236,6 +258,10 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"status":"accepted","transaction":"` + transaction + `"}`))
 	case gateway.AppOTPVerify:
+		if l.IdentityBroker != nil {
+			l.retiredDirectOTP(w, r)
+			return
+		}
 		var b struct {
 			Email       string `json:"email"`
 			Transaction string `json:"transaction"`
@@ -264,7 +290,7 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 			writePreAuthDenied(w, http.StatusUnauthorized)
 			return
 		}
-		if l.RateLimits != nil && !l.RateLimits.AllowTransaction(ratelimit.OTPVerify, r.RemoteAddr, b.Transaction, app.ID) {
+		if l.RateLimits != nil && !l.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, b.Transaction, app.ID) {
 			if !form {
 				writeRateLimited(w)
 				return
@@ -362,6 +388,18 @@ func (l Login) DispatchPreAuth(app apps.App, ep gateway.Endpoint, w http.Respons
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// retiredDirectOTP keeps the old paths safe for stale forms and clients while
+// ensuring the configured global-identity deployment never issues an app
+// session without a revocable parent identity. Form callers retain the native
+// generic retry screen; JSON callers retain a bounded machine-safe denial.
+func (l Login) retiredDirectOTP(w http.ResponseWriter, r *http.Request) {
+	if hasMediaType(r, "application/x-www-form-urlencoded") {
+		writeFormRetry(w, http.StatusGone, "/")
+		return
+	}
+	writePreAuthDenied(w, http.StatusUnauthorized)
 }
 
 func hasMediaType(r *http.Request, want string) bool {

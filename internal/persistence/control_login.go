@@ -37,7 +37,7 @@ func validControlLoginChannel(channel controlapi.LoginChannel) bool {
 	return channel == controlapi.BrowserLoginChannel || channel == controlapi.CLILoginChannel
 }
 
-func (c ControlLogin) RequestOTP(ctx context.Context, raw string, channel controlapi.LoginChannel) (string, error) {
+func (c ControlLogin) RequestOTP(ctx context.Context, raw string, channel controlapi.LoginChannel, fingerprint string) (string, error) {
 	if !validControlLoginChannel(channel) {
 		return "", nil
 	}
@@ -71,7 +71,7 @@ func (c ControlLogin) RequestOTP(ctx context.Context, raw string, channel contro
 		if e = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE normalized_email=? AND status='active' AND role IN ('operator','deployer'))", email).Scan(&eligible); e != nil {
 			return e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO otp_challenges(id,app_id,purpose,control_channel,normalized_email,code_hash,expires_at,attempts,created_at) VALUES(?,NULL,'control',?,?,?,?,?,?)", id, string(channel), email, h.Sum(nil), now.Add(ttl).UTC().Format(time.RFC3339Nano), 0, now.UTC().Format(time.RFC3339Nano))
+		_, e = tx.ExecContext(ctx, "INSERT INTO otp_challenges(id,app_id,purpose,control_channel,normalized_email,code_hash,expires_at,attempts,request_fingerprint_hash,created_at) VALUES(?,NULL,'control',?,?,?,?,?,?,?)", id, string(channel), email, h.Sum(nil), now.Add(ttl).UTC().Format(time.RFC3339Nano), 0, fingerprintHash(c.HMACKey, fingerprint), now.UTC().Format(time.RFC3339Nano))
 		return e
 	})
 	if e != nil {

@@ -32,12 +32,37 @@ host or reserved `/_tiny/api/v1` routes on an app host.
 
 ```text
 GET  /_tiny/auth/login
-POST /_tiny/auth/otp
-POST /_tiny/auth/verify
 POST /_tiny/auth/logout
+GET  /_tiny/auth/callback
 ```
 
-OTP request:
+In a deployed global-viewer-identity configuration, `GET /_tiny/auth/login`
+creates a bounded, server-owned handoff and the platform identity broker is the
+**only** browser viewer-session issuance route. Direct app-host
+`POST /_tiny/auth/otp` and `POST /_tiny/auth/verify` are retired: form callers
+receive the generic native retry page and JSON callers receive the normal safe
+`not_authorized` envelope. They remain available only to an explicitly
+brokerless local compatibility harness.
+
+The platform-host broker owns:
+
+```text
+GET  /_tiny/identity?handoff=<opaque>
+POST /_tiny/identity/otp
+POST /_tiny/identity/verify
+POST /_tiny/identity/use-another
+POST /_tiny/identity/logout
+```
+
+Every platform broker POST requires an exact HTTPS same-origin `Origin` header
+matching the configured platform host, an URL-encoded form body, and a bounded
+body. Missing, malformed, or cross-origin requests return the same generic
+native retry response without issuing OTP, changing a handoff, rotating an
+identity, clearing a valid cookie, or serving app bytes. Anonymous app-host
+handoff creation is independently rate-limited in bounded in-memory state; it
+does not spend or bypass the email OTP budget.
+
+The legacy/local-harness OTP request representation is:
 
 ```json
 { "email": "alice@example.com" }
@@ -54,8 +79,17 @@ OTP verify:
 }
 ```
 
-Success sets a host-only secure session cookie and redirects to a validated
-relative return path.
+In a brokerless local compatibility harness only, successful verification sets
+a host-only app session cookie and redirects to a validated relative return
+path. In a deployed broker, successful platform verification sets only the
+platform identity cookie and redirects to an app-bound callback, which issues
+the app-local child cookie after atomic policy/state checks.
+
+For a document navigation with no app cookie, the app host uses a
+server-created, state-bound handoff through the platform host. The browser
+never supplies an app ID or callback host.
+The app callback consumes an opaque one-time grant and state after current
+policy rechecks; it is not an API, SDK, or app-content route.
 
 ## App host: protected capabilities
 
@@ -221,6 +255,11 @@ POST /api/v1/auth/otp
 POST /api/v1/auth/verify
 GET  /api/v1/whoami
 
+GET  /auth/viewer
+POST /auth/viewer/otp
+POST /auth/viewer/verify
+GET  /auth/viewer/handoff
+
 GET  /api/v1/apps
 POST /api/v1/apps
 GET  /api/v1/apps/{slug}
@@ -238,16 +277,19 @@ URL; “ready” is returned only after security probes and TLS readiness.
 
 ## Cookie split
 
+- Global viewer identity: host-only platform cookie with a distinct name;
+  email identity only, never a control credential.
 - Control plane: host-only platform cookie with a distinct name.
 - App plane: host-only app session cookie; never a parent-domain cookie.
 - CLI/agent: bearer token, never accepted as an app viewer session.
 
-App sessions are independent opaque credentials: one viewer may hold multiple
-simultaneous sessions for the same app and sessions for different apps. They
-survive a normal server restart because only their hashes and lifecycle state
-are persisted. Revoking one app session denies that credential on the next
-request without revoking the viewer's other app sessions; wrong-app and expired
-credentials deny.
+Global identities and app sessions are opaque persisted credentials. One
+browser profile has one global viewer identity; it may hold independent app
+sessions for allowed apps. The global identity is exchanged only via a
+five-minute-or-less, state-bound, one-time app handoff, and the current policy
+is checked again on every protected app request. Sessions survive a normal
+server restart because only hashes and lifecycle state persist. Revoking an app
+session is local; global switch/revocation removes all child app sessions.
 
 ## Compatibility rule
 

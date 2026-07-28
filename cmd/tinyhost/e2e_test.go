@@ -65,7 +65,10 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 		p, e := verification.ProbeCandidate(ctx, cfg, root, r)
 		return e == nil && p.Passed()
 	}}
-	h, _ := buildHandler(cfg, config.Secrets{}, s, gates)
+	h, _, err := buildHandler(cfg, config.Secrets{}, s, gates)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ts := httptest.NewTLSServer(h)
 	defer ts.Close()
 	addr := ts.Listener.Addr().String()
@@ -111,7 +114,7 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 	// The updater calls this through the same composed TLS gateway after a
 	// restart. A missing route or public static response must not count as
 	// update evidence.
-	if e := (update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: result.URL, Client: cl}}).Check(context.Background()); e != nil {
+	if e := (update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: result.URL + "_tiny/api/v1/capabilities", Client: cl}}).Check(context.Background()); e != nil {
 		t.Fatalf("composed anonymous denial evidence: %v", e)
 	}
 }

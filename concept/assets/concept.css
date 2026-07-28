@@ -129,6 +129,14 @@ li + li { margin-top: .35rem; }
   background: #0c1323;
 }
 .flow b { color: var(--accent); }
+.concept-visual {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 1.25rem;
+  border-radius: 14px;
+  background: #fffbe8;
+}
 footer { padding: 0 0 4rem; color: var(--muted); }
 @media (max-width: 760px) {
   header { padding-top: 2.5rem; }

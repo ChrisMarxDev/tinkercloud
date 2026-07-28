@@ -40,7 +40,7 @@ func TestRecoverOperatorRevokesPriorControlCredentialsIncludingSameEmail(t *test
 	}
 	o := &captureOutbox{}
 	login := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: o}
-	browserChallenge, err := login.RequestOTP(ctx, "root@example.com", controlapi.BrowserLoginChannel)
+	browserChallenge, err := login.RequestOTP(ctx, "root@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || browserChallenge == "" || o.m.Code == "" {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestRecoverOperatorRevokesPriorControlCredentialsIncludingSameEmail(t *test
 	if _, err = s.AuthenticateControlSession(ctx, browserBefore, time.Now()); err == nil {
 		t.Fatal("pre-recovery browser control session remained valid")
 	}
-	challenge, err := login.RequestOTP(ctx, "root@example.com", controlapi.BrowserLoginChannel)
+	challenge, err := login.RequestOTP(ctx, "root@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || challenge == "" || o.m.Code == "" {
 		t.Fatal(err)
 	}

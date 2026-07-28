@@ -167,10 +167,9 @@ def validate_request(argv: list[str]) -> tuple[str, str, str, str]:
         fail("invalid reader invocation")
     if not HOST.fullmatch(platform) or not HOST.fullmatch(suffix) or platform == suffix:
         fail("invalid reader configuration")
-    if purpose == "deployer" and hostname != platform:
-        fail("invalid reader hostname")
-    labels = hostname[: -(len(suffix) + 1)].split(".") if hostname.endswith("." + suffix) else []
-    if purpose == "viewer" and (len(labels) != 1 or not labels[0] or hostname == platform):
+    # The global identity broker sends both deployer and viewer OTPs from the
+    # configured platform host. App-host viewer OTPs are not a V1 flow.
+    if hostname != platform:
         fail("invalid reader hostname")
     return purpose, email, hostname, sender
 

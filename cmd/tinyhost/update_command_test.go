@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/update"
 )
 
@@ -98,5 +100,37 @@ func TestRollbackRestoresBeforeAnyProbe(t *testing.T) {
 	i, r := &rollbackInstaller{}, &rollbackRestarter{}
 	if err := restoreBeforeProbe(context.Background(), i, r); err != nil || !i.restored || !r.restarted {
 		t.Fatal(err, i, r)
+	}
+}
+
+func TestUpdateChecksUseProtectedCapabilityDenialEndpoint(t *testing.T) {
+	checks := updateChecks(config.Config{PlatformHost: "tiny.example.test", AppSuffix: "apps.tiny.example.test", ListenHTTP: ":80", ListenHTTPS: ":443"}, "payroll", "/usr/local/bin/tinyhost", "/etc/tinyhost/config.yaml")
+	if len(checks) != 4 {
+		t.Fatalf("health checks = %d", len(checks))
+	}
+	readiness, ok := checks[0].(update.ListenerHealth)
+	if !ok {
+		t.Fatalf("listener readiness check = %T", checks[0])
+	}
+	if strings.Join(readiness.Addresses, ",") != ":80,:443" {
+		t.Fatalf("listener readiness addresses = %v", readiness.Addresses)
+	}
+	if _, ok := checks[1].(update.ExecHealth); !ok {
+		t.Fatalf("doctor check = %T", checks[1])
+	}
+	if _, ok := checks[2].(update.HTTPHealth); !ok {
+		t.Fatalf("public health check = %T", checks[2])
+	}
+	denial, ok := checks[3].(update.AnonymousDenyHealth)
+	if !ok {
+		t.Fatalf("anonymous denial predicate = %T", checks[3])
+	}
+	want := "https://payroll.apps.tiny.example.test/_tiny/api/v1/capabilities"
+	if denial.URL != want {
+		t.Fatalf("denial URL = %q, want %q", denial.URL, want)
+	}
+	parsed, err := url.Parse(denial.URL)
+	if err != nil || parsed.Host != "payroll.apps.tiny.example.test" || parsed.Path != updateAnonymousDenyPath {
+		t.Fatalf("denial URL lost app-host binding: %q", denial.URL)
 	}
 }

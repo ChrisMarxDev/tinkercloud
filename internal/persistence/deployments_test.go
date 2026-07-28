@@ -2,10 +2,12 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/releases"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -37,6 +39,88 @@ func TestDeploymentRepositoryCreateGet(t *testing.T) {
 	}
 	if _, e := r.Get(context.Background(), "missing"); !errors.Is(e, os.ErrNotExist) {
 		t.Fatal(e)
+	}
+}
+
+func TestDeploymentRecoveryFailsMissingActiveAndMakesAppUnavailable(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	r := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec("INSERT INTO deployments(id,app_id,created_by,idempotency_key,state,created_at) VALUES('broken','a','u','broken','active',datetime('now')); UPDATE applications SET current_deployment_id='broken' WHERE id='a'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyRecovery(context.Background(), "broken", releases.Failed); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ApplyRecovery(context.Background(), "broken", releases.Failed); err != nil {
+		t.Fatal(err)
+	}
+	var state string
+	var current sql.NullString
+	if err := s.DB.QueryRow("SELECT d.state,a.current_deployment_id FROM deployments d JOIN applications a ON a.id=d.app_id WHERE d.id='broken'").Scan(&state, &current); err != nil || state != "failed" || current.Valid {
+		t.Fatalf("recovery state=%q current=%#v err=%v", state, current, err)
+	}
+	var appStatus string
+	if err := s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&appStatus); err != nil || appStatus != "failed" {
+		t.Fatalf("app remained available: %q %v", appStatus, err)
+	}
+}
+
+func TestRecoveryRecordsClassifyCorruptHistoricalRowsWithoutBlockingGoodActiveApp(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	seedActiveRelease(t, s)
+	r := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec(`
+        INSERT INTO deployments(id,app_id,created_by,idempotency_key,release_hash,manifest_json,state,created_at)
+        VALUES
+	          ('corrupt-verified','b','u','corrupt-verified','not-a-release',X'ff','verified',datetime('now')),
+          ('corrupt-superseded','b','u','corrupt-superseded','not-a-release',X'ff','superseded',datetime('now')),
+          ('missing-files','b','u','missing-files','not-a-release','{"version":1,"name":"beta"}','verified',datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&deployments.Service{Repo: r}).RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: s.DataRoot}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"corrupt-verified", "corrupt-superseded", "missing-files"} {
+		var state string
+		if err := s.DB.QueryRow("SELECT state FROM deployments WHERE id=?", id).Scan(&state); err != nil || state != string(releases.Failed) {
+			t.Fatalf("%s recovery state=%q err=%v", id, state, err)
+		}
+	}
+	active, err := r.Active(context.Background(), "a")
+	if err != nil || active == nil || active.ID != "d" {
+		t.Fatalf("known-good active app was blocked: %#v %v", active, err)
+	}
+}
+
+func TestRecoveryCorruptCurrentRecordAtomicallyFailsAppAndClearsPointer(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	r := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec(`
+        UPDATE applications SET status='active' WHERE id='b';
+        INSERT INTO deployments(id,app_id,created_by,idempotency_key,release_hash,manifest_json,state,created_at)
+        VALUES('corrupt-current','b','u','corrupt-current','not-a-release','{','active',datetime('now'));
+        UPDATE applications SET current_deployment_id='corrupt-current' WHERE id='b'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&deployments.Service{Repo: r}).RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: filepath.Join(s.DataRoot, "unused")}); err != nil {
+		t.Fatal(err)
+	}
+	var state, status string
+	var current sql.NullString
+	if err := s.DB.QueryRow(`SELECT d.state,a.status,a.current_deployment_id
+        FROM deployments d JOIN applications a ON a.id=d.app_id WHERE d.id='corrupt-current'`).Scan(&state, &status, &current); err != nil {
+		t.Fatal(err)
+	}
+	if state != string(releases.Failed) || status != "failed" || current.Valid {
+		t.Fatalf("corrupt current recovery state=%q status=%q pointer=%#v", state, status, current)
+	}
+	// A second pass is a no-op durable outcome, including the already-cleared
+	// pointer and failed application state.
+	if err := (&deployments.Service{Repo: r}).RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: filepath.Join(s.DataRoot, "unused")}); err != nil {
+		t.Fatal(err)
 	}
 }
 

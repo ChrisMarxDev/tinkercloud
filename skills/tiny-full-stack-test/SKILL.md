@@ -4,6 +4,19 @@ description: Run and maintain TinyHost's opt-in unattended full-stack VPS accept
 ---
 
 <!-- shared:security:start -->
+## Terminology
+
+Use `operator` for a person who hosts and operates TinyHost, `deployer` for a
+person authorized to create and manage their own Tiny apps, and `viewer` for a
+person who accesses and interacts with a deployed app. Treat `user` as a
+neutral umbrella term for any human; never infer a role, permission, ownership,
+or credential type from it. When authority changes the answer or action and the
+role is unclear, ask whether `user` means operator, deployer, or viewer. Do not
+ask when context already establishes the role. Treat a deployment agent as
+non-human automation using a scoped deployer token, not as a user. A person may
+act in more than one role, but never transfer authority or credentials between
+roles.
+
 ## Security boundary
 
 TinyHost's gateway derives app identity from the hostname and viewer identity
@@ -43,8 +56,43 @@ never allowed to block other viewers. Authenticated live sockets also have a
 successful pong keeps a healthy socket alive. Revocation closes matching live
 sockets immediately rather than waiting for that liveness bound.
 Viewer OTP requests (JSON or form) expose only an opaque transaction and the
-same generic accepted shape. Keep form fields bounded and escaped; verification
-atomically consumes the challenge and sets a host-only secure app cookie.
+same generic accepted shape. Keep form fields bounded and escaped. One global
+viewer identity per browser profile is an opaque server-side platform-host
+cookie, never a control credential, parent-domain cookie, JWT, local-storage
+value, app-visible credential, or client-selected identity/app. It lasts at
+most 30 days, rotates every 24 hours, and accepts its prior token for no more
+than 60 seconds. A missing local app session uses only a server-created,
+state-bound, app-bound, five-minute-or-less one-time handoff through the exact
+platform host; recheck current app policy when issuing and consuming it, then
+create the existing host-only app cookie. Guessed, replayed, wrong-app,
+expired, or state-mismatched handoffs deny without app bytes. App logout stays
+local; global identity switch happens only on platform-host POST verification
+and revokes the old identity family plus every child app session. Recheck
+policy on every protected request and close matching live sockets on app,
+policy, session, or global-family revocation. Never accept global identity,
+control cookies, app cookies, or CLI bearers in one another's routes.
+The platform may also issue a host-only `__Host-tiny_browser` binding with a
+30-day bounded lifetime. It is a cryptographically random, `Secure`,
+`HttpOnly`, `SameSite=Lax` OTP race-grouping value only: never treat it as an
+identity/control/app/CLI credential; never send it to an app host or expose it
+in URLs, forms, templates, JavaScript, or logs. Pass it only server-side to
+OTP request/verification persistence, which stores hashes and permits one
+unrevoked identity family per binding so concurrent completions are first-wins.
+Missing/mismatched bindings deny generically. Retain the binding through global
+logout and known-invalid identity cleanup; it does not mean the browser is
+signed in.
+For global logout, revoke a valid global identity first. Only when it is absent
+or known-invalid may the binding hash locate a family for revocation; it never
+authenticates the request. A real selected-revocation error preserves cookies
+and returns generic retry rather than claiming logout success.
+Global-identity migration is additive: never rewrite legacy app-session
+`revoked_at`. The runtime quarantines a parentless app session only when its
+RFC3339 `created_at` predates migration 5's persisted `applied_at` cutoff;
+parent-linked sessions validate normally and explicitly brokerless sessions
+created at/after that cutoff retain app-local semantics. Missing or malformed
+cutoff/session timestamps deny without mutation. Retain the known historical
+v5 checksum for the corrected additive migration so rollback binaries can
+reopen the database; never alter a VPS migration row to bypass it.
 At the disk write-stop watermark, expect app creation, deployment, and KV
 mutation and blob upload to fail safely; static/blob reads, deletion when safe,
 and revocations must still work. Cleanup is server-side, database-led, and never
@@ -110,7 +158,7 @@ timestamp after an authorization succeeds. Recheck active user, revocation,
 expiry, exact scope, and app binding atomically with that update; failed checks
 or persistence failures deny and must not alter it. Token lists and dashboards
 may show that timestamp, never token values or hashes, IPs, or user agents.
-Before retaining an update, probe `/` on a locally verified active app host
+Before retaining an update, probe `/_tiny/api/v1/capabilities` on a locally verified active app host
 through the composed HTTPS gateway. Only its `401` JSON `not_authorized`
 envelope with no-store security headers is health evidence; 404, redirect,
 2xx, malformed denial, timeout, and transport failure require rollback.
@@ -119,6 +167,11 @@ private, non-symlinked `update-rollback/previous` snapshot that remains until
 that same update commits. It must still run every other doctor check; ordinary
 `tinyhost status` and `tinyhost doctor` keep rollback-pending degraded, and an
 unsafe or incomplete snapshot never becomes healthy.
+After a self-update restart, wait only for local TCP connection establishment
+on the configured HTTP and HTTPS listeners, with a bounded cancellable retry.
+Run doctor, public health, and anonymous-denial gates once afterward; do not
+retry or soften their database, credential, DNS, TLS, provider, or gateway
+failures.
 Before treating `tinyhost init` as complete, derive the sole public proof from
 the configured platform host: `https://{platform_host}/api/v1/version`. Use
 verified TLS and no redirects; accept only the exact final host, `200`, bounded
@@ -180,7 +233,11 @@ Use capability discovery before KV, blob, or live work. Handle
 `TinyVersionIncompatibleError` by upgrading `@tinyhost/sdk`; do not add an app
 selector or fall back to control credentials. Raw HTTP clients may omit the SDK
 version header, while a supplied unsupported major receives a typed upgrade
-error. Compile examples and run the real-listener SDK contract after SDK
+error. Blob uploads use exactly one `file` multipart part; blob IDs are opaque,
+downloads are attachment bytes, and callers never pass a path, bucket, or
+storage key. Custom live channels call `subscribe()` before `connect()` and
+`unsubscribe()` when delivery is no longer wanted; reconnect recovery rereads
+KV rather than replaying events. Compile examples and run the real-listener SDK contract after SDK
 changes. Verify the packed SDK contains only its README, Apache-2.0 license,
 declarations, and runtime module. Keep the npm manifest, JSR manifest, exported
 SDK version, and release version identical; install-test the npm tarball and
@@ -224,11 +281,53 @@ without final metadata have no description.
 4. Set `TINYHOST_VPS_OTP_COMMAND` to the absolute path of
    `scripts/read-resend-otp.py`. Supply exact platform/app host and sender
    environment values. The reader receives only `deployer|viewer EMAIL HOST`;
-   it must print only a 4--12 digit code.
+   both V1 OTP purposes must use exactly `TINYHOST_VPS_PLATFORM_HOST` because
+   the global identity broker owns the flow. It must print only a 4--12 digit
+   code.
 5. Require `TINYHOST_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINYHOST_VPS_REUSE=1` marker gating. Never
-   weaken SSH trust or introduce an OTP/auth bypass.
-6. Run one deliberate acceptance pass only:
+   weaken SSH trust or introduce an OTP/auth bypass. In the real browser-jar
+   proof, read exactly one initial viewer OTP for the first allowed app through
+   the platform identity broker; the second allowed app must get a separate
+   host-only app session without another OTP, while an excluded app renders a
+   generic no-app-bytes/no-OTP denial. Assert the global identity and the
+   non-authorizing browser-binding cookies are platform-only and app session
+   cookies are distinct per app host. The binding must exist after the initial
+   broker form, never appear on an app host, and remain after a global account
+   switch. Replay a consumed callback and target it at a sibling app host as
+   denials; app-local logout must preserve global identity and sibling access,
+   while a later account switch uses its intentionally separate viewer-purpose
+   OTP and revokes all old child sessions.
+6. Treat blob evidence as a complete capability sequence, not just a 2xx:
+   discover the enabled capability, reject a multipart request with an extra
+   part and prove no catalog mutation, then authenticate a viewer and prove
+   upload/list/exact-byte attachment download/delete. Prove anonymous and a
+   second app's guessed-ID download contain no blob bytes. Restart the service
+   before delete and reread the same blob through a bounded,
+   context-cancellable readiness retry. Retry only connection-startup transport
+   failures or 502/503/504; a redirect, denial, other status, wrong bytes, or
+   wrong attachment/private-no-store/nosniff headers fails immediately. Never
+   query the VPS filesystem, SQLite, or logs to substitute for this gateway
+   evidence.
+7. Reuse never re-initializes or wipes the VPS. It requires an explicit local
+   `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
+   key and use only `tinyhost update` with its active-app health gate. The
+   unattended wrapper fails before offline gates unless this is an absolute,
+   existing, caller-owned non-symlink directory. A
+   temporary test signing key cannot update a reused host.
+8. For one noninteractive run using already-exported environment, invoke only
+   the checked-in wrapper. It runs the offline gates before exactly one live
+   pass. Its offline VPS package gate explicitly skips `^TestVPSAcceptance$`,
+   requires the shipped local Resend reader and strict SSH inputs, and
+   leaves a private redacted timestamped status artifact. It never sources an
+   env file, evaluates environment values as shell, retries the suite, or
+   prints secrets:
+
+   ```bash
+   skills/tiny-full-stack-test/scripts/run-unattended.sh
+   ```
+
+9. For a terminal-guided run, execute one deliberate acceptance pass only:
 
    ```bash
    go test ./test/vps -run TestVPSAcceptance -count=1 -v
@@ -244,3 +343,7 @@ separately.
 
 - `scripts/read-resend-otp.py`: fixed-origin, fail-closed Resend reader.
 - `scripts/test_read_resend_otp.py`: offline deterministic reader tests.
+- `scripts/run-unattended.sh`: one-pass noninteractive wrapper with a private
+  redacted status artifact.
+- `scripts/test_run_unattended.sh`: deterministic no-network wrapper
+  preflight, ordering, single-live-pass, and report self-test.

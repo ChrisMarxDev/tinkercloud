@@ -20,6 +20,7 @@ type AuthorizationContext interface {
 	ReleaseEvidence() releases.FileManifest
 	SPAFallback() bool
 	KVEnabled() bool
+	BlobsEnabled() bool
 	RealtimeEnabled() bool
 	Identity() identity.Identity
 	SessionID() string
@@ -42,6 +43,7 @@ func (c authorizationContext) ReleaseEvidence() releases.FileManifest {
 }
 func (c authorizationContext) SPAFallback() bool           { return c.app.SPAFallback }
 func (c authorizationContext) KVEnabled() bool             { return c.app.KVEnabled }
+func (c authorizationContext) BlobsEnabled() bool          { return c.app.BlobsEnabled }
 func (c authorizationContext) RealtimeEnabled() bool       { return c.app.RealtimeEnabled }
 func (c authorizationContext) Identity() identity.Identity { return c.session.Identity }
 func (c authorizationContext) SessionID() string           { return c.session.ID }

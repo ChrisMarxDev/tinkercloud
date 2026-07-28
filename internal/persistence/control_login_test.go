@@ -17,9 +17,13 @@ func TestControlLoginOneTimeToken(t *testing.T) {
 	defer s.Close()
 	o := &captureOutbox{}
 	l := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: o}
-	tx, e := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+	tx, e := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if e != nil || tx == "" || o.m.Code == "" {
 		t.Fatal(e)
+	}
+	var fingerprint []byte
+	if e = s.DB.QueryRow("SELECT request_fingerprint_hash FROM otp_challenges WHERE id=?", tx).Scan(&fingerprint); e != nil || string(fingerprint) == "test" || len(fingerprint) == 0 {
+		t.Fatalf("fingerprint must be a non-raw keyed digest: %q %v", fingerprint, e)
 	}
 	var raw []byte
 	if e = s.DB.QueryRow("SELECT code_hash FROM otp_challenges WHERE id=?", tx).Scan(&raw); e != nil || string(raw) == o.m.Code {
@@ -45,7 +49,7 @@ func TestControlLoginLogoutRevokesCredential(t *testing.T) {
 	defer s.Close()
 	o := &captureOutbox{}
 	l := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: o}
-	tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+	tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +71,7 @@ func TestControlBrowserSessionsRevokeIndependently(t *testing.T) {
 	o := &captureOutbox{}
 	l := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: o}
 	issue := func() string {
-		tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+		tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -103,7 +107,7 @@ func TestControlLoginWrongAttemptCommitsConfiguredLimit(t *testing.T) {
 	defer s.Close()
 	o := &captureOutbox{}
 	l := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: o, MaxAttempts: 2}
-	tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+	tx, err := l.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || tx == "" || o.m.Code == "" {
 		t.Fatal(err)
 	}
@@ -126,7 +130,7 @@ func TestControlLoginChannelCannotMintOtherCredential(t *testing.T) {
 	defer s.Close()
 	outbox := &captureOutbox{}
 	login := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: outbox}
-	tx, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel)
+	tx, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.BrowserLoginChannel, "test")
 	if err != nil || tx == "" || outbox.m.Code == "" {
 		t.Fatal(err)
 	}
@@ -140,7 +144,7 @@ func TestControlLoginChannelCannotMintOtherCredential(t *testing.T) {
 	if _, err = s.AuthenticateToken(context.Background(), browser, "app:read", "", time.Now()); err == nil {
 		t.Fatal("browser credential accepted as bearer")
 	}
-	cliTx, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel)
+	cliTx, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel, "test")
 	if err != nil || cliTx == "" || outbox.m.Code == "" {
 		t.Fatal(err)
 	}

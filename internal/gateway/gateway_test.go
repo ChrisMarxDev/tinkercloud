@@ -77,7 +77,7 @@ func TestProtectedStaticPathDeniesBeforeReleaseRead(t *testing.T) {
 	// Route classification and authorization are both release-file-free. This
 	// includes login/OTP routes, reserved routes, anonymous static, and a
 	// cross-app session. Only a sealed context may trigger inspection.
-	for _, p := range []string{"/_tiny/auth/login", "/_tiny/auth/otp", "/_tiny/auth/verify", "/_tiny/auth/logout", "/_tiny/not-a-route"} {
+	for _, p := range []string{"/_tiny/auth/login", "/_tiny/auth/otp", "/_tiny/auth/verify", "/_tiny/auth/logout", "/_tiny/auth/callback", "/_tiny/not-a-route"} {
 		method := http.MethodGet
 		if p != "/_tiny/auth/login" && p != "/_tiny/not-a-route" {
 			method = http.MethodPost
@@ -181,7 +181,7 @@ func TestHostClassificationFailsClosed(t *testing.T) {
 }
 func TestRouteRegistryCoversClasses(t *testing.T) {
 	r := gateway.Registry()
-	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppOTPRequest, gateway.AppOTPVerify, gateway.AppLogout, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Live, gateway.ProtectedStatic} {
+	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppOTPRequest, gateway.AppOTPVerify, gateway.AppLogout, gateway.AppIdentityCallback, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Blobs, gateway.Live, gateway.ProtectedStatic} {
 		if r[class] == "" {
 			t.Fatalf("route class %d missing", class)
 		}

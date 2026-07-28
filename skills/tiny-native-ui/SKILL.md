@@ -53,6 +53,17 @@ the control-plane mark, stylesheet, or chrome.
 - Keep authentication, authorization, confirmation, CSRF, ownership, and
   mutation on typed server paths. Browser state and animation are never
   security controls.
+- Global viewer identity/handoff pages use the existing auth card, native form,
+  and text-bearing notice primitives. Do not create an account picker,
+  browser-held identity state, or app-visible control. “Use another email” is
+  a platform-host POST verification flow whose copy says it signs app sessions
+  out. Keep it visibly distinct from app-host “Sign out of this app”; generic
+  denied and handoff states reveal no policy membership, callback state, or app
+  bytes.
+- The platform's browser-profile binding is an HTTP-only non-authorizing OTP
+  race-grouping detail. Never render, label, serialize, or expose it in a
+  template, form, URL, JavaScript, notice, or app UI; retaining it through
+  global sign-out never implies that a viewer remains signed in.
 - For a local list filter, operate only on already server-rendered authorized
   items. Hide controls until initialization, leave every item visible without
   JavaScript, use labelled native controls plus a polite result count, and do

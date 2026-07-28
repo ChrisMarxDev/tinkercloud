@@ -106,13 +106,42 @@ Then run:
 go test ./test/vps -run TestVPSAcceptance -count=1 -v
 ```
 
+For one unattended overnight pass after exporting the same variables, use:
+
+```bash
+skills/tiny-full-stack-test/scripts/run-unattended.sh
+```
+
+It runs the offline reader tests, skill-drift check, VPS package test with
+`^TestVPSAcceptance$` explicitly skipped, and diff check before exactly one
+live acceptance invocation. It will only use the
+shipped local Resend reader, refuses unsafe local secret/ledger files and any
+SSH acknowledgement mismatch, and never sources an env file. It prints the
+path of a private mode-`0600` redacted timestamped status artifact (default
+`.tiny/vps/unattended-reports/`) on either success or failure. Set an absolute,
+owner-only mode-`0700` `TINYHOST_VPS_UNATTENDED_REPORT_DIR` to choose another
+local location. The report intentionally contains step outcomes only; it never
+contains credentials, OTPs, mail data, or provider responses.
+With `TINYHOST_VPS_REUSE=1`, it also refuses before offline gates unless
+`TINYHOST_VPS_RELEASE_DIR` is an absolute, existing, caller-owned,
+non-symlink directory; the live suite still verifies the release signature.
+
 The suite confirms the 80/443 listeners belong to TinyHost, deploys a
 randomized smoke archive, denies anonymous HTML/asset/API/WebSocket access
 without its marker, and verifies the allowed viewer's post-OTP app and identity
-access. It leaves the VPS state available after a failure. For a disposable
+access. It also deploys a `features.blobs: true` SDK-equivalent fixture and
+proves capability discovery plus authenticated upload/list/exact binary
+download/delete. It rejects an extra multipart part without catalog mutation,
+proves anonymous and cross-app guessed-ID reads contain no blob bytes, requires
+attachment/private-no-store/nosniff download headers, and checks the bytes
+survive a service restart. It leaves the VPS state available after a failure. For a disposable
 already-initialized host only, set `TINYHOST_VPS_REUSE=1`; the existing
 root-owned suite marker must match the target, platform host, and app suffix.
-Reuse does not reset or clean up the host.
+Reuse does not reset or clean up the host. It additionally requires
+`TINYHOST_VPS_RELEASE_DIR` to name a release verified by the installed
+server's pinned release key. Once a fresh active probe app exists, the suite
+uses the normal signed `tinyhost update` command and its rollback health gate;
+it never re-runs initialization or replaces the binary directly.
 
 First ACME issuance and public DNS propagation can make the final platform
 health proof temporarily unavailable. The suite safely reruns the same init

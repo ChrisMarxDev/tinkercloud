@@ -39,6 +39,22 @@ export interface ListOptions extends RequestOptions {
   limit?: number;
   cursor?: string;
 }
+/** Metadata for one opaque, app-scoped attachment. */
+export interface TinyBlob {
+  id: string;
+  name: string;
+  size: number;
+  contentType: string;
+  createdAt: string;
+}
+export interface BlobListOptions extends RequestOptions {
+  limit?: number;
+  cursor?: string;
+}
+export interface BlobList {
+  blobs: TinyBlob[];
+  nextCursor?: string;
+}
 export class TinyError extends Error {
   constructor(
     message: string,
@@ -74,11 +90,11 @@ function errorFor(code: string, message: string, id?: string): TinyError {
   };
   return new (C[code] ?? TinyError)(message, code, id);
 }
-async function json<T>(
+async function responseFor(
   fetcher: FetchLike,
   path: string,
   init: RequestInit = {},
-): Promise<T> {
+): Promise<Response> {
   let response: Response;
   try {
     response = await fetcher(path, {
@@ -99,17 +115,31 @@ async function json<T>(
       "temporarily_unavailable",
     );
   }
+  return response;
+}
+async function errorForResponse(response: Response): Promise<TinyError> {
   const body = await response.json().catch(() => undefined) as {
     error?: { code: string; message: string; request_id?: string };
-  } | T;
-  if (!response.ok) {
-    const e = (body as {
-      error?: { code: string; message: string; request_id?: string };
-    }).error;
-    throw errorFor(
-      e?.code ?? "temporarily_unavailable",
-      e?.message ?? "TinyHost is temporarily unavailable.",
-      e?.request_id,
+  };
+  const e = body?.error;
+  return errorFor(
+    e?.code ?? "temporarily_unavailable",
+    e?.message ?? "TinyHost is temporarily unavailable.",
+    e?.request_id,
+  );
+}
+async function json<T>(
+  fetcher: FetchLike,
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await responseFor(fetcher, path, init);
+  if (!response.ok) throw await errorForResponse(response);
+  const body = await response.json().catch(() => undefined) as T | undefined;
+  if (body === undefined) {
+    throw new TinyTemporarilyUnavailableError(
+      "TinyHost returned an invalid response.",
+      "temporarily_unavailable",
     );
   }
   return body as T;
@@ -127,6 +157,32 @@ async function nullableJSON<T>(
     if (error instanceof TinyError && error.code === "not_found") return null;
     throw error;
   }
+}
+function blobMetadata(value: unknown): TinyBlob {
+  const blob = value as {
+    id?: unknown;
+    name?: unknown;
+    size?: unknown;
+    content_type?: unknown;
+    created_at?: unknown;
+  };
+  if (
+    !blob || typeof blob.id !== "string" || typeof blob.name !== "string" ||
+    typeof blob.size !== "number" || !Number.isFinite(blob.size) || blob.size < 0 ||
+    typeof blob.content_type !== "string" || typeof blob.created_at !== "string"
+  ) {
+    throw new TinyTemporarilyUnavailableError(
+      "TinyHost returned invalid blob metadata.",
+      "temporarily_unavailable",
+    );
+  }
+  return {
+    id: blob.id,
+    name: blob.name,
+    size: blob.size,
+    contentType: blob.content_type,
+    createdAt: blob.created_at,
+  };
 }
 export type LiveStatus =
   | "offline"
@@ -187,6 +243,12 @@ export interface TinyClient {
       options?: ListOptions,
     ): Promise<KVList<T>>;
   };
+  blobs: {
+    upload(file: File, options?: RequestOptions): Promise<TinyBlob>;
+    get(id: string, options?: RequestOptions): Promise<Blob | null>;
+    list(options?: BlobListOptions): Promise<BlobList>;
+    delete(id: string, options?: RequestOptions): Promise<{ deleted: boolean }>;
+  };
   live: {
     channel(name: string): LiveChannel;
     onKvChange(
@@ -208,6 +270,7 @@ export class LiveChannel {
     (e: { key: string; version: number; deleted: boolean }) => void
   >();
   private kvPrefixes = new Set<string>();
+  private subscribed = false;
   constructor(
     private readonly name: string | undefined,
     private readonly options: LiveOptions,
@@ -220,6 +283,23 @@ export class LiveChannel {
     return () => {
       this.handlers.delete(wrapped);
     };
+  }
+  /** Subscribe this connection to its one app-scoped custom channel. */
+  subscribe(): void {
+    if (!this.name) return;
+    this.subscribed = true;
+    if (this.socket?.readyState === 1) {
+      this.socket.send(JSON.stringify({ v: 1, type: "subscribe", channel: this.name }));
+    }
+  }
+  /** Stop server-side delivery for this channel without closing the socket. */
+  unsubscribe(): void {
+    if (!this.name) return;
+    const wasSubscribed = this.subscribed;
+    this.subscribed = false;
+    if (wasSubscribed && this.socket?.readyState === 1) {
+      this.socket.send(JSON.stringify({ v: 1, type: "unsubscribe", channel: this.name }));
+    }
   }
   onKv(
     prefix: string,
@@ -257,7 +337,7 @@ export class LiveChannel {
     );
     s.onopen = () => {
       this.status = "connected";
-      if (this.name) {
+      if (this.name && this.subscribed) {
         s.send(JSON.stringify({ v: 1, type: "subscribe", channel: this.name }));
       }
       for (const prefix of this.kvPrefixes) {
@@ -421,6 +501,53 @@ export function createTiny(
         // the SDK contract iterable while callers upgrade their server.
         return { ...page, entries: Array.isArray(page.entries) ? page.entries : [] };
       },
+    },
+    blobs: {
+      upload: async (file: File, o: RequestOptions = {}) => {
+        const body = new FormData();
+        // The display name is multipart metadata, never a server storage key.
+        body.append("file", file, file.name);
+        const response = await responseFor(fetcher, "/_tiny/api/v1/blobs", {
+          method: "POST",
+          signal: o.signal,
+          body,
+        });
+        if (!response.ok) throw await errorForResponse(response);
+        return blobMetadata(await response.json());
+      },
+      get: async (id: string, o: RequestOptions = {}) => {
+        const response = await responseFor(
+          fetcher,
+          `/_tiny/api/v1/blobs/${encodeURIComponent(id)}`,
+          { signal: o.signal },
+        );
+        if (response.status === 404) return null;
+        if (!response.ok) throw await errorForResponse(response);
+        return response.blob();
+      },
+      list: async (o: BlobListOptions = {}) => {
+        const q = new URLSearchParams();
+        if (o.cursor) q.set("cursor", o.cursor);
+        if (o.limit) q.set("limit", String(o.limit));
+        const page = await json<{ blobs?: unknown; next_cursor?: unknown }>(
+          fetcher,
+          `/_tiny/api/v1/blobs?${q}`,
+          { signal: o.signal },
+        );
+        return {
+          blobs: Array.isArray(page.blobs) ? page.blobs.map(blobMetadata) : [],
+          nextCursor: typeof page.next_cursor === "string" ? page.next_cursor : undefined,
+        };
+      },
+      delete: (id: string, o: RequestOptions = {}) =>
+        json<{ deleted: boolean }>(
+          fetcher,
+          `/_tiny/api/v1/blobs/${encodeURIComponent(id)}`,
+          {
+            method: "DELETE",
+            signal: o.signal,
+          },
+        ),
     },
     live: {
       channel: (name: string) => new LiveChannel(name, liveOptions),

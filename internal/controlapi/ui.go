@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/ratelimit"
 	webui "github.com/tinyhost/tiny/web"
 )
@@ -116,7 +117,7 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
 		return false
 	}
 	key := newUIRequestKey()
@@ -125,6 +126,19 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	var err error
+	if len(parts) == 2 && parts[0] == "deployers" && parts[1] == "authorize" {
+		if a.Role != "operator" {
+			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		email, normalizeErr := identity.Normalize(r.FormValue("email"))
+		if normalizeErr != nil {
+			p.errorPage(w, http.StatusBadRequest, "Deployer email needs review", "Enter one valid email address before authorizing deployment access.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.SetDeployerStatus(r.Context(), a, email, "active", key)
+		return p.actionResult(w, r, err, "")
+	}
 	if len(parts) == 3 && parts[0] == "deployers" && (parts[2] == "authorize" || parts[2] == "suspend" || parts[2] == "revoke") {
 		if a.Role != "operator" || r.FormValue("confirmation") != parts[2]+":"+strings.ToLower(strings.TrimSpace(parts[1])) {
 			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
@@ -256,10 +270,10 @@ func (p Platform) requestOTP(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	email := r.Form.Get("email")
 	tx := ""
-	if p.RateLimits == nil || p.RateLimits.Allow(ratelimit.OTPRequest, r.RemoteAddr, email, "control") {
-		tx, _ = p.Login.RequestOTP(r.Context(), email, BrowserLoginChannel)
+	if p.RateLimits == nil || p.RateLimits.AllowRequest(ratelimit.OTPRequest, r, email, "control") {
+		tx, _ = p.Login.RequestOTP(r.Context(), email, BrowserLoginChannel, ratelimit.RequestFingerprint(r))
 		if tx != "" && p.RateLimits != nil {
-			p.RateLimits.BindTransaction(tx, email)
+			p.RateLimits.BindTransactionRequest(tx, email, r)
 		}
 	}
 	// Always show the same state to prevent account enumeration.
@@ -274,7 +288,7 @@ func (p Platform) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = r.ParseForm()
-	if p.RateLimits != nil && !p.RateLimits.AllowTransaction(ratelimit.OTPVerify, r.RemoteAddr, r.Form.Get("transaction"), "control") {
+	if p.RateLimits != nil && !p.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, r.Form.Get("transaction"), "control") {
 		p.verifyForm(w, r.Form.Get("transaction"), "Unable to verify that code.")
 		return
 	}

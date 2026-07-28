@@ -17,6 +17,15 @@ type lifecycleLiveSpy struct {
 
 func (s *lifecycleLiveSpy) Revoke(app, session string) { s.calls++; s.app, s.session = app, session }
 
+type lifecycleBlobCleanupSpy struct {
+	calls chan struct{}
+}
+
+func (s *lifecycleBlobCleanupSpy) Reconcile(context.Context) error {
+	s.calls <- struct{}{}
+	return nil
+}
+
 func TestControlReleasesOwnerBoundAndMetadataOnly(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
@@ -50,7 +59,8 @@ func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	live := &lifecycleLiveSpy{}
-	svc := ControlService{Store: s, Live: live}
+	cleanup := &lifecycleBlobCleanupSpy{calls: make(chan struct{}, 2)}
+	svc := ControlService{Store: s, Live: live, BlobCleanup: cleanup}
 	actor := controlapi.Actor{ID: "u", Active: true}
 	if err = svc.DeleteApp(context.Background(), actor, "alpha", "delete-one"); err != nil {
 		t.Fatal(err)
@@ -72,6 +82,11 @@ func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
 	if live.calls != 1 || live.app != "a" || live.session != "" {
 		t.Fatalf("live revocation = %#v", live)
 	}
+	select {
+	case <-cleanup.calls:
+	case <-time.After(time.Second):
+		t.Fatal("deleted app did not trigger blob reconciliation")
+	}
 	// The deployment row and its immutable release root are intentionally left
 	// for asynchronous retention cleanup, not this security-sensitive request.
 	var deployments int
@@ -84,8 +99,18 @@ func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
 	if err = svc.DeleteApp(context.Background(), actor, "alpha", "delete-one"); err != nil {
 		t.Fatal("matching idempotent retry denied: ", err)
 	}
+	select {
+	case <-cleanup.calls:
+		t.Fatal("idempotent deletion retry triggered blob reconciliation")
+	default:
+	}
 	if err = svc.DeleteApp(context.Background(), actor, "alpha", "other-request"); err == nil {
 		t.Fatal("deleted app accepted a new deletion request")
+	}
+	select {
+	case <-cleanup.calls:
+		t.Fatal("failed deletion triggered blob reconciliation")
+	default:
 	}
 }
 
@@ -121,12 +146,42 @@ func TestControlDeleteAppCrossOwnerDenied(t *testing.T) {
 	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('u2','two@example.com','deployer','active',datetime('now'))"); err != nil {
 		t.Fatal(err)
 	}
-	if err := (ControlService{Store: s}).DeleteApp(context.Background(), controlapi.Actor{ID: "u2", Active: true}, "alpha", "x"); err == nil {
+	cleanup := &lifecycleBlobCleanupSpy{calls: make(chan struct{}, 1)}
+	if err := (ControlService{Store: s, BlobCleanup: cleanup}).DeleteApp(context.Background(), controlapi.Actor{ID: "u2", Active: true}, "alpha", "x"); err == nil {
 		t.Fatal("cross-owner deletion accepted")
+	}
+	select {
+	case <-cleanup.calls:
+		t.Fatal("unauthorized deletion triggered blob reconciliation")
+	default:
 	}
 	var status string
 	if err := s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&status); err != nil || status != "active" {
 		t.Fatal(status, err)
+	}
+}
+
+func TestControlReplaceAccessDoesNotTriggerBlobCleanup(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	live := &lifecycleLiveSpy{}
+	cleanup := &lifecycleBlobCleanupSpy{calls: make(chan struct{}, 1)}
+	svc := ControlService{Store: s, Live: live, BlobCleanup: cleanup}
+	in := controlapi.AccessPolicyInput{Mode: "private", ExpectedRevision: 1, ConfirmBroadening: true}
+	in.Allow.Emails = []string{"viewer@example.com"}
+	if err := svc.ReplaceAccess(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", in, "replace"); err != nil {
+		t.Fatal(err)
+	}
+	if live.calls != 1 || live.app != "a" || live.session != "" {
+		t.Fatalf("access replacement did not immediately revoke live sessions: %#v", live)
+	}
+	select {
+	case <-cleanup.calls:
+		t.Fatal("access replacement triggered blob reconciliation")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

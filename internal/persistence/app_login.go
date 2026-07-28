@@ -2,7 +2,9 @@ package persistence
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"github.com/tinyhost/tiny/internal/identity"
@@ -31,8 +33,8 @@ func (a AppLogin) now() time.Time {
 	}
 	return time.Now()
 }
-func (a AppLogin) Request(ctx context.Context, app, email string, eligible bool) (string, error) {
-	m, e := a.Store.CreateChallenge(ctx, app, "viewer", email, "", a.HMACKey, eligible, a.now(), a.TTL)
+func (a AppLogin) Request(ctx context.Context, app, email string, eligible bool, fingerprint string) (string, error) {
+	m, e := a.Store.CreateChallenge(ctx, app, "viewer", email, fingerprintHash(a.HMACKey, fingerprint), a.HMACKey, eligible, a.now(), a.TTL)
 	if e != nil {
 		return opaqueTransaction(), nil
 	}
@@ -41,6 +43,12 @@ func (a AppLogin) Request(ctx context.Context, app, email string, eligible bool)
 		return m.ID, nil
 	}
 	return opaqueTransaction(), nil
+}
+
+func fingerprintHash(key []byte, fingerprint string) []byte {
+	h := hmac.New(sha256.New, key)
+	_, _ = h.Write([]byte("otp-request-fingerprint:" + fingerprint))
+	return h.Sum(nil)
 }
 func opaqueTransaction() string {
 	b := make([]byte, 16)

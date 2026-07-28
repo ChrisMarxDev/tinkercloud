@@ -55,7 +55,9 @@ tiny.blobs.get(id, options?)
 tiny.blobs.list({ limit, cursor })
 tiny.blobs.delete(id, options?)
 
+tiny.live.channel(name).subscribe()
 tiny.live.channel(name).connect()
+tiny.live.channel(name).unsubscribe()
 tiny.live.channel(name).on(event, handler)
 tiny.live.channel(name).publish(event, payload)
 tiny.live.onKvChange({ prefix }, handler)
@@ -66,6 +68,12 @@ tiny.app.info()
 
 `capabilities.list()` lets an app and coding agent discover what the operator
 and manifest enabled without probing endpoints.
+
+`subscribe()` and `unsubscribe()` are explicit, local intent for the connected
+channel: call `subscribe()` before `connect()` (or while connected) to receive
+events, and `unsubscribe()` when the UI no longer needs them. They do not make
+events durable, ordered, or replayable. After reconnect, read current KV state
+again before rendering.
 
 ## Transport
 
@@ -195,7 +203,7 @@ canonical repository and `@tinyhost` registry scopes are confirmed. See the
 
 ## Deployable example gallery
 
-[`examples/sdk-apps/`](../../examples/sdk-apps/) contains three private static
+[`examples/sdk-apps/`](../../examples/sdk-apps/) contains four private static
 apps that use the package surface in realistic flows:
 
 - Shared Checklist covers capability discovery, prefix pagination, KV
@@ -205,6 +213,15 @@ apps that use the package surface in realistic flows:
   connect/on/publish/status/close, and KV recovery after reconnect.
 - Quick Poll covers a current record with `kv.get`, viewer-keyed records,
   versioned vote changes/deletion, prefix aggregation, and typed failures.
+- Attachment Shelf covers blob capability discovery, bounded upload and
+  attachment download, cursor listing, deletion, cancellation, typed quota
+  handling, and the local-VPS durability disclaimer.
+
+The attachment example obtains bytes with `tiny.blobs.get(id)`, creates a
+browser download locally, and uses the returned display name only for that
+download. It never receives a raw storage URL or path. The gateway delivers
+the bytes as `attachment` with `nosniff` and `private, no-store`; uploaded
+HTML, SVG, or JavaScript is not an inline TinyHost document surface.
 
 Their build copies the already-built ESM SDK into each release and converts the
 package import to a same-release module path. No runtime CDN, API origin, app

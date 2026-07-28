@@ -60,6 +60,7 @@ const (
 	WriteAppCreate  WriteKind = "app_create"
 	WriteDeployment WriteKind = "deployment"
 	WriteKV         WriteKind = "kv"
+	WriteBlob       WriteKind = "blob"
 )
 
 // DiskSource reports the data-volume usage.  It is an injected seam so errors

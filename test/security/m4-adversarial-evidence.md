@@ -39,18 +39,41 @@
   granted. The ordinary sandbox blocks `httptest` listener creation.
 - M4 HTTP regression tests cover server-derived identity, two-app KV isolation,
   malformed JSON, strict content type, and optimistic-version conflicts.
-- `internal/live/revocation_regression_test.go` currently exposes a revocation
-  bypass: `Connection.Publish` does not verify that the connection remains in
-  the hub after `Hub.Revoke`. A buffered inbound frame can therefore be fanned
-  out after revocation. This test is intentionally failing until production
-  rejects operations from detached connections.
+- `internal/live/revocation_regression_test.go` proves revocation removes the
+  connection before a buffered inbound frame can publish. The result is a
+  direct hub close signal, not an idle-timeout side effect.
+
+## 2026-07-27 — bounded KV, blob, and recovery evidence
+
+- KV admission uses server-derived viewer-within-app, app, and global windows.
+  Focused tests prove each dimension is isolated as intended, a denied global
+  request consumes no dynamic scope, and the finite dynamic-scope map fails
+  closed before repository access.
+- Blob service, SQLite catalog, and private local store tests cover the
+  `staging → ready → deleting` state transitions, exact app quota/concurrency,
+  close/sync/commit failure cleanup, missing-byte denial, and bounded catalog/
+  storage reconciliation. A ready row with missing, corrupt, or foreign bytes
+  is unavailable rather than substituted.
+- Gateway and built-SDK tests cover capability-disabled no-touch behavior,
+  multipart extra-part denial before readiness, same-origin mutation checks,
+  opaque app-scoped IDs, cursor/list bounds, cross-app denial, and typed blob
+  errors. Successful blob downloads are attachment-only with `nosniff` and
+  `private, no-store`; they expose no local path or storage URL.
+- The M3 restart charter now has executable persistence coverage for
+  database-led, stable per-record recovery: malformed historical records fail
+  individually without blocking a healthy app, while a corrupt current record
+  atomically clears its pointer and makes that app unavailable. No recovery
+  path scans a release or staging directory for authority.
+- The checked-in Attachment Shelf example compiles against the SDK and shows
+  capability discovery, cancellation, upload/list/download/delete, and the
+  local-VPS durability boundary.
 
 ## M0–M5 follow-up findings
 
-- `internal/releases/manifest_regression_test.go` exposes that duplicate nested
-  manifest feature keys are accepted and last-write-wins (`kv: false` followed
-  by `kv: true`). This is intentionally failing: deployment policy/capability
-  inputs must be unambiguous.
+- `internal/releases/manifest_regression_test.go` rejects duplicate nested
+  manifest feature keys (`kv: false` followed by `kv: true`) before domain
+  conversion, so deployment policy/capability inputs cannot silently use
+  last-write-wins semantics.
 - `internal/controlapi` passes idempotency keys through but has no bounded
   format validation or repository-level replay contract. This remains a proof
   gap rather than a demonstrated bypass.
@@ -59,5 +82,7 @@
 
 - Control-plane idempotency is declared but no idempotency repository contract
   or implementation is present.
-- No executable tests yet cover current-policy revocation wiring into the live
-  hub, CSP/CSRF/CORS, or production SQLite interruption recovery.
+- Updated-live-VPS acceptance of the current blob-enabled binary remains
+  pending: the existing disposable-host evidence predates the release-key
+  approval needed to install this exact build. This is not claimed by local,
+  real-listener, or source-level tests.

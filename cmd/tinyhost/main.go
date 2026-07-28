@@ -138,14 +138,20 @@ func (h hostResolver) ActiveAppHost(host string) bool {
 type resendCredential struct{ key string }
 
 func (c resendCredential) ResendAPIKey() string { return c.key }
-func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates) (http.Handler, *live.Hub) {
+func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates) (http.Handler, *live.Hub, error) {
 	hub := live.New(live.DefaultLimits())
 	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
 	atomic := persistence.AppLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
 	liveSessions := compose.LiveSessions{Sessions: store, Hub: hub}
-	login := compose.Login{Atomic: atomic, Sessions: liveSessions, Policies: store, SessionTTL: c.SessionExpiry}
+	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost, AppSuffix: c.AppSuffix, RevokeChildren: func(refs []persistence.AppSessionRef) {
+		for _, ref := range refs {
+			hub.Revoke(ref.AppID, ref.SessionID)
+		}
+	}}
+	login := compose.Login{Atomic: atomic, Sessions: liveSessions, Policies: store, SessionTTL: c.SessionExpiry, IdentityBroker: identityBroker}
 	limits := ratelimit.New([]byte(secrets.HMACKey), ratelimit.DefaultConfig())
 	login.RateLimits = limits
+	identityBroker.RateLimits = limits
 	if gates == nil {
 		gates = denyDeploymentGates{}
 	}
@@ -155,12 +161,19 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	resources, _ := compose.NewResourceControls(c, operations.StaticDiskSource{Path: c.DataDirectory})
 	deploy := &deployments.Service{Repo: persistence.DeploymentRepository{Store: store}, Root: c.DataDirectory, Gates: gates}
 	resources.ConfigureDeployments(deploy)
+	if err := deploy.RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: c.DataDirectory}); err != nil {
+		return nil, hub, err
+	}
+	blobs := resources.BlobRepository(store)
 	controlAuth := persistence.ControlAuthenticator{Store: store}
-	controlService := persistence.ControlService{Store: store, Live: hub, Deployments: deploy, AppSuffix: c.AppSuffix}
+	controlService := persistence.ControlService{Store: store, Live: hub, BlobCleanup: blobs, Deployments: deploy, AppSuffix: c.AppSuffix}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
 	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes}, Auth: controlAuth, Views: controlService, Actions: controlService, Login: controlLogin, RateLimits: limits}
-	return compose.AppPlaneWithPlatform(c, store, liveSessions, store, resources.KVRepository(store), hub, login, platform), hub
+	if err := blobs.Reconcile(context.Background()); err != nil {
+		return nil, hub, err
+	}
+	return compose.AppPlaneWithPlatformAndBlobs(c, store, liveSessions, store, resources.KVRepository(store), blobs, hub, login, platform), hub, nil
 }
 
 var effectiveUID = os.Geteuid
@@ -363,7 +376,10 @@ func run(args []string, out, errout *os.File) error {
 			p, e := verification.ProbeCandidate(ctx, cfg, cfg.DataDirectory, r)
 			return e == nil && p.Passed()
 		}}
-		h, _ := buildHandler(cfg, secrets, store, gates)
+		h, _, err := buildHandler(cfg, secrets, store, gates)
+		if err != nil {
+			return err
+		}
 		logger := slog.New(slog.NewJSONHandler(errout, nil))
 		resolver := hostResolver{suffix: cfg.AppSuffix, store: store}
 		cm := certificates.NewAutocert(cfg.ACMECachedir, cfg.ACMEEmail, cfg.PlatformHost, resolver, func(string) bool { return true })

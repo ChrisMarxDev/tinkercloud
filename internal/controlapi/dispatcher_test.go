@@ -193,7 +193,7 @@ type loginFake struct {
 	channel  LoginChannel
 }
 
-func (l *loginFake) RequestOTP(_ context.Context, _ string, channel LoginChannel) (string, error) {
+func (l *loginFake) RequestOTP(_ context.Context, _ string, channel LoginChannel, _ string) (string, error) {
 	l.requests++
 	l.channel = channel
 	return "login_test", nil

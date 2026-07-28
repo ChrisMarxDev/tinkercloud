@@ -33,15 +33,22 @@ type Secrets struct{ ResendAPIKey, HMACKey string }
 // limits are normalized to Defaults so upgrading an existing installation does
 // not silently become unlimited.
 type ResourceLimits struct {
-	AppsPerDeployer           int    `yaml:"apps_per_deployer"`
-	ArchiveUploadBytes        int64  `yaml:"archive_upload_bytes"`
-	ExpandedReleaseBytes      int64  `yaml:"expanded_release_bytes"`
-	FilesPerRelease           int    `yaml:"files_per_release"`
-	SingleFileBytes           int64  `yaml:"single_file_bytes"`
-	DeploymentAttemptsPerHour int    `yaml:"deployment_attempts_per_hour"`
-	ReleaseRetention          int    `yaml:"release_retention"`
-	DiskWarningPercent        uint64 `yaml:"disk_warning_percent"`
-	DiskStopPercent           uint64 `yaml:"disk_stop_percent"`
+	AppsPerDeployer           int           `yaml:"apps_per_deployer"`
+	ArchiveUploadBytes        int64         `yaml:"archive_upload_bytes"`
+	ExpandedReleaseBytes      int64         `yaml:"expanded_release_bytes"`
+	FilesPerRelease           int           `yaml:"files_per_release"`
+	SingleFileBytes           int64         `yaml:"single_file_bytes"`
+	DeploymentAttemptsPerHour int           `yaml:"deployment_attempts_per_hour"`
+	ReleaseRetention          int           `yaml:"release_retention"`
+	BlobBytes                 int64         `yaml:"blob_bytes"`
+	BlobsPerApp               int           `yaml:"blobs_per_app"`
+	TotalBlobBytesPerApp      int64         `yaml:"total_blob_bytes_per_app"`
+	BlobListLimit             int           `yaml:"blob_list_limit"`
+	BlobUploadsPerMinute      int           `yaml:"blob_uploads_per_minute"`
+	BlobConcurrentUploads     int           `yaml:"blob_concurrent_uploads"`
+	BlobUploadDuration        time.Duration `yaml:"blob_upload_duration"`
+	DiskWarningPercent        uint64        `yaml:"disk_warning_percent"`
+	DiskStopPercent           uint64        `yaml:"disk_stop_percent"`
 }
 
 // RealtimeLimits bound each authenticated WebSocket's liveness and resource
@@ -92,7 +99,7 @@ func (l RealtimeLimits) Validate() error {
 }
 
 func DefaultResourceLimits() ResourceLimits {
-	return ResourceLimits{AppsPerDeployer: 20, ArchiveUploadBytes: 100 << 20, ExpandedReleaseBytes: 250 << 20, FilesPerRelease: 10000, SingleFileBytes: 50 << 20, DeploymentAttemptsPerHour: 20, ReleaseRetention: 10, DiskWarningPercent: 80, DiskStopPercent: 90}
+	return ResourceLimits{AppsPerDeployer: 20, ArchiveUploadBytes: 100 << 20, ExpandedReleaseBytes: 250 << 20, FilesPerRelease: 10000, SingleFileBytes: 50 << 20, DeploymentAttemptsPerHour: 20, ReleaseRetention: 10, BlobBytes: 25000000, BlobsPerApp: 1000, TotalBlobBytesPerApp: 250000000, BlobListLimit: 100, BlobUploadsPerMinute: 20, BlobConcurrentUploads: 2, BlobUploadDuration: 2 * time.Minute, DiskWarningPercent: 80, DiskStopPercent: 90}
 }
 
 func (c Config) EffectiveLimits() ResourceLimits {
@@ -118,6 +125,27 @@ func (c Config) EffectiveLimits() ResourceLimits {
 	if v.ReleaseRetention != 0 {
 		d.ReleaseRetention = v.ReleaseRetention
 	}
+	if v.BlobBytes != 0 {
+		d.BlobBytes = v.BlobBytes
+	}
+	if v.BlobsPerApp != 0 {
+		d.BlobsPerApp = v.BlobsPerApp
+	}
+	if v.TotalBlobBytesPerApp != 0 {
+		d.TotalBlobBytesPerApp = v.TotalBlobBytesPerApp
+	}
+	if v.BlobListLimit != 0 {
+		d.BlobListLimit = v.BlobListLimit
+	}
+	if v.BlobUploadsPerMinute != 0 {
+		d.BlobUploadsPerMinute = v.BlobUploadsPerMinute
+	}
+	if v.BlobConcurrentUploads != 0 {
+		d.BlobConcurrentUploads = v.BlobConcurrentUploads
+	}
+	if v.BlobUploadDuration != 0 {
+		d.BlobUploadDuration = v.BlobUploadDuration
+	}
 	if v.DiskWarningPercent != 0 {
 		d.DiskWarningPercent = v.DiskWarningPercent
 	}
@@ -138,6 +166,13 @@ func (l ResourceLimits) Validate() error {
 		l.SingleFileBytes < 1<<10 || l.SingleFileBytes > l.ExpandedReleaseBytes ||
 		l.DeploymentAttemptsPerHour < 1 || l.DeploymentAttemptsPerHour > 1000 ||
 		l.ReleaseRetention < 1 || l.ReleaseRetention > 1000 ||
+		l.BlobBytes < 1<<10 || l.BlobBytes > 1<<30 ||
+		l.BlobsPerApp < 1 || l.BlobsPerApp > 100000 ||
+		l.TotalBlobBytesPerApp < l.BlobBytes || l.TotalBlobBytesPerApp > 4<<30 ||
+		l.BlobListLimit < 1 || l.BlobListLimit > 1000 ||
+		l.BlobUploadsPerMinute < 1 || l.BlobUploadsPerMinute > 10000 ||
+		l.BlobConcurrentUploads < 1 || l.BlobConcurrentUploads > 100 ||
+		l.BlobUploadDuration < time.Second || l.BlobUploadDuration > time.Hour ||
 		l.DiskWarningPercent < 1 || l.DiskWarningPercent >= l.DiskStopPercent || l.DiskStopPercent > 100 {
 		return fmt.Errorf("unsafe resource limits")
 	}
@@ -154,7 +189,7 @@ func (c Config) RenderYAML() ([]byte, error) {
 	}
 	l := c.EffectiveLimits()
 	r := c.EffectiveRealtimeLimits()
-	return []byte(fmt.Sprintf("platform_host: %s\napp_suffix: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\nsecret_refs:\n  hmac_key: %s\nemail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.PlatformHost, c.AppSuffix, c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, c.HMACKeyRef, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.DiskWarningPercent, l.DiskStopPercent)), nil
+	return []byte(fmt.Sprintf("platform_host: %s\napp_suffix: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\nsecret_refs:\n  hmac_key: %s\nemail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.PlatformHost, c.AppSuffix, c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, c.HMACKeyRef, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
 }
 
 func (c Config) Redacted() map[string]string {

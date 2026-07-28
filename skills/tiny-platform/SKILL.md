@@ -4,6 +4,19 @@ description: Build and verify private TinyHost static apps and platform capabili
 ---
 
 <!-- shared:security:start -->
+## Terminology
+
+Use `operator` for a person who hosts and operates TinyHost, `deployer` for a
+person authorized to create and manage their own Tiny apps, and `viewer` for a
+person who accesses and interacts with a deployed app. Treat `user` as a
+neutral umbrella term for any human; never infer a role, permission, ownership,
+or credential type from it. When authority changes the answer or action and the
+role is unclear, ask whether `user` means operator, deployer, or viewer. Do not
+ask when context already establishes the role. Treat a deployment agent as
+non-human automation using a scoped deployer token, not as a user. A person may
+act in more than one role, but never transfer authority or credentials between
+roles.
+
 ## Security boundary
 
 TinyHost's gateway derives app identity from the hostname and viewer identity
@@ -43,8 +56,43 @@ never allowed to block other viewers. Authenticated live sockets also have a
 successful pong keeps a healthy socket alive. Revocation closes matching live
 sockets immediately rather than waiting for that liveness bound.
 Viewer OTP requests (JSON or form) expose only an opaque transaction and the
-same generic accepted shape. Keep form fields bounded and escaped; verification
-atomically consumes the challenge and sets a host-only secure app cookie.
+same generic accepted shape. Keep form fields bounded and escaped. One global
+viewer identity per browser profile is an opaque server-side platform-host
+cookie, never a control credential, parent-domain cookie, JWT, local-storage
+value, app-visible credential, or client-selected identity/app. It lasts at
+most 30 days, rotates every 24 hours, and accepts its prior token for no more
+than 60 seconds. A missing local app session uses only a server-created,
+state-bound, app-bound, five-minute-or-less one-time handoff through the exact
+platform host; recheck current app policy when issuing and consuming it, then
+create the existing host-only app cookie. Guessed, replayed, wrong-app,
+expired, or state-mismatched handoffs deny without app bytes. App logout stays
+local; global identity switch happens only on platform-host POST verification
+and revokes the old identity family plus every child app session. Recheck
+policy on every protected request and close matching live sockets on app,
+policy, session, or global-family revocation. Never accept global identity,
+control cookies, app cookies, or CLI bearers in one another's routes.
+The platform may also issue a host-only `__Host-tiny_browser` binding with a
+30-day bounded lifetime. It is a cryptographically random, `Secure`,
+`HttpOnly`, `SameSite=Lax` OTP race-grouping value only: never treat it as an
+identity/control/app/CLI credential; never send it to an app host or expose it
+in URLs, forms, templates, JavaScript, or logs. Pass it only server-side to
+OTP request/verification persistence, which stores hashes and permits one
+unrevoked identity family per binding so concurrent completions are first-wins.
+Missing/mismatched bindings deny generically. Retain the binding through global
+logout and known-invalid identity cleanup; it does not mean the browser is
+signed in.
+For global logout, revoke a valid global identity first. Only when it is absent
+or known-invalid may the binding hash locate a family for revocation; it never
+authenticates the request. A real selected-revocation error preserves cookies
+and returns generic retry rather than claiming logout success.
+Global-identity migration is additive: never rewrite legacy app-session
+`revoked_at`. The runtime quarantines a parentless app session only when its
+RFC3339 `created_at` predates migration 5's persisted `applied_at` cutoff;
+parent-linked sessions validate normally and explicitly brokerless sessions
+created at/after that cutoff retain app-local semantics. Missing or malformed
+cutoff/session timestamps deny without mutation. Retain the known historical
+v5 checksum for the corrected additive migration so rollback binaries can
+reopen the database; never alter a VPS migration row to bypass it.
 At the disk write-stop watermark, expect app creation, deployment, and KV
 mutation and blob upload to fail safely; static/blob reads, deletion when safe,
 and revocations must still work. Cleanup is server-side, database-led, and never
@@ -110,7 +158,7 @@ timestamp after an authorization succeeds. Recheck active user, revocation,
 expiry, exact scope, and app binding atomically with that update; failed checks
 or persistence failures deny and must not alter it. Token lists and dashboards
 may show that timestamp, never token values or hashes, IPs, or user agents.
-Before retaining an update, probe `/` on a locally verified active app host
+Before retaining an update, probe `/_tiny/api/v1/capabilities` on a locally verified active app host
 through the composed HTTPS gateway. Only its `401` JSON `not_authorized`
 envelope with no-store security headers is health evidence; 404, redirect,
 2xx, malformed denial, timeout, and transport failure require rollback.
@@ -119,6 +167,11 @@ private, non-symlinked `update-rollback/previous` snapshot that remains until
 that same update commits. It must still run every other doctor check; ordinary
 `tinyhost status` and `tinyhost doctor` keep rollback-pending degraded, and an
 unsafe or incomplete snapshot never becomes healthy.
+After a self-update restart, wait only for local TCP connection establishment
+on the configured HTTP and HTTPS listeners, with a bounded cancellable retry.
+Run doctor, public health, and anonymous-denial gates once afterward; do not
+retry or soften their database, credential, DNS, TLS, provider, or gateway
+failures.
 Before treating `tinyhost init` as complete, derive the sole public proof from
 the configured platform host: `https://{platform_host}/api/v1/version`. Use
 verified TLS and no redirects; accept only the exact final host, `200`, bounded
@@ -180,7 +233,11 @@ Use capability discovery before KV, blob, or live work. Handle
 `TinyVersionIncompatibleError` by upgrading `@tinyhost/sdk`; do not add an app
 selector or fall back to control credentials. Raw HTTP clients may omit the SDK
 version header, while a supplied unsupported major receives a typed upgrade
-error. Compile examples and run the real-listener SDK contract after SDK
+error. Blob uploads use exactly one `file` multipart part; blob IDs are opaque,
+downloads are attachment bytes, and callers never pass a path, bucket, or
+storage key. Custom live channels call `subscribe()` before `connect()` and
+`unsubscribe()` when delivery is no longer wanted; reconnect recovery rereads
+KV rather than replaying events. Compile examples and run the real-listener SDK contract after SDK
 changes. Verify the packed SDK contains only its README, Apache-2.0 license,
 declarations, and runtime module. Keep the npm manifest, JSR manifest, exported
 SDK version, and release version identical; install-test the npm tarball and

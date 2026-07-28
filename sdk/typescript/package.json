@@ -42,12 +42,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test:live": "node test/live.test.mjs",
+    "test:blobs": "node test/blobs.test.mjs",
     "test:examples": "node test/examples-compile.mjs && node ../../examples/sdk-apps/build.mjs --check",
     "test:bundle": "node test/bundle-size.mjs",
     "test:package": "node test/package-contents.mjs",
     "test:version": "node test/version-sync.mjs",
     "test:distribution": "node test/distribution.mjs",
-    "test": "npm run build && npm run test:live && npm run test:examples && npm run test:bundle && npm run test:package && npm run test:version && npm run test:distribution",
+    "test": "npm run build && npm run test:live && npm run test:blobs && npm run test:examples && npm run test:bundle && npm run test:package && npm run test:version && npm run test:distribution",
     "prepack": "npm run build",
     "prepublishOnly": "npm test"
   },

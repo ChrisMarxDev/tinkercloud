@@ -1,7 +1,7 @@
 # `@tinyhost/sdk`
 
-Typed browser SDK for TinyHost app identity, capability discovery, JSON KV, and
-ephemeral realtime channels.
+Typed browser SDK for TinyHost app identity, capability discovery, JSON KV,
+private utility-grade blobs, and ephemeral realtime channels.
 
 The SDK is designed for static apps served by TinyHost. It uses same-origin
 platform endpoints and accepts neither an app ID nor a platform secret.
@@ -54,9 +54,19 @@ const entry = await tiny.kv.get("example", {
 });
 ```
 
-Realtime events are ephemeral hints. Read current KV state after connecting or
-reconnecting; the SDK does not promise history, replay, ordering, or durable
-delivery.
+Attachments stay in the current app's shared private namespace. They have no
+public URL and are utility-grade local VPS data:
+
+```ts
+const file = document.querySelector<HTMLInputElement>("input[type=file]")!.files![0];
+const uploaded = await tiny.blobs.upload(file, { signal: controller.signal });
+const bytes = await tiny.blobs.get(uploaded.id, { signal: controller.signal });
+```
+
+Realtime events are ephemeral hints. Call `channel.subscribe()` before
+`connect()` and `channel.unsubscribe()` when delivery is no longer wanted.
+Read current KV state after connecting or reconnecting; the SDK does not
+promise history, replay, ordering, or durable delivery.
 
 See the repository's
 [client SDK documentation](https://github.com/ChrisMarxDev/tiny/blob/main/docs/architecture/client-sdk.md)

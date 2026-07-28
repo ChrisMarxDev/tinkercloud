@@ -8,9 +8,13 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -92,6 +96,72 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 	v["TINYHOST_VPS_VIEWER_EMAIL"] = v["TINYHOST_VPS_DEPLOYER_EMAIL"]
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("same deployer and viewer accepted")
+	}
+}
+
+func TestGlobalIdentityHandoffCallbackIsExact(t *testing.T) {
+	const handoff = "handoff_opaque"
+	if !isAppHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, handoff) {
+		t.Fatal("valid opaque callback rejected")
+	}
+	for _, raw := range []string{
+		"/_tiny/auth/callback?handoff=" + handoff,
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&return=https://evil.example",
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
+		"https://alpha.apps.example.test/_tiny/auth/login?handoff=" + handoff,
+	} {
+		if isAppHandoffCallback(raw, handoff) {
+			t.Fatalf("accepted unsafe generic callback %q", raw)
+		}
+	}
+	if !isExactHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, "alpha.apps.example.test", handoff) {
+		t.Fatal("exact callback rejected")
+	}
+	for _, raw := range []string{
+		"https://beta.apps.example.test/_tiny/auth/callback?handoff=" + handoff,
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&x=1",
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
+	} {
+		if isExactHandoffCallback(raw, "alpha.apps.example.test", handoff) {
+			t.Fatalf("accepted wrong-app or malformed callback %q", raw)
+		}
+	}
+}
+
+func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform, _ := url.Parse("https://tiny.example.test/")
+	first, _ := url.Parse("https://first.apps.example.test/")
+	second, _ := url.Parse("https://second.apps.example.test/")
+	jar.SetCookies(platform, []*http.Cookie{
+		{Name: "__Host-tiny_identity", Value: "identity", Path: "/", Secure: true},
+		{Name: "__Host-tiny_browser", Value: "browser-profile", Path: "/", Secure: true},
+	})
+	jar.SetCookies(first, []*http.Cookie{
+		{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true},
+		{Name: "__Host-tiny_identity_state", Value: "state", Path: "/", Secure: true},
+	})
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "second", Path: "/", Secure: true}})
+	h := &http.Client{Jar: jar}
+	s := Suite{Config: Config{PlatformHost: "tiny.example.test"}}
+	if err := s.assertCookieScopes(h, "first.apps.example.test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err != nil {
+		t.Fatal(err)
+	}
+	if state, ok := identityStateCookie(h, "first.apps.example.test"); !ok || state != "state" {
+		t.Fatal("app-host handoff state was not retained for replay evidence")
+	}
+	if !hasCookie(jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(jar.Cookies(first), "__Host-tiny_browser") || hasCookie(jar.Cookies(second), "__Host-tiny_browser") {
+		t.Fatal("platform browser binding was not retained as an exact-host cookie")
+	}
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true}})
+	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err == nil {
+		t.Fatal("accepted shared app token across app hosts")
 	}
 }
 
@@ -309,6 +379,111 @@ func TestAnonymousDeniedRequiresEverySurfaceToDenyWithoutMarker(t *testing.T) {
 	}
 }
 
+func TestRestartBlobReadinessRetriesOnlyTransientStartupFailures(t *testing.T) {
+	attempts, waits := 0, []time.Duration{}
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		attempts++
+		switch attempts {
+		case 1:
+			return nil, &url.Error{Op: "Get", URL: r.URL.String(), Err: syscall.ECONNREFUSED}
+		case 2:
+			return &http.Response{StatusCode: http.StatusServiceUnavailable, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("starting")), Request: r}, nil
+		case 3:
+			headers := make(http.Header)
+			headers.Set("Cache-Control", "private, no-store")
+			headers.Set("X-Content-Type-Options", "nosniff")
+			headers.Set("Content-Disposition", "attachment; filename=exact-bytes.bin")
+			return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(bytes.NewReader(vpsBlobBytes)), Request: r}, nil
+		default:
+			t.Fatalf("unexpected readiness attempt %d", attempts)
+			return nil, nil
+		}
+	})}
+	s := Suite{RestartReadinessWait: func(ctx context.Context, delay time.Duration) error {
+		if ctx.Err() != nil {
+			t.Fatal("readiness wait received cancelled context")
+		}
+		waits = append(waits, delay)
+		return nil
+	}}
+	if err := s.verifyBlobPersistsAfterRestart(context.Background(), h, "app.example.test", "blob_1"); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts=%d, want 3", attempts)
+	}
+	if want := []time.Duration{restartBlobInitialDelay, restartBlobInitialDelay * 2}; !slices.Equal(waits, want) {
+		t.Fatalf("waits=%v, want %v", waits, want)
+	}
+}
+
+func TestRestartBlobReadinessRejectsNonTransientOrInvalidEvidenceWithoutRetry(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		response func(*http.Request) (*http.Response, error)
+	}{
+		{
+			name: "authorization denial",
+			response: func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusUnauthorized, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("denied")), Request: r}, nil
+			},
+		},
+		{
+			name: "redirect",
+			response: func(r *http.Request) (*http.Response, error) {
+				headers := make(http.Header)
+				headers.Set("Location", "https://other.example.test/")
+				return &http.Response{StatusCode: http.StatusFound, Header: headers, Body: io.NopCloser(strings.NewReader("redirect")), Request: r}, nil
+			},
+		},
+		{
+			name: "wrong bytes with success status",
+			response: func(r *http.Request) (*http.Response, error) {
+				headers := make(http.Header)
+				headers.Set("Cache-Control", "private, no-store")
+				headers.Set("X-Content-Type-Options", "nosniff")
+				headers.Set("Content-Disposition", "attachment; filename=exact-bytes.bin")
+				return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(strings.NewReader("wrong")), Request: r}, nil
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts, waits := 0, 0
+			h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				attempts++
+				return tc.response(r)
+			})}
+			s := Suite{RestartReadinessWait: func(context.Context, time.Duration) error { waits++; return nil }}
+			if err := s.verifyBlobPersistsAfterRestart(context.Background(), h, "app.example.test", "blob_1"); err == nil {
+				t.Fatal("invalid restart evidence accepted")
+			}
+			if attempts != 1 || waits != 0 {
+				t.Fatalf("attempts=%d waits=%d, want one request and no retry", attempts, waits)
+			}
+		})
+	}
+}
+
+func TestRestartBlobReadinessWaitHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attempts := 0
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		attempts++
+		return nil, &url.Error{Op: "Get", URL: r.URL.String(), Err: syscall.ECONNREFUSED}
+	})}
+	s := Suite{RestartReadinessWait: func(got context.Context, _ time.Duration) error {
+		cancel()
+		return got.Err()
+	}}
+	if err := s.verifyBlobPersistsAfterRestart(ctx, h, "app.example.test", "blob_1"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want context cancellation", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts=%d, want 1", attempts)
+	}
+}
+
 func TestSocketInventoryMatchesExactPublicPorts(t *testing.T) {
 	f := &calls{out: []byte("LISTEN 0 4096 *:8080 *:* users:((\"tinyhost\",pid=9,fd=1))\n")}
 	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: f}
@@ -340,7 +515,7 @@ func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 		t.Fatalf("archive A: bytes=%d size=%d marker=%q err=%v", len(a), sizeA, markerA, err)
 	}
 	m := smokeManifest(t, a)
-	if m.Name != "vps-smoke-a" || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
+	if m.Name != "vps-smoke-a" || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
 		t.Fatalf("smoke policy = %#v", m)
 	}
 	_, _, markerB, err := smokeArchive("vps-smoke-b", viewer)

@@ -217,7 +217,7 @@ func TestCLIControlLoginIssuedTokenHasV1Scopes(t *testing.T) {
 	defer s.Close()
 	outbox := &captureOutbox{}
 	login := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: outbox}
-	transaction, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel)
+	transaction, err := login.RequestOTP(context.Background(), "owner@example.com", controlapi.CLILoginChannel, "test")
 	if err != nil || transaction == "" {
 		t.Fatal(err)
 	}

@@ -45,7 +45,7 @@ func TestAppAuthTemplatesKeepTrustedScriptInsideBody(t *testing.T) {
 
 type fakeAtomic struct{}
 
-func (fakeAtomic) Request(context.Context, string, string, bool) (string, error) {
+func (fakeAtomic) Request(context.Context, string, string, bool, string) (string, error) {
 	return "otp_test", nil
 }
 func (fakeAtomic) VerifyAndCreateSession(context.Context, string, string, string, string, time.Time) (string, error) {
@@ -57,7 +57,7 @@ type denyAtomic struct {
 	requests int
 }
 
-func (f *denyAtomic) Request(_ context.Context, _ string, _ string, eligible bool) (string, error) {
+func (f *denyAtomic) Request(_ context.Context, _ string, _ string, eligible bool, _ string) (string, error) {
 	f.eligible = eligible
 	f.requests++
 	return "otp_fake", nil
@@ -148,6 +148,28 @@ func TestLoginFormIneligibleHasGenericCodeForm(t *testing.T) {
 	if !strings.Contains(body, "This message is the same for every address.") ||
 		!strings.Contains(body, `autocomplete="one-time-code"`) {
 		t.Fatalf("generic styled verification state missing: %s", body)
+	}
+}
+
+func TestConfiguredIdentityBrokerRetiresDirectAppOTPForFormsAndJSON(t *testing.T) {
+	fake := &denyAtomic{}
+	l := Login{Atomic: fake, IdentityBroker: &IdentityBroker{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}}
+	app := apps.App{ID: "a"}
+
+	form := httptest.NewRecorder()
+	formRequest := httptest.NewRequest(http.MethodPost, "/_tiny/auth/otp", strings.NewReader("email=a%40example.com"))
+	formRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	l.DispatchPreAuth(app, gateway.AppOTPRequest, form, formRequest)
+	if form.Code != http.StatusGone || !strings.HasPrefix(form.Header().Get("Content-Type"), "text/html") || !strings.Contains(form.Body.String(), "Sign-in needs another try") || strings.Contains(form.Body.String(), "transaction") || fake.requests != 0 {
+		t.Fatalf("form status=%d headers=%v requests=%d body=%q", form.Code, form.Header(), fake.requests, form.Body.String())
+	}
+
+	jsonOut := httptest.NewRecorder()
+	jsonRequest := httptest.NewRequest(http.MethodPost, "/_tiny/auth/verify", strings.NewReader(`{"email":"a@example.com","transaction":"otp","code":"123456"}`))
+	jsonRequest.Header.Set("Content-Type", "application/json")
+	l.DispatchPreAuth(app, gateway.AppOTPVerify, jsonOut, jsonRequest)
+	if jsonOut.Code != http.StatusUnauthorized || !strings.HasPrefix(jsonOut.Header().Get("Content-Type"), "application/json") || !strings.Contains(jsonOut.Body.String(), `"not_authorized"`) || strings.Contains(jsonOut.Body.String(), "<html") || fake.requests != 0 {
+		t.Fatalf("json status=%d headers=%v requests=%d body=%q", jsonOut.Code, jsonOut.Header(), fake.requests, jsonOut.Body.String())
 	}
 }
 

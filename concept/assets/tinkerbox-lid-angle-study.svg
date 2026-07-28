@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="620" viewBox="0 0 1560 620" role="img" aria-labelledby="title description">
+  <title id="title">Tinkerbox lid angle study</title>
+  <desc id="description">Three clean vector versions of the same friendly three-dimensional box with a single slightly open lid, shown at 8, 12, and 16 degrees.</desc>
+
+  <defs>
+    <filter id="shadow" x="-30%" y="-60%" width="160%" height="220%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <filter id="eye-shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#080127" flood-opacity=".24"/>
+    </filter>
+
+    <g id="box-body">
+      <ellipse cx="225" cy="412" rx="175" ry="22" fill="#25106F" opacity=".13" filter="url(#shadow)"/>
+
+      <!-- The right plane uses the same depth vector as the opening and lid. -->
+      <path d="M320 146 L377 100 Q390 90 390 106 V315 Q390 330 380 342 L334 382 Q320 394 320 374 Z" fill="#0875F5"/>
+
+      <!-- A single dark interior plane; there is no lip, latch, or hinge detail. -->
+      <path d="M78 146 L320 146 L390 90 L140 90 Q130 90 122 97 L67 136 Q54 146 78 146 Z" fill="#130549"/>
+
+      <!-- The eyes sit inside the box and remain fixed in every study. -->
+      <g fill="#FFFBE8" filter="url(#eye-shadow)">
+        <rect x="160" y="126" width="22" height="28" rx="8"/>
+        <rect x="211" y="126" width="22" height="28" rx="8"/>
+      </g>
+
+      <!-- One softly rounded front plane. -->
+      <path d="M84 146 H320 V360 Q320 390 290 390 H90 Q60 390 60 360 V170 Q60 146 84 146 Z" fill="#261075"/>
+      <path d="M84 146 H316" fill="none" stroke="#4B22AF" stroke-width="3" stroke-linecap="round" opacity=".62"/>
+      <path d="M320 153 V397" fill="none" stroke="#35A0FF" stroke-width="3" stroke-linecap="round" opacity=".68"/>
+    </g>
+  </defs>
+
+  <rect width="1560" height="620" rx="32" fill="#FFFBE8"/>
+
+  <g transform="translate(40 38)">
+    <rect width="466" height="544" rx="28" fill="#FFFFFF" opacity=".58"/>
+    <g transform="translate(8 26)">
+      <use href="#box-body"/>
+      <!-- 8°: one continuous lid surface, invisibly hinged on its rear edge. -->
+      <path d="M76 132 Q62 132 69 124 L121 96 Q129 90 140 90 H378 Q391 90 382 98 L330 127 Q324 132 312 132 Z" fill="#36149A"/>
+    </g>
+    <text x="233" y="510" fill="#241062" font-family="Verdana, sans-serif" font-size="28" font-weight="700" text-anchor="middle">8°</text>
+    <text x="233" y="536" fill="#6E6690" font-family="Verdana, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5" text-anchor="middle">QUIET PEEK</text>
+  </g>
+
+  <g transform="translate(547 38)">
+    <rect width="466" height="544" rx="28" fill="#FFFFFF" opacity=".58"/>
+    <g transform="translate(8 26)">
+      <use href="#box-body"/>
+      <!-- 12°: only the apparent lid angle changes. -->
+      <path d="M80 123 Q66 123 73 116 L122 96 Q130 90 141 90 H378 Q391 90 382 98 L334 118 Q327 123 316 123 Z" fill="#36149A"/>
+    </g>
+    <text x="233" y="510" fill="#241062" font-family="Verdana, sans-serif" font-size="28" font-weight="700" text-anchor="middle">12°</text>
+    <text x="233" y="536" fill="#6E6690" font-family="Verdana, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5" text-anchor="middle">BALANCED</text>
+  </g>
+
+  <g transform="translate(1054 38)">
+    <rect width="466" height="544" rx="28" fill="#FFFFFF" opacity=".58"/>
+    <g transform="translate(8 26)">
+      <use href="#box-body"/>
+      <!-- 16°: the front edge rises and retreats; all other geometry is unchanged. -->
+      <path d="M84 114 Q70 114 77 107 L123 96 Q131 90 142 90 H378 Q391 90 382 98 L338 109 Q331 114 320 114 Z" fill="#36149A"/>
+    </g>
+    <text x="233" y="510" fill="#241062" font-family="Verdana, sans-serif" font-size="28" font-weight="700" text-anchor="middle">16°</text>
+    <text x="233" y="536" fill="#6E6690" font-family="Verdana, sans-serif" font-size="15" font-weight="600" letter-spacing="1.5" text-anchor="middle">MORE CURIOUS</text>
+  </g>
+</svg>

@@ -55,15 +55,45 @@ otp_challenges
   request_fingerprint_hash, created_at
 
 sessions
-  id, scope(control|app), app_id?, identity_id?, user_id?, secret_hash,
-  expires_at, revoked_at, last_seen_at, created_at
+  id, scope(control|app), app_id?, identity_id?, user_id?, identity_session_id?,
+  secret_hash, expires_at, revoked_at, last_seen_at, created_at
+
+identity_sessions
+  id, identity_id, family_id, secret_hash, browser_binding_hash,
+  previous_secret_hash?, previous_valid_until?, expires_at, last_seen_at,
+  rotated_at, revoked_at, created_at
+
+identity_handoffs
+  id, app_id, identity_session_id?, state_hash, browser_binding_hash?, return_path, expires_at,
+  authorized_at?, consumed_at, created_at
 ```
 
 An app session requires `app_id` and `identity_id`. A control session requires
 `user_id` and cannot be presented as an app session or bearer token. A CLI
 bearer exists only in `api_tokens` and cannot be presented as a browser control
 session. Control OTP challenges are bound to their server-selected credential
-channel; existing unbound challenges fail closed.
+channel; existing unbound challenges fail closed. An `identity_session` proves
+only a viewer email on the platform host and belongs to one family; it is not a
+control session. An app session can record that family as its parent so global
+switch, revocation, or rotation-replay detection revokes every derived local
+session. A handoff is state-bound to one server-derived app, stores only secret
+hashes, expires in five minutes or less, and is atomically single-use. The
+platform browser-binding hash is attached when OTP is requested and copied to
+the issued global identity session; it is grouping/anti-race state, never an
+identity credential or authorization input. SQLite permits at most one
+unrevoked identity-session family for a binding hash, while expiration cleanup
+revokes its children and pending grants before a replacement can be created.
+The binding lookup has one narrow additional use: it may revoke that bound
+family and its descendants during browser cleanup; it never returns an identity
+or grants access.
+
+Migration 5 adds the optional child linkage without rewriting any existing app
+session. At app-session validation, a parentless session is quarantined when
+its RFC3339 creation time predates migration 5's persisted `applied_at`
+cutoff. Parent-linked sessions use their normal validation path; explicitly
+configured brokerless parentless sessions created at/after the cutoff retain
+their local semantics. Missing or malformed cutoff/session timestamps deny
+without changing persisted revocation state.
 
 ## Deployments
 
@@ -141,7 +171,10 @@ authorization headers, and raw request bodies.
 
 ## Transaction boundaries
 
-- OTP consume + app session creation.
+- OTP consume + global identity/session-family creation, or an app-local
+  session creation where no handoff is involved.
+- Global identity switch/revocation + child app-session revocation.
+- Handoff grant consumption + current policy recheck + app-session creation.
 - Policy revision creation + current revision swap + audit.
 - Deployment activation + current deployment swap + audit.
 - Token creation/revocation + audit.

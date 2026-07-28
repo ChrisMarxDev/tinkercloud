@@ -1,7 +1,7 @@
 # Control authentication deny charter
 
-Control browser sessions, CLI bearer tokens, and app viewer sessions are three
-different persisted credential types. A control OTP challenge is server-bound
+Control browser sessions, CLI bearer tokens, app viewer sessions, and global
+viewer identity sessions are four different persisted credential types. A control OTP challenge is server-bound
 to either the `browser` or `cli` channel before it is sent; verification accepts
 only that intended channel and atomically creates the matching credential type.
 Browser verification creates a `sessions.scope='control'` credential used only
@@ -10,7 +10,9 @@ credential used only through `Authorization: Bearer`. Authority is issued only
 to a normalized active authorized user and every use rechecks active status,
 expiry and revocation. App-view permission never grants control authority;
 browser control credentials are never accepted as CLI/API bearers and CLI
-bearers are never accepted from browser cookies.
+bearers are never accepted from browser cookies. A global viewer identity is
+accepted only by the platform identity broker to issue a server-created,
+app-bound viewer handoff; it is never dashboard/control authority.
 
 Successful bearer-token authentication records only the token's nullable UTC
 `last_used_at` timestamp. Authentication performs the active-user, token
@@ -33,6 +35,8 @@ The platform host exposes a server-rendered login and dashboard at `/login` and
 email. Successful verification sets only the host-only `__Host-tiny_control`
 cookie (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`); it is distinct from
 the app-viewer cookie and is not accepted by CLI/API bearer authentication.
+It is also distinct from host-only `__Host-tiny_identity`, which proves a
+viewer email only and cannot access dashboard/control read models.
 
 The dashboard uses only server-derived control authority and bounded safe read
 models: owned app status, the current private policy revision plus its
@@ -85,6 +89,8 @@ post-success summary.
 - A control cookie presented as a bearer token, a CLI bearer presented as a
   control cookie, or an app viewer session presented on either control surface
   is denied without recording successful-use metadata.
+- A global viewer identity cookie is not a control session, cannot access the
+  dashboard, cannot mint a CLI bearer, and cannot select an app or user role.
 
 ## Owned application lifecycle
 

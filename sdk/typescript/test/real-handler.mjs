@@ -7,15 +7,22 @@ const cookie = process.env.TINY_SDK_CONTRACT_COOKIE;
 const appHost = process.env.TINY_SDK_CONTRACT_HOST;
 assert.ok(origin && cookie && appHost, "real handler contract environment is missing");
 
-function networkFetch(input, init = {}, host = appHost, includeCookie = true) {
+async function networkFetch(input, init = {}, host = appHost, includeCookie = true) {
   const url = new URL(input, origin);
   const headers = new Headers(init.headers);
   if (includeCookie) headers.set("Cookie", cookie);
   // CI has no wildcard DNS. This browser-shaped adapter connects to the local
   // listener while retaining the hostname a browser would send after DNS.
   headers.set("Host", host);
-  if (init.method === "PUT" || init.method === "DELETE") headers.set("Origin", `http://${host}`);
-  if (typeof init.body === "string") headers.set("Content-Length", String(Buffer.byteLength(init.body)));
+  if (["PUT", "POST", "DELETE"].includes(init.method)) headers.set("Origin", `http://${host}`);
+  let body = init.body;
+  if (body instanceof FormData) {
+    const encoded = new Request("http://tinyhost.invalid", { method: "POST", body });
+    headers.set("Content-Type", encoded.headers.get("Content-Type"));
+    body = Buffer.from(await encoded.arrayBuffer());
+  }
+  if (typeof body === "string") body = Buffer.from(body);
+  if (body) headers.set("Content-Length", String(body.length));
   return new Promise((resolve, reject) => {
     const req = request(url, { method: init.method, headers: Object.fromEntries(headers) }, (res) => {
       const chunks = [];
@@ -26,7 +33,7 @@ function networkFetch(input, init = {}, host = appHost, includeCookie = true) {
       });
     });
     req.on("error", reject);
-    if (init.body) req.write(init.body);
+    if (body) req.write(body);
     req.end();
   });
 }
@@ -36,10 +43,22 @@ const tiny = createTiny({ fetch: realFetch, origin });
 const user = await tiny.user.current();
 assert.equal(user.identity.email, "viewer@example.com");
 assert.equal(user.app.slug, "alpha");
-assert.deepEqual(await tiny.app.info(), { slug: "alpha", features: { kv: true, realtime: true } });
-assert.deepEqual((await tiny.capabilities.list()).capabilities.map((c) => c.name), ["kv", "live"]);
+assert.deepEqual(await tiny.app.info(), { slug: "alpha", features: { kv: true, blobs: true, realtime: true } });
+assert.deepEqual((await tiny.capabilities.list()).capabilities.map((c) => c.name), ["user", "kv", "blobs", "live"]);
 
 assert.equal(await tiny.kv.get("items/a"), null);
+
+const file = new Blob(["hello"], { type: "text/plain" });
+Object.defineProperty(file, "name", { value: "notes.txt" });
+const uploaded = await tiny.blobs.upload(file);
+assert.equal(uploaded.name, "notes.txt");
+assert.equal(uploaded.contentType, "text/plain");
+assert.equal(uploaded.size, 5);
+assert.equal((await tiny.blobs.list()).blobs[0].id, uploaded.id);
+const bytes = await tiny.blobs.get(uploaded.id);
+assert.equal(await bytes.text(), "hello");
+assert.deepEqual(await tiny.blobs.delete(uploaded.id), { deleted: true });
+assert.equal(await tiny.blobs.get(uploaded.id), null);
 const first = await tiny.kv.set("items/a", { value: 1 });
 assert.equal(first.version, 1);
 await tiny.kv.set("items/b", { value: 2 });
