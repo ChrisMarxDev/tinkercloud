@@ -233,6 +233,33 @@ this before operators or deployers store important data.
 
 ## 6. Actors and permissions
 
+### 6.0 Terminology
+
+Role names describe authority, not necessarily distinct people. One person may
+act in more than one role, but authority, credentials, and permissions never
+carry from one role to another.
+
+- **Operator:** a person responsible for hosting and operating TinyHost.
+  Operators install, configure, update, diagnose, and recover the server and
+  manage deployer authorization.
+- **Deployer:** a person authorized to create, deploy, and manage their own Tiny
+  apps. TinyHost is designed so deployers do not need infrastructure knowledge,
+  although a deployer may still be technically skilled.
+- **Viewer:** a person who accesses and interacts with a deployed app. Viewer
+  access grants no deployment or operator authority.
+- **User:** a neutral umbrella term for any person interacting with TinyHost.
+  It implies no role, permission, ownership, or credential type.
+- **Deployment agent:** non-human automation acting through a scoped token on
+  behalf of a deployer. A deployment agent is not included by the term
+  “user” unless explicitly stated.
+
+Use `user` only when the person’s role is irrelevant. When a request,
+requirement, contract, or interface depends on permissions, ownership,
+credentials, or available actions and the role is unclear, ask whether it means
+an operator, deployer, or viewer. Authorization code and contracts must use the
+specific role or actor type rather than granting meaning to the generic term
+`user`.
+
 ### 6.1 Operator
 
 The operator controls the VPS and TinyHost trust root.

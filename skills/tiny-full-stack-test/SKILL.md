@@ -4,6 +4,19 @@ description: Run and maintain TinyHost's opt-in unattended full-stack VPS accept
 ---
 
 <!-- shared:security:start -->
+## Terminology
+
+Use `operator` for a person who hosts and operates TinyHost, `deployer` for a
+person authorized to create and manage their own Tiny apps, and `viewer` for a
+person who accesses and interacts with a deployed app. Treat `user` as a
+neutral umbrella term for any human; never infer a role, permission, ownership,
+or credential type from it. When authority changes the answer or action and the
+role is unclear, ask whether `user` means operator, deployer, or viewer. Do not
+ask when context already establishes the role. Treat a deployment agent as
+non-human automation using a scoped deployer token, not as a user. A person may
+act in more than one role, but never transfer authority or credentials between
+roles.
+
 ## Security boundary
 
 TinyHost's gateway derives app identity from the hostname and viewer identity
