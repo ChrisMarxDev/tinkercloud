@@ -168,7 +168,9 @@ can be established through local test and release evidence.
 - Operator authorizes/suspends deployers by normalized email.
 - Viewer authentication through email one-time codes.
 - Separate control-plane, CLI-token, and app-viewer credentials.
-- Host-only, app-scoped opaque viewer sessions.
+- One host-only global opaque viewer identity on the platform host plus
+  host-only, app-scoped opaque viewer sessions issued through app-bound
+  one-time handoffs.
 - Private app policies with owner, exact email, and email-domain rules.
 - Immediate policy/session/deployer/app revocation.
 - Generic responses that resist app and email enumeration.
@@ -276,8 +278,8 @@ A viewer is an email identity, not necessarily a platform user.
 
 May:
 
-- request and verify an OTP for an active app;
-- receive one host-only session scoped to that app;
+- authenticate one email identity for a browser profile through OTP;
+- receive host-only sessions scoped to allowed apps without repeating OTP;
 - access content and capabilities allowed by current app policy.
 
 May not:
@@ -402,12 +404,10 @@ developer’s existing toolchain produce the deploy directory.
 viewer opens app URL
 → gateway resolves active app
 → no valid app session
-→ login page remembers validated relative return path
-→ viewer requests OTP
-→ generic response
-→ viewer submits code
-→ challenge checked and current policy re-evaluated transactionally
-→ create app-scoped session
+→ server-created app-bound handoff to platform identity broker
+→ existing global viewer identity, or generic OTP when absent
+→ current policy rechecked at grant issue and callback consumption
+→ create app-scoped session only for that resolved app
 → redirect to safe relative app path
 ```
 
@@ -518,6 +518,12 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-AUTH-006:** Challenge consumption and session creation MUST be atomic.
 - **FR-AUTH-007:** Existing valid sessions MAY continue during a Resend outage;
   new authentication MUST fail closed.
+- **FR-AUTH-008:** A successful viewer OTP MAY establish exactly one opaque,
+  platform-host global viewer identity per browser profile. It MUST grant no
+  app or control authority without a separate current authorization check.
+- **FR-AUTH-009:** An app handoff MUST be server-created, state-bound,
+  app-bound, one-time, and no longer than five minutes. Its issue and consume
+  paths MUST re-evaluate current app policy.
 
 ### 8.4 Sessions
 
@@ -528,6 +534,15 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-SESSION-004:** Control-plane sessions MUST use a distinct type and cookie.
 - **FR-SESSION-005:** CLI/agent tokens MUST never be accepted as viewer sessions.
 - **FR-SESSION-006:** Revoked or expired sessions MUST fail the next request.
+- **FR-SESSION-007:** The global viewer identity cookie MUST be host-only on
+  the platform host, opaque, `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
+  and never use `Domain`, JWT, or browser storage.
+- **FR-SESSION-008:** Global viewer identity is not a control-plane credential.
+  Global sessions last at most 30 days, rotate every 24 hours, and accept the
+  immediately prior secret for no more than 60 seconds.
+- **FR-SESSION-009:** Global identity switch revokes the prior identity family
+  and all derived app sessions before issuing the replacement identity; per-app
+  logout revokes only its app session.
 
 ### 8.5 Access policies
 
@@ -843,6 +858,22 @@ Login/OTP routes require an active resolved app but no existing session. They
 receive no release or KV repository dependency. Rate limits and generic
 responses occur before provider work.
 
+### 10.2a Global viewer identity handoff
+
+```text
+app document request without app session
+→ derive active app from hostname and create state-bound handoff
+→ redirect only to platform-host identity route
+→ validate platform-host global viewer identity or complete generic OTP
+→ re-evaluate app policy and authorize one-time app-bound handoff
+→ exact app callback atomically consumes handoff and rechecks policy
+→ create host-only app session and redirect to safe relative path
+```
+
+The platform-host identity cookie is never sent to the app host. The app
+callback accepts no client-selected app or absolute return URL. Rejected,
+pre-auth, and callback paths serve no app bytes.
+
 ### 10.3 Control-plane mutation
 
 ```text
@@ -953,6 +984,8 @@ access_policies
 access_rules
 otp_challenges
 sessions
+identity_sessions
+identity_handoffs
 deployments
 deployment_files
 app_kv
@@ -969,6 +1002,13 @@ Required constraints:
 - app slug unique under the configured app suffix;
 - every active app references a valid policy and deployment;
 - session type/app/user/identity combinations are valid;
+- global identity sessions have one identity and family, no app/control user;
+- app sessions have one app and identity and can be linked to a global identity
+  family; handoffs bind exactly one server-derived app and are consumed once;
+- identity-link migrations are additive: runtime validation quarantines a
+  parentless app session created before the recorded migration cutoff without
+  mutating its `revoked_at`; post-cutoff explicitly brokerless sessions retain
+  their app-local semantics and malformed cutoff/session timestamps deny;
 - deployment belongs to exactly one app;
 - KV primary key begins with app ID;
 - token secret hash is unique and plaintext is never persisted;
@@ -976,7 +1016,9 @@ Required constraints:
 
 Transaction boundaries include:
 
-- OTP consumption plus session creation;
+- OTP consumption plus global identity/session-family creation or app-session
+  creation, as applicable;
+- handoff consumption plus policy recheck plus app-session creation;
 - policy revision plus current revision swap plus audit;
 - deployment activation plus current deployment swap plus audit;
 - token create/revoke plus audit;
@@ -1087,6 +1129,9 @@ values require benchmark validation:
 | Viewer OTP expiry | 10 minutes |
 | OTP attempts | 5 |
 | Viewer session | 24 hours |
+| Global viewer identity | 30 days absolute; rotate every 24 hours |
+| Global identity prior-token overlap | 60 seconds maximum |
+| App handoff | 5 minutes maximum |
 | Active CLI token default | 30 days |
 | KV key | 256 bytes |
 | KV JSON value | 64 KiB |
@@ -1497,7 +1542,8 @@ configuration.
 - No outbound telemetry by default.
 - Manual signed `tinyhost update`; optional scheduled updates later.
 - Stable app hostnames reused across releases.
-- Application-scoped viewer sessions.
+- Global viewer identity with app-scoped local sessions and app-bound handoffs;
+  never a parent-domain app cookie.
 - Current policy evaluated on every protected HTTP request initially.
 - WebSocket connections are closed on matching app/session/policy revocation.
 - Realtime is best-effort, in-memory, and single-node.

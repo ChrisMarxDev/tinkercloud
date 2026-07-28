@@ -151,6 +151,28 @@ func TestLoginFormIneligibleHasGenericCodeForm(t *testing.T) {
 	}
 }
 
+func TestConfiguredIdentityBrokerRetiresDirectAppOTPForFormsAndJSON(t *testing.T) {
+	fake := &denyAtomic{}
+	l := Login{Atomic: fake, IdentityBroker: &IdentityBroker{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}}
+	app := apps.App{ID: "a"}
+
+	form := httptest.NewRecorder()
+	formRequest := httptest.NewRequest(http.MethodPost, "/_tiny/auth/otp", strings.NewReader("email=a%40example.com"))
+	formRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	l.DispatchPreAuth(app, gateway.AppOTPRequest, form, formRequest)
+	if form.Code != http.StatusGone || !strings.HasPrefix(form.Header().Get("Content-Type"), "text/html") || !strings.Contains(form.Body.String(), "Sign-in needs another try") || strings.Contains(form.Body.String(), "transaction") || fake.requests != 0 {
+		t.Fatalf("form status=%d headers=%v requests=%d body=%q", form.Code, form.Header(), fake.requests, form.Body.String())
+	}
+
+	jsonOut := httptest.NewRecorder()
+	jsonRequest := httptest.NewRequest(http.MethodPost, "/_tiny/auth/verify", strings.NewReader(`{"email":"a@example.com","transaction":"otp","code":"123456"}`))
+	jsonRequest.Header.Set("Content-Type", "application/json")
+	l.DispatchPreAuth(app, gateway.AppOTPVerify, jsonOut, jsonRequest)
+	if jsonOut.Code != http.StatusUnauthorized || !strings.HasPrefix(jsonOut.Header().Get("Content-Type"), "application/json") || !strings.Contains(jsonOut.Body.String(), `"not_authorized"`) || strings.Contains(jsonOut.Body.String(), "<html") || fake.requests != 0 {
+		t.Fatalf("json status=%d headers=%v requests=%d body=%q", jsonOut.Code, jsonOut.Header(), fake.requests, jsonOut.Body.String())
+	}
+}
+
 func TestLoginRequestRateLimitDoesNotIssueAndKeepsGenericResponse(t *testing.T) {
 	now := time.Unix(100, 0)
 	limits := ratelimit.New([]byte("test-key"), ratelimit.Config{Request: ratelimit.Policy{Window: time.Minute, PerIP: 1, PerEmail: 10, PerApp: 10, Global: 10}, Verify: ratelimit.Policy{Window: time.Minute, PerIP: 10, PerEmail: 10, PerApp: 10, Global: 10}, MaxKeys: 100})

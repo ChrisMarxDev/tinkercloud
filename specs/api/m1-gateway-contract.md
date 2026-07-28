@@ -3,7 +3,8 @@
 ## Trust boundary
 
 Only the public gateway accepts HTTP. It derives the application from a
-canonical `Host` and the viewer from an opaque host-only session cookie. A
+canonical `Host` and the viewer from an opaque host-only app session cookie or
+from the platform-host global identity during a server-created handoff. A
 protected dispatcher receives an `appauth.AuthorizationContext`, which only
 the `appauth` package can implement. It never accepts an app identifier from a
 request parameter, cookie, or header.
@@ -47,6 +48,15 @@ Forms are bounded and HTML-escaped. Verification atomically consumes the
 challenge, rechecks current policy, and issues only a host-only Secure,
 HttpOnly, SameSite=Lax app cookie with a safe relative return target.
 
+The global viewer identity and app-bound handoff are governed by
+[`global-identity-handoff-contract.md`](global-identity-handoff-contract.md).
+The platform-host global cookie proves email identity only; it is never used as
+app request authority. A missing app session may redirect an unambiguous
+document navigation through the exact platform identity broker only with a
+server-created state-bound handoff. Handoff issuance and consumption both
+recheck current policy, consume the grant once, and create the existing
+app-host cookie only after success.
+
 For a genuine unauthenticated browser document navigation to a protected static
 path, the gateway may redirect only to that same app host's
 `/_tiny/auth/login?return={safe-relative-request-uri}`. It does not use a
@@ -54,12 +64,17 @@ platform cookie as app identity and does not read release content first. API,
 asset, WebSocket, range, non-document, and ambiguous requests continue to
 return the normal JSON `401 not_authorized` denial without a redirect.
 
-`POST /_tiny/auth/logout` is the only app-host logout/account-switch mutation.
+`POST /_tiny/auth/logout` is the only app-host *local* logout mutation.
 It requires an exact same-origin `Origin`, validates any form return value as a
 safe relative path, revokes only the current app's host-only session, expires
 that app cookie, and redirects a form submission to its app-host login page.
 JSON callers receive no-content success. `GET` logout is reserved/denied and
 never mutates state.
+
+Global identity switch is a platform-host POST verification outcome, not an
+app-host GET/POST parameter. It revokes the old global family and child app
+sessions before issuing the replacement identity; no app-local logout can
+select or reveal a global identity.
 
 ## OTP abuse controls
 

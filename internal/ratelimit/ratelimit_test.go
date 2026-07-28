@@ -118,6 +118,41 @@ func TestRequestFingerprintIsolationAndBoundedInputs(t *testing.T) {
 	}
 }
 
+func TestHandoffBudgetIsDedicatedAndHasNoEmptyEmailChokePoint(t *testing.T) {
+	now := time.Unix(100, 0)
+	l := New([]byte("test-key"), Config{
+		Request: Policy{Window: time.Minute, PerIP: 1, PerFingerprint: 1, PerEmail: 1, PerApp: 10, Global: 10},
+		Verify:  Policy{Window: time.Minute, PerIP: 10, PerFingerprint: 10, PerEmail: 10, PerApp: 10, Global: 10},
+		Handoff: HandoffPolicy{Window: time.Minute, PerIP: 1, PerFingerprint: 1, PerApp: 10, Global: 10},
+		MaxKeys: 100,
+	})
+	l.SetClock(func() time.Time { return now })
+	r := httptest.NewRequest("GET", "https://alpha.apps.test/_tiny/auth/login", nil)
+	r.RemoteAddr = "203.0.113.9:1"
+	if !l.AllowHandoffRequest(r, "app-alpha") {
+		t.Fatal("first handoff denied")
+	}
+	// Handoff traffic has different bucket names from the OTP request
+	// dimensions, so it neither spends nor inherits the empty-email budget.
+	if !l.AllowRequest(OTPRequest, r, "viewer@example.com", "app-alpha") {
+		t.Fatal("handoff incorrectly consumed OTP request budget")
+	}
+	if l.AllowHandoffRequest(r, "app-alpha") {
+		t.Fatal("handoff per-IP limit bypassed")
+	}
+}
+
+func TestInvalidExplicitHandoffPolicyFailsClosedAtComposition(t *testing.T) {
+	if New([]byte("key"), Config{
+		Request: Policy{Window: time.Second, PerIP: 1, PerEmail: 1, PerApp: 1, Global: 1},
+		Verify:  Policy{Window: time.Second, PerIP: 1, PerEmail: 1, PerApp: 1, Global: 1},
+		Handoff: HandoffPolicy{Window: time.Second, PerIP: 1, PerFingerprint: 0, PerApp: 1, Global: 1},
+		MaxKeys: 10,
+	}) != nil {
+		t.Fatal("invalid explicit handoff policy accepted")
+	}
+}
+
 func TestInvalidConfigurationFailsClosedAtComposition(t *testing.T) {
 	if New([]byte("key"), Config{Request: Policy{Window: time.Second, PerIP: 1, PerEmail: 1, PerApp: 1, Global: 1}, Verify: Policy{Window: time.Second, PerIP: 1, PerEmail: 1, PerApp: 1, Global: 1}, MaxKeys: 3}) != nil {
 		t.Fatal("undersized state bound accepted")

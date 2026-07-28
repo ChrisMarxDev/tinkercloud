@@ -29,9 +29,12 @@
 | [0027](0027-immutable-deployment-descriptions-and-stable-launch.md) | Immutable deployment descriptions and stable dashboard launch | Accepted |
 | [0028](0028-operator-supplied-tls-for-vpn-only.md) | Operator-supplied TLS for the first VPN-only topology | Accepted post-V1 direction |
 | [0029](0029-updater-candidate-doctor-rollback-snapshot.md) | Candidate doctor tolerates only its expected rollback snapshot | Accepted for V1 |
+| [0034](0034-update-denial-probe-capability-route.md) | Update denial health uses a protected capability route | Accepted for V1 |
 | [0030](0030-v1-lightweight-local-blob-storage.md) | Lightweight local blob storage behind a provider-neutral seam | Accepted for V1 |
 | [0031](0031-trusted-issue-loop-draft-prs.md) | Trusted issue loop proposes changes through draft pull requests | Accepted for repository delivery |
 | [0032](0032-local-resend-reader-for-unattended-vps-acceptance.md) | Local Resend reader for unattended VPS acceptance | Accepted for V1 acceptance evidence |
+| [0033](0033-global-viewer-identity-app-bound-handoff.md) | Global viewer identity with app-bound handoffs | Accepted for V1 |
+| [0035](0035-bounded-update-listener-readiness.md) | Bounded local listener readiness before update health gates | Accepted for V1 |
 
 ## Decision rule
 

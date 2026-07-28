@@ -78,6 +78,11 @@ const (
 	AppOTPRequest
 	AppOTPVerify
 	AppLogout
+	// AppIdentityCallback consumes an app-bound broker handoff. It is pre-auth
+	// because the host-only app session does not exist until the handoff is
+	// consumed, but the app itself still comes exclusively from this gateway's
+	// validated host resolution.
+	AppIdentityCallback
 	CurrentUser
 	AppInfo
 	Capabilities
@@ -98,6 +103,8 @@ func ClassifyRoute(method, p string) Endpoint {
 			return AppOTPVerify
 		case method == "POST" && p == "/_tiny/auth/logout":
 			return AppLogout
+		case method == "GET" && p == "/_tiny/auth/callback":
+			return AppIdentityCallback
 		case method == "GET" && p == "/_tiny/api/v1/me":
 			return CurrentUser
 		case method == "GET" && p == "/_tiny/api/v1/app":
@@ -116,7 +123,7 @@ func ClassifyRoute(method, p string) Endpoint {
 	return ProtectedStatic
 }
 func Registry() map[Endpoint]string {
-	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Blobs: "protected", Live: "protected", ProtectedStatic: "protected"}
+	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", AppIdentityCallback: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Blobs: "protected", Live: "protected", ProtectedStatic: "protected"}
 }
 
 // ProtectedDispatcher is the only extension point for protected app surfaces.
@@ -163,7 +170,7 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch ClassifyRoute(r.Method, r.URL.Path) {
-	case AppLogin, AppOTPRequest, AppOTPVerify, AppLogout:
+	case AppLogin, AppOTPRequest, AppOTPVerify, AppLogout, AppIdentityCallback:
 		if g.PreAuth != nil {
 			g.PreAuth.DispatchPreAuth(app, ClassifyRoute(r.Method, r.URL.Path), w, r)
 			return

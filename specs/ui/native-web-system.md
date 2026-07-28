@@ -145,7 +145,32 @@ Before a styled happy path is accepted, tests must prove:
     `rel="noopener noreferrer"`, has an accessible name and title, and never
     exposes a release hash, release path, or raw immutable URL. A malformed
     final deployment manifest makes the dashboard read model unavailable;
-    absent intermediate metadata is simply description-less.
+   absent intermediate metadata is simply description-less.
+15. Global viewer identity is presented only on TinyHost-owned platform/app
+   authentication pages. It must never be rendered as a control role, sent to
+   deployed app content, selected by a query parameter, or stored in browser
+   JavaScript. Handoff progress and a denied-app outcome use the existing auth
+   card and text notice primitives; they retain generic copy, provide a safe
+   next step, and expose no policy membership, account existence, callback
+   state, or app bytes.
+16. “Use another email” is an ordinary platform-host POST verification flow.
+   Its visible confirmation makes clear that it changes the browser’s viewer
+   identity and signs app sessions out; it is not a dashboard control sign-out,
+   app-local GET mutation, or a client-side account selector.
+17. App-host UI labels its existing POST action “Sign out of this app” (or an
+   equivalently local phrase), never “Sign out everywhere.” Platform identity
+   UI labels the separate POST action “Use another email” or “Sign out of
+   TinyHost apps,” and explains its global consequence. An allowed handoff may
+   show the verified email only as ordinary escaped text. An unauthorized app
+   shows the generic denial notice; when a valid global identity is already
+   established, it may show that verified email and “Use another email,” but
+   never allowlist, app-policy, or callback details.
+18. The platform-host browser-binding cookie is a non-authorizing HTTP-only
+   implementation detail for OTP race grouping. Authentication pages never
+   render, serialize, label, or expose it in URLs, forms, templates,
+   JavaScript, notices, or deployed-app content. It remains stable through
+   global sign-out; that persistence must not be represented as a signed-in
+   state or account picker.
 
 ## Accessibility contract
 

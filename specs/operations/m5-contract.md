@@ -133,10 +133,14 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   email addresses, or private filesystem paths.
 - Updates accept only a pinned Ed25519 public key and exact artifact digest,
   create a bounded rollback state before replacement, restart the service, then
-  commit only after local doctor, public-health, and a composed-gateway
-  anonymous-denial probe pass. The denial probe targets `/` on an explicitly
-  locally verified active app host and accepts only the protected-route gateway
-  response: `401`, `application/json`, `Cache-Control: no-store`,
+  first waits at most ten seconds, with bounded cancellation-aware backoff,
+  for TCP connection establishment to the configured local HTTP and HTTPS
+  listeners. It then commits only after one-shot local doctor, public-health,
+  and composed-gateway
+  anonymous-denial probe pass. The denial probe targets
+  `/_tiny/api/v1/capabilities` on an explicitly locally verified active app
+  host and accepts only the protected-route gateway response: `401`,
+  `application/json`, `Cache-Control: no-store`,
   `X-Content-Type-Options: nosniff`, and the stable `not_authorized` error
   envelope whose request ID matches `X-Request-ID`. A 404, redirect, 2xx,
   malformed denial, timeout, or dependency error is unhealthy. Any failure
@@ -185,6 +189,10 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
 - Any database, disk, clock, service, listener, DNS, TLS, provider, public
   health, or anonymous-denial failure remains unhealthy in candidate health
   and restores the old binary.
+- Listener readiness retries only failed local TCP connection establishment for
+  the configured HTTP and HTTPS addresses after restart. It is capped at ten
+  seconds, observes cancellation, and precedes the one-shot doctor, public,
+  and anonymous-denial gates; none of those gates is retried or weakened.
 
 ## Gateway bind-policy deny charter
 

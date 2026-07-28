@@ -87,7 +87,8 @@ and does not alter the deployed gateway, its database, or its authentication
 flow. It calls only the fixed HTTPS `https://api.resend.com` origin with a
 local reader credential. The reader accepts only an exact recipient, exact
 configured sender, exact `Your sign-in code` subject, a bounded recent
-timestamp, a valid requested platform/app hostname shape, and the exact
+timestamp, and exactly the configured platform hostname for both deployer and
+viewer global-identity-broker OTP flows, plus the exact
 TinyHost text body `Your code: NNNN...`. It fetches one matching message and
 records its opaque message ID in a private consumed-ID ledger before emitting
 only the 4--12 digit code on stdout.
@@ -162,10 +163,24 @@ values.
 5. Before viewer login, deny the generated app's HTML, private asset, current-
    viewer API, and WebSocket-upgrade request without returning its random
    marker or completing a WebSocket upgrade.
-6. Authenticate the viewer through the app OTP flow. Verify the host-only
-   session returns the generated marker and that `/_tiny/api/v1/me` reports
-   the configured viewer email. The deployed fixture has `features.blobs:
-   true` and contains a same-origin SDK-equivalent blob client example.
+6. Authenticate the initial viewer once through the platform-host identity broker,
+   reached from the first app's document login handoff. Verify the platform
+   identity cookie is not sent to the app host, the derived host-only app
+   session returns the generated marker, and `/_tiny/api/v1/me` reports the
+   configured viewer email. Deploy a second allowed app and prove the same
+   browser jar completes its server-created handoff without requesting or
+   reading another viewer OTP; both app hosts must retain distinct app cookies.
+   A third app that excludes that identity must render the generic broker
+   denial without app bytes or an OTP request. Replay the consumed callback and
+   send it to the other app host; both must deny without issuing a replacement
+   app session. Prove app-local logout leaves the global identity and the other
+   app usable, then broker-reopen the logged-out app without an OTP. Finally,
+   switch to the configured deployer identity through the denied page; this
+   intentionally separate viewer-purpose OTP revokes the original child
+   sessions before the deployer-only app opens.
+   The deployed fixture has
+   `features.blobs: true` and contains a same-origin SDK-equivalent blob client
+   example.
 7. With that real viewer session, discover `blobs`, reject a multipart upload
    containing a second part without changing the catalog, then upload, list,
    download, and delete one binary fixture. Download bytes must be exact and

@@ -29,6 +29,8 @@ var updateFetchValidator = update.ValidatePublicHTTPS
 
 var updateSlug = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
+const updateAnonymousDenyPath = "/_tiny/api/v1/capabilities"
+
 func runUpdate(args []string, out io.Writer) error {
 	if effectiveUID() != 0 {
 		return errors.New("tinyhost: root_required")
@@ -121,9 +123,10 @@ func updateArtifact(ctx context.Context, binary, metadata, signature, releaseBas
 func updateChecks(cfg config.Config, slug, target, cfgPath string) []update.Health {
 	client := updateHTTPClient
 	return []update.Health{
+		update.ListenerHealth{Addresses: []string{cfg.ListenHTTP, cfg.ListenHTTPS}},
 		update.ExecHealth{Binary: target, Config: cfgPath, Env: os.Environ()},
 		update.HTTPHealth{URL: "https://" + cfg.PlatformHost + "/api/v1/version", Client: client},
-		update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix + "/", Client: client}},
+		update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix + updateAnonymousDenyPath, Client: client}},
 	}
 }
 

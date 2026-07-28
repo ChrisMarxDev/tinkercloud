@@ -35,14 +35,15 @@ Critical journey:
 
 ```text
 open app URL
-→ generic login form
-→ request OTP
-→ receive generic response
-→ verify OTP
-→ policy is re-evaluated
-→ receive app-scoped session
+→ existing global viewer identity, or generic email OTP once per browser profile
+→ server-created one-time handoff bound to this app
+→ policy is re-evaluated before grant and before local session creation
+→ receive app-scoped host-only session
 → return to original safe path
 ```
+
+The global identity proves only the email. Each app independently evaluates
+that email against current policy; no deployed app receives the global cookie.
 
 ## Deployment agent
 

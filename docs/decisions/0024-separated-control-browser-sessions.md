@@ -26,6 +26,10 @@ be distinguished as former browser cookies or CLI bearers, a follow-on
 migration revokes every existing token. Operators and deployers complete one
 fresh CLI login; no legacy credential is silently converted or retained.
 
+ADR 0033 adds a fourth, still separate browser credential: a platform-host
+global *viewer identity* session. It can participate only in a one-time,
+app-bound viewer handoff and is neither a control cookie nor a CLI bearer.
+
 ## Consequences
 
 - A dashboard cookie cannot be replayed to the bearer control API, and a CLI
@@ -35,3 +39,5 @@ fresh CLI login; no legacy credential is silently converted or retained.
 - The schema migration is forward-only. No downgrade promise is made, and
   operators/deployers must complete a fresh CLI login after upgrade; an
   interrupted legacy OTP flow also requires a fresh request.
+- Global viewer identity does not merge dashboard/control authority with viewer
+  authentication, even where normalized email values match.

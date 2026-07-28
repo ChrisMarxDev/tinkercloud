@@ -17,7 +17,7 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 
 | Slice | Included | Exit signal |
 |---|---|---|
-| Secure gateway | Host resolution, OTP, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
+| Secure gateway | Host resolution, global viewer identity, app-bound handoff, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
 | Deployment | Deployer login, archive upload, validation, immutable release, atomic activation, rollback | One command returns a verified protected URL |
 | App primitives | First-class TypeScript SDK, capability discovery, current-user, JSON KV, lightweight local blobs, and ephemeral realtime | A static app persists current state and bounded attachments and receives live notifications without auth, database, bucket, or mount ceremony |
 | Operations | Hetzner-first setup, status, administration, signed update/rollback | Operator initializes a clean VPS with one command |

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -95,6 +96,72 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 	v["TINYHOST_VPS_VIEWER_EMAIL"] = v["TINYHOST_VPS_DEPLOYER_EMAIL"]
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("same deployer and viewer accepted")
+	}
+}
+
+func TestGlobalIdentityHandoffCallbackIsExact(t *testing.T) {
+	const handoff = "handoff_opaque"
+	if !isAppHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, handoff) {
+		t.Fatal("valid opaque callback rejected")
+	}
+	for _, raw := range []string{
+		"/_tiny/auth/callback?handoff=" + handoff,
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&return=https://evil.example",
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
+		"https://alpha.apps.example.test/_tiny/auth/login?handoff=" + handoff,
+	} {
+		if isAppHandoffCallback(raw, handoff) {
+			t.Fatalf("accepted unsafe generic callback %q", raw)
+		}
+	}
+	if !isExactHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, "alpha.apps.example.test", handoff) {
+		t.Fatal("exact callback rejected")
+	}
+	for _, raw := range []string{
+		"https://beta.apps.example.test/_tiny/auth/callback?handoff=" + handoff,
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&x=1",
+		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
+	} {
+		if isExactHandoffCallback(raw, "alpha.apps.example.test", handoff) {
+			t.Fatalf("accepted wrong-app or malformed callback %q", raw)
+		}
+	}
+}
+
+func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform, _ := url.Parse("https://tiny.example.test/")
+	first, _ := url.Parse("https://first.apps.example.test/")
+	second, _ := url.Parse("https://second.apps.example.test/")
+	jar.SetCookies(platform, []*http.Cookie{
+		{Name: "__Host-tiny_identity", Value: "identity", Path: "/", Secure: true},
+		{Name: "__Host-tiny_browser", Value: "browser-profile", Path: "/", Secure: true},
+	})
+	jar.SetCookies(first, []*http.Cookie{
+		{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true},
+		{Name: "__Host-tiny_identity_state", Value: "state", Path: "/", Secure: true},
+	})
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "second", Path: "/", Secure: true}})
+	h := &http.Client{Jar: jar}
+	s := Suite{Config: Config{PlatformHost: "tiny.example.test"}}
+	if err := s.assertCookieScopes(h, "first.apps.example.test", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err != nil {
+		t.Fatal(err)
+	}
+	if state, ok := identityStateCookie(h, "first.apps.example.test"); !ok || state != "state" {
+		t.Fatal("app-host handoff state was not retained for replay evidence")
+	}
+	if !hasCookie(jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(jar.Cookies(first), "__Host-tiny_browser") || hasCookie(jar.Cookies(second), "__Host-tiny_browser") {
+		t.Fatal("platform browser binding was not retained as an exact-host cookie")
+	}
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true}})
+	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err == nil {
+		t.Fatal("accepted shared app token across app hosts")
 	}
 }
 

@@ -81,6 +81,31 @@ Use a single centered auth card with:
 Never reveal whether an entered email is authorized. Code inputs use
 `autocomplete="one-time-code"` and numeric input mode.
 
+Global viewer identity and app handoff deliberately introduce no new visual
+component. Use the existing centered auth card for “Continue as your verified
+email” and the existing text-bearing notice for generic denied/unavailable
+states. The platform-auth page may offer “Use another email” as an ordinary
+POST form; copy must say that it changes the viewer identity for this browser
+and signs its app sessions out. Never render that identity as a deployer or
+operator role, place it in deployed app chrome, expose callback state, or use a
+client-side account picker. Existing auth-card, notice, native form, and
+server-rendered failure primitives already cover authenticated, handoff,
+denied, and switching states, so a showcase-only component or JavaScript
+interaction would add no durable rule.
+
+The platform may maintain an HTTP-only browser-profile binding to serialize
+competing OTP completions. It is deliberately invisible: never name it in
+copy, render it as a field, transfer it in browser-visible state, or imply that
+its persistence through global sign-out means the viewer remains signed in.
+
+Keep scopes explicit in visible labels: the app-host POST action is “Sign out
+of this app,” while the platform-host action is “Use another email” or “Sign
+out of TinyHost apps.” The latter explains that app sessions are signed out.
+An allowed handoff may display the verified address as escaped text in the auth
+card. A denied app may also show that already-authenticated address beside the
+generic notice and “Use another email” action; it must not reveal allowlist
+membership, policy detail, or callback state.
+
 ### Dashboard
 
 The dashboard uses a compact top bar, a plain page heading, visible ownership

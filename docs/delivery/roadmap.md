@@ -109,6 +109,8 @@ Outcome: operator-created app content is visible only to an allowed viewer.
 Components:
 
 - configuration, database/migrations, apps, identity, OTP, sessions, policy;
+- one platform-host global viewer identity, one-time app-bound handoff, and
+  local app-session child revocation;
 - host router, authorization context, protected static runtime;
 - minimal auth/operator pages and Resend adapter;
 - route registry and negative security matrix.
@@ -119,6 +121,12 @@ Exit gate:
 - wrong-app and revoked sessions deny;
 - policy/database failure denies;
 - path and host fuzz suites pass.
+- a viewer completes OTP once per browser profile, receives no second OTP for
+  an allowed app, and still receives no app bytes for denied/replayed/wrong-app
+  handoff paths.
+- the global-identity migration is additive; new runtime validation quarantines
+  pre-cutoff parentless app sessions without changing `revoked_at`, while
+  post-cutoff brokerless compatibility sessions remain app-local.
 
 ## M2 — Deployer control plane
 

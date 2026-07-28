@@ -22,6 +22,12 @@ func AppPlaneWithPlatform(cfg config.Config, appsRepo apps.Repository, sessions 
 	return AppPlaneWithPlatformAndBlobs(cfg, appsRepo, sessions, policy, repo, nil, hub, login, platform)
 }
 func AppPlaneWithPlatformAndBlobs(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
+	// The broker owns only its fixed platform-host namespace and delegates every
+	// control/dashboard route to the existing platform handler. Its interface is
+	// deliberately independent from the gateway's app authorization context.
+	if login.IdentityBroker != nil && platform != nil {
+		platform = login.IdentityBroker.PlatformHandler(platform)
+	}
 	service := kv.NewWithRepository(kv.DefaultLimits(), hub, repo)
 	bl := cfgBlobLimits(cfg)
 	caps := []appapi.Capability{

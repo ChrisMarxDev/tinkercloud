@@ -143,9 +143,15 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
 	atomic := persistence.AppLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
 	liveSessions := compose.LiveSessions{Sessions: store, Hub: hub}
-	login := compose.Login{Atomic: atomic, Sessions: liveSessions, Policies: store, SessionTTL: c.SessionExpiry}
+	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost, AppSuffix: c.AppSuffix, RevokeChildren: func(refs []persistence.AppSessionRef) {
+		for _, ref := range refs {
+			hub.Revoke(ref.AppID, ref.SessionID)
+		}
+	}}
+	login := compose.Login{Atomic: atomic, Sessions: liveSessions, Policies: store, SessionTTL: c.SessionExpiry, IdentityBroker: identityBroker}
 	limits := ratelimit.New([]byte(secrets.HMACKey), ratelimit.DefaultConfig())
 	login.RateLimits = limits
+	identityBroker.RateLimits = limits
 	if gates == nil {
 		gates = denyDeploymentGates{}
 	}

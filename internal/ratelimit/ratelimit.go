@@ -32,11 +32,22 @@ type Policy struct {
 	Global                                  int
 }
 
+// HandoffPolicy bounds anonymous creation of durable, app-bound identity
+// handoffs. It deliberately has no email dimension: login navigation happens
+// before an email exists, and using an empty email would turn one digest into a
+// server-wide choke point. Its buckets remain distinct from OTP traffic.
+type HandoffPolicy struct {
+	Window                        time.Duration
+	PerIP, PerFingerprint, PerApp int
+	Global                        int
+}
+
 // Config is purpose-specific. MaxKeys bounds memory even under a distributed
 // address/email flood. When the bound is reached, a new key is denied rather
 // than evicting an active key and letting the caller bypass a budget.
 type Config struct {
 	Request, Verify Policy
+	Handoff         HandoffPolicy
 	MaxKeys         int
 }
 
@@ -44,6 +55,7 @@ func DefaultConfig() Config {
 	return Config{
 		Request: Policy{Window: 10 * time.Minute, PerIP: 10, PerFingerprint: 10, PerEmail: 3, PerApp: 100, Global: 1000},
 		Verify:  Policy{Window: 10 * time.Minute, PerIP: 20, PerFingerprint: 20, PerEmail: 10, PerApp: 200, Global: 2000},
+		Handoff: HandoffPolicy{Window: 10 * time.Minute, PerIP: 30, PerFingerprint: 30, PerApp: 100, Global: 1000},
 		MaxKeys: 10000,
 	}
 }
@@ -69,10 +81,24 @@ func New(key []byte, cfg Config) *Limiter {
 	if len(key) == 0 {
 		return nil
 	}
-	if !validPolicy(cfg.Request) || !validPolicy(cfg.Verify) || cfg.MaxKeys < 5 || cfg.MaxKeys > 100000 {
+	// Older local harnesses configure only OTP policies. Preserve that narrow
+	// compatibility by deriving a no-email handoff policy; production always
+	// supplies the explicit DefaultConfig policy above.
+	if zeroHandoffPolicy(cfg.Handoff) {
+		cfg.Handoff = handoffFromRequest(cfg.Request)
+	}
+	if !validPolicy(cfg.Request) || !validPolicy(cfg.Verify) || !validHandoffPolicy(cfg.Handoff) || cfg.MaxKeys < 5 || cfg.MaxKeys > 100000 {
 		return nil
 	}
 	return &Limiter{key: append([]byte(nil), key...), cfg: cfg, now: time.Now, buckets: make(map[string]bucket), transactions: make(map[string]transactionBinding)}
+}
+
+func handoffFromRequest(p Policy) HandoffPolicy {
+	return HandoffPolicy{Window: p.Window, PerIP: p.PerIP, PerFingerprint: fingerprintLimit(p), PerApp: p.PerApp, Global: p.Global}
+}
+
+func zeroHandoffPolicy(p HandoffPolicy) bool {
+	return p.Window == 0 && p.PerIP == 0 && p.PerFingerprint == 0 && p.PerApp == 0 && p.Global == 0
 }
 
 func validPolicy(p Policy) bool {
@@ -88,6 +114,18 @@ func validPolicy(p Policy) bool {
 		return false
 	}
 	return true
+}
+
+func validHandoffPolicy(p HandoffPolicy) bool {
+	if p.Window < time.Second || p.Window > time.Hour {
+		return false
+	}
+	for _, n := range []int{p.PerIP, p.PerApp, p.Global} {
+		if n < 1 || n > 1000000 {
+			return false
+		}
+	}
+	return p.PerFingerprint >= 1 && p.PerFingerprint <= 1000000
 }
 
 func fingerprintLimit(p Policy) int {
@@ -120,6 +158,20 @@ func (l *Limiter) AllowRequest(kind Kind, r *http.Request, email, app string) bo
 		return l.AllowFingerprint(kind, "", "", email, app)
 	}
 	return l.AllowFingerprint(kind, r.RemoteAddr, RequestFingerprint(r), email, app)
+}
+
+// AllowHandoffRequest applies the handoff-only budget before persistence is
+// asked to create a durable transaction. It hashes the bounded request
+// fingerprint immediately and never accepts an email parameter.
+func (l *Limiter) AllowHandoffRequest(r *http.Request, app string) bool {
+	if l == nil {
+		return true
+	}
+	remote, fingerprint := "", ""
+	if r != nil {
+		remote, fingerprint = r.RemoteAddr, RequestFingerprint(r)
+	}
+	return l.allowHandoff(remote, l.digest(normalizedOrOpaque(fingerprint)), app)
 }
 
 // AllowFingerprint applies all OTP request dimensions. The fingerprint is
@@ -215,6 +267,40 @@ func (l *Limiter) allow(kind Kind, remoteAddr, fingerprintDigest, emailDigest, a
 		string(kind) + ":global",
 	}
 	limits := []int{p.PerIP, fingerprintLimit(p), p.PerEmail, p.PerApp, p.Global}
+	now := l.now()
+	cutoff := now.Add(-p.Window)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.pruneLocked(cutoff)
+	l.pruneTransactionsLocked(now)
+	for i, k := range keys {
+		b, exists := l.buckets[k]
+		if !exists && len(l.buckets) >= l.cfg.MaxKeys {
+			return false
+		}
+		if len(b.events) >= limits[i] {
+			return false
+		}
+	}
+	for _, k := range keys {
+		b := l.buckets[k]
+		b.events = append(b.events, now)
+		l.buckets[k] = b
+	}
+	return true
+}
+
+func (l *Limiter) allowHandoff(remoteAddr, fingerprintDigest, app string) bool {
+	p := l.cfg.Handoff
+	ip := remoteIP(remoteAddr)
+	keys := []string{
+		"identity_handoff:ip:" + l.digest(ip),
+		"identity_handoff:fingerprint:" + fingerprintDigest,
+		"identity_handoff:app:" + safeApp(app),
+		"identity_handoff:global",
+	}
+	limits := []int{p.PerIP, p.PerFingerprint, p.PerApp, p.Global}
 	now := l.now()
 	cutoff := now.Add(-p.Window)
 

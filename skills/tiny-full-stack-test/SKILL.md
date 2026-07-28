@@ -43,8 +43,43 @@ never allowed to block other viewers. Authenticated live sockets also have a
 successful pong keeps a healthy socket alive. Revocation closes matching live
 sockets immediately rather than waiting for that liveness bound.
 Viewer OTP requests (JSON or form) expose only an opaque transaction and the
-same generic accepted shape. Keep form fields bounded and escaped; verification
-atomically consumes the challenge and sets a host-only secure app cookie.
+same generic accepted shape. Keep form fields bounded and escaped. One global
+viewer identity per browser profile is an opaque server-side platform-host
+cookie, never a control credential, parent-domain cookie, JWT, local-storage
+value, app-visible credential, or client-selected identity/app. It lasts at
+most 30 days, rotates every 24 hours, and accepts its prior token for no more
+than 60 seconds. A missing local app session uses only a server-created,
+state-bound, app-bound, five-minute-or-less one-time handoff through the exact
+platform host; recheck current app policy when issuing and consuming it, then
+create the existing host-only app cookie. Guessed, replayed, wrong-app,
+expired, or state-mismatched handoffs deny without app bytes. App logout stays
+local; global identity switch happens only on platform-host POST verification
+and revokes the old identity family plus every child app session. Recheck
+policy on every protected request and close matching live sockets on app,
+policy, session, or global-family revocation. Never accept global identity,
+control cookies, app cookies, or CLI bearers in one another's routes.
+The platform may also issue a host-only `__Host-tiny_browser` binding with a
+30-day bounded lifetime. It is a cryptographically random, `Secure`,
+`HttpOnly`, `SameSite=Lax` OTP race-grouping value only: never treat it as an
+identity/control/app/CLI credential; never send it to an app host or expose it
+in URLs, forms, templates, JavaScript, or logs. Pass it only server-side to
+OTP request/verification persistence, which stores hashes and permits one
+unrevoked identity family per binding so concurrent completions are first-wins.
+Missing/mismatched bindings deny generically. Retain the binding through global
+logout and known-invalid identity cleanup; it does not mean the browser is
+signed in.
+For global logout, revoke a valid global identity first. Only when it is absent
+or known-invalid may the binding hash locate a family for revocation; it never
+authenticates the request. A real selected-revocation error preserves cookies
+and returns generic retry rather than claiming logout success.
+Global-identity migration is additive: never rewrite legacy app-session
+`revoked_at`. The runtime quarantines a parentless app session only when its
+RFC3339 `created_at` predates migration 5's persisted `applied_at` cutoff;
+parent-linked sessions validate normally and explicitly brokerless sessions
+created at/after that cutoff retain app-local semantics. Missing or malformed
+cutoff/session timestamps deny without mutation. Retain the known historical
+v5 checksum for the corrected additive migration so rollback binaries can
+reopen the database; never alter a VPS migration row to bypass it.
 At the disk write-stop watermark, expect app creation, deployment, and KV
 mutation and blob upload to fail safely; static/blob reads, deletion when safe,
 and revocations must still work. Cleanup is server-side, database-led, and never
@@ -110,7 +145,7 @@ timestamp after an authorization succeeds. Recheck active user, revocation,
 expiry, exact scope, and app binding atomically with that update; failed checks
 or persistence failures deny and must not alter it. Token lists and dashboards
 may show that timestamp, never token values or hashes, IPs, or user agents.
-Before retaining an update, probe `/` on a locally verified active app host
+Before retaining an update, probe `/_tiny/api/v1/capabilities` on a locally verified active app host
 through the composed HTTPS gateway. Only its `401` JSON `not_authorized`
 envelope with no-store security headers is health evidence; 404, redirect,
 2xx, malformed denial, timeout, and transport failure require rollback.
@@ -119,6 +154,11 @@ private, non-symlinked `update-rollback/previous` snapshot that remains until
 that same update commits. It must still run every other doctor check; ordinary
 `tinyhost status` and `tinyhost doctor` keep rollback-pending degraded, and an
 unsafe or incomplete snapshot never becomes healthy.
+After a self-update restart, wait only for local TCP connection establishment
+on the configured HTTP and HTTPS listeners, with a bounded cancellable retry.
+Run doctor, public health, and anonymous-denial gates once afterward; do not
+retry or soften their database, credential, DNS, TLS, provider, or gateway
+failures.
 Before treating `tinyhost init` as complete, derive the sole public proof from
 the configured platform host: `https://{platform_host}/api/v1/version`. Use
 verified TLS and no redirects; accept only the exact final host, `200`, bounded
@@ -228,10 +268,23 @@ without final metadata have no description.
 4. Set `TINYHOST_VPS_OTP_COMMAND` to the absolute path of
    `scripts/read-resend-otp.py`. Supply exact platform/app host and sender
    environment values. The reader receives only `deployer|viewer EMAIL HOST`;
-   it must print only a 4--12 digit code.
+   both V1 OTP purposes must use exactly `TINYHOST_VPS_PLATFORM_HOST` because
+   the global identity broker owns the flow. It must print only a 4--12 digit
+   code.
 5. Require `TINYHOST_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINYHOST_VPS_REUSE=1` marker gating. Never
-   weaken SSH trust or introduce an OTP/auth bypass.
+   weaken SSH trust or introduce an OTP/auth bypass. In the real browser-jar
+   proof, read exactly one initial viewer OTP for the first allowed app through
+   the platform identity broker; the second allowed app must get a separate
+   host-only app session without another OTP, while an excluded app renders a
+   generic no-app-bytes/no-OTP denial. Assert the global identity and the
+   non-authorizing browser-binding cookies are platform-only and app session
+   cookies are distinct per app host. The binding must exist after the initial
+   broker form, never appear on an app host, and remain after a global account
+   switch. Replay a consumed callback and target it at a sibling app host as
+   denials; app-local logout must preserve global identity and sibling access,
+   while a later account switch uses its intentionally separate viewer-purpose
+   OTP and revokes all old child sessions.
 6. Treat blob evidence as a complete capability sequence, not just a 2xx:
    discover the enabled capability, reject a multipart request with an extra
    part and prove no catalog mutation, then authenticate a viewer and prove
