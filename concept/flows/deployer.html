@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost — Complete Deployer Flow</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="../index.html">Product concept</a>
+      <a href="operator.html">Operator flow</a>
+      <a href="tinyhost-operator-deployer-flows.tldraw">Editable canvas</a>
+      <a href="../../PRINCIPLES.md">Principles</a>
+      <a href="../../PRD.md">PRD</a>
+    </nav>
+    <p class="eyebrow">Actor flow · Deployer · July 2026</p>
+    <h1>From a built folder to a protected useful app.</h1>
+    <p class="lede">The complete journey covers authorization, signed client
+      installation, deploy-first onboarding, persistent login, generated
+      manifest, verified activation, daily management, account switching,
+      logout, and permanent app deletion.</p>
+    <p class="promise">The deployer runs <code>tiny deploy .</code>. TinyHost
+      asks only for a necessary decision it cannot safely infer.</p>
+  </header>
+
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="value">
+        <p class="eyebrow">Reason and value</p>
+        <h2>Deployment is the task; configuration is the receipt</h2>
+        <p>A deployer should not learn VPS layout, TLS, archive security, auth
+          middleware, config schemas, or credential-store commands. They bring
+          an already built static app and the platform performs the protected
+          release loop.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">3 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">5 / 5</span></div>
+      </section>
+    </div>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>Operator-authorized deployer email.</li>
+          <li>Signed macOS/Linux <code>tiny</code> client.</li>
+          <li>Useful static project; existing build output is reused, while
+            missing output produces one exact project-owned build action.</li>
+          <li>Verified default platform and persistent scoped bearer.</li>
+          <li>Generated manifest and owner-only secure default.</li>
+          <li>Immutable deployment, protection proof, dashboard management, and deletion.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No VPS, DNS, Resend, TLS, or server config knowledge.</li>
+          <li>No automatic execution of project build scripts.</li>
+          <li>No project-local deployer credential.</li>
+          <li>No public app or implicit viewer-access broadening.</li>
+          <li>No deployer-selected release rollback.</li>
+          <li>No required hand-authored <code>tiny.yaml</code>.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="phase-a">
+      <p class="eyebrow">Phase A · Authorization and local project</p>
+      <h2>Start with a real app, not platform ceremony</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System or external action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Receive the TinyHost platform URL from the operator.</td>
+            <td>The operator has already placed the deployer email in the global active allowlist.</td>
+            <td>No invitation account, password, team, or organization setup.</td>
+            <td>The existing email inbox is assumed.</td>
+            <td>Only the platform address and prior authorization are needed.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Install the signed <code>tiny</code> client as the normal OS account, without <code>sudo</code>.</td>
+            <td>The installer selects the local OS/architecture and verifies the release signature before writing to the per-user executable location.</td>
+            <td>An alternate signed release source only when intentionally overriding the trusted default.</td>
+            <td>OS, architecture, and install path.</td>
+            <td>The deployer should not choose server artifacts or system paths.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Open a useful static application project.</td>
+            <td>The existing framework/toolchain remains responsible for source and dependencies.</td>
+            <td>No TinyHost project template is required.</td>
+            <td>The current directory is the project root.</td>
+            <td>TinyHost hosts built static output; it does not own the app’s build system.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Run <code>tiny deploy .</code> from the project root.</td>
+            <td>The CLI begins local, platform, authentication, manifest, and deployment preflight as one resumable flow.</td>
+            <td>None yet.</td>
+            <td>Project path defaults to the current directory.</td>
+            <td>A separate build or <code>init</code> ceremony is not required when valid output already exists.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>If no valid built output exists, run the exact project-owned build action Tiny identifies, then rerun <code>tiny deploy .</code>.</td>
+            <td>TinyHost never executes the build; with existing output it skips this branch entirely.</td>
+            <td>No build-command prompt.</td>
+            <td>Existing build scripts/toolchain remain authoritative.</td>
+            <td>Building is necessary only when output is absent; arbitrary local script execution remains outside TinyHost.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-b">
+      <p class="eyebrow">Phase B · Platform and identity wizard</p>
+      <h2>Ask once, verify, and reuse</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>6</td>
+            <td>If no default exists, enter the HTTPS platform URL received from the operator.</td>
+            <td>Tiny normalizes it, follows no redirect, proves API compatibility, and saves only the verified non-secret URL.</td>
+            <td>One platform URL, once.</td>
+            <td>Later human commands reuse it. An explicit <code>--server</code> override is invocation-only.</td>
+            <td>The CLI cannot discover which independent TinyHost the deployer intends to use.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>If a saved bearer exists, provide no input.</td>
+            <td>Tiny calls version and authenticated <code>whoami</code>; a valid bearer confirms the deployer and continues silently.</td>
+            <td>None.</td>
+            <td>Server and identity come from protected saved state and server proof.</td>
+            <td>Repeated login is unnecessary while current authorization remains valid.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>If no valid bearer exists, enter the authorized deployer email.</td>
+            <td>The platform sends a generic OTP response that does not reveal allowlist membership.</td>
+            <td>Email only when authentication is actually required.</td>
+            <td>The verified default server is reused.</td>
+            <td>Identity cannot be guessed; transport/5xx/ambiguous failures must not trigger OTP automatically.</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Enter the emailed one-time code.</td>
+            <td>The server verifies code, expiry, attempts, active deployer status, and issues a server-bound scoped CLI bearer.</td>
+            <td>One OTP.</td>
+            <td>No password, magic-link requirement, or project token.</td>
+            <td>Possession of the authorized mailbox is the V1 remote authentication proof.</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td>Provide no storage choice or password.</td>
+            <td>Tiny confirms the new bearer with <code>whoami</code>, then atomically stores it in the protected per-user Tiny credential file.</td>
+            <td>None.</td>
+            <td>OS config path, hashed server filename, directory/file modes, and atomic replacement.</td>
+            <td>Credential mechanics are not a product decision. Failure preserves any previous valid credential.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-c">
+      <p class="eyebrow">Phase C · Project discovery and manifest receipt</p>
+      <h2>Derive safe state; ask only about ambiguity</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>11</td>
+            <td>If a valid <code>tiny.yaml</code> exists, provide no input; otherwise provide no manifest.</td>
+            <td>Tiny validates and reuses an existing manifest without rewriting. When absent, it inspects only the non-symlinked project and conventional static-output candidates.</td>
+            <td>None when explicit valid manifest state or exactly one safe output exists.</td>
+            <td>Existing reviewed manifest wins; otherwise slug comes from the directory and output from unambiguous evidence.</td>
+            <td>Known explicit state and filesystem facts should not be re-entered.</td>
+          </tr>
+          <tr>
+            <td>12</td>
+            <td>If multiple valid outputs exist, select the intended directory. If none exists, stop and build rather than choosing an arbitrary folder.</td>
+            <td>Tiny validates the selected path remains beneath the project and contains a deployable entry document.</td>
+            <td>Output directory only when discovery is ambiguous.</td>
+            <td>No framework selection or build command.</td>
+            <td>Uploading the wrong directory is unsafe; choosing among ambiguous evidence is necessary.</td>
+          </tr>
+          <tr>
+            <td>13</td>
+            <td>If the derived slug is invalid or generically unavailable, enter a replacement app name.</td>
+            <td>Tiny normalizes and checks the stable slug against platform rules/ownership; an existing same-owner app is reused automatically.</td>
+            <td>App name only when the directory default cannot work.</td>
+            <td>Valid directory name or existing same-owner app otherwise.</td>
+            <td>A stable hostname needs a valid slug; asking every deployer is unnecessary.</td>
+          </tr>
+          <tr>
+            <td>14</td>
+            <td>Provide no standalone capability answer.</td>
+            <td>Tiny reuses explicit manifest capabilities or defaults to none. Detected SDK usage may produce a warning/evidence in review, never authority.</td>
+            <td>Capabilities are entered only through deliberate “Edit” intent.</td>
+            <td>No capability by default; never enable surface from unproven build inspection.</td>
+            <td>An answer must express deployer intent; detection alone cannot prove required authority.</td>
+          </tr>
+          <tr>
+            <td>15</td>
+            <td>Review one deployment screen: server, slug, output, owner-only/current policy, immutable description, capabilities, fallback, and limits. Choose “Edit” only for deliberate customization.</td>
+            <td>Tiny displays slug, output, owner-only access, capabilities, fallback, server, and limits.</td>
+            <td>No intermediate confirmation; optional values only after choosing “Edit.”</td>
+            <td>Owner-only private access, empty description, no fallback, and explicit-manifest capabilities or none.</td>
+            <td>Optional product metadata must not become mandatory questions. Access broadening is explicit.</td>
+          </tr>
+          <tr>
+            <td>16</td>
+            <td>Choose one final action. When access broadens, its label names the consequence, for example “Deploy and grant access to 3 addresses.”</td>
+            <td>Tiny normalizes viewer rules, binds the candidate private policy, and begins deployment.</td>
+            <td>One explicit final action; broadening is part of that same clearly named action.</td>
+            <td>The deployer owner remains an implicit viewer.</td>
+            <td>Authorization broadening must never be inferred from convenience.</td>
+          </tr>
+          <tr>
+            <td>17</td>
+            <td>Provide no separate manifest confirmation.</td>
+            <td>After the single final action, Tiny atomically writes a missing strict deterministic <code>tiny.yaml</code> without overwriting an existing file.</td>
+            <td>No YAML syntax, schema version, config path, or “accept manifest?” question.</td>
+            <td>Manifest location is the project root and records the reviewed choices.</td>
+            <td>The file is a consequence/receipt of the confirmed deploy, not another decision.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-d">
+      <p class="eyebrow">Phase D · Immutable protected deployment</p>
+      <h2>Success means the app works and anonymous access fails</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>18</td>
+            <td>After the one final action in step 16, provide no more input on the happy path.</td>
+            <td>Tiny validates manifest, credential, paths, symlinks, limits, policy, and server compatibility before creating bytes.</td>
+            <td>No second deploy approval; no app ID, owner ID, archive path, or hostname.</td>
+            <td>App identity/ownership and stable URL are server-derived.</td>
+            <td>One deployment intent must not become review + manifest + deploy confirmations.</td>
+          </tr>
+          <tr>
+            <td>19</td>
+            <td>Wait while the CLI archives and uploads.</td>
+            <td>Tiny creates a private deterministic temporary archive, streams it with a fresh idempotency key, and always removes the temporary file.</td>
+            <td>None.</td>
+            <td>Archive format, temporary path, idempotency key, and upload endpoint.</td>
+            <td>Transport mechanics are not questions.</td>
+          </tr>
+          <tr>
+            <td>20</td>
+            <td>Continue waiting through validation.</td>
+            <td>The server quota-checks, inspects the hostile archive, extracts into unreachable staging, hashes files, seals an immutable release, and persists candidate evidence.</td>
+            <td>None.</td>
+            <td>Release ID, storage path, content hashes, and state transitions.</td>
+            <td>Security validation must be automatic and fail closed.</td>
+          </tr>
+          <tr>
+            <td>21</td>
+            <td>Continue waiting through first-host readiness.</td>
+            <td>The server creates/checks private policy, retries only bounded certificate readiness for the exact app host, then atomically activates.</td>
+            <td>None.</td>
+            <td>App hostname from slug plus server suffix; certificate operations from current host state.</td>
+            <td>Certificate delay is not a reason to supply TLS data. On exhaustion, the prior active release remains; a first app stays inactive and receives one actionable retry.</td>
+          </tr>
+          <tr>
+            <td>22</td>
+            <td>Continue waiting through verification.</td>
+            <td>Server and CLI independently probe platform health and exact anonymous denial for HTML/assets/reserved APIs without cookies or bearer.</td>
+            <td>None.</td>
+            <td>Probe URLs and expected denial envelope are server-derived.</td>
+            <td>A private deployment is not successful until unauthorized bytes are proven unavailable. Failure preserves the prior release (or leaves a first deployment inactive); no rollback selector is offered.</td>
+          </tr>
+          <tr>
+            <td>23</td>
+            <td>Open or copy the returned stable protected URL.</td>
+            <td>Tiny reports URL, deployment ID, immutable description, capabilities, and policy summary only after all gates pass.</td>
+            <td>None.</td>
+            <td>Stable URL and IDs come from the activation result.</td>
+            <td>Never ask the deployer to construct or guess an app URL.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-e">
+      <p class="eyebrow">Phase E · Daily app management</p>
+      <h2>Manage only owned apps through narrow controls</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>24</td>
+            <td>Open the dashboard and enter the deployer email when desired; matching email text does not reuse a viewer credential.</td>
+            <td>The platform creates a control session distinct from the CLI bearer and viewer sessions.</td>
+            <td>OTP only when no valid browser control session exists.</td>
+            <td>Platform and account can be reused or deliberately changed.</td>
+            <td>Credential types remain separate even when one person uses them.</td>
+          </tr>
+          <tr>
+            <td>25</td>
+            <td>Search owned projects by slug/current description or filter by status.</td>
+            <td>Local enhancement filters the server-authorized list; no hidden app becomes visible.</td>
+            <td>Search/filter values only when used.</td>
+            <td>Owned apps, descriptions, status, counts, and URLs are server-derived.</td>
+            <td>Do not require app IDs or repeated server queries for local narrowing.</td>
+          </tr>
+          <tr>
+            <td>26</td>
+            <td>Use the active app’s direct-link icon to open it.</td>
+            <td>The link targets only the stable gateway origin and normal viewer authorization still applies.</td>
+            <td>None.</td>
+            <td>URL from server-controlled slug and app suffix.</td>
+            <td>Convenience must not expose raw release/storage URLs.</td>
+          </tr>
+          <tr>
+            <td>26A</td>
+            <td>Continue as a viewer when the app opens.</td>
+            <td>App URL → app-bound handoff → existing global viewer identity or OTP → current policy checks → isolated app-local session.</td>
+            <td>Viewer email/OTP only when no current global viewer identity exists or an explicit account switch is requested.</td>
+            <td>App and policy come from the host/server. Deployer/control authority grants no viewer access.</td>
+            <td>Matching email may be allowed as owner, but the credential boundary never transfers.</td>
+          </tr>
+          <tr>
+            <td>27</td>
+            <td>Edit viewer email/domain access when needed and confirm broadening.</td>
+            <td>TinyHost revision-checks and atomically replaces current private policy; removal affects the next request and closes matching live access.</td>
+            <td>Only intended viewer rules and broadening confirmation.</td>
+            <td>Owner rule, app ID, policy revision, sessions, and revocation targets.</td>
+            <td>The deployer decides who may view; internal policy selectors are server-derived.</td>
+          </tr>
+          <tr>
+            <td>28</td>
+            <td>Create/revoke scoped deployment-agent tokens only when automation is needed.</td>
+            <td>TinyHost shows a new secret once, stores only its hash, and enforces scope/expiry/ownership on every use.</td>
+            <td>Choose the narrow deployment-only preset; raw scopes/expiry appear only behind “Edit,” and broader scope requires explicit confirmation.</td>
+            <td>Bounded default expiry, token ID, random secret, owner, and server.</td>
+            <td>A token is unnecessary for normal interactive deploys.</td>
+          </tr>
+          <tr>
+            <td>29</td>
+            <td>Read immutable deployment history and current description.</td>
+            <td>The dashboard shows release metadata but no deployer rollback action.</td>
+            <td>None.</td>
+            <td>Current pointer and historical immutable records.</td>
+            <td>Failed-candidate preservation exists; selecting an old release is deliberately outside V1.</td>
+          </tr>
+          <tr>
+            <td>30</td>
+            <td>Deploy a new build with <code>tiny deploy .</code>.</td>
+            <td>Tiny reuses platform, credential, and manifest, then repeats validation/activation/protection proof.</td>
+            <td>No confirmation when state is unchanged. Ask only for local ambiguity or explicit policy broadening.</td>
+            <td>Known project/server/identity values are not re-asked.</td>
+            <td>Repeat deploy should feel like one command, not onboarding again.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-f">
+      <p class="eyebrow">Phase F · Account control and permanent deletion</p>
+      <h2>Make identity changes and destructive intent explicit</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Deployer action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>31</td>
+            <td>Run <code>tiny login --force</code> to change deployer account.</td>
+            <td>Tiny keeps the previous bearer until fresh OTP and <code>whoami</code> prove the new account, then atomically replaces it.</td>
+            <td>New email and OTP.</td>
+            <td>Server and credential path.</td>
+            <td>Account switching is deliberate; ordinary login should not repeatedly prompt.</td>
+          </tr>
+          <tr>
+            <td>32</td>
+            <td>Run <code>tiny logout</code> to stop using the CLI account.</td>
+            <td>The server revokes exactly the current CLI bearer; only confirmed revocation/already-unauthorized state permits local deletion. The default server remains.</td>
+            <td>No token ID, server URL, or confirmation on the normal path.</td>
+            <td>Exact bearer from authentication context and its local file.</td>
+            <td>Logout must be real revocation, not just local cache deletion.</td>
+          </tr>
+          <tr>
+            <td>33</td>
+            <td>Choose “Delete app” only when the app and its data are disposable.</td>
+            <td>The dashboard names the app and exact irreversible consequences.</td>
+            <td>Type the exact confirmation <code>delete:&lt;slug&gt;</code>.</td>
+            <td>App ID, owner, data/storage paths, sessions, tokens, live connections, and cleanup targets.</td>
+            <td>Permanent deletion needs app-bound proof of intent; internal paths must never be entered.</td>
+          </tr>
+          <tr>
+            <td>34</td>
+            <td>Wait for deletion completion.</td>
+            <td>TinyHost first fails the app closed, closes live connections, then permanently removes app-owned policy, deployments/releases, tokens, viewer sessions, KV, blobs, app audit, and server-derived bytes.</td>
+            <td>None.</td>
+            <td>All deletion targets are derived from the owned app.</td>
+            <td>Success is impossible while cleanup remains uncertain.</td>
+          </tr>
+          <tr>
+            <td>35</td>
+            <td>Accept that the former slug is now unknown and reusable only through a new app creation.</td>
+            <td>No tombstone, trash, restore action, or deployer rollback remains.</td>
+            <td>None.</td>
+            <td>Hard deletion is the playground model.</td>
+            <td>Retention ceremony and false recovery promises are intentionally absent.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="implementation">
+      <p class="eyebrow">Implementation sketch</p>
+      <h2>One command composes bounded existing contracts</h2>
+      <pre>tiny deploy .
+→ discover project + verified default platform
+→ reuse bearer or complete OTP
+→ derive safe manifest defaults
+→ ask only for ambiguity or explicit customization
+→ write manifest receipt
+→ validate + archive + upload
+→ stage + seal + certificate readiness
+→ atomic activation
+→ anonymous-denial + health proof
+→ stable protected URL</pre>
+      <p>JSON/automation takes explicit server, credential, manifest, and output
+        state and never prompts or creates missing prerequisites.</p>
+    </section>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Open questions</p>
+      <h2>Evidence still needed</h2>
+      <ul>
+        <li>Which project-output discovery rules are reliable enough to select
+          automatically across supported static toolchains?</li>
+        <li>What build evidence can safely propose KV/blob/realtime capabilities
+          without enabling unused surface or missing minified SDK use?</li>
+        <li>Should the first-run review use one editable summary or a compact
+          numbered menu while remaining accessible in basic terminals?</li>
+        <li>When a slug collision belongs to another deployer, what generic
+          wording avoids resource enumeration while still giving a useful next action?</li>
+      </ul>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Make deploy-first the canonical human path</h2>
+      <p><strong>Do:</strong> Reuse verified state, derive project facts, default
+        to owner-only, and expose optional settings through one review/edit
+        checkpoint.</p>
+      <p><strong>Don’t:</strong> Do not run builds, infer access broadening,
+        hide security probes, store credentials in projects, or ask the deployer
+        to author internal IDs, URLs, archive paths, or YAML.</p>
+      <p class="muted">Decision basis: impact 5/5, complexity 3/5, yield 5/5.
+        Every prompt must justify itself against Principle 17.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Detailed deployer flow. Continue with the
+      <a href="operator.html">operator flow</a> or the
+      <a href="../../docs/product/flow-necessity-audit-2026-07.md">input necessity audit</a>.</p>
+  </footer>
+</body>
+</html>

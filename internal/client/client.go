@@ -20,6 +20,16 @@ import (
 
 var ErrUnauthorized = errors.New("not authorized")
 
+// ErrRateLimited is intentionally response-detail free. Authentication clients
+// can react consistently to a retryable throttling result without exposing a
+// server body, request metadata, or the submitted email address.
+var ErrRateLimited = errors.New("rate limited")
+
+// ErrIncompatibleServer is deliberately detail-free: first-run setup can tell
+// a deployer that a host was not verified without reflecting a response body,
+// redirect target, or transport detail into terminal output.
+var ErrIncompatibleServer = errors.New("incompatible server")
+
 func IdempotencyKey() (string, error) {
 	b := make([]byte, 24)
 	if _, e := rand.Read(b); e != nil {
@@ -38,6 +48,18 @@ var gatewayRequestID = regexp.MustCompile(`^req_[0-9a-f]{24}$`)
 type Store interface {
 	Get(string) (string, error)
 	Put(string, string) error
+}
+
+// CredentialDeleter is intentionally separate from Store so normal commands
+// cannot delete a bearer merely by receiving a broader storage dependency.
+type CredentialDeleter interface{ Delete(string) error }
+
+// DefaultServerStore persists only the non-secret normalized platform URL.
+// Keeping it separate from bearer storage makes its mutation explicit in the
+// successful interactive-login path.
+type DefaultServerStore interface {
+	DefaultServer() (string, error)
+	SetDefaultServer(string) error
 }
 type Client struct {
 	Base, Token string
@@ -168,6 +190,12 @@ func (c *Client) DeleteApp(ctx context.Context, slug, key string) error {
 	return c.Do(ctx, "DELETE", "/api/v1/apps/"+url.PathEscape(slug), key, map[string]string{"confirmation": "delete:" + slug}, nil)
 }
 
+// Logout revokes exactly the CLI bearer on this request. It has no app target,
+// does not receive cookies, and cannot affect browser or viewer sessions.
+func (c Client) Logout(ctx context.Context) error {
+	return c.Do(ctx, "POST", "/api/v1/auth/logout", "", nil, nil)
+}
+
 func NormalizeServer(raw string, allowHTTP bool) (string, error) {
 	u, e := url.Parse(raw)
 	if e != nil || u.Host == "" || (u.Scheme != "https" && !(allowHTTP && u.Scheme == "http")) {
@@ -243,13 +271,16 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 	if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&out); e != nil {
 		return DeploymentResult{}, e
 	}
-	if out.State == "verified" && out.DeploymentID != "" {
+	activateVerified := func(deploymentID string) (DeploymentResult, error) {
+		if deploymentID == "" {
+			return DeploymentResult{}, ErrDeploymentFailed
+		}
 		k, e := IdempotencyKey()
 		if e != nil {
 			return DeploymentResult{}, e
 		}
 		var activated DeploymentResult
-		if e = c.Do(ctx, "POST", "/api/v1/apps/"+url.PathEscape(slug)+"/deployments/"+url.PathEscape(out.DeploymentID)+"/activate", k, nil, &activated); e != nil {
+		if e = c.Do(ctx, "POST", "/api/v1/apps/"+url.PathEscape(slug)+"/deployments/"+url.PathEscape(deploymentID)+"/activate", k, nil, &activated); e != nil {
 			return DeploymentResult{}, e
 		}
 		if e = c.verifyPublicDeployment(ctx, slug, activated); e != nil {
@@ -257,10 +288,14 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 		}
 		return activated, nil
 	}
+	if out.State == "verified" {
+		return activateVerified(out.DeploymentID)
+	}
 	if out.StatusURL == "" {
 		return DeploymentResult{}, out.DeploymentResult.Verified()
 	}
-	su, e := url.Parse(out.StatusURL)
+	statusURL := out.StatusURL
+	su, e := url.Parse(statusURL)
 	if e != nil || su.Scheme != u.Scheme || su.Host != u.Host {
 		return DeploymentResult{}, errors.New("cross-origin status URL")
 	}
@@ -268,7 +303,7 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 		if ctx.Err() != nil {
 			return DeploymentResult{}, ctx.Err()
 		}
-		q, e := http.NewRequestWithContext(ctx, "GET", out.StatusURL, nil)
+		q, e := http.NewRequestWithContext(ctx, "GET", statusURL, nil)
 		if e != nil {
 			return DeploymentResult{}, e
 		}
@@ -286,6 +321,9 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 				return DeploymentResult{}, e
 			}
 			return out.DeploymentResult, nil
+		}
+		if out.State == "verified" {
+			return activateVerified(out.DeploymentID)
 		}
 		if out.State == "failed" || out.State == "rejected" {
 			return DeploymentResult{}, ErrDeploymentFailed
@@ -401,8 +439,80 @@ func (r DeploymentResult) Verified() error {
 	return nil
 }
 
-func Login(ctx context.Context, base string, p Prompt) (LoginResult, error) {
-	c := New(base, "")
+// VerifyLoginSession proves both server compatibility and the bearer token's
+// currently authenticated deployer identity. It never treats a dependency
+// failure as an authorization failure: callers may fall back to OTP only for a
+// definite ErrUnauthorized result.
+func VerifyLoginSession(ctx context.Context, c Client) (LoginResult, error) {
+	var v struct {
+		APIVersion int `json:"api_version"`
+	}
+	if e := c.Do(ctx, "GET", "/api/v1/version", "", nil, &v); e != nil {
+		return LoginResult{}, e
+	}
+	if v.APIVersion != 1 {
+		return LoginResult{}, errors.New("incompatible server API")
+	}
+	var me struct {
+		Email string `json:"email"`
+	}
+	if e := c.Do(ctx, "GET", "/api/v1/whoami", "", nil, &me); e != nil {
+		return LoginResult{}, e
+	}
+	if me.Email == "" {
+		return LoginResult{}, ErrUnauthorized
+	}
+	return LoginResult{Token: c.Token, Email: me.Email, APIVersion: v.APIVersion}, nil
+}
+
+// VerifyServerCompatibility is the unauthenticated first-run server proof. It
+// accepts only the exact HTTPS control origin, a non-redirected 200 response,
+// and a bounded complete API-v1 JSON document. It deliberately does not prove
+// deployer authorization; callers still handle a missing local bearer as
+// Login required after the selected platform is safely persisted.
+func VerifyServerCompatibility(ctx context.Context, c Client) error {
+	base, err := NormalizeServer(c.Base, false)
+	if err != nil || base != c.Base {
+		return ErrIncompatibleServer
+	}
+	h := c.HTTP
+	if h == nil {
+		h = http.DefaultClient
+	}
+	strict := *h
+	strict.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return ErrIncompatibleServer
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/version", nil)
+	if err != nil {
+		return ErrIncompatibleServer
+	}
+	res, err := strict.Do(req)
+	if err != nil {
+		return ErrIncompatibleServer
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return ErrIncompatibleServer
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 32<<10+1))
+	if err != nil || len(body) > 32<<10 {
+		return ErrIncompatibleServer
+	}
+	var out struct {
+		APIVersion int `json:"api_version"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	if decoder.Decode(&out) != nil || decoder.Decode(&struct{}{}) != io.EOF || out.APIVersion != 1 {
+		return ErrIncompatibleServer
+	}
+	return nil
+}
+
+// LoginWithClient completes an interactive login using the supplied client.
+// The post-verification whoami call is mandatory: the server, rather than the
+// OTP response, is authoritative for the persisted credential's identity.
+func LoginWithClient(ctx context.Context, c Client, p Prompt) (LoginResult, error) {
 	var v struct {
 		APIVersion int `json:"api_version"`
 	}
@@ -433,7 +543,19 @@ func Login(ctx context.Context, base string, p Prompt) (LoginResult, error) {
 	if out.Token == "" {
 		return LoginResult{}, ErrUnauthorized
 	}
-	return out, nil
+	verifiedClient := c
+	verifiedClient.Token = out.Token
+	verified, e := VerifyLoginSession(ctx, verifiedClient)
+	if e != nil {
+		return LoginResult{}, e
+	}
+	return verified, nil
+}
+
+// Login preserves the small package-level entry point used by external callers
+// while command code can inject a client transport through LoginWithClient.
+func Login(ctx context.Context, base string, p Prompt) (LoginResult, error) {
+	return LoginWithClient(ctx, New(base, ""), p)
 }
 
 func (c Client) Do(ctx context.Context, method, path, key string, in, out any) error {
@@ -465,6 +587,9 @@ func (c Client) Do(ctx context.Context, method, path, key string, in, out any) e
 	defer res.Body.Close()
 	if res.StatusCode == 401 || res.StatusCode == 403 {
 		return ErrUnauthorized
+	}
+	if res.StatusCode == http.StatusTooManyRequests {
+		return ErrRateLimited
 	}
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		return errors.New("control request failed")

@@ -40,8 +40,8 @@ spa:
   rewritten.
 - The description lives only in that deployment's immutable `manifest_json`.
   It does not create application-level mutable metadata. A release can show
-  its own description; the app summary is the selected current deployment's
-  description, so rollback restores it naturally.
+  its own description; the app summary is the active deployment's description,
+  while failed activation leaves that summary unchanged.
 - `build.output` is resolved beneath the project directory by the CLI.
 - `access.mode` defaults to `private`, never `public`.
 - The active owner is always an implicit viewer. An empty allowlist therefore
@@ -49,14 +49,54 @@ spa:
 - `access.mode: public` is invalid in V1.
 - Email/domain values are normalized by the server and echoed in canonical form.
 - The canonical allowlist is immutable deployment metadata. Activation makes
-  that exact private allowlist current atomically with the release pointer;
-  rollback restores the selected deployment's allowlist.
+  that exact private allowlist current atomically with the release pointer.
 - Unknown top-level keys are errors in V1 to catch typos.
 - `spa.fallback` must name a normal file in the uploaded release.
 - Enabling a capability that the server/operator disabled is an error.
 - `features.blobs` opts the app into the V1 lightweight app-shared blob
   capability. It does not name a bucket, path, provider, endpoint, or
   credential. Missing or `false` means blob routes deny before storage access.
+
+## Local creation and deploy-first onboarding
+
+`tiny init [DIR]` creates a new strict V1 `tiny.yaml` only in an existing,
+non-symlinked project directory. It never overwrites a manifest. The interactive
+wizard uses the normalized project-directory basename without asking when it is
+a valid slug. It asks for a replacement only when derivation is invalid or the
+server generically rejects availability. It selects one unambiguous
+conventional built output without asking. Multiple valid outputs require a
+choice; no valid output stops with an exact build action instead of suggesting
+the project root.
+
+Description, allowlist, capabilities, and SPA fallback are optional behind one
+review/edit step. Capability detection may produce a warning but never enables
+authority; only an existing manifest or deliberate edit does. A combined
+allowlist accepts comma-separated email addresses and domains; values are
+validated through this same contract before the file is created. The one final
+action names any access broadening.
+
+`tiny deploy [DIR]` defaults to `.`. For a human invocation with no manifest it
+runs that wizard and, after the same final deploy action, atomically creates
+`tiny.yaml`, prints its path, and continues. Manifest creation has no separate
+confirmation. `--json` is non-interactive: it neither prompts, creates a
+missing manifest, requests OTP, nor stores credentials.
+
+The generator serializes only this strict V1 shape and validates the generated
+bytes with `ParseManifest` before returning them. Build output and fallback must
+be relative, normalized paths beneath the project; every existing component is
+checked with `Lstat` and symlinks, traversal, non-directories, and non-regular
+fallback files are rejected.
+
+### Local denial charter
+
+- A missing/invalid project directory, manifest symlink, pre-existing target,
+  malformed wizard value, or failed atomic write creates no replacement file.
+- JSON/non-interactive invocations do not read stdin or mutate local missing
+  prerequisites.
+- A path that escapes the project, or has a symlink in any output/fallback
+  component, is rejected before archive creation.
+- Empty optional fields are valid; every interactive input is bounded and each
+  prompt exists only for required ambiguity or explicit edit intent.
 
 `features` is the V1 spelling for built-in capabilities. A later manifest
 version may add operator-approved external capability bindings. Those bindings

@@ -46,11 +46,10 @@ type Platform struct {
 // forms. Implementations must re-check role and ownership; route parameters
 // and form fields are untrusted input.
 type UIActions interface {
-	SetDeployerStatus(context.Context, Actor, string, string, string) error
+	ReplaceActiveDeployers(context.Context, Actor, []string, string, bool, string) error
 	ReplaceAccess(context.Context, Actor, string, AccessPolicyInput, string) error
 	CreateToken(context.Context, Actor, string, TokenInput, string) (TokenResult, error)
 	RevokeToken(context.Context, Actor, string, string, string) error
-	Rollback(context.Context, Actor, string, string, string) error
 	SetAppStatus(context.Context, Actor, string, string, string) error
 	DeleteApp(context.Context, Actor, string, string) error
 }
@@ -126,25 +125,17 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	var err error
-	if len(parts) == 2 && parts[0] == "deployers" && parts[1] == "authorize" {
+	if len(parts) == 2 && parts[0] == "deployers" && parts[1] == "active" {
 		if a.Role != "operator" {
 			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
 			return true
 		}
-		email, normalizeErr := identity.Normalize(r.FormValue("email"))
-		if normalizeErr != nil {
-			p.errorPage(w, http.StatusBadRequest, "Deployer email needs review", "Enter one valid email address before authorizing deployment access.", "/dashboard", "Return to dashboard")
+		emails, listErr := normalizedEmailList(r.FormValue("emails"), 100, 8192)
+		if listErr != nil {
+			p.errorPage(w, http.StatusBadRequest, "Deployer allowlist needs review", "Use at most 100 unique, valid email addresses—one per line—then try again.", "/dashboard", "Return to dashboard")
 			return true
 		}
-		err = p.Actions.SetDeployerStatus(r.Context(), a, email, "active", key)
-		return p.actionResult(w, r, err, "")
-	}
-	if len(parts) == 3 && parts[0] == "deployers" && (parts[2] == "authorize" || parts[2] == "suspend" || parts[2] == "revoke") {
-		if a.Role != "operator" || r.FormValue("confirmation") != parts[2]+":"+strings.ToLower(strings.TrimSpace(parts[1])) {
-			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
-			return true
-		}
-		err = p.Actions.SetDeployerStatus(r.Context(), a, parts[1], map[string]string{"authorize": "active", "suspend": "suspended", "revoke": "revoked"}[parts[2]], key)
+		err = p.Actions.ReplaceActiveDeployers(r.Context(), a, emails, r.FormValue("expected_revision"), r.FormValue("confirm_broadening") == "confirm", key)
 		return p.actionResult(w, r, err, "")
 	}
 	if parts[0] != "apps" || len(parts) < 3 {
@@ -183,13 +174,6 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	case len(parts) == 5 && action == "tokens" && parts[3] != "" && parts[4] == "revoke":
 		err = p.Actions.RevokeToken(r.Context(), a, slug, parts[3], key)
-	case len(parts) == 3 && action == "rollback":
-		id := r.FormValue("deployment")
-		if id == "" {
-			p.errorPage(w, http.StatusBadRequest, "Release needs review", "Choose an immutable release from the dashboard before trying again.", "/dashboard", "Return to dashboard")
-			return true
-		}
-		err = p.Actions.Rollback(r.Context(), a, slug, id, key)
 	case len(parts) == 3 && (action == "suspend" || action == "resume"):
 		err = p.Actions.SetAppStatus(r.Context(), a, slug, map[string]string{"suspend": "suspended", "resume": "active"}[action], key)
 	case len(parts) == 3 && action == "delete":
@@ -204,8 +188,34 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 	return p.actionResult(w, r, err, "")
 }
 
+func normalizedEmailList(raw string, maxEntries, maxBytes int) ([]string, error) {
+	if len(raw) > maxBytes {
+		return nil, errors.New("too large")
+	}
+	items := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' })
+	if len(items) > maxEntries {
+		return nil, errors.New("too many")
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		email, err := identity.Normalize(strings.TrimSpace(item))
+		if err != nil || seen[email] {
+			return nil, errors.New("invalid email list")
+		}
+		seen[email] = true
+		out = append(out, email)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func (p Platform) actionResult(w http.ResponseWriter, r *http.Request, err error, notice string) bool {
 	if err != nil {
+		if errors.Is(err, ErrDeployerRevision) {
+			p.errorPage(w, http.StatusConflict, "Deployer list changed", "Refresh the dashboard and review the current active deployer list before saving.", "/dashboard", "Refresh dashboard")
+			return true
+		}
 		if errors.Is(err, ErrPolicyRevision) {
 			p.errorPage(w, http.StatusConflict, "Policy changed", "Someone or a deployment changed this policy. Refresh and review the current revision before retrying.", "/dashboard", "Refresh dashboard")
 			return true

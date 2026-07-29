@@ -209,6 +209,54 @@ func (s LocalStore) Delete(app, id string) error {
 	return e
 }
 
+// RemoveAppNamespace removes exactly one empty, validated app blob directory.
+// Reconciliation must remove every object first; refusing a non-empty
+// directory makes a partial purge fail closed and retryable.
+func (s LocalStore) RemoveAppNamespace(app string) error {
+	if !validAppID(app) {
+		return errors.New("unsafe blob namespace")
+	}
+	r, err := os.OpenRoot(s.Root)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err = safeDir(r, "blobs"); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	blobsRoot, err := r.OpenRoot("blobs")
+	if err != nil {
+		return err
+	}
+	defer blobsRoot.Close()
+	if err = safeDir(blobsRoot, app); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	child, err := blobsRoot.OpenRoot(app)
+	if err != nil {
+		return err
+	}
+	entries, err := fs.ReadDir(child.FS(), ".")
+	child.Close()
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return errors.New("blob namespace not empty")
+	}
+	if err = blobsRoot.Remove(app); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return localSyncDir(blobsRoot)
+}
+
 // Keys returns one deterministic page strictly after after. Recovery owns this
 // private enumeration; it never informs public list results.
 func (s LocalStore) Keys(after Key, limit int) ([]Key, bool, error) {

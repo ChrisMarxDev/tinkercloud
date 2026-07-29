@@ -9,7 +9,7 @@
 <body>
   <header>
     <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
-    <p class="eyebrow">Rank 1 · Planned feature</p>
+    <p class="eyebrow">Implemented V1 foundation · Verification remains release-gated</p>
     <h1>Secure static gateway</h1>
     <p class="lede">Prove the core promise with one active app, one allowlisted
       viewer, and a request pipeline that cannot dispatch content before
@@ -23,9 +23,9 @@
         <p class="eyebrow">Reason and value</p>
         <h2>One structural guard replaces app-specific auth</h2>
         <p>Operators and deployers can trust a private app even when its bundle
-          is naive or AI-generated. Viewers get a simple email-code flow. This
-          slice proves the differentiator before upload tooling or platform APIs
-          expand the surface.</p>
+          is naive or AI-generated. A viewer proves email once to the platform
+          browser identity, then each app independently rechecks policy through
+          an app-bound handoff before creating its isolated app session.</p>
       </section>
       <section class="third">
         <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
@@ -39,7 +39,8 @@
         <ul>
           <li>Strict app-host resolution.</li>
           <li>Operator-created app, release, and current policy.</li>
-          <li>Resend OTP and host-only app session.</li>
+          <li>Resend OTP, rotating platform identity, app-bound one-time
+            handoff, and host-only app session.</li>
           <li>Exact email/domain/owner policy evaluation.</li>
           <li>Protected file serving and SPA fallback.</li>
           <li>App suspension and immediate rule/session revocation.</li>
@@ -51,7 +52,7 @@
         <ul>
           <li>No deployer upload or CLI deployment yet.</li>
           <li>No KV, blobs, WebSockets, or backend proxy.</li>
-          <li>No public apps or cross-app SSO in the first proof.</li>
+          <li>No public apps, parent-domain app cookie, or shared app session.</li>
           <li>No elaborate dashboard; only enough operator UI/CLI to seed state.</li>
         </ul>
       </section>
@@ -90,16 +91,12 @@ else:
       </ul>
     </section>
     <section id="questions" class="caution">
-      <p class="eyebrow">Open questions</p>
+      <p class="eyebrow">Remaining evidence questions</p>
       <ul>
-        <li>Should policy be read on every request initially, or use a
-          revision-keyed cache from day one?</li>
-        <li>Which OS-level beneath-root file opening approach supports the V1
-          Linux baseline most safely?</li>
         <li>Which CSP is enforceable by default without breaking the target static
           app ecosystem?</li>
-        <li>What response distinction between unknown, suspended, and unauthorized
-          apps is operationally useful without enabling enumeration?</li>
+        <li>Which browser matrix should remain a release gate for rotating
+          global identity, app-bound handoff, account switching, and revocation?</li>
       </ul>
     </section>
     <section id="decision" class="decision">
@@ -112,6 +109,6 @@ else:
         not co-evolve with an unproven boundary.</p>
     </section>
   </main>
-  <footer><p>Planned feature; remove from the ranking after base behavior ships.</p></footer>
+  <footer><p>Implemented foundation; retained as a standalone security concept and verification gate.</p></footer>
 </body>
 </html>

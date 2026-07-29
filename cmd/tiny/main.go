@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/tinyhost/tiny/internal/client"
@@ -32,7 +33,7 @@ type cliError struct {
 }
 
 func main() {
-	os.Exit(runWith(os.Args[1:], os.Stdout, os.Stderr, runnerDeps{store: client.OSStore{}, prompt: stdinPrompt{r: bufio.NewReader(os.Stdin), w: os.Stderr}}))
+	os.Exit(runWith(os.Args[1:], os.Stdout, os.Stderr, runnerDeps{store: client.FileStore{}, prompt: stdinPrompt{r: bufio.NewReader(os.Stdin), w: os.Stderr}}))
 }
 
 type runnerDeps struct {
@@ -41,12 +42,23 @@ type runnerDeps struct {
 	newClient func(string, string) client.Client
 }
 
+const maxSetupServerInput = 2048
+
+var (
+	errServerSetupInput  = errors.New("server setup input invalid")
+	errServerSetupFailed = errors.New("server setup verification failed")
+)
+
+type boundedPrompt interface {
+	AskBounded(string, int) (string, error)
+}
+
 func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	// Accept global flags before or after the subcommand without treating them as
 	// positional arguments. Command-specific --file remains in argv.
 	var globals, rest []string
 	for i := 0; i < len(argv); i++ {
-		if argv[i] == "--json" {
+		if argv[i] == "--json" || argv[i] == "--force" {
 			globals = append(globals, argv[i])
 			continue
 		}
@@ -61,51 +73,112 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	flag.CommandLine = flag.NewFlagSet("tiny", flag.ContinueOnError)
 	flag.CommandLine.SetOutput(stderr)
 	jsonOutput := flag.Bool("json", false, "write deterministic JSON")
+	forceLogin := flag.Bool("force", false, "ignore a saved login and authenticate again")
 	server := flag.String("server", "", "platform server")
 	if err := flag.CommandLine.Parse(argv); err != nil {
 		return 2
 	}
 	args := flag.Args()
+	if *forceLogin && !(len(args) == 1 && args[0] == "login") {
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "--force is only valid with login."}})
+		return 2
+	}
 	if len(args) == 1 && args[0] == "login" {
-		if *server == "" {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "login requires --server"}})
+		base, e := resolveServerForCommand(*server, *jsonOutput, deps)
+		if e != nil {
+			code, message := serverFailure(e)
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 			return 2
 		}
-		base, e := client.NormalizeServer(*server, false)
+		out, fresh, e := login(context.Background(), base, *forceLogin, deps)
 		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
-		}
-		out, e := client.Login(context.Background(), base, deps.prompt)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"login_failed", "Login could not be completed."}})
+			code, message := loginFailure(e)
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 			return 1
 		}
 		if deps.store == nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token could not be stored."}})
 			return 1
 		}
-		if e = deps.store.Put(base, out.Token); e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token could not be stored."}})
+		if fresh {
+			if e = deps.store.Put(base, out.Token); e != nil {
+				writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token could not be stored."}})
+				return 1
+			}
+		}
+		defaults, ok := deps.store.(client.DefaultServerStore)
+		if !ok || defaults.SetDefaultServer(base) != nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"configuration_store", "Server could not be saved."}})
 			return 1
 		}
-		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: out.Email})
+		if *jsonOutput {
+			writeTo(stdout, stderr, true, result{Valid: true, Name: out.Email})
+		} else {
+			fmt.Fprintf(stdout, "Logged in as %s.\n", out.Email)
+		}
 		return 0
 	}
 	if len(args) == 1 && args[0] == "version" {
 		fmt.Fprintln(stdout, "tiny v1")
 		return 0
 	}
-	if len(args) >= 1 && args[0] == "whoami" {
-		if *server == "" {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "whoami requires --server"}})
-			return 2
+	if (len(args) == 1 || len(args) == 2) && args[0] == "init" {
+		project := "."
+		if len(args) == 2 {
+			project = args[1]
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
+		return runInit(project, *jsonOutput, stdout, stderr, deps)
+	}
+	if len(args) == 2 && args[0] == "inspect-manifest" {
+		return runInspectManifest(args[1], *jsonOutput, stdout, stderr)
+	}
+	if !requiresServer(args) {
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "usage: tiny [--json] [--server URL] <command>"}})
+		return 2
+	}
+	resolvedServer, resolveErr := resolveServerForCommand(*server, *jsonOutput, deps)
+	if resolveErr != nil {
+		code, message := serverFailure(resolveErr)
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
+		return 2
+	}
+	if len(args) == 1 && args[0] == "logout" {
+		if deps.store == nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token unavailable."}})
+			return 1
 		}
+		deleter, ok := deps.store.(client.CredentialDeleter)
+		if !ok {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token unavailable."}})
+			return 1
+		}
+		token, err := deps.store.Get(resolvedServer)
+		if errors.Is(err, client.ErrCredentialNotFound) || token == "" && err == nil {
+			writeLogoutSuccess(stdout, stderr, *jsonOutput, "Already logged out.")
+			return 0
+		}
+		if err != nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token could not be read."}})
+			return 1
+		}
+		newClient := deps.newClient
+		if newClient == nil {
+			newClient = client.New
+		}
+		err = newClient(resolvedServer, token).Logout(context.Background())
+		if err != nil && !errors.Is(err, client.ErrUnauthorized) {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"logout_failed", "Logout could not be completed."}})
+			return 1
+		}
+		if err = deleter.Delete(resolvedServer); err != nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token could not be removed."}})
+			return 1
+		}
+		writeLogoutSuccess(stdout, stderr, *jsonOutput, "Logged out.")
+		return 0
+	}
+	if len(args) == 1 && args[0] == "whoami" {
+		base := resolvedServer
 		if deps.store == nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"credential_store", "Token unavailable."}})
 			return 1
@@ -118,23 +191,23 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		var me struct {
 			Email string `json:"email"`
 		}
-		if e = client.New(base, token).Do(context.Background(), "GET", "/api/v1/whoami", "", nil, &me); e != nil {
+		deployer := client.New(base, token)
+		if deps.newClient != nil {
+			deployer = deps.newClient(base, token)
+		}
+		if e = deployer.Do(context.Background(), "GET", "/api/v1/whoami", "", nil, &me); e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
 			return 1
 		}
-		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: me.Email})
+		writeIdentitySuccess(stdout, stderr, *jsonOutput, me.Email)
 		return 0
 	}
 	if len(args) == 3 && args[0] == "access" && args[1] == "get" {
-		if *server == "" || deps.store == nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "access get requires --server and login"}})
+		if deps.store == nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "access get requires login"}})
 			return 2
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
-		}
+		base := resolvedServer
 		token, e := deps.store.Get(base)
 		if e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
@@ -155,25 +228,25 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		return 0
 	}
 	if len(args) >= 2 && args[0] == "tokens" {
-		return runTokens(args[1:], *server, *jsonOutput, stdout, stderr, deps)
+		return runTokens(args[1:], resolvedServer, *jsonOutput, stdout, stderr, deps)
 	}
 	if (len(args) == 2 || len(args) == 3) && args[0] == "releases" && releases.ValidSlug(args[len(args)-1]) && (len(args) == 2 || args[1] == "list") {
-		return runReleases(args[len(args)-1], *server, *jsonOutput, stdout, stderr, deps)
+		return runReleases(args[len(args)-1], resolvedServer, *jsonOutput, stdout, stderr, deps)
 	}
 	if len(args) == 5 && args[0] == "apps" && args[1] == "delete" && releases.ValidSlug(args[2]) && args[3] == "--confirm" && args[4] == "delete:"+args[2] {
-		return runAppDelete(args[2], *server, *jsonOutput, stdout, stderr, deps)
+		return runAppDelete(args[2], resolvedServer, *jsonOutput, stdout, stderr, deps)
 	}
 	if len(args) >= 2 && args[0] == "releases" {
-		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "usage: tiny [--json] --server URL releases [list] APP"}})
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "usage: tiny [--json] [--server URL] releases [list] APP"}})
 		return 2
 	}
 	if len(args) >= 2 && args[0] == "apps" && args[1] == "delete" {
-		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "usage: tiny [--json] --server URL apps delete APP --confirm delete:APP"}})
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "usage: tiny [--json] [--server URL] apps delete APP --confirm delete:APP"}})
 		return 2
 	}
 	if len(args) == 5 && args[0] == "access" && args[1] == "set" && args[3] == "--file" {
-		if *server == "" || deps.store == nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "access set requires --server and login"}})
+		if deps.store == nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "access set requires login"}})
 			return 2
 		}
 		b, e := os.ReadFile(args[4])
@@ -187,11 +260,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_policy", "Policy file must be valid JSON."}})
 			return 1
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
-		}
+		base := resolvedServer
 		token, e := deps.store.Get(base)
 		if e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
@@ -222,47 +291,22 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: "access policy updated"})
 		return 0
 	}
-	if len(args) == 3 && args[0] == "rollback" {
-		if *server == "" || deps.store == nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "rollback requires --server and login"}})
+	if len(args) == 2 && args[0] == "apps" && args[1] == "list" {
+		if deps.store == nil {
 			return 2
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
-		}
+		base := resolvedServer
 		token, e := deps.store.Get(base)
 		if e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
 			return 1
 		}
-		key, e := client.IdempotencyKey()
-		if e != nil {
-			return 1
-		}
-		payload := map[string]string{"deployment": args[2]}
-		if e = client.New(base, token).Do(context.Background(), "POST", "/api/v1/apps/"+url.PathEscape(args[1])+"/rollback", key, payload, nil); e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"rollback_failed", "Rollback could not be completed."}})
-			return 1
-		}
-		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: "rollback requested"})
-		return 0
-	}
-	if len(args) == 2 && args[0] == "apps" && args[1] == "list" {
-		if *server == "" || deps.store == nil {
-			return 2
-		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			return 2
-		}
-		token, e := deps.store.Get(base)
-		if e != nil {
-			return 1
+		deployer := client.New(base, token)
+		if deps.newClient != nil {
+			deployer = deps.newClient(base, token)
 		}
 		var out any
-		if e = client.New(base, token).Do(context.Background(), "GET", "/api/v1/apps", "", nil, &out); e != nil {
+		if e = deployer.Do(context.Background(), "GET", "/api/v1/apps", "", nil, &out); e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"apps_failed", "Apps request failed."}})
 			return 1
 		}
@@ -271,23 +315,25 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		return 0
 	}
 	if len(args) == 3 && args[0] == "apps" && args[1] == "create" {
-		if *server == "" || deps.store == nil || !releases.ValidSlug(args[2]) {
+		if deps.store == nil || !releases.ValidSlug(args[2]) {
 			return 2
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			return 2
-		}
+		base := resolvedServer
 		token, e := deps.store.Get(base)
 		if e != nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
 			return 1
 		}
 		k, e := client.IdempotencyKey()
 		if e != nil {
 			return 1
 		}
+		deployer := client.New(base, token)
+		if deps.newClient != nil {
+			deployer = deps.newClient(base, token)
+		}
 		var out any
-		if e = client.New(base, token).Do(context.Background(), "POST", "/api/v1/apps", k, map[string]string{"slug": args[2]}, &out); e != nil {
+		if e = deployer.Do(context.Background(), "POST", "/api/v1/apps", k, map[string]string{"slug": args[2]}, &out); e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"app_create_failed", "App could not be created."}})
 			return 1
 		}
@@ -295,32 +341,43 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		fmt.Fprintln(stdout, string(b))
 		return 0
 	}
-	if len(args) == 2 && args[0] == "deploy" {
-		if *server == "" || deps.store == nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "deploy requires --server and login"}})
+	if (len(args) == 1 || len(args) == 2) && args[0] == "deploy" {
+		if deps.store == nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "deploy requires login"}})
 			return 2
 		}
-		base, e := client.NormalizeServer(*server, false)
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_server", "Server must use HTTPS."}})
-			return 2
+		base := resolvedServer
+		project := "."
+		if len(args) == 2 {
+			project = args[1]
 		}
-		token, e := deps.store.Get(base)
+		manifest, created, e := ensureManifest(project, *jsonOutput, deps)
 		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authenticated", "Login required."}})
+			code, message := manifestFailure(e)
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 			return 1
 		}
-		manifest, e := os.ReadFile(filepath.Join(args[1], "tiny.yaml"))
-		if e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_manifest", "Could not read manifest."}})
-			return 1
+		if created && !*jsonOutput {
+			fmt.Fprintf(stdout, "Created %s.\n", filepath.Join(project, "tiny.yaml"))
 		}
 		m, e := releases.ParseManifest(manifest)
 		if e != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_manifest", "Manifest does not meet the V1 contract."}})
 			return 1
 		}
-		archive, cleanup, err := stagedArchive(args[1], manifest)
+		token, e := ensureDeployCredential(context.Background(), base, *jsonOutput, deps)
+		if e != nil {
+			code, message := loginFailure(e)
+			if errors.Is(e, client.ErrStore) {
+				code, message = "credential_store", "Token could not be stored."
+			}
+			if errors.Is(e, client.ErrCredentialNotFound) {
+				code, message = "not_authenticated", "Login required."
+			}
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
+			return 1
+		}
+		archive, cleanup, err := stagedArchive(project, manifest)
 		if err != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_directory", "Deployment directory is unsafe."}})
 			return 1
@@ -403,6 +460,263 @@ func stagedArchive(project string, manifest []byte) (*os.File, func(), error) {
 	}, nil
 }
 
+var errManifestSetup = errors.New("manifest setup failed")
+
+func runInspectManifest(path string, jsonOutput bool, stdout, stderr io.Writer) int {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		writeTo(stdout, stderr, jsonOutput, result{Error: &cliError{"read_failed", "Could not read manifest."}})
+		return 1
+	}
+	m, err := releases.ParseManifest(b)
+	if err != nil {
+		writeTo(stdout, stderr, jsonOutput, result{Error: &cliError{"invalid_manifest", "Manifest does not meet the V1 contract."}})
+		return 1
+	}
+	writeTo(stdout, stderr, jsonOutput, result{Valid: true, Name: m.Name})
+	return 0
+}
+
+func runInit(project string, jsonOutput bool, stdout, stderr io.Writer, deps runnerDeps) int {
+	if jsonOutput {
+		writeTo(stdout, stderr, true, result{Error: &cliError{"manifest_required", "Create tiny.yaml interactively without --json."}})
+		return 1
+	}
+	if _, err := createManifest(project, deps.prompt); err != nil {
+		writeTo(stdout, stderr, false, result{Error: &cliError{"manifest_setup_failed", "Manifest could not be created."}})
+		return 1
+	}
+	fmt.Fprintf(stdout, "Created %s.\n", filepath.Join(project, "tiny.yaml"))
+	return 0
+}
+
+func ensureManifest(project string, jsonOutput bool, deps runnerDeps) ([]byte, bool, error) {
+	dir, err := safeProjectDir(project)
+	if err != nil {
+		return nil, false, errManifestSetup
+	}
+	path := filepath.Join(dir, "tiny.yaml")
+	info, err := os.Lstat(path)
+	if err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, false, errManifestSetup
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, false, errManifestSetup
+		}
+		return b, false, nil
+	}
+	if !os.IsNotExist(err) || jsonOutput || deps.prompt == nil {
+		return nil, false, errManifestSetup
+	}
+	b, err := createManifest(dir, deps.prompt)
+	return b, err == nil, err
+}
+
+func createManifest(project string, prompt client.Prompt) ([]byte, error) {
+	dir, err := safeProjectDir(project)
+	if err != nil || prompt == nil {
+		return nil, errManifestSetup
+	}
+	target := filepath.Join(dir, "tiny.yaml")
+	if _, err = os.Lstat(target); err == nil || !os.IsNotExist(err) {
+		return nil, errManifestSetup
+	}
+	suggested := strings.ToLower(filepath.Base(dir))
+	if !releases.ValidSlug(suggested) {
+		suggested = "my-app"
+	}
+	slug, err := askSetup(prompt, "App slug ("+suggested+", Enter to accept): ", true)
+	if slug == "" {
+		slug = suggested
+	}
+	if err != nil || !releases.ValidSlug(slug) {
+		return nil, errManifestSetup
+	}
+	description, err := askSetup(prompt, "Description (optional): ", true)
+	if err != nil {
+		return nil, errManifestSetup
+	}
+	defaultOutput := "."
+	if safeOutput(dir, "dist") {
+		defaultOutput = "dist"
+	}
+	output, err := askSetup(prompt, "Build output ("+defaultOutput+", Enter to accept): ", true)
+	if output == "" {
+		output = defaultOutput
+	}
+	if err != nil || !safeOutput(dir, output) {
+		return nil, errManifestSetup
+	}
+	allow, err := askSetup(prompt, "Allowed emails or domains, comma-separated (optional): ", true)
+	if err != nil {
+		return nil, errManifestSetup
+	}
+	features, err := askSetup(prompt, "Features (kv,blobs,realtime; optional): ", true)
+	if err != nil {
+		return nil, errManifestSetup
+	}
+	fallback, err := askSetup(prompt, "SPA fallback (optional): ", true)
+	if err != nil || (fallback != "" && !safeFallback(dir, output, fallback)) {
+		return nil, errManifestSetup
+	}
+	m := releases.Manifest{Version: 1, Name: slug, Description: description, BuildOutput: output, SPAFallback: fallback}
+	for _, item := range splitSetupList(allow) {
+		if strings.Contains(item, "@") {
+			m.Emails = append(m.Emails, item)
+		} else {
+			m.Domains = append(m.Domains, item)
+		}
+	}
+	for _, feature := range splitSetupList(features) {
+		switch feature {
+		case "kv":
+			m.KV = true
+		case "blobs":
+			m.Blobs = true
+		case "realtime":
+			m.Realtime = true
+		default:
+			return nil, errManifestSetup
+		}
+	}
+	b, err := releases.GenerateManifest(m)
+	if err != nil {
+		return nil, errManifestSetup
+	}
+	if writeNewManifest(dir, target, b) != nil {
+		return nil, errManifestSetup
+	}
+	return b, nil
+}
+
+func askSetup(p client.Prompt, label string, optional bool) (string, error) {
+	var v string
+	var err error
+	if bounded, ok := p.(interface {
+		AskBoundedOptional(string, int) (string, error)
+	}); ok {
+		v, err = bounded.AskBoundedOptional(label, maxSetupServerInput)
+	} else {
+		v, err = p.Ask(label)
+	}
+	if err != nil || len(v) > maxSetupServerInput {
+		return "", errManifestSetup
+	}
+	v = strings.TrimSpace(v)
+	if !optional && v == "" {
+		return "", errManifestSetup
+	}
+	return v, nil
+}
+func splitSetupList(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+func safeProjectDir(project string) (string, error) {
+	p, err := filepath.Abs(project)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(p)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", errManifestSetup
+	}
+	return p, nil
+}
+func safeOutput(project, output string) bool {
+	if !safeRelative(output) {
+		return false
+	}
+	info, err := lstatBeneath(project, output)
+	return err == nil && info.Mode()&os.ModeSymlink == 0 && info.IsDir()
+}
+func safeFallback(project, output, fallback string) bool {
+	if !safeOutput(project, output) || !safeRelative(fallback) {
+		return false
+	}
+	info, err := lstatBeneath(project, filepath.ToSlash(output)+"/"+fallback)
+	return err == nil && info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular()
+}
+func safeRelative(value string) bool {
+	return value != "" && !filepath.IsAbs(value) && filepath.Clean(value) == value && !strings.Contains(value, "\\") && !strings.HasPrefix(value, "../") && value != ".."
+}
+func lstatBeneath(root, rel string) (os.FileInfo, error) {
+	current := root
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		current = filepath.Join(current, filepath.FromSlash(part))
+		info, err := os.Lstat(current)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return nil, errManifestSetup
+		}
+	}
+	return os.Lstat(current)
+}
+func writeNewManifest(dir, target string, b []byte) error {
+	tmp, err := os.CreateTemp(dir, ".tiny-manifest-")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if err = tmp.Chmod(0600); err == nil {
+		_, err = tmp.Write(b)
+	}
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	if err = os.Link(name, target); err != nil {
+		return err
+	}
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	err = d.Sync()
+	closeErr := d.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
+}
+
+func ensureDeployCredential(ctx context.Context, base string, jsonOutput bool, deps runnerDeps) (string, error) {
+	if deps.store == nil {
+		return "", client.ErrCredentialNotFound
+	}
+	if jsonOutput {
+		return deps.store.Get(base)
+	}
+	out, fresh, err := login(ctx, base, false, deps)
+	if err != nil {
+		return "", err
+	}
+	if fresh && (out.Token == "" || deps.store.Put(base, out.Token) != nil) {
+		return "", client.ErrStore
+	}
+	if out.Token == "" {
+		return "", client.ErrCredentialNotFound
+	}
+	return out.Token, nil
+}
+
+func manifestFailure(error) (string, string) {
+	return "manifest_required", "Create a valid tiny.yaml with tiny init."
+}
+
 func archiveSize(f *os.File) int64 {
 	info, err := f.Stat()
 	if err != nil {
@@ -411,11 +725,53 @@ func archiveSize(f *os.File) int64 {
 	return info.Size()
 }
 
-const tokenUsage = "usage: tiny [--json] --server URL tokens <list APP|create APP --scope SCOPE [--scope SCOPE] --expires-in SECONDS|revoke APP TOKEN_ID>"
+const tokenUsage = "usage: tiny [--json] [--server URL] tokens <list APP|create APP --scope SCOPE [--scope SCOPE] --expires-in SECONDS|revoke APP TOKEN_ID>"
 
 // runTokens keeps the token lifecycle intentionally separate from generic
 // command output: a newly-created secret is written once, while list/revoke
 // output can never contain a raw credential.
+func requiresServer(args []string) bool {
+	if len(args) == 1 {
+		return args[0] == "login" || args[0] == "logout" || args[0] == "whoami"
+	}
+	if len(args) == 3 && args[0] == "access" && args[1] == "get" {
+		return true
+	}
+	if len(args) == 5 && args[0] == "access" && args[1] == "set" && args[3] == "--file" {
+		return true
+	}
+	if (len(args) == 2 || len(args) == 3) && args[0] == "releases" && releases.ValidSlug(args[len(args)-1]) && (len(args) == 2 || args[1] == "list") {
+		return true
+	}
+	if (len(args) == 1 || len(args) == 2) && args[0] == "deploy" {
+		return true
+	}
+	if len(args) == 2 && args[0] == "apps" && args[1] == "list" {
+		return true
+	}
+	if len(args) == 3 && args[0] == "apps" && args[1] == "create" && releases.ValidSlug(args[2]) {
+		return true
+	}
+	if len(args) == 5 && args[0] == "apps" && args[1] == "delete" && releases.ValidSlug(args[2]) && args[3] == "--confirm" && args[4] == "delete:"+args[2] {
+		return true
+	}
+	if len(args) >= 2 && args[0] == "tokens" {
+		return validTokenCommand(args[1:])
+	}
+	return false
+}
+
+func validTokenCommand(args []string) bool {
+	if len(args) == 2 && args[0] == "list" {
+		return releases.ValidSlug(args[1])
+	}
+	if len(args) >= 2 && args[0] == "create" && releases.ValidSlug(args[1]) {
+		_, ok := parseTokenInput(args[2:])
+		return ok
+	}
+	return len(args) == 3 && args[0] == "revoke" && releases.ValidSlug(args[1]) && validTokenID(args[2])
+}
+
 func runTokens(args []string, server string, jsonOutput bool, stdout, stderr io.Writer, deps runnerDeps) int {
 	if server == "" || deps.store == nil {
 		writeTo(stdout, stderr, jsonOutput, result{Error: &cliError{"usage", tokenUsage}})
@@ -597,7 +953,7 @@ func runAppDelete(slug, server string, jsonOutput bool, stdout, stderr io.Writer
 // absent credential is never passed to a client and is never printed back.
 func authenticatedClient(server string, jsonOutput bool, stdout, stderr io.Writer, deps runnerDeps) (client.Client, int) {
 	if server == "" || deps.store == nil {
-		writeTo(stdout, stderr, jsonOutput, result{Error: &cliError{"usage", "Command requires --server and login."}})
+		writeTo(stdout, stderr, jsonOutput, result{Error: &cliError{"usage", "Command requires login."}})
 		return client.Client{}, 2
 	}
 	base, err := client.NormalizeServer(server, false)
@@ -639,10 +995,176 @@ type stdinPrompt struct {
 	w io.Writer
 }
 
+// login first proves a saved credential is still valid. Only an explicit
+// authorization denial falls back to OTP; transport, compatibility, and rate
+// limit failures remain failures so a dependency outage cannot silently drive a
+// deployer into a different authentication path. --force deliberately skips
+// reuse to support switching accounts, while storage happens only after the
+// new token and server-derived identity have both been verified.
+func login(ctx context.Context, base string, force bool, deps runnerDeps) (client.LoginResult, bool, error) {
+	newClient := deps.newClient
+	if newClient == nil {
+		newClient = client.New
+	}
+	if !force && deps.store != nil {
+		if token, err := deps.store.Get(base); err == nil && token != "" {
+			out, err := client.VerifyLoginSession(ctx, newClient(base, token))
+			if err == nil {
+				return out, false, nil
+			}
+			if !errors.Is(err, client.ErrUnauthorized) {
+				return client.LoginResult{}, false, err
+			}
+		} else if err != nil && !errors.Is(err, client.ErrCredentialNotFound) {
+			return client.LoginResult{}, false, err
+		}
+	}
+	out, err := client.LoginWithClient(ctx, newClient(base, ""), deps.prompt)
+	return out, true, err
+}
+
+func loginFailure(err error) (string, string) {
+	if errors.Is(err, client.ErrRateLimited) {
+		return "rate_limited", "Too many sign-in attempts. Wait and try again."
+	}
+	return "login_failed", "Login could not be completed."
+}
+
+func resolveServer(explicit string, deps runnerDeps) (string, error) {
+	if explicit != "" {
+		return client.NormalizeServer(explicit, false)
+	}
+	defaults, ok := deps.store.(client.DefaultServerStore)
+	if !ok || defaults == nil {
+		return "", client.ErrNoDefaultServer
+	}
+	server, err := defaults.DefaultServer()
+	if err != nil {
+		return "", err
+	}
+	return client.NormalizeServer(server, false)
+}
+
+// resolveServerForCommand adds a deliberately narrow human-only first-run
+// setup path around ordinary resolution. Explicit flags, JSON automation, and
+// anything other than the exact missing-default sentinel never enter it.
+func resolveServerForCommand(explicit string, jsonOutput bool, deps runnerDeps) (string, error) {
+	server, err := resolveServer(explicit, deps)
+	if err == nil || explicit != "" || jsonOutput || err != client.ErrNoDefaultServer {
+		return server, err
+	}
+	defaults, ok := deps.store.(client.DefaultServerStore)
+	if !ok || defaults == nil || deps.prompt == nil {
+		return "", errServerSetupInput
+	}
+	raw, err := askServer(deps.prompt)
+	if err != nil {
+		return "", errServerSetupInput
+	}
+	server, err = client.NormalizeServer(raw, false)
+	if err != nil {
+		return "", errServerSetupInput
+	}
+	newClient := deps.newClient
+	if newClient == nil {
+		newClient = client.New
+	}
+	if err = client.VerifyServerCompatibility(context.Background(), newClient(server, "")); err != nil {
+		return "", errServerSetupFailed
+	}
+	if err = defaults.SetDefaultServer(server); err != nil {
+		return "", errServerSetupFailed
+	}
+	return server, nil
+}
+
+func askServer(p client.Prompt) (string, error) {
+	if bounded, ok := p.(boundedPrompt); ok {
+		return bounded.AskBounded("Server (https://...): ", maxSetupServerInput)
+	}
+	value, err := p.Ask("Server (https://...): ")
+	if err != nil || len(value) == 0 || len(value) > maxSetupServerInput {
+		return "", errServerSetupInput
+	}
+	return value, nil
+}
+
+func serverFailure(err error) (string, string) {
+	if errors.Is(err, client.ErrNoDefaultServer) {
+		return "usage", "No saved server. Run tiny login --server https://your-tinyhost.example."
+	}
+	if errors.Is(err, errServerSetupInput) {
+		return "server_setup_failed", "Server setup requires a valid HTTPS URL."
+	}
+	if errors.Is(err, errServerSetupFailed) {
+		return "server_setup_failed", "Server could not be verified or saved."
+	}
+	if errors.Is(err, client.ErrStore) {
+		return "configuration_store", "Saved server could not be read."
+	}
+	return "invalid_server", "Server must use HTTPS."
+}
+
+func writeLogoutSuccess(stdout, stderr io.Writer, jsonOutput bool, message string) {
+	if jsonOutput {
+		writeTo(stdout, stderr, true, result{Valid: true, Name: "logged out"})
+		return
+	}
+	fmt.Fprintln(stdout, message)
+}
+
+func writeIdentitySuccess(stdout, stderr io.Writer, jsonOutput bool, email string) {
+	if jsonOutput {
+		writeTo(stdout, stderr, true, result{Valid: true, Name: email})
+		return
+	}
+	fmt.Fprintf(stdout, "Logged in as %s.\n", email)
+}
+
 func (p stdinPrompt) Ask(label string) (string, error) {
 	fmt.Fprint(p.w, label)
 	s, e := p.r.ReadString('\n')
 	return strings.TrimSpace(s), e
+}
+func (p stdinPrompt) AskBounded(label string, limit int) (string, error) {
+	if limit <= 0 {
+		return "", errServerSetupInput
+	}
+	fmt.Fprint(p.w, label)
+	b, err := p.r.ReadSlice('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	if err == io.EOF {
+		err = nil
+	}
+	value := strings.TrimSpace(string(b))
+	if len(value) == 0 || len(value) > limit {
+		return "", errServerSetupInput
+	}
+	return value, err
+}
+
+// AskBoundedOptional is deliberately separate from AskBounded: setup fields
+// may accept Enter, but they must never retain an arbitrarily large line in
+// memory while a human is preparing a local manifest.
+func (p stdinPrompt) AskBoundedOptional(label string, limit int) (string, error) {
+	if limit <= 0 {
+		return "", errServerSetupInput
+	}
+	fmt.Fprint(p.w, label)
+	b, err := p.r.ReadSlice('\n')
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+	if err == io.EOF {
+		err = nil
+	}
+	value := strings.TrimSpace(string(b))
+	if len(value) > limit {
+		return "", errServerSetupInput
+	}
+	return value, err
 }
 func writeTo(stdout, stderr io.Writer, j bool, r result) {
 	if j {

@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tinyhost/tiny/internal/blob"
 	"github.com/tinyhost/tiny/internal/controlapi"
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/tinyhost/tiny/internal/jobs"
 	"github.com/tinyhost/tiny/internal/operations"
 	"github.com/tinyhost/tiny/internal/releases"
 	"net/http"
@@ -86,6 +88,13 @@ func classifyControlRoute(m, p string) (string, string, bool) {
 	if m == "GET" && (p == "/api/v1/whoami" || p == "/api/v1/apps") {
 		return "app:read", "", true
 	}
+	// This is a self-revocation route. Restricting it to a global bearer means
+	// app-scoped deployment-agent credentials cannot use a server-level CLI
+	// convenience action, while the authenticated actor still identifies only
+	// the exact bearer row to revoke.
+	if m == "POST" && p == "/api/v1/auth/logout" {
+		return "app:read", "", true
+	}
 	if m == "POST" && p == "/api/v1/apps" {
 		return "app:create", "", true
 	}
@@ -130,9 +139,6 @@ func classifyControlRoute(m, p string) (string, string, bool) {
 	if len(parts) == 4 && parts[1] == "deployments" && parts[2] != "" && parts[3] == "activate" && m == "POST" {
 		return "deploy:activate", slug, true
 	}
-	if len(parts) == 2 && parts[1] == "rollback" && m == "POST" {
-		return "deploy:activate", slug, true
-	}
 	return "", "", false
 }
 func safeTokenRouteID(id string) bool {
@@ -148,9 +154,12 @@ func safeTokenRouteID(id string) bool {
 }
 
 type ControlService struct {
-	Store       *SQLiteStore
-	Live        interface{ Revoke(string, string) }
-	BlobCleanup interface{ Reconcile(context.Context) error }
+	Store          *SQLiteStore
+	Live           interface{ Revoke(string, string) }
+	BlobCleanup    interface{ Reconcile(context.Context) error }
+	AppDataCleanup interface {
+		Purge(context.Context, string) error
+	}
 	Deployments *deployments.Service
 	AppSuffix   string
 	// WriteGate protects only resource-growing mutations. It is deliberately
@@ -159,57 +168,177 @@ type ControlService struct {
 	AppsPerDeployer int
 }
 
-// SetDeployerStatus is the browser-safe counterpart to the root bootstrap
-// command. It retains the same single-writer transaction, but only a currently
-// active operator record can invoke it remotely. A suspended or revoked
-// deployer loses every control credential in that same transaction.
-func (s ControlService) SetDeployerStatus(ctx context.Context, a controlapi.Actor, email, status, key string) error {
-	if s.Store == nil || !a.Active || a.Role != "operator" || key == "" || (status != "active" && status != "suspended" && status != "revoked") {
+// AppDataPurger owns only server-derived private byte paths. It deliberately
+// runs while the application is in deleting state, before its database rows
+// are removed, so a failed purge leaves an inaccessible app that can be retried.
+type AppDataPurger struct {
+	DataRoot    string
+	Store       *SQLiteStore
+	BlobCleanup interface{ Reconcile(context.Context) error }
+}
+
+func (p AppDataPurger) Purge(ctx context.Context, appID string) error {
+	if err := jobs.RemoveAppReleases(p.DataRoot, appID); err != nil {
+		return err
+	}
+	cleanup := p.BlobCleanup
+	if cleanup == nil {
+		if p.Store == nil {
+			return ErrUnavailable
+		}
+		cleanup = &BlobRepository{Store: p.Store, Bytes: blob.LocalStore{Root: p.DataRoot}}
+	}
+	if err := cleanup.Reconcile(ctx); err != nil {
+		return err
+	}
+	namespace, ok := cleanup.(interface{ RemoveAppNamespace(string) error })
+	if !ok {
 		return ErrUnavailable
 	}
-	normalized, err := identity.Normalize(email)
-	if err != nil {
+	return namespace.RemoveAppNamespace(appID)
+}
+
+// ReplaceActiveDeployers reconciles the exact active deployer allowlist while
+// preserving immutable deployer IDs and every owned app record.
+func (s ControlService) ReplaceActiveDeployers(ctx context.Context, a controlapi.Actor, emails []string, expectedRevision string, confirmBroadening bool, key string) error {
+	if s.Store == nil || !a.Active || a.Role != "operator" || key == "" || len(emails) > 100 {
 		return ErrUnavailable
+	}
+	requested := append([]string(nil), emails...)
+	sort.Strings(requested)
+	if len(strings.Join(requested, "\n")) > 8192 {
+		return ErrUnavailable
+	}
+	for i, email := range requested {
+		if normalized, err := identity.Normalize(email); err != nil || normalized != email || (i > 0 && requested[i-1] == email) {
+			return ErrUnavailable
+		}
 	}
 	return s.Store.Write(ctx, func(tx *sql.Tx) error {
-		var priorTarget, priorAction string
-		e := tx.QueryRowContext(ctx, "SELECT target_id,action FROM audit_events WHERE actor_id=? AND request_id=?", a.ID, key).Scan(&priorTarget, &priorAction)
+		var priorAction, priorMetadata string
+		e := tx.QueryRowContext(ctx, "SELECT action,COALESCE(metadata_json,'') FROM audit_events WHERE actor_id=? AND request_id=?", a.ID, key).Scan(&priorAction, &priorMetadata)
 		if e == nil {
-			if priorTarget == normalized && priorAction == "deployer."+status {
-				return nil
+			var prior struct {
+				Requested         []string `json:"requested"`
+				ExpectedRevision  string   `json:"expected_revision"`
+				ConfirmBroadening bool     `json:"confirm_broadening"`
 			}
-			return ErrUnavailable
+			if priorAction != "deployers.reconciled" || json.Unmarshal([]byte(priorMetadata), &prior) != nil || strings.Join(prior.Requested, "\x00") != strings.Join(requested, "\x00") || prior.ExpectedRevision != expectedRevision || prior.ConfirmBroadening != confirmBroadening {
+				return ErrUnavailable
+			}
+			return nil
 		}
 		if e != sql.ErrNoRows {
 			return e
 		}
-		var operatorRole, operatorStatus string
-		if e = tx.QueryRowContext(ctx, "SELECT role,status FROM users WHERE id=?", a.ID).Scan(&operatorRole, &operatorStatus); e != nil || operatorRole != "operator" || operatorStatus != "active" {
+		var role, status string
+		if e = tx.QueryRowContext(ctx, "SELECT role,status FROM users WHERE id=?", a.ID).Scan(&role, &status); e != nil || role != "operator" || status != "active" {
 			return ErrUnavailable
 		}
-		var id, role string
-		e = tx.QueryRowContext(ctx, "SELECT id,role FROM users WHERE normalized_email=?", normalized).Scan(&id, &role)
-		if e == sql.ErrNoRows {
-			if status != "active" {
-				return ErrUnavailable
-			}
-			id = "usr_" + fmt.Sprintf("%x", sha256.Sum256([]byte(normalized)))[:16]
-			if _, e = tx.ExecContext(ctx, "INSERT INTO users(id,normalized_email,role,status,created_at) VALUES(?,?, 'deployer','active',datetime('now'))", id, normalized); e != nil {
-				return e
-			}
-		} else if e != nil || role != "deployer" {
-			return ErrUnavailable
-		} else if _, e = tx.ExecContext(ctx, "UPDATE users SET status=? WHERE id=?", status, id); e != nil {
+		rows, e := tx.QueryContext(ctx, "SELECT id,normalized_email,status FROM users WHERE role='deployer' ORDER BY normalized_email")
+		if e != nil {
 			return e
 		}
-		if status != "active" {
-			if _, e = tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE user_id=? AND revoked_at IS NULL", id); e != nil {
+		type deployer struct{ id, email, status string }
+		all := map[string]deployer{}
+		active := []string{}
+		for rows.Next() {
+			var d deployer
+			if e = rows.Scan(&d.id, &d.email, &d.status); e != nil {
+				rows.Close()
+				return e
+			}
+			all[d.email] = d
+			if d.status == "active" {
+				active = append(active, d.email)
+			}
+		}
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		currentRevision := deployerRevision(active)
+		if expectedRevision == "" || expectedRevision != currentRevision {
+			return controlapi.ErrDeployerRevision
+		}
+		activeSet, requestedSet := map[string]bool{}, map[string]bool{}
+		for _, email := range active {
+			activeSet[email] = true
+		}
+		for _, email := range requested {
+			requestedSet[email] = true
+		}
+		broadening := false
+		for email := range requestedSet {
+			if !activeSet[email] {
+				broadening = true
+			}
+		}
+		if broadening && !confirmBroadening {
+			return ErrUnavailable
+		}
+		for _, email := range requested {
+			var existingRole string
+			e = tx.QueryRowContext(ctx, "SELECT role FROM users WHERE normalized_email=?", email).Scan(&existingRole)
+			if e == nil && existingRole == "operator" {
+				return ErrUnavailable
+			}
+			if e != nil && e != sql.ErrNoRows {
 				return e
 			}
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,?,'success','user',?,?,?)", a.ID, "deployer."+status, normalized, key, normalized)
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		for _, email := range requested {
+			d, exists := all[email]
+			if !exists {
+				id := "usr_" + fmt.Sprintf("%x", sha256.Sum256([]byte(email)))[:16]
+				if _, e = tx.ExecContext(ctx, "INSERT INTO users(id,normalized_email,role,status,created_at) VALUES(?,?, 'deployer','active',?)", id, email, now); e != nil {
+					return e
+				}
+			} else if d.status != "active" {
+				if _, e = tx.ExecContext(ctx, "UPDATE otp_challenges SET invalidated_at=? WHERE purpose='control' AND normalized_email=? AND consumed_at IS NULL AND invalidated_at IS NULL", now, email); e != nil {
+					return e
+				}
+				if _, e = tx.ExecContext(ctx, "UPDATE users SET status='active' WHERE id=?", d.id); e != nil {
+					return e
+				}
+			}
+		}
+		for _, email := range active {
+			if requestedSet[email] {
+				continue
+			}
+			d := all[email]
+			if _, e = tx.ExecContext(ctx, "UPDATE users SET status='revoked' WHERE id=?", d.id); e != nil {
+				return e
+			}
+			for _, q := range []string{"UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", "UPDATE sessions SET revoked_at=? WHERE scope='control' AND user_id=? AND revoked_at IS NULL"} {
+				if _, e = tx.ExecContext(ctx, q, now, d.id); e != nil {
+					return e
+				}
+			}
+			if _, e = tx.ExecContext(ctx, "UPDATE otp_challenges SET invalidated_at=? WHERE purpose='control' AND normalized_email=? AND consumed_at IS NULL AND invalidated_at IS NULL", now, email); e != nil {
+				return e
+			}
+		}
+		metadata, e := json.Marshal(struct {
+			Requested         []string `json:"requested"`
+			ExpectedRevision  string   `json:"expected_revision"`
+			ConfirmBroadening bool     `json:"confirm_broadening"`
+		}{requested, expectedRevision, confirmBroadening})
+		if e != nil {
+			return e
+		}
+		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),?,'user',?,'deployers.reconciled','success','deployer_allowlist','active',?,?)", now, a.ID, key, string(metadata))
 		return e
 	})
+}
+
+func deployerRevision(emails []string) string {
+	sorted := append([]string(nil), emails...)
+	sort.Strings(sorted)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(sorted, "\n"))))
 }
 
 // SetAppStatus atomically makes a suspension effective before acknowledging it.
@@ -274,6 +403,32 @@ func (s ControlService) SetAppStatus(ctx context.Context, a controlapi.Actor, sl
 func (s ControlService) Whoami(_ context.Context, a controlapi.Actor) any {
 	return map[string]string{"id": a.ID, "email": a.Email}
 }
+
+// RevokeCurrentBearer makes CLI logout effective on the next request. Actor
+// and CredentialID both originate in the successful bearer authentication; no
+// request-controlled token ID is accepted. A persistence failure is returned
+// so the client keeps its local credential rather than claiming logout.
+func (s ControlService) RevokeCurrentBearer(ctx context.Context, a controlapi.Actor) error {
+	if s.Store == nil || !a.Active || a.ID == "" || a.CredentialID == "" {
+		return ErrUnavailable
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE api_tokens
+			SET revoked_at=datetime('now')
+			WHERE id=? AND user_id=? AND app_id IS NULL AND revoked_at IS NULL`, a.CredentialID, a.ID)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil || count != 1 {
+			return ErrUnavailable
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO audit_events
+			(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id)
+			VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,'cli.logout','success','token',?)`, a.ID, a.CredentialID)
+		return err
+	})
+}
 func (s ControlService) Apps(ctx context.Context, a controlapi.Actor) any {
 	rows, e := s.Store.DB.QueryContext(ctx, "SELECT slug,status FROM applications WHERE owner_user_id=? ORDER BY slug", a.ID)
 	if e != nil {
@@ -298,9 +453,9 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		return controlapi.DashboardView{}, ErrUnavailable
 	}
 	v := controlapi.DashboardView{Health: []controlapi.DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinyhost doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
-	query, args := "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.owner_user_id=? ORDER BY a.slug LIMIT 100", []any{a.ID}
+	query, args := "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.owner_user_id=? AND a.status <> 'deleted' ORDER BY a.slug LIMIT 100", []any{a.ID}
 	if a.Role == "operator" {
-		query, args = "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision ORDER BY a.slug LIMIT 100", nil
+		query, args = "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.status <> 'deleted' ORDER BY a.slug LIMIT 100", nil
 	}
 	rows, err := s.Store.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -336,10 +491,9 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 	rows.Close()
 	for _, x := range owned {
 		app := x.app
-		// The active pointer is independent from the bounded release history: a
-		// rollback can select an older release that is no longer in the latest
-		// 100 rows. Read it directly so its summary and stable launch link do not
-		// disappear or degrade into a guessed description.
+		// The active pointer is independent from the bounded release history. Read
+		// it directly so its summary and stable launch link do not disappear or
+		// degrade into a guessed description.
 		if x.currentDeploymentID != "" {
 			var state string
 			var manifest []byte
@@ -433,23 +587,27 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 	if a.Role != "operator" {
 		return v, nil
 	}
-	users, err := s.Store.DB.QueryContext(ctx, "SELECT normalized_email,status FROM users WHERE role='deployer' ORDER BY normalized_email LIMIT 100")
+	users, err := s.Store.DB.QueryContext(ctx, "SELECT normalized_email FROM users WHERE role='deployer' AND status='active' ORDER BY normalized_email LIMIT 101")
 	if err != nil {
 		return v, err
 	}
 	for users.Next() {
-		var d controlapi.DashboardDeployer
-		if err := users.Scan(&d.Email, &d.Status); err != nil {
+		var email string
+		if err := users.Scan(&email); err != nil {
 			users.Close()
 			return v, err
 		}
-		v.Deployers = append(v.Deployers, d)
+		v.ActiveDeployerEmails = append(v.ActiveDeployerEmails, email)
 	}
 	if err := users.Err(); err != nil {
 		users.Close()
 		return v, err
 	}
 	users.Close()
+	if len(v.ActiveDeployerEmails) > 100 {
+		return v, ErrUnavailable
+	}
+	v.ActiveDeployerRevision = deployerRevision(v.ActiveDeployerEmails)
 	audit, err := s.Store.DB.QueryContext(ctx, "SELECT occurred_at,action,outcome,COALESCE(target_id,'') FROM audit_events ORDER BY occurred_at DESC,id DESC LIMIT 100")
 	if err != nil {
 		return v, err
@@ -786,66 +944,83 @@ func (s ControlService) Releases(ctx context.Context, a controlapi.Actor, slug s
 	return out, nil
 }
 
-// DeleteApp is intentionally a state transition and revocation operation only.
-// Files are immutable evidence and are cleaned asynchronously after retention
-// policy evaluates them; this request must never walk or remove release paths.
+// DeleteApp first makes the app inaccessible, then synchronously removes its
+// server-derived bytes, then deletes every app-owned database row. A byte
+// cleanup failure deliberately leaves the row in deleting state so a later
+// confirmed owner request can retry without restoring access.
 func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug, key string) error {
 	if !a.Active || s.Store == nil || key == "" {
 		return ErrUnavailable
 	}
 	var appID string
-	fresh := false
 	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
-		var target string
-		err := tx.QueryRowContext(ctx, "SELECT target_id FROM audit_events WHERE action='app.deletion_requested' AND actor_id=? AND request_id=?", a.ID, key).Scan(&target)
-		if err == nil {
-			if target == slug {
-				return nil
-			}
+		var status string
+		if err := tx.QueryRowContext(ctx, "SELECT id,status FROM applications WHERE slug=? AND owner_user_id=?", slug, a.ID).Scan(&appID, &status); err != nil {
 			return ErrUnavailable
 		}
-		if err != sql.ErrNoRows {
+		if status != "active" && status != "suspended" && status != "deleting" && status != "deleted" {
+			return ErrUnavailable
+		}
+		if status == "active" || status == "suspended" {
+			res, err := tx.ExecContext(ctx, "UPDATE applications SET status='deleting',updated_at=datetime('now') WHERE id=? AND status IN ('active','suspended')", appID)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n != 1 {
+				return ErrUnavailable
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE app_id=? AND revoked_at IS NULL", appID); err != nil {
 			return err
 		}
-		var status string
-		if err = tx.QueryRowContext(ctx, "SELECT id,status FROM applications WHERE slug=? AND owner_user_id=?", slug, a.ID).Scan(&appID, &status); err != nil {
-			return ErrUnavailable
+		if _, err := tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=datetime('now') WHERE app_id=? AND scope='app' AND revoked_at IS NULL", appID); err != nil {
+			return err
 		}
-		if status != "active" && status != "suspended" {
-			return ErrUnavailable
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if s.Live != nil {
+		s.Live.Revoke(appID, "")
+	}
+	purger := s.AppDataCleanup
+	if purger == nil {
+		purger = AppDataPurger{DataRoot: s.Store.DataRoot, Store: s.Store, BlobCleanup: s.BlobCleanup}
+	}
+	if err := purger.Purge(ctx, appID); err != nil {
+		return err
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		// Delete children explicitly. SQLite foreign keys are intentionally
+		// restrictive, so this list is also a reviewable ownership inventory.
+		for _, statement := range []string{
+			"DELETE FROM deployment_files WHERE deployment_id IN (SELECT id FROM deployments WHERE app_id=?)",
+			"DELETE FROM deployments WHERE app_id=?",
+			"DELETE FROM access_rules WHERE app_id=?",
+			"DELETE FROM access_policies WHERE app_id=?",
+			"DELETE FROM otp_challenges WHERE app_id=?",
+			"DELETE FROM sessions WHERE app_id=?",
+			"DELETE FROM api_tokens WHERE app_id=?",
+			"DELETE FROM app_kv WHERE app_id=?",
+			"DELETE FROM app_quota_usage WHERE app_id=?",
+			"DELETE FROM app_blobs WHERE app_id=?",
+			"DELETE FROM identity_handoffs WHERE app_id=?",
+			"DELETE FROM audit_events WHERE app_id=?",
+		} {
+			if _, err := tx.ExecContext(ctx, statement, appID); err != nil {
+				return err
+			}
 		}
-		res, err := tx.ExecContext(ctx, "UPDATE applications SET status='deleting',updated_at=datetime('now') WHERE id=? AND status IN ('active','suspended')", appID)
+		result, err := tx.ExecContext(ctx, "DELETE FROM applications WHERE id=? AND owner_user_id=? AND status IN ('deleting','deleted')", appID, a.ID)
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n != 1 {
+		if count, err := result.RowsAffected(); err != nil || count != 1 {
 			return ErrUnavailable
 		}
-		if _, err = tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE app_id=? AND revoked_at IS NULL", appID); err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=datetime('now') WHERE app_id=? AND scope='app' AND revoked_at IS NULL", appID); err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, "UPDATE applications SET status='deleted',current_deployment_id=NULL,updated_at=datetime('now') WHERE id=? AND status='deleting'", appID); err != nil {
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_kind,target_id,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,?,'app.deletion_requested','success','app',?,?)", a.ID, appID, slug, key); err != nil {
-			return err
-		}
-		fresh = true
 		return nil
 	})
-	if err == nil && fresh && s.Live != nil {
-		s.Live.Revoke(appID, "")
-	}
-	// The database state is already deleted and therefore gateway-inaccessible.
-	// Reconciliation owns the only server-derived byte cleanup path; do not
-	// make this revocation-sensitive request wait on local disk I/O.
-	if err == nil && fresh && s.BlobCleanup != nil {
-		go func() { _ = s.BlobCleanup.Reconcile(context.Background()) }()
-	}
-	return err
 }
 func (s ControlService) CreateToken(ctx context.Context, a controlapi.Actor, slug string, in controlapi.TokenInput, key string) (controlapi.TokenResult, error) {
 	var out controlapi.TokenResult
@@ -965,24 +1140,4 @@ func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, 
 		s.Live.Revoke(appID, "")
 	}
 	return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", AppSuffix: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
-}
-func (s ControlService) Rollback(ctx context.Context, a controlapi.Actor, slug, id, key string) error {
-	if s.Deployments == nil || !a.Active || key == "" {
-		return ErrUnavailable
-	}
-	var appID string
-	if e := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&appID); e != nil {
-		return ErrUnavailable
-	}
-	r, e := s.Deployments.Repo.Get(ctx, id)
-	if e != nil || r.AppID != appID || r.OwnerID != a.ID {
-		return ErrUnavailable
-	}
-	if e = s.Deployments.Rollback(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key); e != nil {
-		return e
-	}
-	if s.Live != nil {
-		s.Live.Revoke(appID, "")
-	}
-	return nil
 }

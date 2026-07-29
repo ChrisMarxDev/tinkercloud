@@ -14,6 +14,67 @@ bearers are never accepted from browser cookies. A global viewer identity is
 accepted only by the platform identity broker to issue a server-created,
 app-bound viewer handoff; it is never dashboard/control authority.
 
+The interactive deployer CLI persists its bearer only in one Tiny-owned
+per-user credential file per normalized HTTPS platform server URL:
+`os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`. The
+platform-specific Tiny configuration directory is mode `0700`; the credential
+file is a regular, non-symlinked mode-`0600` file. Creation and replacement
+reject symlinks and use an atomic same-directory replacement, so a partial
+write can never be treated as a credential. The file is bounded, versioned JSON
+with exactly the `version`, `server`, and `token` members; unknown or duplicate
+JSON members, a stored-server mismatch, malformed input, and oversized input
+deny rather than being silently repaired. The bearer is never supplied in argv
+or environment variables and is never emitted in CLI output or logs. This local
+persistence is only for CLI bearer reuse; it is neither a browser control cookie
+nor an app or viewer credential, and browser/control/app credential separation
+remains unchanged.
+
+`tiny login` first loads that exact server-bound credential and calls the
+authenticated `GET /api/v1/whoami` endpoint. A complete, authorized response
+reuses the existing bearer without requesting an OTP, issuing a new token, or
+rewriting the credential file; the CLI confirms the server-derived identity.
+An unauthorized or expired bearer is not reusable and falls back to the normal
+CLI-channel OTP flow. Transport, dependency, malformed-response, unexpected
+status, and ambiguous authorization failures fail closed: they neither start an
+OTP request nor change the stored credential. `tiny login --force` is the
+explicit account-switch path. It skips reuse, completes a fresh OTP, and
+replaces the stored bearer only after a successful authenticated `whoami`
+confirmation for the newly issued token; failure leaves the prior credential
+intact. A `429 rate_limited` response is safe to report as a bounded retry
+instruction, but never identifies an email address, authorization state, or
+whether a challenge was created.
+
+After any successful `tiny login`—whether it reused a validated bearer or
+completed fresh OTP—the CLI persists the normalized HTTPS platform URL as a
+separate non-secret default in `os.UserConfigDir()/tiny/default-server.json`.
+It uses exact bounded versioned JSON containing only `version` and `server`,
+the same non-symlinked mode-`0700` directory and mode-`0600` regular-file
+checks as credentials, atomic replacement, and directory fsync. A later CLI
+command may omit `--server` only by resolving this exact normalized value.
+An explicit `--server` wins for one invocation and cannot update the default.
+For a recognized human command with no explicit server, exactly missing default
+state starts one bounded `Server (https://...):` setup prompt. The proposed URL
+must normalize as HTTPS and pass a direct no-redirect bounded `GET
+/api/v1/version` proof with exactly API version 1 before it is stored. This is
+platform selection, not authentication: after durable save the original command
+continues and may still report `Login required`. `--json` never prompts or
+stores; it retains the deterministic missing-server error. Malformed,
+oversized, non-HTTPS, unknown/duplicate-field, unsafe, incompatible, redirect,
+transport, 5xx, malformed-proof, and storage-failure state fails closed without
+running the target command or altering the default.
+
+`POST /api/v1/auth/logout` accepts only a currently authenticated global CLI
+bearer. The route derives both deployer and bearer-row ID from authentication,
+then atomically revokes exactly that global bearer and records a safe audit
+event. It has no token ID, app ID, cookie, or body input, and cannot revoke
+browser control sessions, viewer sessions, app-scoped bearer tokens, or any
+other CLI bearer. A CLI `tiny logout` deletes only the matching local
+server-bound credential after this success. `401 not_authorized` means the
+bearer is already unusable and permits that same local cleanup; transport,
+5xx, persistence, malformed-response, and other ambiguous failures retain the
+local credential. Missing local credential is idempotent; corrupt or unsafe
+local credential state is not.
+
 Successful bearer-token authentication records only the token's nullable UTC
 `last_used_at` timestamp. Authentication performs the active-user, token
 revocation, expiry, app-binding, and exact-scope checks together with that
@@ -49,8 +110,8 @@ boundary as the CLI/API; it does not proxy browser credentials to the bearer
 API. Operators may authorize, suspend, and revoke deployers. Deployer-owned
 app forms show the current policy's canonical additional viewers and may replace
 that policy, create a scoped token (shown only in
-the create response), revoke a token, roll back, suspend/resume, and delete an
-app. Operators may suspend/resume any app. App deletion requires the exact
+the create response), revoke a token, suspend/resume, and delete an app.
+Operators may suspend/resume any app. App deletion requires the exact
 form confirmation `delete:{slug}`.
 
 An access-policy replacement carries the positive `expected_revision` rendered
@@ -91,6 +152,27 @@ post-success summary.
   is denied without recording successful-use metadata.
 - A global viewer identity cookie is not a control session, cannot access the
   dashboard, cannot mint a CLI bearer, and cannot select an app or user role.
+- A reusable CLI bearer is accepted only after a complete authenticated
+  `whoami` response for its normalized server. A malformed response,
+  dependency failure, unexpected status, or ambiguous authorization result
+  cannot prompt for OTP or replace the old credential.
+- An unauthorized or expired CLI bearer may fall back to one CLI-channel OTP;
+  a forced login always requires that fresh OTP. Neither path replaces an
+  existing credential until the newly issued bearer has passed `whoami`.
+- A rate-limited CLI login response is actionable but non-enumerating. It
+  reports only a retry instruction and never exposes email, deployer status,
+  token existence, or OTP-challenge state.
+- Missing default-server state may offer only the bounded human setup prompt;
+  corrupt, unsafe, non-HTTPS, or ambiguous default-server state cannot select a
+  host or start a network request.
+- Only an exact missing default can open the bounded human setup prompt. JSON,
+  explicit-server, invalid grammar, version, corrupt configuration, invalid
+  input, incompatible/redirected/failed proof, and failed secure storage never
+  prompt, cache, or execute the requested command.
+- Logout denies anonymous, browser-cookie, viewer-session, app-scoped, wrong
+  scope, malformed-route, and revoked-bearer requests. A successful logout
+  revokes exactly the authenticated global bearer; another bearer remains
+  usable. Persistence failure never produces a successful logout response.
 
 ## Owned application lifecycle
 
@@ -102,12 +184,12 @@ authorization denial as an unknown slug.
 `DELETE /api/v1/apps/{slug}` requires an `app:delete` control scope, an
 idempotency key, and the JSON confirmation value `delete:{slug}`. The service
 derives both app and owner from the bearer credential and route; it does not
-accept an app ID from JSON. A successful deletion revokes every app-scoped
-control token and viewer session in the same transaction, writes one
-`app.deletion_requested` audit event, and makes the app unavailable before the
-response. It records `active|suspended -> deleting -> deleted` inside that
-transaction. Release files are retained for asynchronous cleanup and are never
-deleted from the request path.
+accept an app ID from JSON. A successful deletion permanently removes the app,
+its policies, deployments/releases, tokens, viewer sessions, KV entries,
+blobs, and app-specific audit metadata. It also removes the corresponding
+server-derived release/blob bytes before reporting success. A transient
+`deleting` state may fail closed during the operation, but no `deleted`
+tombstone, restore record, or app-specific audit record remains after success.
 
 ### Deny charter
 
@@ -115,5 +197,9 @@ deleted from the request path.
   not disclose release metadata or mutate state.
 - Missing, mismatched, or malformed confirmation values and missing idempotency
   keys do not start deletion.
-- Audit insertion failure rolls back status and every revocation.
-- Reusing an idempotency key succeeds only for the same owner and app target.
+- Any database or owned-file removal failure denies completion, leaves the app
+  unavailable while cleanup is incomplete, and never reports successful
+  deletion prematurely.
+- A retry may continue only the same server-derived deletion operation; after
+  successful removal the slug has no retained deletion record and behaves as
+  an unknown app.

@@ -185,8 +185,8 @@ Owns untrusted archive inspection and extraction:
 ### `releases`
 
 Owns the deployment state machine, immutable release metadata, activation lease,
-and rollback. It coordinates database and filesystem operations through an
-explicit recovery protocol.
+and failed-activation preservation. It coordinates database and filesystem
+operations through an explicit recovery protocol.
 
 ```go
 Activate(deploymentID):

@@ -411,61 +411,6 @@ func (s DeploymentRepository) CommitActivation(ctx context.Context, next deploym
 		return err
 	})
 }
-func (s DeploymentRepository) CommitRollback(ctx context.Context, target, current deployments.Record, requestID string) error {
-	if requestID == "" {
-		return deployments.ErrDenied
-	}
-	return s.Store.Write(ctx, func(tx *sql.Tx) error {
-		var prior string
-		e := tx.QueryRowContext(ctx, "SELECT target_id FROM audit_events WHERE action='deployment.rolled_back' AND actor_id=? AND request_id=?", target.OwnerID, requestID).Scan(&prior)
-		if e == nil {
-			if prior == target.ID {
-				return nil
-			}
-			return deployments.ErrIdempotency
-		}
-		if e != sql.ErrNoRows {
-			return e
-		}
-		var ptr sql.NullString
-		var policyRevision uint64
-		var owner, status string
-		if e = tx.QueryRowContext(ctx, "SELECT current_deployment_id,policy_revision,owner_user_id,status FROM applications WHERE id=?", target.AppID).Scan(&ptr, &policyRevision, &owner, &status); e != nil || !ptr.Valid || ptr.String != current.ID {
-			return releases.ErrTransition
-		}
-		if owner != target.OwnerID || status != "active" {
-			return deployments.ErrDenied
-		}
-		if target.AppID != current.AppID || target.State != releases.Superseded || current.State != releases.Active {
-			return releases.ErrTransition
-		}
-		if e = installManifestPolicy(ctx, tx, target.AppID, target.OwnerID, policyRevision+1, target); e != nil {
-			return e
-		}
-		res, e := tx.ExecContext(ctx, "UPDATE deployments SET state='active',activated_at=datetime('now') WHERE id=? AND app_id=? AND state='superseded'", target.ID, target.AppID)
-		if e != nil {
-			return e
-		}
-		n, _ := res.RowsAffected()
-		if n != 1 {
-			return releases.ErrTransition
-		}
-		res, e = tx.ExecContext(ctx, "UPDATE deployments SET state='superseded' WHERE id=? AND app_id=? AND state='active'", current.ID, current.AppID)
-		if e != nil {
-			return e
-		}
-		n, _ = res.RowsAffected()
-		if n != 1 {
-			return releases.ErrTransition
-		}
-		_, e = tx.ExecContext(ctx, "UPDATE applications SET current_deployment_id=?,policy_revision=?,updated_at=datetime('now') WHERE id=?", target.ID, policyRevision+1, target.AppID)
-		if e != nil {
-			return e
-		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_id,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'deployer',?,?,'deployment.rolled_back','success',?,?)", target.OwnerID, target.AppID, target.ID, requestID)
-		return e
-	})
-}
 func (s DeploymentRepository) Fail(ctx context.Context, id string) error {
 	return s.Store.Write(ctx, func(tx *sql.Tx) error {
 		var state string

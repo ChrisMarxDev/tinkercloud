@@ -24,37 +24,36 @@ detail but must not silently expand or contradict it.
 
 ## Development quick start
 
-The repository currently expects Go 1.25.12, Node.js 22, npm, a POSIX shell,
-OpenSSL, and Python 3. On macOS, release scripts also require GNU
+The repository currently expects Task 3.38+, Go 1.25.12, Node.js 22, npm, a
+POSIX shell, OpenSSL, and Python 3. On macOS, release scripts also require GNU
 `sha256sum`.
 
 ```sh
 git clone https://github.com/ChrisMarxDev/tiny.git
 cd tiny
 
-go test ./...
-go vet ./...
-
-cd sdk/typescript
-npm ci
-npm test
+task setup
+task -l
+task build
+task check
 ```
 
-Run the offline security gates from the repository root:
+Use `task -l` to see all maintainer workflows. The core commands are `task
+build` (local server, deployer CLI, SDK, and examples) and `task check` (the
+local CI-equivalent verification suite). Focused tasks such as `task test`,
+`task lint`, `task security`, and `task release:check` are also available.
+These are local evidence commands; none deploy, publish, or install production
+software. Signed artifact creation requires explicit `VERSION`, `OUTPUT`, and
+`TINYHOST_RELEASE_SIGNING_KEY` inputs:
 
 ```sh
-./scripts/ci-security-gates.sh
+task release:build VERSION=0.1.0 OUTPUT=./dist/0.1.0
 ```
 
-Build the two Go entry points locally:
-
-```sh
-mkdir -p bin
-go build -o bin/tinyhost ./cmd/tinyhost
-go build -o bin/tiny ./cmd/tiny
-```
-
-These commands are development checks, not production deployment evidence.
+The explicitly gated `task vps:e2e` mutates a disposable VPS only after its
+acknowledgement and pinned host-key inputs are present. Read
+[VPS E2E](docs/operations/vps-e2e.md) before using it. Local build and test
+commands are development checks, not production deployment evidence.
 The supported server workflow and its prerequisites are documented in
 [Hetzner deployment](docs/operations/hetzner-deployment.md).
 
@@ -75,6 +74,27 @@ The supported server workflow and its prerequisites are documented in
 13. [Agent skill system](docs/delivery/agent-skills.md)
 14. [Technology decisions](docs/decisions/README.md)
 15. [Browsable concept](concept/index.html)
+16. [Complete operator flow](concept/flows/operator.html)
+17. [Complete deployer flow](concept/flows/deployer.html)
+18. [Conversation decision compact](docs/product/conversation-decisions-2026-07.md)
+19. [Flow necessity audit](docs/product/flow-necessity-audit-2026-07.md)
+
+## Deployer quick start
+
+From a static app project, deploy the project directory (not just its output
+folder). Tiny reuses valid existing output; when none exists it stops with the
+project-owned build action rather than running it:
+
+```sh
+tiny deploy .
+```
+
+On its first human run, Tiny asks for the HTTPS platform URL only when it has no
+verified default, reuses or establishes the deployer identity, inspects the
+project, asks only about ambiguous required state, and creates a missing
+`tiny.yaml` as a reviewed receipt. Use `tiny init .` to create the manifest
+ahead of time. Later commands reuse the saved default server and verified CLI
+bearer; `tiny logout` revokes and removes that local bearer.
 
 ## Repository shape
 
@@ -104,8 +124,11 @@ tiny/
 
 ## Local operator workflow
 
-`tinyhost init --config … --operator-email …` initializes private state and
-the first operator. `tinyhost status` is safe for offline recovery and reports
+The target human path is `sudo tinyhost setup`: discover the host, ask only for
+the controlled base domain, initial operator email, and necessary protected
+provider credential source, then generate the config and resume across external
+DNS/email checkpoints. Strict `tinyhost init --non-interactive` remains the
+automation contract. `tinyhost status` is safe for offline recovery and reports
 local, redacted health (SQLite integrity, disk, permissions, clock, service,
 listeners, version, and update rollback state). `sudo tinyhost doctor`
 additionally performs bounded DNS, TLS, and read-only Resend credential checks

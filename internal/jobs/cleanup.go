@@ -102,6 +102,41 @@ func RemoveRelease(dataRoot, appID, releaseHash string) error {
 	return nil
 }
 
+// RemoveAppReleases removes the complete, server-derived release namespace for
+// one app. It is used only after the app has been made inaccessible. Unlike
+// retention cleanup, app deletion must not leave an old immutable release
+// behind merely because it is still within the normal retention window.
+func RemoveAppReleases(dataRoot, appID string) error {
+	if strings.TrimSpace(dataRoot) == "" || !safeComponent(appID) {
+		return ErrUnsafeReleasePath
+	}
+	root := filepath.Clean(dataRoot)
+	p := filepath.Join(root, "releases", appID)
+	prefix := filepath.Join(root, "releases") + string(filepath.Separator)
+	if !strings.HasPrefix(p, prefix) {
+		return ErrUnsafeReleasePath
+	}
+	info, err := os.Lstat(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return ErrUnsafeReleasePath
+	}
+	modes, err := makeWritableTree(p)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(p); err != nil {
+		restoreModes(modes)
+		return err
+	}
+	return nil
+}
+
 type savedMode struct {
 	path string
 	mode os.FileMode

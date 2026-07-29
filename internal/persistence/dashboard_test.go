@@ -18,7 +18,7 @@ func TestDashboardReadModelRoleBoundAndSafe(t *testing.T) {
 	}
 	svc := ControlService{Store: s}
 	v, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true})
-	if err != nil || len(v.Apps) != 2 || len(v.Deployers) != 0 || len(v.Audit) != 0 {
+	if err != nil || len(v.Apps) != 2 || len(v.ActiveDeployerEmails) != 0 || len(v.Audit) != 0 {
 		t.Fatalf("deployer dashboard %#v %v", v, err)
 	}
 	for _, a := range v.Apps {
@@ -32,8 +32,75 @@ func TestDashboardReadModelRoleBoundAndSafe(t *testing.T) {
 		}
 	}
 	v, err = svc.Dashboard(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true})
-	if err != nil || len(v.Apps) != 3 || len(v.Deployers) != 2 || len(v.Audit) != 1 {
+	if err != nil || len(v.Apps) != 3 || len(v.ActiveDeployerEmails) != 2 || len(v.Audit) != 1 {
 		t.Fatalf("operator dashboard %#v %v", v, err)
+	}
+}
+
+func TestDashboardRefusesTruncatedActiveDeployerAllowlist(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 101; i++ {
+		if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES(?,?, 'deployer','active',datetime('now'))", fmt.Sprintf("d%d", i), fmt.Sprintf("d%d@example.com", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := (ControlService{Store: s}).Dashboard(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true}); err != ErrUnavailable {
+		t.Fatalf("dashboard=%v", err)
+	}
+}
+
+func TestDashboardExcludesDeletedAppsButKeepsOperationalStates(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec(`
+		INSERT INTO users VALUES
+			('op','operator@example.com','operator','active',datetime('now')),
+			('other','other@example.com','deployer','active',datetime('now'));
+		INSERT INTO applications(id,owner_user_id,slug,status,policy_revision,created_at,updated_at) VALUES
+			('deleted-own','u','deleted-own','deleted',1,datetime('now'),datetime('now')),
+			('active-other','other','active-other','active',1,datetime('now'),datetime('now')),
+			('deleted-other','other','deleted-other','deleted',1,datetime('now'),datetime('now'));
+		INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES
+			('a',1,'private',datetime('now')),
+			('b',1,'private',datetime('now')),
+			('deleted-own',1,'private',datetime('now')),
+			('active-other',1,'private',datetime('now')),
+			('deleted-other',1,'private',datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := ControlService{Store: s}
+	for _, tc := range []struct {
+		name  string
+		actor controlapi.Actor
+		want  []string
+	}{
+		{"deployer", controlapi.Actor{ID: "u", Role: "deployer", Active: true}, []string{"alpha", "beta"}},
+		{"operator", controlapi.Actor{ID: "op", Role: "operator", Active: true}, []string{"active-other", "alpha", "beta"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v, err := svc.Dashboard(context.Background(), tc.actor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(v.Apps) != len(tc.want) {
+				t.Fatalf("dashboard app count = %d, want %d: %#v", len(v.Apps), len(tc.want), v.Apps)
+			}
+			for i, app := range v.Apps {
+				if app.Slug != tc.want[i] || app.Status == "deleted" {
+					t.Fatalf("dashboard apps = %#v, want operational apps %v", v.Apps, tc.want)
+				}
+			}
+		})
+	}
+
+	var retained int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM applications WHERE status='deleted'").Scan(&retained); err != nil || retained != 2 {
+		t.Fatalf("deleted records retained = %d, %v", retained, err)
 	}
 }
 

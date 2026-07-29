@@ -67,13 +67,18 @@ func TestLoginSuccess(t *testing.T) {
 		case "/api/v1/auth/otp":
 			w.Write([]byte(`{"transaction":"x"}`))
 		case "/api/v1/auth/verify":
-			w.Write([]byte(`{"token":"secret","email":"a@example.com","api_version":1}`))
+			w.Write([]byte(`{"token":"secret","api_version":1}`))
+		case "/api/v1/whoami":
+			if r.Header.Get("Authorization") != "Bearer secret" {
+				t.Fatal("whoami was not authenticated")
+			}
+			w.Write([]byte(`{"email":"a@example.com"}`))
 		}
 	}))
 	defer s.Close()
 	p := &prompt{[]string{"a@example.com", "123456"}}
 	o, e := Login(context.Background(), s.URL, p)
-	if e != nil || o.Token != "secret" {
+	if e != nil || o.Token != "secret" || o.Email != "a@example.com" {
 		t.Fatal(o, e)
 	}
 }
@@ -83,6 +88,67 @@ func TestLoginVersionMismatch(t *testing.T) {
 	_, e := Login(context.Background(), s.URL, &prompt{})
 	if e == nil {
 		t.Fatal("accepted incompatible API")
+	}
+}
+
+func TestDoRateLimitDoesNotExposeResponseBody(t *testing.T) {
+	c := New("https://tiny.test", "control-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(`{"error":{"message":"a@example.test control-token"}}`)), Header: make(http.Header), Request: r}, nil
+	})}
+	err := c.Do(context.Background(), "POST", "/api/v1/auth/otp", "", map[string]string{"email": "a@example.test"}, nil)
+	if !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("error = %v", err)
+	}
+	if strings.Contains(err.Error(), "example") || strings.Contains(err.Error(), "token") {
+		t.Fatalf("rate limit detail leaked: %v", err)
+	}
+}
+
+func TestVerifyLoginSessionDependencyFailureIsNotUnauthorized(t *testing.T) {
+	c := New("https://tiny.test", "saved-token")
+	c.HTTP = &http.Client{Transport: rt(func(*http.Request) (*http.Response, error) {
+		return nil, context.DeadlineExceeded
+	})}
+	_, err := VerifyLoginSession(context.Background(), c)
+	if err == nil || errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("dependency error must fail closed, got %v", err)
+	}
+}
+
+func TestVerifyServerCompatibilityFailsClosed(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		status int
+		body   string
+		err    error
+	}{
+		{"valid", http.StatusOK, `{"api_version":1}`, nil},
+		{"wrong version", http.StatusOK, `{"api_version":2}`, nil},
+		{"malformed", http.StatusOK, `{`, nil},
+		{"redirect", http.StatusFound, ``, nil},
+		{"dependency", 0, ``, context.DeadlineExceeded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := New("https://tiny.test", "")
+			c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/version" || r.Header.Get("Authorization") != "" {
+					t.Fatalf("unexpected proof request %s %s", r.Method, r.URL.Path)
+				}
+				if tt.err != nil {
+					return nil, tt.err
+				}
+				return &http.Response{StatusCode: tt.status, Body: io.NopCloser(strings.NewReader(tt.body)), Header: make(http.Header), Request: r}, nil
+			})}
+			err := VerifyServerCompatibility(context.Background(), c)
+			if tt.name == "valid" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if !errors.Is(err, ErrIncompatibleServer) {
+				t.Fatalf("error = %v", err)
+			}
+		})
 	}
 }
 func TestCrossOriginRedirectDenied(t *testing.T) {

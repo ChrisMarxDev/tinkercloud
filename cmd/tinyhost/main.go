@@ -166,7 +166,14 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	}
 	blobs := resources.BlobRepository(store)
 	controlAuth := persistence.ControlAuthenticator{Store: store}
-	controlService := persistence.ControlService{Store: store, Live: hub, BlobCleanup: blobs, Deployments: deploy, AppSuffix: c.AppSuffix}
+	controlService := persistence.ControlService{
+		Store:          store,
+		Live:           hub,
+		BlobCleanup:    blobs,
+		AppDataCleanup: persistence.AppDataPurger{DataRoot: c.DataDirectory, Store: store, BlobCleanup: blobs},
+		Deployments:    deploy,
+		AppSuffix:      c.AppSuffix,
+	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
 	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes}, Auth: controlAuth, Views: controlService, Actions: controlService, Login: controlLogin, RateLimits: limits}

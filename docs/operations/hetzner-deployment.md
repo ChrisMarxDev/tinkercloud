@@ -11,15 +11,18 @@ dedicated to TinyHost:
 
 ```bash
 sudo sh ./packaging/install.sh ./tinyhost ./tinyhost.json ./tinyhost.sig
-sudo tinyhost init --non-interactive \
-  --platform-host tiny.example.com --app-suffix apps.example.com \
-  --operator-email operator@example.com \
-  --email-from operator@example.com --acme-email operator@example.com \
-  --resend-api-key-file /root/tinyhost-resend.key \
-  --hmac-key-file /root/tinyhost-hmac.key
+sudo tinyhost setup
 ```
 
-The script is a thin convenience wrapper. It:
+The guided setup discovers the host, asks for one controlled base domain and
+the initial operator email, derives conventional platform/app/sender values,
+and pauses with exact DNS and Resend actions. It resumes without asking for
+prior valid answers, ingests the provider key into the root-owned credential
+boundary, generates non-secret config and internal secrets, and completes the
+ordinary health/security gates. See the
+[complete operator flow](../../concept/flows/operator.html).
+
+The install script is a thin convenience wrapper. It:
 
 1. Detects supported Linux architecture.
 2. Downloads the matching `tinyhost` release.
@@ -27,19 +30,35 @@ The script is a thin convenience wrapper. It:
 4. Installs the binary in a standard executable path.
 5. Runs `tinyhost install-service`.
 
-All meaningful setup logic lives in the signed binary, not a large mutable shell
-script. Operators may download and verify the binary manually instead.
+All meaningful setup logic lives in the signed binary, not a large mutable
+shell script. Operators may download and verify the binary manually instead.
+Generated config is the resulting system record and automation interface, not a
+document the human must author before setup.
 
-## Non-interactive initialization
+## Deterministic non-interactive initialization
 
-V1 deliberately has no interactive secret prompt: terminal input and argv are
-too easy to retain in scrollback, shell history, and process inspection. `init`
-requires `--non-interactive`, explicit non-secret flags, and root-readable
-secret files. It copies the values into
+Automation and recovery still use the explicit contract:
+
+```bash
+sudo tinyhost init --non-interactive \
+  --platform-host tiny.example.com --app-suffix apps.example.com \
+  --operator-email operator@example.com \
+  --email-from access@example.com --acme-email operator@example.com \
+  --resend-api-key-file /root/tinyhost-resend.key \
+  --hmac-key-file /root/tinyhost-hmac.key
+```
+
+`init --non-interactive` requires explicit non-secret flags and root-readable
+secret files. It never prompts or derives missing values. The human `setup`
+assistant generates these inputs and may accept the Resend secret through a
+no-echo prompt only if that path passes the supported-shell secret-handling
+audit; otherwise it guides creation/selection of a protected file. Neither path
+places a secret in argv, ordinary config, or terminal output. Initialization
+copies the values into
 `/etc/tinyhost/credentials/tinyhost.env` at mode `0600`; the config contains
 only `env:` references. Do not pass API keys as command-line values.
 
-`tinyhost init`:
+The shared initialization domain:
 
 1. Validates the exact Ubuntu 24.04 LTS/amd64 or Ubuntu 26.04 LTS/amd64
    allowlist, NTP synchronization, and exclusive availability of public ports
@@ -112,8 +131,8 @@ protections; it does not run the gateway as root.
 
 ```bash
 # Use the configured updates.release_base, or name the HTTPS release directory.
-sudo tinyhost update --config /etc/tinyhost/config.yaml --app-slug payroll
-sudo tinyhost update --config /etc/tinyhost/config.yaml --app-slug payroll \
+sudo tinyhost update
+sudo tinyhost update \
   --release-base https://releases.example.net/tinyhost/v1.0.0/
 ```
 
@@ -121,8 +140,11 @@ For an air-gapped host, copy all three signed artifact files onto the VPS and
 use `--binary`, `--metadata`, and `--signature` together. The command does not
 follow redirects, accepts only the pinned signed `tinyhost-linux-amd64` release,
 and rejects private or link-local release origins. It derives public health from
-the configured platform host and requires `--app-slug` to name an existing
-active app for the anonymous-denial probe; URLs cannot be supplied as probes.
+installed state and deterministically selects a locally verified active app for
+the anonymous capability-denial probe. If no active app exists, it proves that
+exact state plus platform health and safe unknown-app-host denial; the first
+deployment later proves full protected-app denial. Callers cannot supply an app
+slug, probe host, path, or URL.
 
 To avoid repeating `--release-base`, set a release directory (not an artifact
 file) in the root-owned config:
@@ -164,11 +186,12 @@ Root access is authoritative:
 ```bash
 sudo tinyhost recover operator --email new@example.com
 sudo tinyhost doctor
-sudo tinyhost update --config /etc/tinyhost/config.yaml --app-slug payroll --rollback
+sudo tinyhost update --rollback
 ```
 
 Recovery commands require a local root shell and are never exposed as remote
-HTTP bypasses.
+HTTP bypasses. The update `--rollback` flag restores the server binary after a
+failed update; it is not a deployer application-release rollback.
 
 ## Deployer installation
 
@@ -194,23 +217,39 @@ produces a direct upgrade instruction rather than a generic deployment error.
 
 Hosting is not open merely because someone knows the platform URL:
 
-1. The operator authorizes a normalized deployer email in the dashboard or with
+1. The operator edits one revision-protected exact active-deployer allowlist in
+   the dashboard. New/reactivated addresses require explicit broadening
+   confirmation. Removed addresses immediately lose current API/control
+   credentials while their immutable IDs and owned apps remain. Audit failure
+   rolls back the entire reconciliation.
+   Root recovery/automation may still authorize one normalized address with
    `tinyhost deployers authorize <email>`. The root-only command grammar is
    `tinyhost deployers <authorize|suspend|revoke> [--config PATH] <email>`;
    `--config` defaults to `/etc/tinyhost/config.yaml` and must appear before
    the email. It validates root authority, then writes SQLite as the unprivileged
    `tinyhost` service identity, including a narrowly validated handoff of any
    legacy root-owned DB/WAL/SHM artifacts; it never loosens database modes.
-2. The deployer runs `tiny login --server https://tiny.example.com`.
+2. The deployer runs `tiny login`. If no verified default platform exists, the
+   human CLI asks once for `https://tiny.example.com`, proves compatibility
+   without redirects, saves only that URL, and continues. JSON never prompts.
 3. The CLI requests an OTP; the platform returns the same safe response whether
    or not the address is authorized.
 4. The deployer enters the emailed code in the CLI.
 5. After OTP verification and a current deployer-status check, the server
    issues a server-bound, scoped CLI token.
-6. The CLI stores the token in the operating-system credential store, never a
-   project file.
+6. The CLI stores the token in its protected per-user Tiny credential file,
+   never a project file: `os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`.
+   The configuration directory is mode `0700`; the regular non-symlinked
+   credential file is mode `0600` and is atomically replaced in place. `tiny
+   login` is needed once per valid token; later CLI commands reuse it silently.
 7. Every control-plane request rechecks token validity, deployer status, scope,
    and target ownership. Revocation takes effect on the next request.
+
+The canonical deploy-first human flow is `tiny deploy .`: it can perform the
+same missing-platform/login steps, derive safe local project defaults, and
+generate a missing `tiny.yaml` as a reviewable receipt. It never runs the
+project build command. See the
+[complete deployer flow](../../concept/flows/deployer.html).
 
 An unauthorized email never receives authority to create an app, upload a
 release, or mutate policy, even if OTP delivery was requested successfully.

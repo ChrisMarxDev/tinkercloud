@@ -4,58 +4,51 @@ The roadmap uses vertical slices. Each milestone includes a user-visible result,
 a security claim, and an exit gate. Calendar estimates should be added only by
 the implementing team after spikes.
 
-## Next implementation slice — M2 admin-board deployer allowlist
+## Next implementation slice — M5/M3 minimum-necessary guided flows
 
-Outcome: an authenticated operator can use the admin board to see and manage
-the complete set of normalized email identities allowed to deploy apps,
-including authorizing an email that has never signed in. This is the next
-implementation priority. It is followed by the M4 lightweight blob capability,
-the M5 host resource overview, and then the planned M5 guided operator setup.
+Outcome: a human operator can run `tinyhost setup`, and a human deployer can run
+`tiny deploy .`, without preparing configuration paperwork or repeatedly
+entering information TinyHost can discover, verify, reuse, or safely default.
+The exhaustive targets are the
+[operator flow](../../concept/flows/operator.html) and
+[deployer flow](../../concept/flows/deployer.html).
 
-Trust boundary and ownership:
+Already implemented foundations:
 
-- the active operator is derived from the control browser session and rechecked
-  by the server for every mutation;
-- the TinyHost `users` records remain the only deployer-authorization source of
-  truth; the browser form does not introduce a second allowlist;
-- email, status, route, CSRF, and confirmation values are untrusted input; and
-- suspend or revoke still invalidates affected control credentials in the same
-  audited transaction and applies to the next relevant request.
+- one revision-protected exact active-deployer allowlist with atomic
+  credential revocation and audit;
+- persistent server-bound CLI bearer, verified default server, forced account
+  switch, and exact-bearer logout;
+- deploy-first missing-manifest wizard, immutable descriptions, dashboard
+  search/status filtering, stable launch, hard deletion, and no deployer
+  rollback; and
+- global viewer identity with app-bound handoffs.
 
-Contract and deny charter, before the happy path:
+Remaining vertical path:
 
-- extend [`specs/api/control-auth-contract.md`](../../specs/api/control-auth-contract.md)
-  with the add-new-deployer form, normalized-email behavior, bounded complete
-  listing/pagination behavior, and generic failure response;
-- prove anonymous, deployer-role, inactive-operator, missing/wrong-CSRF,
-  cross-origin, malformed-email, operator-email collision, replay-conflict,
-  database-failure, and audit-failure attempts do not create or change a
-  deployer;
-- prove an unavailable or truncated deployer read model is never presented as
-  the complete allowlist; and
-- retain the root-local `tinyhost deployers` command as recovery/bootstrap, not
-  as a prerequisite for routine allowlist management.
-
-Vertical path:
-
-- add an operator-only normalized-email form to the Deployers section;
-- authorize a new deployer through the existing typed, audited browser action;
-- show the new active deployer immediately in a bounded list from which the
-  operator can suspend, re-authorize, or revoke them; and
-- make every deployer reachable through pagination or an equivalent explicit
-  bounded navigation instead of silently stopping at the current first 100.
+- add the resumable human `tinyhost setup` assistant over the strict
+  non-interactive initialization contract;
+- derive conventional platform/app/sender values from one base domain and
+  pause with exact DNS/Resend actions;
+- make project/output/capability discovery explicit and ask only when safe
+  evidence is ambiguous;
+- replace field-by-field optional deploy questions with one review/edit
+  checkpoint; and
+- remove the normal update `--app-slug` ceremony by deterministically selecting
+  a locally verified active app (or proving the exact no-app state); and
+- instrument prompt tests against
+  [`specs/ux/minimum-necessary-input-contract.md`](../../specs/ux/minimum-necessary-input-contract.md).
 
 Exit evidence:
 
-- a fresh email can be authorized entirely from the admin board and can then
-  complete deployer login;
-- every authorized, suspended, and revoked deployer is discoverable from the
-  board without VPS access;
-- a non-operator cannot read the deployer list or invoke any deployer mutation;
-- malformed and failed mutations leave authorization and audit state
-  unchanged; and
-- suspension or revocation denies the deployer's next control request and does
-  not resurrect prior credentials when re-authorized.
+- a fresh supported VPS reaches a verified dashboard without hand-authored
+  config or repeated answers;
+- interrupted external DNS/email work resumes at the exact blocked step;
+- a useful built static project reaches a protected URL from
+  `tiny deploy .` without hand-authored YAML;
+- every human prompt proves its input is required, unknown, and unsafe to
+  default; and
+- JSON/non-interactive behavior remains deterministic and non-prompting.
 
 ## Cross-cutting delivery evidence — trusted GitHub issue loop
 
@@ -188,14 +181,15 @@ policy state as empty.
 
 ## M3 — Immutable deployment loop
 
-Outcome: `tiny deploy` returns a verified protected URL, with rollback.
+Outcome: `tiny deploy` returns a verified protected URL with failed-activation
+preservation.
 
 Components:
 
 - manifest parser, upload stream, archive inspector/extractor;
 - deployment state machine, release manifest, activation and recovery;
 - certificate readiness and public gateway probes;
-- rollback and cleanup.
+- failure recovery and cleanup.
 
 Evidence implemented: the CLI streams a reproducible archive through a private
 temporary file rather than RAM, obtains a fresh random idempotency key for each
@@ -208,13 +202,14 @@ deployer's ownership-scoped app list proves it is missing; a foreign slug
 conflict remains a denial. The server stores the canonical private manifest
 allowlist with each immutable deployment, validates that candidate (not an old
 ambient policy), and atomically swaps release pointer plus policy revision on
-activation and rollback. Failure injection proves either operation preserves
-the prior pointer and policy together.
+activation. Failure injection proves a failed activation preserves the prior
+pointer and policy together.
 
 Evidence implemented: an optional validated `tiny.yaml` description is stored
 only in each immutable deployment manifest. Dashboard history shows the
 matching release description while the app summary follows `current_deployment_id`,
-so rollback restores it without a mutable app field. Malformed final manifest
+so failed activation preserves the active app without a mutable app field.
+Malformed final manifest
 metadata makes the read model unavailable. The active current app alone has an
 accessible new-tab stable-gateway launch icon; it never links raw release
 storage and remains behind normal app authentication.
@@ -453,12 +448,15 @@ The assistant:
 
 - checks supported OS/architecture, root authority, NTP, disk, and ports before
   asking for configuration;
-- asks only for values it cannot discover or safely default: platform/app
-  domains, operator email, verified sending address, and credential-file paths;
-- defaults the public ACME contact to the operator email unless explicitly
-  overridden;
-- accepts secrets only through explicit root-readable file paths, never secret
-  values in argv, echoed prompts, generated shell commands, logs, or summaries;
+- asks for one controlled base domain and the operator email, derives
+  conventional platform/app/sender/ACME values, and puts non-standard choices
+  behind one edit step;
+- pauses with exact external DNS and Resend actions, persists validated
+  non-secret progress, and resumes without re-asking prior valid answers;
+- accepts secrets through explicit root-readable file paths, or through a
+  no-echo prompt only after supported-shell handling passes audit; never secret
+  values in argv, ordinary config, echoed output, generated shell commands,
+  logs, or summaries;
 - previews the resulting non-secret configuration and affected paths before
   confirmation;
 - renders durable step progress for preflight, paths, database, operator,

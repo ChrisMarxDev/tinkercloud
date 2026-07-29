@@ -94,12 +94,51 @@ Do not use a client installer fetched from an unauthenticated URL as its own
 trust root. Obtain this script from the signed source release or a reviewed
 checkout; the public key embedded in it is the verification authority.
 
+After interactive OTP verification, `tiny login` saves its server-bound bearer
+in `os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`. The platform
+configuration directory must be mode `0700`, the regular non-symlinked
+credential file mode `0600`, and writes atomic replacements in the same
+directory. The file's bounded exact JSON must reject malformed, unknown,
+duplicate, server-mismatched, or oversized input. Client tests must exercise
+these denial paths and prove that a raw bearer never reaches argv, environment
+variables, output, or logs. The file is local to the deployer's OS account, not
+a release artifact, project file, browser credential, or app credential.
+
+On a later `tiny login`, the client first checks the stored bearer through
+authenticated `whoami`. A valid response is reused without issuing another OTP
+or rewriting the file. Only an unauthorized or expired bearer may fall back to
+the interactive CLI OTP flow; dependency, transport, malformed-response,
+unexpected-status, and ambiguous authorization failures stop without changing
+the saved credential. Use `tiny login --force` to deliberately switch
+accounts. It obtains a fresh OTP and replaces the file only after the new
+bearer completes `whoami`. A rate-limited response tells the deployer to wait
+and retry without disclosing email eligibility or challenge state.
+
+The same protected directory keeps a separate bounded exact
+`default-server.json` containing only `version` and the normalized HTTPS
+platform URL. Successful login updates it after credential verification and
+storage; later commands may omit `--server`. Explicit `--server` is an
+invocation-only override. A human command with exactly missing default state
+offers one bounded server prompt, verifies the normalized HTTPS host through a
+direct no-redirect API-v1 response, then saves it before continuing; the next
+step may still be `Login required`. JSON never prompts or saves. Malformed,
+unsafe, incompatible, redirected, transport-failed, or storage-failed setup
+state fails closed. `tiny logout` calls `POST /api/v1/auth/logout` with the current global
+CLI bearer and removes only that matching local credential after confirmed
+revocation (or a `401` proving it is already unusable). It retains the default
+URL and retains the local credential on transport, 5xx, persistence, or local
+delete failure.
+
 ## Update health evidence
 
-Before retaining a replacement server, `tinyhost update --app-slug` verifies a
-locally confirmed active app through its normal HTTPS gateway route. An
-anonymous request to that app's `/` must receive the normal protected-route
-`401` JSON denial, including the stable error envelope and no-store security
-headers. A 404 is not acceptable evidence: it can mean the app route is absent.
-Likewise, a redirect, public 2xx response, malformed response, timeout, or
-transport failure automatically restores the prior binary and restarts it.
+Before retaining a replacement server, `tinyhost update` deterministically
+selects the lexicographically first locally verified active app and requests its
+`/_tiny/api/v1/capabilities` route through the normal HTTPS gateway. The
+operator supplies no app slug or probe URL. An anonymous request must receive
+the exact protected-route `401` JSON denial, including the stable error envelope
+and no-store security headers. A 404 is not acceptable evidence: it can mean
+the app route is absent. Likewise, a redirect, public 2xx response, malformed
+response, timeout, or transport failure automatically restores the prior binary
+and restarts it. With no active app, the updater proves that exact installed
+state plus platform health, socket confinement, and safe unknown-app-host
+denial; ambiguous state is failure.

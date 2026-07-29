@@ -16,6 +16,16 @@ type fakeBlobBytes struct {
 	installed       map[string]bool
 }
 
+type signalingAppDataPurger struct {
+	inner   AppDataPurger
+	entered chan struct{}
+}
+
+func (p signalingAppDataPurger) Purge(ctx context.Context, appID string) error {
+	close(p.entered)
+	return p.inner.Purge(ctx, appID)
+}
+
 func k(app, id string) string { return app + "/" + id }
 func (f *fakeBlobBytes) Put(app, id string, r io.Reader, _ int64) (int64, string, error) {
 	_, _ = io.ReadAll(r)
@@ -38,6 +48,14 @@ func (f *fakeBlobBytes) Open(app, id string) (io.ReadCloser, int64, string, erro
 	return io.NopCloser(strings.NewReader("x")), 1, "hash", nil
 }
 func (f *fakeBlobBytes) Delete(app, id string) error { delete(f.installed, k(app, id)); return nil }
+func (f *fakeBlobBytes) RemoveAppNamespace(app string) error {
+	for key := range f.installed {
+		if strings.HasPrefix(key, app+"/") {
+			delete(f.installed, key)
+		}
+	}
+	return nil
+}
 func (f *fakeBlobBytes) Keys(after blob.Key, limit int) ([]blob.Key, bool, error) {
 	out := []blob.Key{}
 	for x := range f.installed {
@@ -163,12 +181,21 @@ func TestBlobRepositoryAppDeletionCannotRaceUpload(t *testing.T) {
 			out <- err
 		}()
 		<-entered
-		if err := (ControlService{Store: s}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "delete-before-ready"); err != nil {
-			t.Fatal(err)
-		}
+		purgeEntered := make(chan struct{})
+		deleteResult := make(chan error, 1)
+		go func() {
+			deleteResult <- (ControlService{Store: s, AppDataCleanup: signalingAppDataPurger{
+				inner:   AppDataPurger{DataRoot: s.DataRoot, Store: s, BlobCleanup: r},
+				entered: purgeEntered,
+			}}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "delete-before-ready")
+		}()
+		<-purgeEntered
 		close(release)
 		if err := <-out; !errors.Is(err, blob.ErrUnavailable) {
 			t.Fatalf("upload finalized after deletion: %v", err)
+		}
+		if err := <-deleteResult; err != nil {
+			t.Fatal(err)
 		}
 		if err := r.Reconcile(context.Background()); err != nil {
 			t.Fatal(err)
@@ -185,7 +212,7 @@ func TestBlobRepositoryAppDeletionCannotRaceUpload(t *testing.T) {
 		if _, err := r.Upload(context.Background(), "a", "i", m, strings.NewReader("x"), limits); err != nil {
 			t.Fatal(err)
 		}
-		if err := (ControlService{Store: s}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "ready-before-delete"); err != nil {
+		if err := (ControlService{Store: s, AppDataCleanup: AppDataPurger{DataRoot: s.DataRoot, Store: s, BlobCleanup: r}}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "ready-before-delete"); err != nil {
 			t.Fatal(err)
 		}
 		if err := r.Reconcile(context.Background()); err != nil {

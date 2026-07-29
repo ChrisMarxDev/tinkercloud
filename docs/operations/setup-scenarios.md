@@ -16,19 +16,26 @@ per-app policy, viewer authentication, session, or authorization checks.
 ## Accepted setup experience
 
 The operator runs `sudo tinyhost setup` on a fresh supported machine. The
-assistant asks only for values it cannot discover or safely default:
+assistant asks for the base domain and initial operator email, then derives the
+conventional platform hostname, wildcard app suffix, sending address, and ACME
+contact. An explicit edit step handles non-standard topologies. It asks only
+for values it cannot discover or safely default:
 
-1. the platform hostname and wildcard app suffix;
+1. the controlled base domain;
 2. the initial operator email;
-3. the verified Resend sending address and root-readable API-key file; and
-4. for the future VPN-only mode, the certificate and private-key file paths.
+3. the verified Resend credential source; and
+4. for the future VPN-only mode, the certificate and private-key credential
+   sources.
 
 The ACME contact defaults to the operator email in public mode. TinyHost handles
 host checks, service identity, directories, configuration, credentials,
 database initialization, systemd installation, startup, and final security
 verification. It reports one actionable prerequisite when DNS, email,
 certificate, VPN reachability, or an operator-owned firewall prevents
-completion. It does not take ownership of SSH or firewall policy.
+completion. It persists validated non-secret progress and resumes without
+asking for prior valid answers. Generated config is a durable receipt and
+automation interface, not prerequisite paperwork. It does not take ownership
+of SSH or firewall policy.
 
 ## Scenario 1: public VPS for a solo operator or startup
 
@@ -64,19 +71,23 @@ firewall policy are not part of the ten-minute TinyHost initialization target.
 
 ```text
 verify and install the signed tinyhost binary
-→ run tinyhost init
-→ create the service identity, config, credentials, SQLite, and operator
+→ run tinyhost setup
+→ discover host state; ask base domain + operator email
+→ show exact DNS/Resend actions and resume after completion
+→ generate the service identity, config, credentials, SQLite, and operator
 → obtain the platform certificate through public HTTP-01
 → prove the public HTTPS gateway
-→ authorize a deployer
+→ reconcile the active-deployer allowlist
 → tiny login
 → tiny deploy
 → prove anonymous denial before reporting success
 ```
 
-The current deterministic path is `tinyhost init --non-interactive`. The
-planned `tinyhost setup` assistant is still required before the ten-minute
-experience is credible for a first-time human operator.
+The deterministic automation contract remains
+`tinyhost init --non-interactive`. The human product path is the planned
+`tinyhost setup` assistant in the
+[complete operator flow](../../concept/flows/operator.html); it calls the same
+validation/domain services and generates the explicit automation state.
 
 ### Network exposure
 
@@ -198,8 +209,9 @@ complete, not to weaken the gateway.
 ## Current open setup issues
 
 1. Implement and test the guided `tinyhost setup` assistant.
-2. Implement the accepted operator-supplied VPN certificate and
+2. Benchmark and document the smallest recommended Hetzner plan.
+3. Implement the accepted operator-supplied VPN certificate and
    trusted-network verification model.
-3. Re-run clean-host install and failed-update rollback acceptance after the
+4. Re-run clean-host install and failed-update rollback acceptance after the
    port-confinement change.
-4. Complete the planned operator CPU/RAM/storage overview.
+5. Complete the planned operator CPU/RAM/storage overview.

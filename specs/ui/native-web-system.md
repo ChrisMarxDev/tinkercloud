@@ -91,7 +91,7 @@ Use durable server states, not optimistic labels:
 
 | Family | Labels |
 |---|---|
-| App | creating, active, suspended, deleting, deleted, failed |
+| App | creating, active, suspended, deleting, failed |
 | Deployment | uploading, validating, staged, verified, active, superseded, rejected, failed |
 | Health | healthy, degraded, warning, write-disabled, unavailable, local |
 | Live | connected, reconnecting, offline |
@@ -99,6 +99,20 @@ Use durable server states, not optimistic labels:
 
 Unknown states render with neutral styling and their escaped server-provided
 text. A dot, icon, or color may reinforce the state but never replace the text.
+
+After a successful irreversible app deletion, the server permanently removes
+the app and its owned data, so the redirected dashboard's app list, local
+search/filter inputs and results, and visible app count exclude it. The browser
+must receive that already-excluded server read model; hiding a rendered deleted
+card with JavaScript is forbidden. The operational dashboard offers no restore
+affordance. A denied or failed deletion leaves the existing operational app
+visible and states that deletion did not complete, without claiming that
+removal, revocation, or cleanup occurred.
+
+The V1 dashboard may display immutable release metadata but offers no
+deployer-selected rollback form, route, button, or simulated client-side
+control. Failed activation preservation is server-side deployment behavior, not
+a dashboard mutation.
 
 ## Security and denial charter
 
@@ -171,6 +185,20 @@ Before a styled happy path is accepted, tests must prove:
    JavaScript, notices, or deployed-app content. It remains stable through
    global sign-out; that persistence must not be represented as a signed-in
    state or account picker.
+19. A successful irreversible app deletion permanently removes the app and its
+   owned data from the server. The redirected operational dashboard's
+   server-derived list, local filter/search result set, and visible count omit
+   it because there is no retained app record to render. The dashboard must not
+   render a deleted card then hide it with JavaScript, expose a deleted-state
+   filter value, or offer restoration. A rejected or failed delete keeps the
+   app in the operational read model and gives a safe, explicit failure or
+   denial message without asserting that deletion occurred.
+20. The operator-only active-deployer allowlist is one labelled native textarea
+   prefilled from the server-rendered canonical snapshot and revision. It has
+   no JavaScript dependency, requires visible broadening confirmation, and
+   states that removed addresses are signed out and cannot deploy. The form
+   never renders credential/provider detail; server-side role, CSRF, origin,
+   revision, collision, audit, and idempotency denials prevent mutation.
 
 ## Accessibility contract
 

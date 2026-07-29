@@ -43,6 +43,34 @@ func TestLocalStoreMissingNamespaceIsEmptyAndDeleteIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestLocalStoreRemoveAppNamespaceRemovesOnlyEmptyValidatedTarget(t *testing.T) {
+	s := LocalStore{Root: t.TempDir()}
+	id := "blb_0123456789abcdef0123456789abcdef"
+	for _, app := range []string{"app-a", "app-b"} {
+		if _, _, err := s.Put(app, id, strings.NewReader("x"), 10); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Delete(app, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.RemoveAppNamespace("app-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(s.Root + "/blobs/app-a"); !os.IsNotExist(err) {
+		t.Fatalf("target namespace remained: %v", err)
+	}
+	if _, err := os.Stat(s.Root + "/blobs/app-b"); err != nil {
+		t.Fatalf("other namespace removed: %v", err)
+	}
+	if err := s.RemoveAppNamespace("../app-b"); err == nil {
+		t.Fatal("unsafe namespace accepted")
+	}
+	if err := s.RemoveAppNamespace("app-b"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLocalStoreSyncAndFinalizeFailureLeaveNoReadableObject(t *testing.T) {
 	cases := []struct {
 		name string

@@ -20,16 +20,21 @@ import (
 const MaxBody = 1 << 20
 
 var ErrPolicyRevision = errors.New("policy revision conflict")
+var ErrDeployerRevision = errors.New("deployer allowlist revision conflict")
 
 type Actor struct {
 	ID, Email, Role string
-	Active          bool
+	// CredentialID is server-derived from the bearer row and is used only by
+	// narrow self-revocation. It is never accepted from the request body.
+	CredentialID string
+	Active       bool
 }
 type Authenticator interface {
 	AuthenticateControl(context.Context, *http.Request) (Actor, error)
 }
 type Service interface {
 	Whoami(context.Context, Actor) any
+	RevokeCurrentBearer(context.Context, Actor) error
 	Apps(context.Context, Actor) any
 	CreateApp(context.Context, Actor, string, string) error
 	Access(context.Context, Actor, string) (any, error)
@@ -41,7 +46,6 @@ type Service interface {
 	RevokeToken(context.Context, Actor, string, string, string) error
 	CreateDeployment(context.Context, Actor, string, string, Upload) (any, error)
 	Activate(context.Context, Actor, string, string, string) (ActivationResult, error)
-	Rollback(context.Context, Actor, string, string, string) error
 }
 type TokenInput struct {
 	Scopes           []string `json:"scopes"`
@@ -116,10 +120,11 @@ type DashboardReader interface {
 }
 
 type DashboardView struct {
-	Apps      []DashboardApp
-	Deployers []DashboardDeployer
-	Audit     []DashboardAudit
-	Health    []DashboardHealth
+	Apps                   []DashboardApp
+	ActiveDeployerEmails   []string
+	ActiveDeployerRevision string
+	Audit                  []DashboardAudit
+	Health                 []DashboardHealth
 }
 type DashboardApp struct {
 	Slug, Status, Description, StableURL string
@@ -140,7 +145,6 @@ type DashboardToken struct {
 	Revoked       bool
 }
 type DashboardRelease struct{ ID, ReleaseHash, State, Description, CreatedAt, VerifiedAt, ActivatedAt string }
-type DashboardDeployer struct{ Email, Status string }
 type DashboardAudit struct{ OccurredAt, Action, Outcome, Target string }
 type DashboardHealth struct{ Name, State, Detail string }
 type envelope struct {
@@ -221,6 +225,12 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET" && p == "whoami":
 		write(w, 200, d.Service.Whoami(r.Context(), a), "")
+	case r.Method == "POST" && p == "auth/logout":
+		if err := d.Service.RevokeCurrentBearer(r.Context(), a); err != nil {
+			write(w, http.StatusServiceUnavailable, nil, "unavailable")
+			return
+		}
+		write(w, http.StatusNoContent, nil, "")
 	case r.Method == "GET" && p == "apps":
 		write(w, 200, d.Service.Apps(r.Context(), a), "")
 	case r.Method == "POST" && p == "apps":
@@ -352,19 +362,6 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			write(w, 200, out, "")
-		case r.Method == "POST" && tail == "rollback":
-			var v struct {
-				Deployment string `json:"deployment"`
-			}
-			if !body(r, &v) || v.Deployment == "" || key(r) == "" {
-				write(w, 400, nil, "validation_failed")
-				return
-			}
-			if e := d.Service.Rollback(r.Context(), a, app, v.Deployment, key(r)); e != nil {
-				write(w, 409, nil, "conflict")
-				return
-			}
-			write(w, 200, map[string]bool{"ok": true}, "")
 		default:
 			write(w, 404, nil, "not_found")
 		}

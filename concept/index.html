@@ -15,16 +15,22 @@
       <a href="#delivery">Delivery</a>
       <a href="#questions">Questions</a>
       <a href="#decision">Decision</a>
+      <a href="flows/operator.html">Operator flow</a>
+      <a href="flows/deployer.html">Deployer flow</a>
+      <a href="flows/tinyhost-operator-deployer-flows.tldraw">Editable canvas</a>
       <a href="../PRD.md">Canonical PRD</a>
       <a href="features/index.html">Feature ranking</a>
     </nav>
-    <p class="eyebrow">Implementation concept · July 2026</p>
+    <p class="eyebrow">Reconciled implementation concept · July 2026</p>
     <h1>A private app gateway that happens to deploy apps.</h1>
     <p class="lede">TinyHost lets one technical operator provide a safe,
       self-hosted deployment destination to people and agents who should not
       need to understand infrastructure or implement authentication.</p>
     <p class="promise">No private app file, API, socket, blob, or backend request
       is reachable until TinyHost has authenticated and authorized it.</p>
+    <p class="promise">A human starts with the intended outcome. TinyHost asks
+      only for information it cannot discover or safely default; generated
+      config is a receipt, not prerequisite paperwork.</p>
   </header>
 
   <main>
@@ -63,14 +69,19 @@
         <ul>
           <li>One <code>tinyhost</code> server binary on a clean Hetzner VPS.</li>
           <li>A separate small <code>tiny</code> deployer CLI.</li>
-          <li>Operator and deployer control plane.</li>
-          <li>Resend email OTP and app-scoped sessions.</li>
+          <li>Operator control plane with one exact active-deployer allowlist.</li>
+          <li>Persistent deployer CLI login, remembered verified server, account
+            switching, and real logout.</li>
+          <li>Resend email OTP, one platform-host global viewer identity, and
+            policy-checked app-bound handoffs into isolated app sessions.</li>
           <li>Private-only email/domain policy with implicit owner access.</li>
-          <li>Immutable static releases, activation, and rollback.</li>
+          <li>Deploy-first manifest generation, immutable static releases,
+            descriptions, activation, and failed-activation preservation.</li>
           <li>Current-user, bounded JSON KV, lightweight local blobs, and
             ephemeral realtime APIs.</li>
           <li>First-class TypeScript SDK and capability discovery.</li>
-          <li>Audit, quotas, signed self-update/rollback, and diagnostics.</li>
+          <li>Search/status filtering, safe app launch, hard app deletion,
+            audit, quotas, signed server self-update/rollback, and diagnostics.</li>
         </ul>
       </section>
       <section class="half refuse">
@@ -99,6 +110,13 @@
         <span>Current policy</span><b>→</b>
         <span>AuthorizationContext</span><b>→</b>
         <span>Protected dispatcher</span>
+      </div>
+      <div class="flow" aria-label="Global viewer identity handoff" style="margin-top: 1rem">
+        <span>App URL</span><b>→</b>
+        <span>App-bound handoff</span><b>→</b>
+        <span>Platform identity or OTP</span><b>→</b>
+        <span>Current app policy</span><b>→</b>
+        <span>Host-only app session</span>
       </div>
       <div class="grid" style="margin-top: 1rem">
         <div class="third card">
@@ -133,7 +151,11 @@ authz = authorize(activeApp, appScopedSession, currentPolicy)
 dispatchProtected(authz, classifiedEndpoint)</pre>
       <p><a href="../docs/architecture/components.md">Detailed component map</a>
         · <a href="../docs/architecture/state-machines.md">State machines</a>
-        · <a href="../docs/security/threat-model.md">Threat model</a></p>
+        · <a href="../docs/security/threat-model.md">Threat model</a>
+        · <a href="flows/operator.html">Complete operator flow</a>
+        · <a href="flows/deployer.html">Complete deployer flow</a>
+        · <a href="flows/tinyhost-operator-deployer-flows.tldraw">Editable flow canvas</a>
+        · <a href="../docs/product/flow-necessity-audit-2026-07.md">Input necessity audit</a></p>
     </section>
 
     <section id="delivery">
@@ -160,23 +182,16 @@ dispatchProtected(authz, classifiedEndpoint)</pre>
 
     <section id="questions" class="caution">
       <p class="eyebrow">Open questions</p>
-      <h2>Resolve with bounded spikes, not incidental code</h2>
+      <h2>Remaining evidence questions, not reopened decisions</h2>
       <ol>
-        <li>Does per-host HTTP-challenge ACME meet creation rates and operational
-          simplicity, or is a manual wildcard escape hatch required?</li>
-        <li>Which CGO-free SQLite driver meets performance, migration,
-          update-rollback, and security requirements under real concurrent
-          workloads?</li>
-        <li>What exact Linux file-opening primitives guarantee beneath-root,
-          no-symlink behavior across supported distributions?</li>
-        <li>Should a failed post-activation public denial probe automatically
-          roll back, quarantine the entire app, or both?</li>
-        <li>What operator recovery credential and ceremony work when email is
-          unavailable without creating a second remote auth bypass?</li>
-        <li>Which CSP defaults remain useful for arbitrary static apps without
-          creating false confidence?</li>
-        <li>Which concrete Quick API conventions should TinyHost preserve, and
-          where should stricter authorization remain visibly explicit?</li>
+        <li>Which smallest Hetzner plan passes the complete V1 resource and
+          failure-injection suite with useful headroom?</li>
+        <li>Which project-output and SDK-usage signals are reliable enough for
+          the deploy wizard to derive rather than ask?</li>
+        <li>Does no-echo secret ingestion meet the supported-shell audit, or
+          should guided setup always create/consume a protected file?</li>
+        <li>Which remaining CLI and setup prompts fail the
+          “necessary, unknown, unsafe to default” test?</li>
       </ol>
     </section>
 
@@ -192,7 +207,8 @@ dispatchProtected(authz, classifiedEndpoint)</pre>
         surface and delay the defining user value.</p>
       <p class="muted">Decision basis: impact 5/5, full-concept complexity 5/5,
         scoped V1 yield 4/5, primary risk severity 5/5. Proceed only with
-        evidence-gated milestones and the gateway invariant as a release blocker.</p>
+        evidence-gated milestones, the gateway invariant, and
+        minimum-necessary human flows as release blockers.</p>
     </section>
   </main>
 

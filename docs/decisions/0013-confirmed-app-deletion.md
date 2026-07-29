@@ -1,28 +1,34 @@
-# ADR 0013: Confirmed app deletion is a revocation-first lifecycle transition
+# ADR 0013: Confirmed app deletion permanently removes an app playground
 
 **Status:** Accepted for V1
 
 ## Context
 
-Deployers need to remove apps they own without turning a request into an
-unbounded filesystem deletion or leaving tokens, viewer sessions, and live
-connections usable. Release directories are immutable evidence and V1 cleanup
-has retention and disk-watermark responsibilities.
+TinyHost is presently a playground for replaceable applications. Deployers need
+confirmed deletion to remove an app rather than leaving a tombstone, retained
+release bytes, or a restore-like record. The operation still must not let a
+client choose a filesystem path or leave sessions, tokens, or live connections
+usable while removal is under way.
 
 ## Decision
 
 Expose a scoped, owner-derived control endpoint that requires an idempotency
-key plus an exact app-bound confirmation value. In one SQLite transaction it
-transitions `active` or `suspended` through `deleting` to `deleted`, revokes
-app-scoped API tokens and viewer sessions, and records the deletion request.
-The in-memory live hub closes matching connections only after that transaction
-commits. Release bytes are not deleted synchronously; cleanup owns that later.
+key plus an exact app-bound confirmation value. The service derives all
+database keys and storage paths from the owned app. It first makes the app fail
+closed and closes matching live connections, then permanently removes the
+application row and every app-owned policy, deployment/release, token, viewer
+session, KV, blob, and app-specific audit record, along with the corresponding
+server-derived release/blob bytes. A transient `deleting` state may exist only
+while work is in progress; successful deletion leaves no `deleted` tombstone
+or restoration path.
 
 ## Consequences
 
-- The gateway immediately fails closed because only active apps resolve.
-- Retried delete requests are safe only when the actor, idempotency key, and
-  slug match the original audit record.
+- The gateway immediately fails closed while deletion is in progress and the
+  app no longer resolves after completion.
+- A retry may resume only a server-derived in-progress deletion. Once deletion
+  succeeds, the former slug is indistinguishable from an unknown app.
 - The interface does not accept an app ID or a filesystem path from clients.
-- Disk reclamation is eventual and observable through the existing cleanup
-  workflow rather than being claimed by the delete response.
+- Completion is not reported until the app's owned data and server-derived
+  storage have been removed. A failed cleanup cannot be represented as a
+  successful deletion.

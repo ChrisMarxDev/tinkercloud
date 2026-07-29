@@ -4,9 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/blob"
 	"github.com/tinyhost/tiny/internal/controlapi"
 )
 
@@ -24,6 +30,18 @@ type lifecycleBlobCleanupSpy struct {
 func (s *lifecycleBlobCleanupSpy) Reconcile(context.Context) error {
 	s.calls <- struct{}{}
 	return nil
+}
+
+func (*lifecycleBlobCleanupSpy) RemoveAppNamespace(string) error { return nil }
+
+type lifecyclePurgeSpy struct {
+	calls int
+	err   error
+}
+
+func (s *lifecyclePurgeSpy) Purge(context.Context, string) error {
+	s.calls++
+	return s.err
 }
 
 func TestControlReleasesOwnerBoundAndMetadataOnly(t *testing.T) {
@@ -46,10 +64,24 @@ func TestControlReleasesOwnerBoundAndMetadataOnly(t *testing.T) {
 	}
 }
 
-func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
+func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	seedActiveRelease(t, s)
+	for _, statement := range []string{
+		"INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))",
+		"INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_at) VALUES('rule','a',1,'email','viewer@example.com',datetime('now'))",
+		"INSERT INTO otp_challenges(id,app_id,purpose,normalized_email,code_hash,expires_at,attempts,created_at) VALUES('otp','a','viewer','viewer@example.com',X'01',datetime('now','+1 hour'),0,datetime('now'))",
+		"INSERT INTO app_kv(app_id,key,value_json,version,size_bytes,created_at,updated_at) VALUES('a','k','{}',1,2,datetime('now'),datetime('now'))",
+		"INSERT INTO app_quota_usage(app_id,metric,used,limit_value,measured_at) VALUES('a','blob_bytes',1,2,datetime('now'))",
+		"INSERT INTO app_blobs(id,app_id,state,display_name,content_type,size_bytes,content_hash,created_by_identity_id,created_at,updated_at) VALUES('blb_0123456789abcdef0123456789abcdef','a','ready','x','text/plain',1,'hash','i',datetime('now'),datetime('now'))",
+		"INSERT INTO identity_handoffs(id,app_id,state_hash,return_path,force_login,expires_at,created_at) VALUES('handoff','a',randomblob(32),'/',0,datetime('now','+1 hour'),datetime('now'))",
+		"INSERT INTO audit_events(id,occurred_at,actor_kind,app_id,action,outcome) VALUES('audit',datetime('now'),'user','a','app.updated','success')",
+	} {
+		if _, err := s.DB.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
 	appToken, err := s.IssueToken(context.Background(), "u", "a", []string{"app:read"}, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
@@ -60,21 +92,33 @@ func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
 	}
 	live := &lifecycleLiveSpy{}
 	cleanup := &lifecycleBlobCleanupSpy{calls: make(chan struct{}, 2)}
-	svc := ControlService{Store: s, Live: live, BlobCleanup: cleanup}
+	svc := ControlService{Store: s, Live: live, BlobCleanup: cleanup, AppDataCleanup: AppDataPurger{DataRoot: s.DataRoot, Store: s, BlobCleanup: cleanup}}
 	actor := controlapi.Actor{ID: "u", Active: true}
 	if err = svc.DeleteApp(context.Background(), actor, "alpha", "delete-one"); err != nil {
 		t.Fatal(err)
 	}
-	var status string
-	if err = s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&status); err != nil || status != "deleted" {
-		t.Fatal(status, err)
+	for _, statement := range []string{
+		"SELECT COUNT(*) FROM applications WHERE id='a'",
+		"SELECT COUNT(*) FROM api_tokens WHERE app_id='a'",
+		"SELECT COUNT(*) FROM sessions WHERE app_id='a'",
+		"SELECT COUNT(*) FROM deployment_files WHERE deployment_id='d'",
+		"SELECT COUNT(*) FROM deployments WHERE app_id='a'",
+		"SELECT COUNT(*) FROM access_rules WHERE app_id='a'",
+		"SELECT COUNT(*) FROM access_policies WHERE app_id='a'",
+		"SELECT COUNT(*) FROM otp_challenges WHERE app_id='a'",
+		"SELECT COUNT(*) FROM app_kv WHERE app_id='a'",
+		"SELECT COUNT(*) FROM app_quota_usage WHERE app_id='a'",
+		"SELECT COUNT(*) FROM app_blobs WHERE app_id='a'",
+		"SELECT COUNT(*) FROM identity_handoffs WHERE app_id='a'",
+		"SELECT COUNT(*) FROM audit_events WHERE app_id='a'",
+	} {
+		var count int
+		if err = s.DB.QueryRow(statement).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("owned row remained count=%d err=%v query=%s", count, err, statement)
+		}
 	}
-	var tokens, sessions int
-	if err = s.DB.QueryRow("SELECT COUNT(*) FROM api_tokens WHERE app_id='a' AND revoked_at IS NULL").Scan(&tokens); err != nil || tokens != 0 {
-		t.Fatal(tokens, err)
-	}
-	if err = s.DB.QueryRow("SELECT COUNT(*) FROM sessions WHERE app_id='a' AND revoked_at IS NULL").Scan(&sessions); err != nil || sessions != 0 {
-		t.Fatal(sessions, err)
+	if _, err = os.Stat(filepath.Join(s.DataRoot, "releases", "a")); !os.IsNotExist(err) {
+		t.Fatalf("release namespace remained: %v", err)
 	}
 	if _, err = s.AuthenticateToken(context.Background(), appToken, "app:read", "a", time.Now()); err == nil {
 		t.Fatal("revoked app token remained usable")
@@ -84,25 +128,14 @@ func TestControlDeleteAppRevokesAtomicallyAndDoesNotDeleteFiles(t *testing.T) {
 	}
 	select {
 	case <-cleanup.calls:
-	case <-time.After(time.Second):
-		t.Fatal("deleted app did not trigger blob reconciliation")
-	}
-	// The deployment row and its immutable release root are intentionally left
-	// for asynchronous retention cleanup, not this security-sensitive request.
-	var deployments int
-	if err = s.DB.QueryRow("SELECT COUNT(*) FROM deployments WHERE app_id='a'").Scan(&deployments); err != nil || deployments != 1 {
-		t.Fatal(deployments, err)
+	default:
+		t.Fatal("deletion did not synchronously purge blob bytes")
 	}
 	if _, err = s.ResolveActive(context.Background(), "alpha"); err == nil {
 		t.Fatal("deleted app remained gateway-resolvable")
 	}
-	if err = svc.DeleteApp(context.Background(), actor, "alpha", "delete-one"); err != nil {
-		t.Fatal("matching idempotent retry denied: ", err)
-	}
-	select {
-	case <-cleanup.calls:
-		t.Fatal("idempotent deletion retry triggered blob reconciliation")
-	default:
+	if err = svc.DeleteApp(context.Background(), actor, "alpha", "delete-one"); err == nil {
+		t.Fatal("hard-deleted app accepted a retry")
 	}
 	if err = svc.DeleteApp(context.Background(), actor, "alpha", "other-request"); err == nil {
 		t.Fatal("deleted app accepted a new deletion request")
@@ -121,22 +154,95 @@ func TestControlDeleteAppAuditFailureRollsBackMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DB.Exec("CREATE TRIGGER deny_delete_audit BEFORE INSERT ON audit_events WHEN NEW.action='app.deletion_requested' BEGIN SELECT RAISE(ABORT,'deny'); END"); err != nil {
+	if _, err = s.DB.Exec("CREATE TRIGGER deny_delete_app BEFORE DELETE ON applications WHEN OLD.id='a' BEGIN SELECT RAISE(ABORT,'deny'); END"); err != nil {
 		t.Fatal(err)
 	}
 	if err = (ControlService{Store: s}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "rollback"); err == nil {
-		t.Fatal("audit failure accepted")
+		t.Fatal("app-delete failure accepted")
 	}
 	var status string
 	var revoked sql.NullString
-	if err = s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&status); err != nil || status != "active" {
+	if err = s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&status); err != nil || status != "deleting" {
 		t.Fatal(status, err)
 	}
-	if err = s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE app_id='a'").Scan(&revoked); err != nil || revoked.Valid {
+	if err = s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE app_id='a'").Scan(&revoked); err != nil || !revoked.Valid {
 		t.Fatal(revoked, err)
 	}
-	if _, err = s.AuthenticateToken(context.Background(), raw, "app:read", "a", time.Now()); err != nil {
-		t.Fatal("token revoked despite rolled-back deletion: ", err)
+	if _, err = s.AuthenticateToken(context.Background(), raw, "app:read", "a", time.Now()); err == nil {
+		t.Fatal("deleting app token remained usable")
+	}
+}
+
+func TestControlDeleteAppPurgeFailureLeavesDeletingAndRetryable(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	raw, err := s.IssueToken(context.Background(), "u", "a", []string{"app:read"}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	purger := &lifecyclePurgeSpy{err: errors.New("private bytes unavailable")}
+	svc := ControlService{Store: s, AppDataCleanup: purger}
+	actor := controlapi.Actor{ID: "u", Active: true}
+	if err := svc.DeleteApp(context.Background(), actor, "alpha", "first"); err == nil {
+		t.Fatal("byte cleanup failure accepted")
+	}
+	var status string
+	if err := s.DB.QueryRow("SELECT status FROM applications WHERE id='a'").Scan(&status); err != nil || status != "deleting" {
+		t.Fatalf("status=%q err=%v", status, err)
+	}
+	if _, err := s.AuthenticateToken(context.Background(), raw, "app:read", "a", time.Now()); err == nil {
+		t.Fatal("failed purge restored token access")
+	}
+	if purger.calls != 1 {
+		t.Fatalf("purge calls=%d", purger.calls)
+	}
+	purger.err = nil
+	if err := svc.DeleteApp(context.Background(), actor, "alpha", "retry"); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM applications WHERE id='a'").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("app remained count=%d err=%v", count, err)
+	}
+	if purger.calls != 2 {
+		t.Fatalf("retry did not purge calls=%d", purger.calls)
+	}
+}
+
+func TestControlDeleteAppPurgesLegacyDeletedRow(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("UPDATE applications SET status='deleted' WHERE id='a'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := (ControlService{Store: s, AppDataCleanup: &lifecyclePurgeSpy{}}).DeleteApp(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM applications WHERE id='a'").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("legacy row remained count=%d err=%v", count, err)
+	}
+}
+
+func TestAppDataPurgerRemovesOnlyDeletedAppBlobNamespace(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	bytes := blob.LocalStore{Root: s.DataRoot}
+	id := "blb_0123456789abcdef0123456789abcdef"
+	for _, app := range []string{"a", "b"} {
+		if _, _, err := bytes.Put(app, id, strings.NewReader("x"), 10); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := &BlobRepository{Store: s, Bytes: bytes}
+	if err := (AppDataPurger{DataRoot: s.DataRoot, Store: s, BlobCleanup: repo}).Purge(context.Background(), "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(s.DataRoot, "blobs", "a")); !os.IsNotExist(err) {
+		t.Fatalf("target blob namespace remained: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(s.DataRoot, "blobs", "b")); err != nil {
+		t.Fatalf("other blob namespace removed: %v", err)
 	}
 }
 
@@ -218,28 +324,101 @@ func TestControlSuspendAppRevokesImmediatelyAndOperatorMaySuspendAnyApp(t *testi
 	}
 }
 
-func TestControlDeployerStatusRequiresActiveOperatorAndRevokesCredentials(t *testing.T) {
+func TestControlReplaceActiveDeployersReconcilesAndRevokes(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
-	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now')),('d','deployer@example.com','deployer','active',datetime('now'))"); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := s.IssueToken(context.Background(), "d", "", []string{"app:read"}, time.Now().Add(time.Hour))
+	_, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now')),('keep','keep@example.com','deployer','active',datetime('now')),('remove','remove@example.com','deployer','active',datetime('now')),('wake','wake@example.com','deployer','revoked',datetime('now')); UPDATE applications SET owner_user_id='remove' WHERE id='a'; INSERT INTO otp_challenges(id,app_id,purpose,normalized_email,code_hash,expires_at,attempts,created_at) VALUES('wake-otp',NULL,'control','wake@example.com',X'01',datetime('now','+1 hour'),0,datetime('now')),('remove-otp',NULL,'control','remove@example.com',X'01',datetime('now','+1 hour'),0,datetime('now'))")
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := ControlService{Store: s}
-	if err = svc.SetDeployerStatus(context.Background(), controlapi.Actor{ID: "d", Role: "deployer", Active: true}, "deployer@example.com", "suspended", "x"); err == nil {
-		t.Fatal("deployer could change deployer status")
-	}
-	if err = svc.SetDeployerStatus(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true}, "deployer@example.com", "suspended", "s"); err != nil {
+	raw, err := s.IssueToken(context.Background(), "remove", "", []string{"app:read"}, time.Now().Add(time.Hour))
+	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err = s.DB.Exec("INSERT INTO sessions(id,scope,user_id,secret_hash,expires_at,created_at) VALUES('remove-session','control','remove',X'01',datetime('now','+1 hour'),datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	svc := ControlService{Store: s}
+	actor := controlapi.Actor{ID: "op", Role: "operator", Active: true}
+	revision := deployerRevision([]string{"keep@example.com", "owner@example.com", "remove@example.com"})
+	if err = svc.ReplaceActiveDeployers(context.Background(), actor, []string{"keep@example.com", "new@example.com", "wake@example.com"}, revision, true, "replace"); err != nil {
+		t.Fatal(err)
+	}
+	var status, owner string
+	if err = s.DB.QueryRow("SELECT status FROM users WHERE id='remove'").Scan(&status); err != nil || status != "revoked" {
+		t.Fatal(status, err)
+	}
+	if err = s.DB.QueryRow("SELECT owner_user_id FROM applications WHERE id='a'").Scan(&owner); err != nil || owner != "remove" {
+		t.Fatal(owner, err)
+	}
 	if _, err = s.AuthenticateToken(context.Background(), raw, "app:read", "", time.Now()); err == nil {
-		t.Fatal("suspended deployer credential remained active")
+		t.Fatal("removed token remained valid")
+	}
+	var n int
+	if err = s.DB.QueryRow("SELECT COUNT(*) FROM sessions WHERE id='remove-session' AND revoked_at IS NOT NULL").Scan(&n); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if err = s.DB.QueryRow("SELECT COUNT(*) FROM otp_challenges WHERE id IN ('wake-otp','remove-otp') AND invalidated_at IS NOT NULL").Scan(&n); err != nil || n != 2 {
+		t.Fatal(n, err)
+	}
+	if err = svc.ReplaceActiveDeployers(context.Background(), actor, []string{"keep@example.com", "new@example.com", "wake@example.com"}, revision, true, "replace"); err != nil {
+		t.Fatal(err)
+	}
+	if err = svc.ReplaceActiveDeployers(context.Background(), actor, []string{"keep@example.com"}, revision, false, "replace"); err == nil {
+		t.Fatal("idempotency mismatch accepted")
+	}
+}
+
+func TestControlReplaceActiveDeployersDenialsAndAtomicAudit(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now')),('d','old@example.com','deployer','active',datetime('now')); INSERT INTO api_tokens(id,user_id,secret_hash,scopes,expires_at) VALUES('token','d',X'01','app:read',datetime('now','+1 hour')); INSERT INTO sessions(id,scope,user_id,secret_hash,expires_at,created_at) VALUES('session','control','d',X'02',datetime('now','+1 hour'),datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	svc := ControlService{Store: s}
+	op := controlapi.Actor{ID: "op", Role: "operator", Active: true}
+	revision := deployerRevision([]string{"old@example.com", "owner@example.com"})
+	overBytes := make([]string, 100)
+	for i := range overBytes {
+		overBytes[i] = strings.Repeat("a", 90) + fmt.Sprintf("%03d@example.test", i)
+	}
+	for _, tc := range []struct {
+		actor    controlapi.Actor
+		emails   []string
+		revision string
+		confirm  bool
+	}{{controlapi.Actor{ID: "d", Role: "deployer", Active: true}, []string{"old@example.com"}, revision, false}, {op, []string{"bad"}, revision, false}, {op, []string{"old@example.com", "old@example.com"}, revision, false}, {op, []string{"operator@example.com"}, revision, true}, {op, []string{"old@example.com", "new@example.com"}, revision, false}, {op, make([]string, 101), revision, true}, {op, overBytes, revision, true}} {
+		if err := svc.ReplaceActiveDeployers(context.Background(), tc.actor, tc.emails, tc.revision, tc.confirm, "deny"+fmt.Sprint(len(tc.emails))); err == nil {
+			t.Fatalf("accepted denied input %#v", tc)
+		}
+	}
+	if err := svc.ReplaceActiveDeployers(context.Background(), op, []string{"old@example.com"}, "stale", false, "stale"); !errors.Is(err, controlapi.ErrDeployerRevision) {
+		t.Fatalf("stale=%v", err)
 	}
 	var status string
-	if err = s.DB.QueryRow("SELECT status FROM users WHERE id='d'").Scan(&status); err != nil || status != "suspended" {
-		t.Fatalf("status=%q err=%v", status, err)
+	var tokenRevoked, sessionRevoked sql.NullString
+	if err := s.DB.QueryRow("SELECT status FROM users WHERE id='d'").Scan(&status); err != nil || status != "active" {
+		t.Fatalf("stale changed status %q %v", status, err)
+	}
+	if err := s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE id='token'").Scan(&tokenRevoked); err != nil || tokenRevoked.Valid {
+		t.Fatalf("stale changed token %v %v", tokenRevoked, err)
+	}
+	if err := s.DB.QueryRow("SELECT revoked_at FROM sessions WHERE id='session'").Scan(&sessionRevoked); err != nil || sessionRevoked.Valid {
+		t.Fatalf("stale changed session %v %v", sessionRevoked, err)
+	}
+	if _, err := s.DB.Exec("CREATE TRIGGER deny_allowlist_audit BEFORE INSERT ON audit_events WHEN NEW.action='deployers.reconciled' BEGIN SELECT RAISE(ABORT,'deny'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ReplaceActiveDeployers(context.Background(), op, []string{}, revision, false, "audit"); err == nil {
+		t.Fatal("audit failure accepted")
+	}
+	if err := s.DB.QueryRow("SELECT status FROM users WHERE id='d'").Scan(&status); err != nil || status != "active" {
+		t.Fatalf("audit changed status %q %v", status, err)
+	}
+	if err := s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE id='token'").Scan(&tokenRevoked); err != nil || tokenRevoked.Valid {
+		t.Fatalf("audit changed token %v %v", tokenRevoked, err)
+	}
+	if err := s.DB.QueryRow("SELECT revoked_at FROM sessions WHERE id='session'").Scan(&sessionRevoked); err != nil || sessionRevoked.Valid {
+		t.Fatalf("audit changed session %v %v", sessionRevoked, err)
 	}
 }

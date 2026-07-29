@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,5 +109,30 @@ func TestRemoveReleaseCanReclaimSealedTree(t *testing.T) {
 	}
 	if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("sealed release remained: %v", err)
+	}
+}
+
+func TestRemoveAppReleasesRemovesOnlyOneValidatedAppNamespace(t *testing.T) {
+	root := t.TempDir()
+	for _, app := range []string{"app-a", "app-b"} {
+		p := filepath.Join(root, "releases", app, "hash")
+		if err := os.MkdirAll(p, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(p, "index.html"), []byte(app), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := RemoveAppReleases(root, "app-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "releases", "app-a")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("removed namespace err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "releases", "app-b", "hash", "index.html")); err != nil {
+		t.Fatalf("other namespace removed: %v", err)
+	}
+	if err := RemoveAppReleases(root, "../app-b"); !errors.Is(err, ErrUnsafeReleasePath) {
+		t.Fatalf("unsafe app id err=%v", err)
 	}
 }

@@ -31,7 +31,7 @@ cannot observe or mutate B by:
 - guessed record/release IDs;
 - duplicate KV key or channel name;
 - guessed blob ID, display filename, cursor, or storage key;
-- rollback/deployment ID;
+- deployment ID;
 - token scope escalation.
 
 ## Routing corpus

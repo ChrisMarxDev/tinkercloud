@@ -48,7 +48,6 @@ type Repository interface {
 	Get(context.Context, string) (Record, error)
 	Active(context.Context, string) (*Record, error)
 	CommitActivation(context.Context, Record, *Record, string) error
-	CommitRollback(context.Context, Record, Record, string) error
 	Fail(context.Context, string) error
 }
 
@@ -320,28 +319,6 @@ func (s *Service) Activate(ctx context.Context, a Actor, id, requestID string) e
 	}
 	return s.Repo.CommitActivation(ctx, r, old, requestID)
 }
-func (s *Service) Rollback(ctx context.Context, a Actor, targetID, key string) error {
-	if key == "" {
-		return ErrDenied
-	}
-	target, e := s.Repo.Get(ctx, targetID)
-	if e != nil || target.OwnerID != a.ID || !a.Active {
-		return ErrDenied
-	}
-	unlock := s.lock(target.AppID)
-	defer unlock()
-	current, e := s.Repo.Active(ctx, target.AppID)
-	if e != nil || current == nil {
-		return ErrDenied
-	}
-	if !s.Gates.Policy(ctx, target) || !s.Gates.Certificate(ctx, target) || !s.Gates.Probe(ctx, target) {
-		return ErrProbe
-	}
-	if _, e = releases.PlanRollback(current.Deployment, target.Deployment, releases.ActivationRequirements{PolicyReady: true, CertificateReady: true, DenialProbePassed: true}); e != nil {
-		return e
-	}
-	return s.Repo.CommitRollback(ctx, target, *current, key)
-}
 
 // MemoryRepository is deliberately test-only style infrastructure that models
 // transactional ownership/current-pointer behavior and injectable failures.
@@ -398,19 +375,6 @@ func (m *MemoryRepository) CommitActivation(_ context.Context, next Record, old 
 		m.Records[o.ID] = o
 	}
 	m.Current[next.AppID] = next.ID
-	return nil
-}
-func (m *MemoryRepository) CommitRollback(_ context.Context, target, current Record, _ string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.Current[target.AppID] != current.ID {
-		return ErrDenied
-	}
-	target.State = releases.Active
-	current.State = releases.Superseded
-	m.Records[target.ID] = target
-	m.Records[current.ID] = current
-	m.Current[target.AppID] = target.ID
 	return nil
 }
 func (m *MemoryRepository) Fail(_ context.Context, id string) error {

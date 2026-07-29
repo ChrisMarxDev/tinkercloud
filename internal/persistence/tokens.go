@@ -77,8 +77,8 @@ func (s *SQLiteStore) AuthenticateToken(ctx context.Context, raw, scope, app str
 		if count != 1 {
 			return ErrToken
 		}
-		if err := tx.QueryRowContext(ctx, `SELECT u.id,u.normalized_email,u.role
-			FROM api_tokens t JOIN users u ON u.id=t.user_id WHERE t.secret_hash=?`, h[:]).Scan(&actor.ID, &actor.Email, &actor.Role); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT t.id,u.id,u.normalized_email,u.role
+			FROM api_tokens t JOIN users u ON u.id=t.user_id WHERE t.secret_hash=?`, h[:]).Scan(&actor.CredentialID, &actor.ID, &actor.Email, &actor.Role); err != nil {
 			return err
 		}
 		actor.Active = true

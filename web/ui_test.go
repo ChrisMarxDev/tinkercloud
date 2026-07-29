@@ -179,12 +179,16 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`aria-controls="showcase-app-list"`,
 		`id="showcase-app-list"`,
 		`no matching apps.`,
+		`after successful irreversible deletion, this app and its owned data are permanently removed`,
+		`it cannot be restored`,
+		`active deployer allowlist`,
+		`removed addresses are signed out`,
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("showcase missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`} {
+	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`} {
 		if strings.Contains(page, forbidden) {
 			t.Fatalf("showcase contains remote or executable dependency %q", forbidden)
 		}

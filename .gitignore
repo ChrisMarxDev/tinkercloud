@@ -44,6 +44,7 @@ npm-debug.log*
 /landing/
 
 # Tool caches and editor/OS noise
+.task/
 .cache/
 .tmp/
 tmp/

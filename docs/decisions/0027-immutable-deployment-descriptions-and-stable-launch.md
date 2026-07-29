@@ -1,6 +1,7 @@
 # ADR 0027: Immutable deployment descriptions and stable dashboard launch
 
-**Status:** Accepted
+**Status:** Accepted for descriptions/launch; deployer rollback portion
+superseded by [ADR 0039](0039-defer-deployer-release-rollback.md)
 
 ## Context
 
@@ -19,9 +20,11 @@ introduced.
 
 Dashboard release rows read their own immutable manifest descriptions. The app
 summary reads only the deployment selected by `current_deployment_id`, so
-activation and rollback restore matching descriptions atomically with the
-existing release pointer. Missing or malformed final manifest data fails the
-dashboard read model closed; intermediate records may have no description.
+activation changes the matching description atomically with the existing
+release pointer. Failed activation leaves the active summary intact.
+Deployer-selected rollback is deferred by ADR 0039. Missing or malformed final
+manifest data fails the dashboard read model closed; intermediate records may
+have no description.
 
 The dashboard may render a compact, accessible external link only for an active
 current app at the server-derived stable `https://{slug}.{app_suffix}/` origin.

@@ -137,9 +137,10 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   for TCP connection establishment to the configured local HTTP and HTTPS
   listeners. It then commits only after one-shot local doctor, public-health,
   and composed-gateway
-  anonymous-denial probe pass. The denial probe targets
-  `/_tiny/api/v1/capabilities` on an explicitly locally verified active app
-  host and accepts only the protected-route gateway response: `401`,
+  anonymous-denial probe pass. When an active app exists, the updater
+  deterministically selects the lexicographically first locally verified active
+  app and targets `/_tiny/api/v1/capabilities` on its derived host. It accepts
+  only the protected-route gateway response: `401`,
   `application/json`, `Cache-Control: no-store`,
   `X-Content-Type-Options: nosniff`, and the stable `not_authorized` error
   envelope whose request ID matches `X-Request-ID`. A 404, redirect, 2xx,
@@ -153,9 +154,12 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   only the V1 `tinyhost-linux-amd64` filename, follows no redirects, rejects
   credentials, query strings, private/link-local/loopback origins, cross-origin
   components, and bodies over the per-component limits. The public health URL
-  is derived from `platform_host`; the anonymous-denial URL is derived from an
-  explicit locally verified active app slug. Update URLs are never accepted as
-  arbitrary health-probe targets and V1 has no scheduled updater.
+  is derived from `platform_host`; the anonymous-denial URL is derived from
+  locally verified installed app state, never caller input. If no active app
+  exists, the updater must prove that exact database state, platform health,
+  socket confinement, and safe unknown-app-host denial; any ambiguous read is
+  unhealthy. Update URLs are never accepted as arbitrary health-probe targets
+  and V1 has no scheduled updater.
 
 ## Host preflight deny charter
 

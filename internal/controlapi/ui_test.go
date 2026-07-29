@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -66,8 +67,8 @@ type uiActions struct {
 	access AccessPolicyInput
 }
 
-func (a *uiActions) SetDeployerStatus(_ context.Context, actor Actor, email, status, _ string) error {
-	a.calls = append(a.calls, "deployer:"+actor.Role+":"+email+":"+status)
+func (a *uiActions) ReplaceActiveDeployers(_ context.Context, actor Actor, emails []string, revision string, confirmed bool, _ string) error {
+	a.calls = append(a.calls, "deployers:"+actor.Role+":"+strings.Join(emails, ",")+":"+revision+":"+strconv.FormatBool(confirmed))
 	return a.err
 }
 func (a *uiActions) ReplaceAccess(_ context.Context, _ Actor, slug string, in AccessPolicyInput, _ string) error {
@@ -81,10 +82,6 @@ func (a *uiActions) CreateToken(_ context.Context, _ Actor, slug string, _ Token
 }
 func (a *uiActions) RevokeToken(_ context.Context, _ Actor, slug, token, _ string) error {
 	a.calls = append(a.calls, "revoke:"+slug+":"+token)
-	return a.err
-}
-func (a *uiActions) Rollback(_ context.Context, _ Actor, slug, deployment, _ string) error {
-	a.calls = append(a.calls, "rollback:"+slug+":"+deployment)
 	return a.err
 }
 func (a *uiActions) SetAppStatus(_ context.Context, _ Actor, slug, status, _ string) error {
@@ -114,6 +111,20 @@ func uiRequest(t *testing.T, p Platform, method, path, body string, cookies ...*
 	return w
 }
 
+func uiSameOriginRequest(t *testing.T, p Platform, method, path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest(method, "https://tiny.test"+path, strings.NewReader(body))
+	r.Host = "tiny.test"
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "https://tiny.test")
+	for _, c := range cookies {
+		r.AddCookie(c)
+	}
+	w := httptest.NewRecorder()
+	p.ServeHTTP(w, r)
+	return w
+}
+
 func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	p := Platform{Auth: uiAuth{err: errors.New("denied")}}
 	if w := uiRequest(t, p, http.MethodGet, "/", ""); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/login" {
@@ -122,11 +133,73 @@ func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	if w := uiRequest(t, p, http.MethodPost, "/logout", "csrf=x"); w.Code != http.StatusForbidden {
 		t.Fatalf("anonymous logout: %d", w.Code)
 	}
-	views := &uiViews{value: DashboardView{Deployers: []DashboardDeployer{{Email: "deployer@example.test", Status: "active"}}}}
+	views := &uiViews{value: DashboardView{ActiveDeployerEmails: []string{"deployer@example.test"}}}
 	p = Platform{Auth: uiAuth{actor: Actor{ID: "d", Email: "deployer@example.test", Role: "deployer", Active: true}}, Views: views}
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != 200 || strings.Contains(w.Body.String(), "deployer@example.test</td>") || views.got.ID != "d" {
 		t.Fatalf("deployer page disclosed operator data: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUIOperatorCanReplaceActiveDeployersOnlyWithBrowserGuards(t *testing.T) {
+	actions := &uiActions{}
+	p := Platform{
+		Auth:    uiAuth{actor: Actor{ID: "op", Email: "operator@example.test", Role: "operator", Active: true}},
+		Views:   &uiViews{value: DashboardView{ActiveDeployerEmails: []string{"old@example.test"}, ActiveDeployerRevision: "revision"}},
+		Actions: actions,
+	}
+	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), `action="/deployers/active"`) || !strings.Contains(page.Body.String(), `name="expected_revision" value="revision"`) || !strings.Contains(page.Body.String(), "removed addresses are signed out") || strings.Contains(page.Body.String(), "Change deployer email") {
+		t.Fatalf("operator allowlist form missing: %d %s", page.Code, page.Body.String())
+	}
+	var csrf *http.Cookie
+	for _, c := range page.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("dashboard did not issue csrf cookie")
+	}
+	body := "csrf=" + url.QueryEscape(csrf.Value) + "&expected_revision=revision&emails=old%40example.test%0Anew%40example.test&confirm_broadening=confirm"
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/deployers/active", body, csrf)
+	if w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "deployers:operator:new@example.test,old@example.test:revision:true" {
+		t.Fatalf("operator allowlist save: status=%d calls=%v", w.Code, actions.calls)
+	}
+
+	actions.calls = nil
+	p.Auth = uiAuth{actor: Actor{ID: "d", Email: "deployer@example.test", Role: "deployer", Active: true}}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/deployers/active", body, csrf)
+	if w.Code != http.StatusForbidden || len(actions.calls) != 0 {
+		t.Fatalf("deployer changed email: status=%d calls=%v", w.Code, actions.calls)
+	}
+	p.Auth = uiAuth{actor: Actor{ID: "op", Email: "operator@example.test", Role: "operator", Active: true}}
+	w = uiRequest(t, p, http.MethodPost, "/deployers/active", "expected_revision=revision&emails=new%40example.test", csrf)
+	if w.Code != http.StatusForbidden || len(actions.calls) != 0 {
+		t.Fatalf("missing csrf accepted: status=%d calls=%v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/deployers/active", "csrf="+url.QueryEscape(csrf.Value)+"&expected_revision=revision&emails=not-an-email", csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+		t.Fatalf("malformed email reached action: status=%d calls=%v", w.Code, actions.calls)
+	}
+}
+
+func TestPlatformUIActiveDeployerRevisionConflictIsActionable(t *testing.T) {
+	actions := &uiActions{err: ErrDeployerRevision}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{ActiveDeployerRevision: "rev"}}, Actions: actions}
+	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	var csrf *http.Cookie
+	for _, c := range page.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("missing csrf")
+	}
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/deployers/active", "csrf="+url.QueryEscape(csrf.Value)+"&expected_revision=rev&emails=&confirm_broadening=confirm", csrf)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "Deployer list changed") || !strings.Contains(w.Body.String(), "Refresh dashboard") || w.Header().Get("Location") != "" {
+		t.Fatalf("revision conflict: %d %q", w.Code, w.Body.String())
 	}
 }
 
@@ -222,6 +295,14 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 			t.Fatalf("dashboard filter contains unsafe browser state or request primitive %q", forbidden)
 		}
 	}
+	if strings.Contains(body, `<option value="deleted">`) {
+		t.Fatalf("dashboard exposes deleted apps as an operational filter: %s", body)
+	}
+	for _, forbidden := range []string{`/rollback`, `Roll back`, `Releases and rollback`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("dashboard exposes deferred rollback control %q: %s", forbidden, body)
+		}
+	}
 }
 
 func TestPlatformUIDashboardEscapesDescriptionsAndUsesOnlyStableGatewayLink(t *testing.T) {
@@ -279,6 +360,33 @@ func TestPlatformUIStalePolicyConflictIsStyledAndDoesNotExposeState(t *testing.T
 	p.ServeHTTP(w, r)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "Policy changed") || !strings.Contains(w.Body.String(), "Refresh dashboard") || strings.Contains(w.Body.String(), "alpha") {
 		t.Fatalf("stale policy response: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUIRollbackFormRouteIsAbsentEvenWithValidBrowserTrustChecks(t *testing.T) {
+	actions := &uiActions{}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Actions: actions}
+	w := uiRequest(t, p, http.MethodGet, "/", "")
+	var csrf *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("missing CSRF cookie")
+	}
+	form := url.Values{"csrf": {csrf.Value}, "deployment": {"old-release"}}
+	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/rollback", strings.NewReader(form.Encode()))
+	r.Host = "tiny.test"
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Set("Origin", "https://tiny.test")
+	r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+	r.AddCookie(csrf)
+	w = httptest.NewRecorder()
+	p.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound || len(actions.calls) != 0 {
+		t.Fatalf("rollback form route status=%d calls=%v", w.Code, actions.calls)
 	}
 }
 
@@ -353,43 +461,17 @@ func TestPlatformUIMutationsRequireActorOriginCSRFAndConfirmation(t *testing.T) 
 	if w = request("/apps/alpha/delete", "confirmation=delete%3Aalpha", "https://tiny.test"); w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "delete:alpha" {
 		t.Fatalf("valid deletion form: %d %#v", w.Code, actions.calls)
 	}
-	if w = request("/deployers/a%40example.test/suspend", "confirmation=suspend%3Aa%40example.test", "https://tiny.test"); w.Code != http.StatusForbidden || len(actions.calls) != 1 {
+	if w = request("/deployers/a%40example.test/suspend", "confirmation=suspend%3Aa%40example.test", "https://tiny.test"); w.Code != http.StatusNotFound || len(actions.calls) != 1 {
 		t.Fatalf("deployer escalated: %d %#v", w.Code, actions.calls)
 	}
 }
 
-func TestPlatformUIOperatorCanAuthorizeFreshDeployer(t *testing.T) {
+func TestPlatformUIOperatorUsesOnlyGlobalDeployerAllowlist(t *testing.T) {
 	actions := &uiActions{}
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "operator", Email: "root@example.test", Role: "operator", Active: true}}, Actions: actions}
 	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `action="/deployers/authorize"`) || !strings.Contains(w.Body.String(), `name="email"`) || !strings.Contains(w.Body.String(), `autocomplete="email"`) {
-		t.Fatalf("authorization form missing: %d %s", w.Code, w.Body.String())
-	}
-	var csrf *http.Cookie
-	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
-			csrf = c
-		}
-	}
-	if csrf == nil {
-		t.Fatal("missing csrf")
-	}
-	post := func(email string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest(http.MethodPost, "https://tiny.test/deployers/authorize", strings.NewReader("email="+url.QueryEscape(email)+"&csrf="+url.QueryEscape(csrf.Value)))
-		r.Host = "tiny.test"
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.Header.Set("Origin", "https://tiny.test")
-		r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
-		r.AddCookie(csrf)
-		out := httptest.NewRecorder()
-		p.ServeHTTP(out, r)
-		return out
-	}
-	if w = post("New@Example.test"); w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "deployer:operator:New@example.test:active" {
-		t.Fatalf("fresh authorization: %d %#v", w.Code, actions.calls)
-	}
-	if w = post("not-an-email"); w.Code != http.StatusBadRequest || len(actions.calls) != 1 {
-		t.Fatalf("malformed email authorized: %d %#v", w.Code, actions.calls)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `action="/deployers/active"`) || strings.Contains(w.Body.String(), `/deployers/authorize`) {
+		t.Fatalf("global editor missing or legacy route present: %d %s", w.Code, w.Body.String())
 	}
 }
 

@@ -66,14 +66,3 @@ func PlanActivation(previous *Deployment, next Deployment, r ActivationRequireme
 	}
 	return out, nil
 }
-func PlanRollback(current, target Deployment, r ActivationRequirements) ([]Deployment, error) {
-	if current.AppID != target.AppID || current.State != Active || target.State != Superseded {
-		return nil, ErrTransition
-	}
-	if !r.PolicyReady || !r.CertificateReady || !r.DenialProbePassed {
-		return nil, errors.New("activation verification incomplete")
-	}
-	target.State = Active
-	current.State = Superseded
-	return []Deployment{target, current}, nil
-}

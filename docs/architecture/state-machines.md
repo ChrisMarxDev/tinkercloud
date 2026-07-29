@@ -12,7 +12,7 @@ creating ──valid policy──▶ active
                             │   │
                     suspend │   │ delete
                             ▼   ▼
-                         suspended ──▶ deleting ──▶ deleted
+                         suspended ──▶ deleting ──▶ permanently removed
                             │
                          resume
                             ▼
@@ -20,7 +20,8 @@ creating ──valid policy──▶ active
 ```
 
 Only `active` apps resolve in the app plane. `creating`, `failed`, `suspended`,
-`deleting`, and `deleted` fail closed.
+and transient `deleting` states fail closed. Successful deletion removes the
+application record and its owned data rather than retaining a `deleted` state.
 
 ## Deployment
 
@@ -40,7 +41,7 @@ staged
 verified
    ├── activation transaction fail▶ failed
    ▼
-active ◀──────── rollback selection ─ superseded
+active ───────────────────────────── superseded
    │
    └── post-activation probe fails → failed + previous restored
 ```

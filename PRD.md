@@ -11,7 +11,7 @@ working labels, not architectural identifiers
 
 **North star:** [Shopify Quick](docs/product/north-star-quick.md)
 
-**Last updated:** 2026-07-27
+**Last updated:** 2026-07-29
 
 ## 0. How to use this document
 
@@ -57,7 +57,7 @@ TinyHost—not the deployed app—owns:
 - viewer authentication and app authorization;
 - release storage and static asset serving;
 - app-scoped data capabilities;
-- deployment activation and rollback;
+- deployment activation and failed-activation preservation;
 - resource limits, audit, and operator diagnostics.
 
 The application is an untrusted static bundle and never receives a request until
@@ -119,6 +119,9 @@ using stricter app ownership and per-app access rules.
    shipped skills.
 7. Security and update failures preserve the last known-good state and never
    make private content public.
+8. Human setup and deployment ask only for information that cannot be
+   discovered or safely defaulted; generated configuration is an output, not a
+   prerequisite ceremony.
 
 ### 4.2 V1 success measures
 
@@ -165,7 +168,7 @@ can be established through local test and release evidence.
 #### Authentication and authorization
 
 - One initial operator; multiple deployers.
-- Operator authorizes/suspends deployers by normalized email.
+- Operator reconciles one exact active-deployer allowlist by normalized email.
 - Viewer authentication through email one-time codes.
 - Separate control-plane, CLI-token, and app-viewer credentials.
 - One host-only global opaque viewer identity on the platform host plus
@@ -179,11 +182,12 @@ can be established through local test and release evidence.
 
 - Static HTML/CSS/JavaScript/assets only.
 - Stable app hostname under one configured wildcard suffix.
-- `tiny.yaml` plus secure defaults and CLI flags.
+- A generated `tiny.yaml` receipt plus secure defaults and CLI flags for
+  repeatable automation.
 - Streaming, quota-limited archive upload.
 - Hostile archive inspection and staged extraction.
 - Immutable release manifests and content hashes.
-- Atomic activation, rollback, and failure recovery.
+- Atomic activation and failure recovery.
 - SPA fallback, MIME, range, ETag, and safe cache behavior.
 - Public gateway denial probes before deployment success.
 
@@ -202,7 +206,7 @@ can be established through local test and release evidence.
 #### Interfaces for creators and agents
 
 - Separate `tiny` Go client for macOS and Linux.
-- Interactive OTP login and OS credential-store token storage.
+- Interactive OTP login and protected per-user credential-file token storage.
 - Scoped non-interactive agent/CI tokens.
 - Deterministic human and JSON CLI output.
 - First-party skills for app development, deployment, and operation.
@@ -267,7 +271,7 @@ The operator controls the VPS and TinyHost trust root.
 May:
 
 - initialize and update TinyHost;
-- authorize, suspend, and revoke deployers;
+- reconcile the exact active deployer allowlist by normalized email;
 - inspect and suspend every app;
 - configure global resource and security limits;
 - inspect audit and service health;
@@ -285,7 +289,7 @@ May:
 
 - authenticate to the CLI/dashboard;
 - create apps and stable slugs;
-- upload, inspect, activate, and roll back releases;
+- upload, inspect, and activate releases;
 - edit their apps’ access rules;
 - inspect bounded app/deployment logs and usage;
 - create app-scoped or otherwise limited agent tokens;
@@ -341,8 +345,13 @@ success.
 Prerequisites:
 
 - clean supported Hetzner VPS with root SSH access;
-- platform and wildcard app DNS records;
-- verified Resend sending domain and API key.
+- one operator-controlled domain; and
+- access to a Resend account and the domain’s DNS control plane.
+
+Platform/wildcard DNS, Resend domain verification, and the API key are required
+external state, but the human assistant derives and presents their exact values
+at resumable checkpoints rather than requiring the operator to prepare them
+from config documentation.
 
 Journey:
 
@@ -351,49 +360,63 @@ curl thin installer | sudo sh
 → detect OS/architecture
 → download tinyhost
 → verify checksum and signature
-→ tinyhost install-service
-→ tinyhost init
-→ validate host, ports, time, disk, DNS
-→ create service user, config, secrets, data directory
+→ tinyhost setup
+→ discover host, ports, time, disk, and supported OS
+→ ask only for the base domain, operator email, and Resend credential source
+  that cannot be derived
+→ derive conventional platform/app hosts and sending defaults; allow an
+  explicit edit only when the operator needs a non-default topology
+→ show the exact DNS records and pause until their public values are correct
+→ create service user, generated config, credentials, and data directory
 → initialize SQLite and operator
 → test Resend
 → provision TLS
 → enable/start systemd service
-→ run health and anonymous-denial probes
+→ run platform health, route-classification, socket-confinement, and safe
+  unknown-app-host denial probes
 → print dashboard and recovery commands
 ```
 
 Meaningful setup logic belongs in the signed binary. The shell script only
 downloads, verifies, installs, and invokes it. Initialization is resumable and
-idempotent.
+idempotent. The generated config records the resulting server state for
+automation and recovery; the operator does not have to author it before setup.
+Secrets are never accepted in argv or ordinary config. The assistant accepts a
+root-readable credential file, or creates the root-owned credential file from a
+no-echo prompt without echoing or logging the value.
 
 ### 7.2 Authorize a deployer
 
 ```text
 operator signs in
-→ enters deployer email
-→ sees normalized address and default limits
-→ confirms
-→ TinyHost commits user + audit event
-→ deployer receives optional invitation email
+→ opens the single active-deployer allowlist
+→ reviews all currently active normalized emails in one multiline field
+→ adds or removes addresses
+→ confirms only when the edit broadens deployment authority
+→ TinyHost revision-checks and atomically reconciles users, credentials, and
+  one audit event
 ```
 
-An email delivery failure does not create a partially public or privileged
-state. The authorized deployer can request login later. An email address that
-has not been authorized by the operator cannot receive a deployer token, create
-an app, upload a release, or mutate access policy.
+No invitation email is required: the operator can share the platform URL
+through any existing channel and the deployer requests OTP when ready. Removing
+an active address immediately revokes its CLI tokens and control sessions while
+preserving its immutable identity and owned apps. Stale snapshots and audit
+failure leave the entire allowlist unchanged. An email address that is not
+active cannot receive a deployer token, create an app, upload a release, or
+mutate access policy.
 
 ### 7.3 Deployer CLI login
 
 ```text
 tiny login --server https://tiny.example.com
-→ prompt for email
-→ generic OTP request response
-→ prompt for code
-→ server verifies current deployer authorization
-→ issue a deployer CLI token bound to this server and user
-→ save in OS credential store
-→ tiny whoami confirms server and identity
+→ load the server-bound credential file
+→ authenticated whoami reuses a valid bearer and confirms identity
+→ otherwise, only an unauthorized/expired bearer falls back to OTP
+→ prompt for email, generic OTP request response, and prompt for code
+→ server verifies current deployer authorization and issues a server-bound token
+→ authenticated whoami confirms the new identity
+→ atomically save the new bearer in the protected per-user Tiny credential file
+→ save the normalized HTTPS platform URL as the Tiny default server
 ```
 
 The token is displayed only when explicitly using a non-interactive token
@@ -401,21 +424,76 @@ creation workflow and is never logged. Every mutating CLI request sends this
 token to the platform host; the server re-evaluates deployer status, token
 scope, expiry, and target ownership before acting.
 
+Interactive login persists the bearer by normalized HTTPS platform URL in one
+Tiny-owned per-user file at `os.UserConfigDir()/tiny/<sha256(server)>.json`.
+The credential directory is mode `0700`, its regular non-symlinked file is
+mode `0600`, and updates use atomic replacement in that directory. Its bounded,
+versioned JSON format has the exact `version`, `server`, and `token` members;
+unknown or duplicate JSON members and a server mismatch deny. The raw bearer
+never appears in argv, environment variables, human/JSON output, logs, or a
+project file.
+`tiny login` is consequently a one-time interactive action for a still-valid
+token; later invocations first reuse it silently after `whoami`. An
+unauthorized or expired token falls back to a normal CLI OTP login. Transport,
+dependency, malformed-response, unexpected-status, or ambiguous authorization
+failures fail closed without sending OTP or altering the existing credential.
+`tiny login --force` is the explicit account-switch flow: it skips reuse,
+requires fresh OTP, and replaces the old credential only after the new bearer
+passes `whoami`; failure retains the old credential. A `429` tells the deployer
+to wait and retry but never reveals email eligibility, token state, or whether
+an OTP was created. The file is readable by the same OS user, unlike an OS
+credential store, so server-side scopes, expiry, and prompt revocation remain
+mandatory safeguards.
+
+The same protected Tiny configuration directory keeps one separate non-secret
+default server record (`default-server.json`) with exact versioned normalized
+HTTPS URL data. After successful login, later deployer CLI commands may omit
+`--server`; an explicit `--server` wins only for that invocation and cannot
+change the default. For a recognized human command, exactly missing default
+state offers one bounded server-setup prompt. Tiny verifies the proposed
+normalized HTTPS URL through a direct no-redirect API-version proof before
+saving it, then continues the original command; authentication remains
+separate, so that command may next report `Login required`. JSON commands
+never prompt or cache. Malformed, unsafe, non-HTTPS, incompatible, redirected,
+transport-failed, or ambiguous default/setup state fails closed rather than
+selecting a host or running the target command.
+
+`tiny logout` sends the current global CLI bearer to an authenticated
+self-revocation route. The server derives and revokes exactly that bearer row;
+it never revokes browser control sessions, viewer sessions, app-scoped tokens,
+or another CLI bearer. The CLI removes only the matching local credential after
+confirmed revocation, or after a `401` proves it is already unusable. Ambiguous
+network/server/persistence/local-storage failures retain the credential; a
+missing local credential is idempotently logged out and leaves the default URL
+available for the next `tiny login`.
+
 ### 7.4 Deploy an app
 
 Recommended V1 behavior:
 
 ```text
-creator/agent builds app locally
-→ tiny deploy ./dist
+creator/deployer has a static project
+→ tiny deploy [project directory]
+→ reuse valid existing output, or stop once with the exact project-owned build
+  action when output is absent
+→ use the verified saved platform and bearer when available
+→ inspect the project and infer safe app slug/output defaults
+→ if required state is missing or ambiguous, human CLI asks one bounded
+  question at a time
+→ default to owner-only access and no unproven capability
+→ show one deployment summary with an edit path for optional description,
+  viewer rules, capabilities, or SPA fallback
+→ one final action names any access broadening and starts deployment
+→ if tiny.yaml is missing, atomically write the generated receipt without a
+  second manifest confirmation
+→ prove saved deployer bearer with whoami; only unauthorized state uses OTP
 → load tiny.yaml and flags
-→ preview app slug, policy, capabilities, and limits
 → validate directory and create deterministic archive
 → stream upload with idempotency key
 → server validates policy before activation
 → inspect/extract archive in staging
 → create immutable release manifest
-→ ensure TLS is ready
+→ ensure the exact app HTTPS origin has a verified certificate (bounded retry window)
 → atomically activate
 → probe anonymous HTML/asset/API denial
 → probe authenticated platform health
@@ -424,6 +502,21 @@ creator/agent builds app locally
 
 The CLI does not execute arbitrary build scripts in V1. Coding agents or the
 developer’s existing toolchain produce the deploy directory.
+
+`tiny init [DIR]` is the explicit equivalent of the missing-manifest setup and
+never overwrites an existing file. The human path does not ask the deployer to
+author YAML or repeat a server URL, email, slug, output directory, or policy
+already verified or safely inferred. `tiny deploy` defaults to the current project
+directory; `--json` never prompts, creates a manifest, starts OTP, or changes
+credentials. A generated manifest is strict and deterministic, and all build
+output/fallback paths are checked to remain inside the local project without
+symlinks before archiving.
+
+First certificate issuance may take longer than one probe. Before activation,
+TinyHost therefore retries only the exact app-origin certificate-readiness
+check within one cancellable, finite 45-second budget. Redirects, wrong hosts,
+unverified chains, cancellation, or exhaustion still deny activation and retain
+the prior release; policy and post-activation evidence never inherit this retry.
 
 ### 7.5 Viewer login
 
@@ -471,19 +564,7 @@ The in-memory hub provides best-effort live delivery only. Reconnects and server
 restarts can lose events. Clients read current KV state after connecting or
 reconnecting; realtime is a notification layer, not the source of truth.
 
-### 7.8 Rollback
-
-```text
-deployer selects prior immutable release
-→ TinyHost confirms ownership and release/app relationship
-→ validates current policy and release integrity
-→ atomically switches current deployment
-→ probes protected URL
-→ keeps rollback or restores previous active release
-→ writes audit event
-```
-
-### 7.9 Server update
+### 7.8 Server update
 
 ```text
 sudo tinyhost update
@@ -614,7 +695,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   readiness exist.
 - **FR-DEPLOY-007:** Activation MUST serialize per app and preserve the previous
   release until verification succeeds.
-- **FR-DEPLOY-008:** Upload, activation, and rollback MUST support idempotency.
+- **FR-DEPLOY-008:** Upload and activation MUST support idempotency.
 - **FR-DEPLOY-009:** The CLI MUST NOT report success until public gateway probes
   verify anonymous denial.
 
@@ -747,7 +828,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   limits, email/TLS diagnostics, disk health, version/update state, and a
   bounded recent host CPU/RAM/data-volume resource chart.
 - **FR-UI-004:** Deployer UI MUST support their apps, deployments, policies,
-  tokens, usage, rollback, suspension/deletion, and actionable failures.
+  tokens, usage, suspension/deletion, and actionable failures.
 - **FR-UI-005:** Sensitive values MUST be write-only or display-once.
 - **FR-UI-006:** Destructive or access-broadening actions MUST show the exact
   target and require confirmation.
@@ -947,7 +1028,7 @@ therefore use:
 ### 11.1 Application
 
 ```text
-creating → active ↔ suspended → deleting → deleted
+creating → active ↔ suspended → deleting → permanently removed
     └────→ failed
 ```
 
@@ -1391,7 +1472,7 @@ Deliver:
 - manifest/client validation;
 - streaming upload and hostile extraction;
 - release state machine;
-- activation, TLS readiness, public probes, rollback, and cleanup.
+- activation, TLS readiness, public probes, failure recovery, and cleanup.
 
 Exit: `tiny deploy` returns a working protected URL; attack corpus and
 interruption recovery pass.
@@ -1454,7 +1535,8 @@ Rank after usage evidence:
 6. Temporary invitations and groups.
 7. Internal/Jira/data-warehouse capability adapters.
 8. Operator backups and disaster recovery.
-9. Backend runtime only through a separate security concept.
+9. Deployer-selected rollback to a prior immutable application release.
+10. Backend runtime only through a separate security concept.
 
 Future provider access follows:
 
@@ -1512,10 +1594,12 @@ always denies.
 
 ### D4 — Deployer authentication and owner access
 
-The operator authorizes deployer email addresses. A deployer runs `tiny login`,
-completes email OTP, and receives a server-bound scoped CLI token stored in the
-OS credential store. Every request rechecks deployer status, token scope, and
-target ownership.
+The operator reconciles one exact active-deployer email list. A deployer runs
+`tiny login` directly or reaches the same bounded login inside
+`tiny deploy .`, completes email OTP when no valid bearer exists, and receives
+a server-bound scoped CLI token stored in the protected per-user Tiny
+credential file. Every request rechecks deployer status, token scope, expiry,
+and target ownership.
 
 An active app owner is an implicit viewer. Deploying without viewer rules
 creates a private owner-only app.
@@ -1557,6 +1641,23 @@ Avoid scattering literal branding through domain packages. Keep names at
 composition roots, distribution metadata, user-facing copy, and SDK package
 configuration.
 
+### D9 — Minimum-necessary guided flows
+
+Human commands begin with the intended outcome (`tinyhost setup`,
+`tiny deploy`, `tiny login`, `tiny logout`) and ask only for information that
+is required, not already verified, and not safely derivable. They persist
+verified reusable state in the correct boundary. A generated config or
+`tiny.yaml` is a transparent receipt and automation surface; it is not a
+prerequisite document the human must create.
+
+The assistant may show derived defaults and an explicit edit path without
+turning every default into a question. It must never infer an authorization
+broadening, accept a secret in argv, follow an unverified server redirect, run
+an application build, or introduce prompts into JSON/non-interactive use.
+Missing required external state such as DNS or a verified sending domain
+produces one exact action and a resumable continuation rather than a wall of
+flags.
+
 ## 23. Additional accepted defaults
 
 - Email OTP only in V1; no password and no required magic-link flow.
@@ -1564,6 +1665,8 @@ configuration.
 - Per-host HTTP-challenge ACME first.
 - Server-rendered admin/deployer UI.
 - No automatic build command inside `tiny deploy`.
+- Human setup/deploy commands are inference-first, resumable wizards; generated
+  configuration and manifests remain explicit, reviewable automation receipts.
 - No Docker initially.
 - No backup feature initially.
 - No outbound telemetry by default.
@@ -1580,6 +1683,8 @@ configuration.
 ### Installation
 
 - [ ] Supported clean Hetzner VPS initializes with documented prerequisites.
+- [ ] Human setup asks only for non-discoverable required values and can resume
+      after an external DNS or email prerequisite is fixed.
 - [ ] Only TinyHost owns expected public sockets.
 - [ ] DNS, TLS, Resend, SQLite, permissions, disk, and version diagnostics work.
 - [ ] Root operator recovery works with email unavailable.
@@ -1587,10 +1692,12 @@ configuration.
 
 ### Deployer
 
-- [ ] Operator can authorize/revoke deployer by email.
+- [ ] Operator can atomically reconcile the exact active-deployer email list.
 - [ ] Deployer can authenticate without VPS access.
 - [ ] `tiny deploy <dir>` returns a protected stable HTTPS URL.
-- [ ] Deployer can manage access, releases, rollback, tokens, and deletion only
+- [ ] A first human deploy can generate its manifest and platform selection
+      without requiring hand-authored config or repeated known values.
+- [ ] Deployer can manage access, releases, tokens, and deletion only
       for owned apps.
 - [ ] Agent/JSON output is deterministic and contains no secret.
 

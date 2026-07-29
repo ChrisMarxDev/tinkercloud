@@ -1,63 +1,103 @@
-# Actors and Critical Journeys
+# Actors and critical journeys
+
+`operator`, `deployer`, and `viewer` are roles, not interchangeable account
+types. One person may hold more than one role, but authority and credentials do
+not transfer between them. A deployment agent is non-human automation using a
+scoped deployer token.
+
+The exhaustive human flows are the browsable
+[operator flow](../../concept/flows/operator.html) and
+[deployer flow](../../concept/flows/deployer.html). Their
+`information requested` and `derived/defaulted` columns are the product gate
+for Principle 17: ask only for necessary information.
 
 ## Operator
 
-Owns infrastructure and the trust root.
+Owns the VPS, domain, DNS, SSH, firewall, email-provider relationship, installed
+server, and platform trust root.
 
-Critical journeys:
+Critical journey:
 
-1. Initialize a clean Hetzner VPS, DNS, TLS, email, database, and first operator.
-2. Authorize or revoke a deployer.
-3. Suspend an app without touching its files.
-4. Diagnose email, disk, certificate, and database health.
-5. Apply a signed update and automatically return to the prior working version
-   when its health gate fails.
+```text
+acquire domain + supported dedicated VPS + root SSH
+→ install one verified signed server binary
+→ tinyhost setup discovers the host
+→ ask base domain + operator email
+→ derive conventional platform/app hosts and sender
+→ pause with exact DNS + Resend actions
+→ resume without repeating valid state
+→ ingest provider secret into root-owned credentials
+→ generate config, internal secrets, SQLite, service, TLS, and probes
+→ sign in to dashboard
+→ reconcile one exact active-deployer allowlist
+→ diagnose, suspend/revoke, update, and recover through narrow controls
+```
 
-The operator has a root-only VPS recovery path that does not depend on email.
+The operator does not author normal config before setup. Root SSH is the
+email-independent recovery authority. Total VPS loss has no V1 recovery
+guarantee.
 
 ## Deployer
 
-Owns only their apps, policies, releases, and scoped automation tokens.
+Owns only their apps, current access policies, immutable deployments, and scoped
+automation tokens.
 
-Critical journeys:
+Critical journey:
 
-1. Authenticate the CLI by email OTP.
-2. Deploy a directory using flags or `tiny.yaml`.
-3. See validation and protection checks before “ready.”
-4. Add or revoke viewer access immediately.
-5. Roll back to a prior immutable release.
+```text
+operator activates deployer email
+→ install signed tiny client as normal OS user
+→ tiny deploy .
+→ reuse existing output, or run one exact project-owned build action when absent
+→ ask/verify/cache platform only when missing
+→ reuse verified bearer or complete OTP only after definite unauthorized state
+→ derive project/manifest defaults
+→ ask only about ambiguity or deliberate customization
+→ write tiny.yaml as a deterministic receipt
+→ upload, validate, seal, activate, and prove anonymous denial
+→ receive stable protected URL
+→ manage viewer policy/tokens and deploy later builds
+```
+
+`tiny login --force` is deliberate account switching. `tiny logout` revokes the
+exact server-side CLI bearer before local removal. The dashboard searches owned
+apps by slug/current description, filters status, and links only to stable
+protected app origins. Deployment history is read-only in V1. Confirmed app
+deletion is permanent and leaves no tombstone or restore action.
 
 ## Viewer
 
-Has no platform account requirement beyond an email identity.
-
-Critical journey:
+Has no platform role or password. Email identity and app access are separate:
 
 ```text
 open app URL
-→ existing global viewer identity, or generic email OTP once per browser profile
-→ server-created one-time handoff bound to this app
-→ policy is re-evaluated before grant and before local session creation
-→ receive app-scoped host-only session
-→ return to original safe path
+→ existing rotating platform-host global viewer identity, or generic OTP once
+  per browser profile when absent
+→ server-created one-time handoff bound to this app and safe return path
+→ current app policy evaluated before grant and again at callback
+→ host-only app session created
+→ return to the requested app path
 ```
 
-The global identity proves only the email. Each app independently evaluates
-that email against current policy; no deployed app receives the global cookie.
+The global identity proves only the email. Each app independently decides
+whether that identity is allowed. No deployed app receives the platform cookie,
+and an app logout revokes only its app session. Account switching is an
+explicit platform-host flow that revokes the prior identity family and child app
+sessions.
 
 ## Deployment agent
 
-Uses a non-interactive scoped token and deterministic output.
-
-Critical journey:
+Uses a non-interactive scoped token, explicit server and manifest state, and
+deterministic output. It never receives prompts or implicit credential/config
+writes.
 
 ```text
 inspect build output
-→ validate manifest and allowlist
+→ validate explicit manifest and policy
 → deploy immutable archive
 → wait for activation checks
 → independently probe anonymous denial
-→ report protected URL and release ID
+→ report protected URL and deployment ID
 ```
 
-The agent must fail the job when denial cannot be verified.
+The agent fails the job when denial cannot be verified.

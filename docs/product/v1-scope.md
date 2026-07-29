@@ -2,12 +2,12 @@
 
 ## Product outcome
 
-An operator can install TinyHost on one Linux VPS, authorize a deployer, and
-give that deployer a workflow that ends with a protected app URL:
+An operator can install TinyHost on one Linux VPS, add a deployer email to the
+exact active allowlist, and give that deployer a workflow that ends with a
+protected app URL:
 
 ```text
-tiny login
-tiny deploy ./dist --allow alice@example.com
+tiny deploy .
 ```
 
 An allowlisted viewer can authenticate by email and use the app. An anonymous,
@@ -18,7 +18,7 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 | Slice | Included | Exit signal |
 |---|---|---|
 | Secure gateway | Host resolution, global viewer identity, app-bound handoff, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
-| Deployment | Deployer login, archive upload, validation, immutable release, atomic activation, rollback | One command returns a verified protected URL |
+| Deployment | Deployer login, archive upload, validation, immutable release, atomic activation, failure recovery | One command returns a verified protected URL |
 | App primitives | First-class TypeScript SDK, capability discovery, current-user, JSON KV, lightweight local blobs, and ephemeral realtime | A static app persists current state and bounded attachments and receives live notifications without auth, database, bucket, or mount ceremony |
 | Operations | Hetzner-first setup, status, administration, signed update/rollback | Operator initializes a clean VPS with one command |
 | Hardening | Rate limits, fuzzing, failure injection, resource limits, reproducible release | Security and recovery gates are repeatable |
@@ -41,10 +41,11 @@ primitive at once.
 
 ## Included
 
-- One operator and multiple deployers.
+- One operator and multiple deployers managed as one exact active email list.
 - Exact-email and email-domain viewer rules.
 - Private-only app policy; an owner is always an implicit viewer.
-- App-scoped opaque viewer sessions.
+- One rotating platform-host viewer identity plus app-bound handoffs into
+  isolated app-scoped opaque viewer sessions.
 - Scoped deployer/API tokens with hashed-at-rest secrets.
 - Static archive deployment and SPA fallback.
 - Current-user, bounded JSON KV, app-shared local blob, and app-scoped
@@ -69,6 +70,8 @@ primitive at once.
   arbitrary outbound proxying.
 - Operator-managed backup, remote backup storage, and full-host restore.
 - Perfect zero-downtime platform upgrades; release activation must be atomic.
+- Deployer-selected rollback to a prior application release; V1 preserves the
+  last known-good release automatically when a candidate fails.
 
 ## V1 product risks
 

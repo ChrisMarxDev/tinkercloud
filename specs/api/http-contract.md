@@ -266,7 +266,6 @@ GET  /api/v1/apps/{slug}
 POST /api/v1/apps/{slug}/deployments
 GET  /api/v1/apps/{slug}/deployments/{id}
 POST /api/v1/apps/{slug}/deployments/{id}/activate
-POST /api/v1/apps/{slug}/rollbacks
 GET  /api/v1/apps/{slug}/access
 PUT  /api/v1/apps/{slug}/access
 ```

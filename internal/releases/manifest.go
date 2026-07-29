@@ -172,3 +172,46 @@ func validDomain(d string) bool {
 	}
 	return true
 }
+
+// GenerateManifest emits the deterministic strict V1 form used by `tiny init`.
+// It round-trips ParseManifest before returning, so local generation and server
+// deployment share the same contract rather than maintaining a second parser.
+func GenerateManifest(m Manifest) ([]byte, error) {
+	encode := func(value Manifest) ([]byte, error) {
+		description, err := NormalizeDescription(value.Description)
+		if err != nil || value.Version != 1 || !ValidSlug(value.Name) {
+			return nil, ErrManifest
+		}
+		raw := rawManifest{Version: 1, Name: value.Name, Description: description}
+		raw.Build.Output = value.BuildOutput
+		if raw.Build.Output == "" {
+			raw.Build.Output = "."
+		}
+		raw.Access.Mode = "private"
+		raw.Access.Allow.Emails = append([]string(nil), value.Emails...)
+		raw.Access.Allow.Domains = append([]string(nil), value.Domains...)
+		raw.Features.KV, raw.Features.Blobs, raw.Features.Realtime = value.KV, value.Blobs, value.Realtime
+		raw.SPA.Fallback = value.SPAFallback
+		b, err := yaml.Marshal(raw)
+		if err != nil {
+			return nil, ErrManifest
+		}
+		return b, nil
+	}
+	b, err := encode(m)
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := ParseManifest(b)
+	if err != nil {
+		return nil, ErrManifest
+	}
+	b, err = encode(canonical)
+	if err != nil {
+		return nil, ErrManifest
+	}
+	if _, err = ParseManifest(b); err != nil {
+		return nil, ErrManifest
+	}
+	return b, nil
+}

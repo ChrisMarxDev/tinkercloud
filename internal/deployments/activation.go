@@ -45,21 +45,3 @@ func (s *ActivationStore) Activate(_ context.Context, actor, id string, r releas
 	}
 	return nil
 }
-func (s *ActivationStore) Rollback(_ context.Context, actor, app, id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	d, ok := s.Records[id]
-	if !ok || d.OwnerID != actor || d.AppID != app || d.State != releases.Superseded {
-		return ErrDenied
-	}
-	old := s.Current[app]
-	if old != "" {
-		o := s.Records[old]
-		o.State = releases.Superseded
-		s.Records[old] = o
-	}
-	d.State = releases.Active
-	s.Records[id] = d
-	s.Current[app] = id
-	return nil
-}

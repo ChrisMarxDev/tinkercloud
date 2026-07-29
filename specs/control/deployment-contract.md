@@ -17,7 +17,6 @@ as an app ID or owner ID in deployer-controlled request data.
 | revoke token | `token:revoke` | token owned by actor | `token.revoked` |
 | create deployment | `deploy:create` | owned app | `deployment.created` |
 | activate deployment | `deploy:activate` | owned app + release | `deployment.activated` |
-| rollback | `deploy:activate` | owned app + prior release | `deployment.rolled_back` |
 
 Successful security-sensitive mutations commit their metadata and audit event in
 the same transaction. Audit failure denies the mutation.
@@ -35,6 +34,13 @@ The CLI creates one private temporary archive per logical `tiny deploy`
 invocation, removes it on every exit path, and sends a fresh cryptographically
 random idempotency key. A retry of that invocation reuses its key; a later
 invocation, including one for the same app, receives a different key.
+
+Before archiving, `tiny deploy [DIR]` uses `DIR` or `.` and loads a local strict
+`tiny.yaml`. A human deploy may create a missing manifest through the bounded
+local wizard; JSON mode never does. The deployer credential is first proven by
+the API-version and authenticated `whoami` checks. Only a definite unauthorized
+result may enter the existing OTP flow, and a fresh bearer is persisted only
+after that proof succeeds. Explicit `--server` applies to only that invocation.
 
 ## Deployment state and activation
 
@@ -54,10 +60,17 @@ failed activation restores the previously active release.
 
 During upload the server validates and persists the deployment manifest's
 canonical private allowlist. Activation installs that exact allowlist and the
-active deployment pointer in one transaction. Rollback likewise reinstalls the
-target deployment's canonical policy with its pointer. The owner remains
-server-derived and implicit; the client never supplies an owner or app ID for
-this binding.
+active deployment pointer in one transaction. The owner remains server-derived
+and implicit; the client never supplies an owner or app ID for this binding.
+
+Before activation, a newly staged app's exact HTTPS origin receives a bounded
+certificate-readiness probe. The server may retry only transient/readiness
+failure within one cancellable 45-second overall budget, with finite attempts
+and bounded individual requests. Each attempt disallows redirects, requires the
+same HTTPS host and a verified TLS chain, and accepts only the normal non-
+redirect readiness status range. Policy, ownership, candidate validation,
+anonymous-denial evidence, and all post-activation checks are never retried or
+weakened by this certificate window.
 
 The optional manifest description is immutable release metadata in
 `manifest_json`, not a mutable application field. Finalized deployment metadata
@@ -79,9 +92,20 @@ preserves the previous active pointer.
 
 - An inactive, expired, revoked, wrong-owner, wrong-app, or missing token is
   denied before control mutation.
+- A JSON deploy with a missing manifest or credential is denied without stdin,
+  OTP, manifest creation, or credential writes. A local path with traversal or
+  a symlinked output/fallback component is denied before archive creation.
 - App/release ownership is checked by the repository/service, not only the CLI.
 - Missing audit capability, valid candidate policy, certificate readiness, or probe result
   denies activation.
+- Certificate readiness is pre-activation evidence only: redirect, wrong-host,
+  unverified-TLS, exhausted-budget, cancelled, or non-ready outcomes deny and
+  preserve the prior active pointer. The finite retry window applies only to
+  certificate/readiness transport failures; it never retries policy, ownership,
+  probe, or post-activation evidence.
+- Deployer-initiated selection of a previous release is not a V1 control
+  command. The CLI, bearer API, and dashboard must deny or omit rollback paths;
+  automatic failed-activation preservation remains required.
 - Malformed manifests and hostile archives are rejected before staging becomes
   an immutable release.
 - Description input with invalid UTF-8, a Unicode control character, a Unicode

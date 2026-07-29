@@ -293,7 +293,7 @@ func TestDeploymentCommitActivationNonCurrentOldRollback(t *testing.T) {
 	}
 }
 
-func TestDeploymentActivationAndRollbackBindManifestPolicyAtomically(t *testing.T) {
+func TestDeploymentActivationBindsManifestPolicyAtomically(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	r := DeploymentRepository{Store: s}
@@ -329,23 +329,6 @@ func TestDeploymentActivationAndRollbackBindManifestPolicyAtomically(t *testing.
 	}
 	if err := s.DB.QueryRow("SELECT normalized_value FROM access_rules WHERE app_id='a' AND policy_revision=2 AND kind='domain' ORDER BY normalized_value LIMIT 1").Scan(&value); err != nil || value != "internal.example" {
 		t.Fatalf("candidate domain policy not installed: %q %v", value, err)
-	}
-	currentRecord, err := r.Active(context.Background(), "a")
-	if err != nil || currentRecord == nil {
-		t.Fatal(err)
-	}
-	rollbackTarget, err := r.Get(context.Background(), "old-policy")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err = r.CommitRollback(context.Background(), rollbackTarget, *currentRecord, "rollback-policy"); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DB.QueryRow("SELECT policy_revision,current_deployment_id FROM applications WHERE id='a'").Scan(&revision, &current); err != nil || revision != 3 || current != "old-policy" {
-		t.Fatalf("rollback revision=%d current=%q err=%v", revision, current, err)
-	}
-	if err := s.DB.QueryRow("SELECT normalized_value FROM access_rules WHERE app_id='a' AND policy_revision=3 AND kind='email'").Scan(&value); err != nil || value != "broad@example.com" {
-		t.Fatalf("rollback policy not restored: %q %v", value, err)
 	}
 }
 

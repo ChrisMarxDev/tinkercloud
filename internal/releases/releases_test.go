@@ -11,6 +11,22 @@ func TestActivationRequiresAllEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestGenerateManifestIsDeterministicAndRoundTrips(t *testing.T) {
+	m := Manifest{Version: 1, Name: "demo", Description: "Useful dashboard", BuildOutput: "dist", Emails: []string{"Zebra@example.com", "alice@example.com"}, Domains: []string{"Example.com"}, KV: true, Realtime: true, SPAFallback: "index.html"}
+	first, err := GenerateManifest(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := ParseManifest(first)
+	if err != nil || parsed.Name != "demo" || len(parsed.Emails) != 2 || parsed.Emails[0] != "Zebra@example.com" {
+		t.Fatalf("parsed=%#v err=%v", parsed, err)
+	}
+	second, err := GenerateManifest(parsed)
+	if err != nil || string(first) != string(second) {
+		t.Fatalf("not deterministic:\n%s\n%s\n%v", first, second, err)
+	}
+}
 func TestManifestRejectsPublicAndUnknown(t *testing.T) {
 	for _, in := range []string{"version: 1\nname: demo\naccess:\n  mode: public\n", "version: 1\nname: demo\nwat: true\n"} {
 		if _, err := ParseManifest([]byte(in)); err == nil {

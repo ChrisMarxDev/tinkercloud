@@ -42,6 +42,47 @@ func TestDeployActivatesVerified(t *testing.T) {
 	}
 }
 
+func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
+	n := 0
+	c := New("https://tiny.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		n++
+		switch n {
+		case 1:
+			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps/demo/deployments" || r.Header.Get("Authorization") != "Bearer secret-token" {
+				t.Fatalf("unexpected upload request: %s %s headers=%v", r.Method, r.URL, r.Header)
+			}
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"staged","status_url":"https://tiny.test/api/v1/apps/demo/deployments/d"}`)), Header: make(http.Header), Request: r}, nil
+		case 2:
+			if r.Method != http.MethodGet || r.URL.String() != "https://tiny.test/api/v1/apps/demo/deployments/d" {
+				t.Fatalf("unexpected status request: %s %s", r.Method, r.URL)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+		case 3:
+			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps/demo/deployments/d/activate" || r.Header.Get("Authorization") != "Bearer secret-token" || r.Header.Get("Idempotency-Key") == "" {
+				t.Fatalf("unexpected activation request: %s %s headers=%v", r.Method, r.URL, r.Header)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		case 4:
+			if r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+				t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
+			}
+			return anonymousDenied(r), nil
+		default:
+			t.Fatalf("unexpected request %d: %s %s", n, r.Method, r.URL)
+			return nil, nil
+		}
+	})}
+
+	result, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+	if err != nil || result.DeploymentID != "d" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if n != 4 {
+		t.Fatalf("request count = %d, want 4", n)
+	}
+}
+
 func anonymousDenied(r *http.Request) *http.Response {
 	h := make(http.Header)
 	h.Set("Content-Type", "application/json; charset=utf-8")

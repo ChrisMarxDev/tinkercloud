@@ -40,6 +40,11 @@ func TestControlAuthenticatorAppBoundToken(t *testing.T) {
 	if e := req("/api/v1/apps/alpha%2faccess/access"); e == nil {
 		t.Fatal("encoded")
 	}
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	r.Header.Set("Authorization", "Bearer "+raw)
+	if _, err := auth.AuthenticateControl(context.Background(), r); err == nil {
+		t.Fatal("app-bound bearer accepted for global CLI logout")
+	}
 }
 
 func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testing.T) {

@@ -9,12 +9,13 @@
 <body>
   <header>
     <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
-    <p class="eyebrow">Rank 7 · Planned feature</p>
+    <p class="eyebrow">Highest-priority remaining human-flow slice</p>
     <h1>Hetzner-first native deployment</h1>
     <p class="lede">Turn a clean, dedicated Hetzner VPS into a working TinyHost
       server with a thin install script and one signed server binary.</p>
-    <p class="promise">The script downloads; the binary owns setup, validation,
-      service installation, diagnostics, update, and recovery.</p>
+    <p class="promise">The script downloads; the binary discovers, asks only
+      what is necessary, generates config, validates, installs, diagnoses,
+      updates, and recovers.</p>
   </header>
   <main>
     <div class="grid">
@@ -38,7 +39,8 @@
         <ul>
           <li>Clean Hetzner Cloud Linux VPS with systemd.</li>
           <li>Signed <code>tinyhost</code> server binary and systemd unit.</li>
-          <li>Interactive, resumable initialization and DNS/email/TLS checks.</li>
+          <li>Interactive, resumable <code>tinyhost setup</code> that derives
+            conventional hosts and generates non-secret config.</li>
           <li>Dedicated unprivileged service user and private data directory.</li>
           <li>Root-only operator recovery independent of email.</li>
           <li>Signed self-update with health-gated automatic rollback.</li>
@@ -66,28 +68,35 @@
   exec "tinyhost install-service"
 
 tinyhost init:
-  validate clean host + DNS
-  create user, config, secrets, data directory
+  retained explicit automation contract
+
+tinyhost setup:
+  discover clean host
+  ask base domain + operator email
+  derive platform host + app suffix + sender
+  pause with exact DNS + Resend actions
+  resume without repeating valid answers
+  ingest provider secret into root-owned credentials
+  create user, generated config, internal secrets, data directory
   initialize SQLite
   test Resend
   provision TLS
   start systemd service
-  run health + anonymous-denial probes
+  run platform health + route/socket + unknown-app denial probes
   print dashboard and recovery commands</pre>
-      <p><a href="../../docs/operations/hetzner-deployment.md">Detailed deployment
-        flow</a> · <a href="../../docs/decisions/0005-split-server-and-client-binaries.md">Binary split decision</a></p>
+      <p><a href="../flows/operator.html">Complete operator flow</a> ·
+        <a href="../../docs/operations/hetzner-deployment.md">Detailed deployment
+        contract</a> · <a href="../../docs/decisions/0041-minimum-necessary-guided-flows.md">Minimum-input decision</a></p>
     </section>
     <section id="questions" class="caution">
       <p class="eyebrow">Open questions</p>
       <ul>
-        <li>Which exact Linux image and architectures form the first tested
-          support matrix?</li>
+        <li>Which smallest supported Hetzner plan passes the complete resource
+          and failure-injection acceptance suite?</li>
         <li>What signing mechanism and trust-root rotation ceremony are simplest
           for operators?</li>
-        <li>How should migrations declare whether automatic binary rollback is
-          safe or requires a forward recovery?</li>
-        <li>Should an opt-in systemd timer for updates ship in V1 or immediately
-          after?</li>
+        <li>Can the supported shells safely accept a no-echo Resend key directly,
+          or should the wizard always guide creation of a protected file?</li>
       </ul>
     </section>
     <section id="decision" class="decision">
@@ -101,6 +110,6 @@ tinyhost init:
         self-contained binary keeps those later options feasible.</p>
     </section>
   </main>
-  <footer><p>Planned feature; remove from the ranking after base behavior ships.</p></footer>
+  <footer><p>Current implementation has the deterministic base; the guided human setup remains the primary UX gap.</p></footer>
 </body>
 </html>

@@ -35,6 +35,7 @@ func (s *svcFake) Whoami(_ context.Context, a Actor) any {
 	s.actor = a
 	return map[string]string{"email": a.Email}
 }
+func (s *svcFake) RevokeCurrentBearer(context.Context, Actor) error       { return s.err }
 func (s *svcFake) Apps(context.Context, Actor) any                        { return []any{} }
 func (s *svcFake) CreateApp(context.Context, Actor, string, string) error { return s.err }
 func (s *svcFake) Access(context.Context, Actor, string) (any, error)     { return nil, s.err }
@@ -59,7 +60,6 @@ func (s *svcFake) CreateDeployment(_ context.Context, _ Actor, _ string, _ strin
 func (s *svcFake) Activate(context.Context, Actor, string, string, string) (ActivationResult, error) {
 	return ActivationResult{}, s.err
 }
-func (s *svcFake) Rollback(context.Context, Actor, string, string, string) error { return s.err }
 func call(d Dispatcher, m, p, b string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(m, p, strings.NewReader(b))
 	w := httptest.NewRecorder()
@@ -106,6 +106,9 @@ func TestDispatcherDenyPaths(t *testing.T) {
 	if w := call(d, "GET", "/api/v1/unknown", ""); w.Code != 404 {
 		t.Fatal(w.Code)
 	}
+	if w := call(d, "POST", "/api/v1/apps/a/rollback", `{"deployment":"old"}`); w.Code != 404 {
+		t.Fatalf("deferred rollback route = %d", w.Code)
+	}
 }
 func TestDispatcherSuccessPropagatesActor(t *testing.T) {
 	a := &authFake{a: Actor{ID: "u", Email: "u@test", Active: true}}
@@ -113,6 +116,26 @@ func TestDispatcherSuccessPropagatesActor(t *testing.T) {
 	w := call(Dispatcher{Auth: a, Service: s}, "GET", "/api/v1/whoami", "")
 	if w.Code != 200 || s.actor.ID != "u" || strings.Contains(w.Body.String(), "error") {
 		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestDispatcherLogoutUsesAuthenticatedActorOnly(t *testing.T) {
+	a := &authFake{a: Actor{ID: "u", CredentialID: "tok", Active: true}}
+	s := &svcFake{}
+	w := call(Dispatcher{Auth: a, Service: s}, http.MethodPost, "/api/v1/auth/logout", "")
+	if w.Code != http.StatusNoContent || !a.seen {
+		t.Fatalf("logout = %d", w.Code)
+	}
+	a.err = errors.New("denied")
+	w = call(Dispatcher{Auth: a, Service: s}, http.MethodPost, "/api/v1/auth/logout", "")
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous logout = %d", w.Code)
+	}
+	a.err = nil
+	s.err = errors.New("persistence failed")
+	w = call(Dispatcher{Auth: a, Service: s}, http.MethodPost, "/api/v1/auth/logout", "")
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failed logout = %d", w.Code)
 	}
 }
 func TestDispatcherBodyAndUploadBoundaries(t *testing.T) {

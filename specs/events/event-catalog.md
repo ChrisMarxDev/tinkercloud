@@ -31,7 +31,6 @@ token.revoked
 app.created
 app.suspended
 app.resumed
-app.deletion_requested
 policy.revised
 otp.requested
 otp.verification_failed
@@ -42,7 +41,6 @@ deployment.rejected
 deployment.verified
 deployment.activated
 deployment.activation_failed
-deployment.rolled_back
 kv.quota_exceeded
 server.update_started
 server.update_completed

@@ -1,0 +1,246 @@
+version: "3"
+
+# Task is the local maintainer entry point. It intentionally has no deploy or
+# publish task: production mutation remains an explicit operator/deployer flow.
+
+vars:
+  BIN_DIR: bin
+  SDK_DIR: sdk/typescript
+  EXAMPLES_DIR: examples/sdk-apps
+
+tasks:
+  default:
+    desc: Show the available maintainer tasks
+    cmds:
+      - task -l
+
+  setup:
+    desc: Install the pinned TypeScript SDK dependencies
+    dir: "{{.SDK_DIR}}"
+    preconditions:
+      - sh: command -v npm >/dev/null
+        msg: npm is required (Node.js 22 is the supported runtime).
+    cmds:
+      - npm ci
+
+  build:
+    desc: Build server, deployer CLI, SDK, and SDK example apps
+    summary: Builds local development artifacts only. It does not create a signed release or deploy anything.
+    cmds:
+      - task: build:server
+      - task: build:client
+      - task: build:sdk
+      - task: build:examples
+
+  build:server:
+    desc: Build the local tinyhost gateway binary to bin/tinyhost
+    preconditions:
+      - sh: command -v go >/dev/null
+        msg: Go 1.25.12 is required.
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}"
+      - go build -o "{{.BIN_DIR}}/tinyhost" ./cmd/tinyhost
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BIN_DIR}}/tinyhost"
+
+  build:client:
+    desc: Build the local tiny deployer CLI to bin/tiny
+    preconditions:
+      - sh: command -v go >/dev/null
+        msg: Go 1.25.12 is required.
+    cmds:
+      - mkdir -p "{{.BIN_DIR}}"
+      - go build -o "{{.BIN_DIR}}/tiny" ./cmd/tiny
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - "{{.BIN_DIR}}/tiny"
+
+  build:sdk:
+    desc: Compile @tinyhost/sdk to sdk/typescript/dist
+    dir: "{{.SDK_DIR}}"
+    preconditions:
+      - sh: test -d node_modules
+        msg: SDK dependencies are missing; run "task setup" first.
+    cmds:
+      - npm run build
+
+  build:examples:
+    desc: Build the static SDK example apps
+    dir: "{{.EXAMPLES_DIR}}"
+    preconditions:
+      - sh: test -d ../../sdk/typescript/node_modules
+        msg: SDK dependencies are missing; run "task setup" first.
+    cmds:
+      - npm run build
+
+  check:
+    desc: Run the complete local CI-equivalent verification suite
+    summary: Runs local tests, race checks, lint, offline security gates, skill-drift verification, and release/installer denial tests. It does not deploy, publish, install, or contact a VPS.
+    cmds:
+      - task: format:check
+      - task: test
+      - task: test:race
+      - task: lint
+      - task: security
+      - task: security:vulnerabilities
+      - task: skills:check
+      - task: release:check
+
+  test:
+    desc: Run the complete local Go and SDK test suites
+    cmds:
+      - task: test:go
+      - task: test:sdk
+
+  test:go:
+    desc: Run all Go unit, contract, integration, and negative tests
+    preconditions:
+      - sh: command -v go >/dev/null
+        msg: Go 1.25.12 is required.
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run Go race tests for internal packages and commands
+    preconditions:
+      - sh: command -v go >/dev/null
+        msg: Go 1.25.12 is required.
+    cmds:
+      - go test -race ./internal/... ./cmd/...
+
+  test:sdk:
+    desc: Run the SDK build, package, examples, and distribution tests
+    dir: "{{.SDK_DIR}}"
+    preconditions:
+      - sh: test -d node_modules
+        msg: SDK dependencies are missing; run "task setup" first.
+    cmds:
+      - npm test
+
+  test:examples:
+    desc: Verify SDK example apps compile without writing distributable output
+    dir: "{{.EXAMPLES_DIR}}"
+    preconditions:
+      - sh: test -d ../../sdk/typescript/node_modules
+        msg: SDK dependencies are missing; run "task setup" first.
+    cmds:
+      - npm run check
+
+  lint:
+    desc: Run static analysis for Go and production SDK dependencies
+    cmds:
+      - go vet ./...
+      - task: lint:sdk
+
+  lint:sdk:
+    desc: Audit the SDK production dependency lockfile
+    dir: "{{.SDK_DIR}}"
+    preconditions:
+      - sh: test -f package-lock.json
+        msg: SDK package lock is required.
+    cmds:
+      - npm audit --omit=dev --package-lock-only
+
+  format:
+    desc: Format all tracked Go source files in place
+    summary: This modifies tracked Go files. Review the resulting diff before committing.
+    preconditions:
+      - sh: command -v gofmt >/dev/null
+        msg: Go formatting tools are required.
+    cmds:
+      - gofmt -w $(git ls-files '*.go')
+
+  format:check:
+    desc: Fail if tracked Go source files are not gofmt-formatted
+    preconditions:
+      - sh: command -v gofmt >/dev/null
+        msg: Go formatting tools are required.
+    cmds:
+      - test -z "$(gofmt -l $(git ls-files '*.go'))"
+
+  security:
+    desc: Run the offline security gates, including bounded fuzz checks
+    cmds:
+      - ./scripts/ci-security-gates.sh
+
+  security:secrets:
+    desc: Scan tracked and non-ignored files for credential patterns
+    cmds:
+      - ./scripts/scan-secrets.sh
+
+  security:fuzz:
+    desc: Run the bounded fuzz targets (set TINYHOST_FUZZ_TIME to adjust)
+    cmds:
+      - ./scripts/run-fuzz-gates.sh
+
+  security:vulnerabilities:
+    desc: Run the pinned Go vulnerability scan used by CI
+    summary: The first run may download govulncheck v1.6.0. The scanner reads the local Go dependency graph and does not mutate or deploy TinyHost.
+    preconditions:
+      - sh: command -v go >/dev/null
+        msg: Go 1.25.12 is required.
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  skills:check:
+    desc: Verify shared Tiny platform security guidance has not drifted
+    cmds:
+      - ./scripts/check-skill-drift
+
+  release:check:
+    desc: Run the complete release-pipeline test and installer denial tests
+    summary: Uses a temporary test signing key. It never publishes a release.
+    cmds:
+      - ./scripts/release-test.sh
+      - ./packaging/install_test.sh
+
+  release:build:
+    desc: Create signed release artifacts (requires VERSION and OUTPUT)
+    summary: Requires TINYHOST_RELEASE_SIGNING_KEY to name the operator-controlled private key. This only writes a new local artifact directory; it never publishes or installs it.
+    requires:
+      vars: [VERSION, OUTPUT]
+    preconditions:
+      - sh: test -n "${TINYHOST_RELEASE_SIGNING_KEY:-}" && test -f "$TINYHOST_RELEASE_SIGNING_KEY"
+        msg: Set TINYHOST_RELEASE_SIGNING_KEY to an existing operator-controlled private key file.
+    cmds:
+      - ./scripts/release-build.sh "{{.VERSION}}" "{{.OUTPUT}}"
+
+  release:verify:
+    desc: Verify a signed release directory without executing artifacts
+    requires:
+      vars: [RELEASE_DIR]
+    cmds:
+      - ./scripts/release-verify.sh "{{.RELEASE_DIR}}"
+
+  vps:e2e:
+    desc: Run destructive, opt-in live acceptance on an acknowledged disposable VPS
+    summary: This installs and mutates the VPS named by TINYHOST_VPS_SSH_TARGET. Read docs/operations/vps-e2e.md, verify the host key out of band, and export every contract variable before running.
+    preconditions:
+      - sh: test "${TINYHOST_VPS_E2E:-}" = 1
+        msg: Set TINYHOST_VPS_E2E=1 only for a dedicated disposable VPS.
+      - sh: test -n "${TINYHOST_VPS_SSH_TARGET:-}" && test "${TINYHOST_VPS_ACKNOWLEDGE:-}" = "$TINYHOST_VPS_SSH_TARGET"
+        msg: TINYHOST_VPS_ACKNOWLEDGE must exactly equal TINYHOST_VPS_SSH_TARGET.
+      - sh: test -n "${TINYHOST_VPS_KNOWN_HOSTS_FILE:-}" && test -f "$TINYHOST_VPS_KNOWN_HOSTS_FILE"
+        msg: Supply a verified TINYHOST_VPS_KNOWN_HOSTS_FILE; never accept an unverified SSH host key.
+      - sh: test -n "${TINYHOST_VPS_PLATFORM_HOST:-}" && test -n "${TINYHOST_VPS_APP_SUFFIX:-}" && test -n "${TINYHOST_VPS_RESEND_API_KEY_FILE:-}"
+        msg: Export the remaining VPS E2E contract variables documented in specs/operations/vps-e2e-contract.md.
+    cmds:
+      - go test ./test/vps -run TestVPSAcceptance -count=1 -v
+
+  vps:unattended:
+    desc: Run the guarded unattended VPS E2E wrapper once
+    summary: This is destructive against the acknowledged disposable VPS and requires the local Resend reader credentials defined in docs/operations/vps-e2e.md.
+    preconditions:
+      - sh: test "${TINYHOST_VPS_E2E:-}" = 1
+        msg: Set TINYHOST_VPS_E2E=1 only for a dedicated disposable VPS.
+      - sh: test -n "${TINYHOST_VPS_SSH_TARGET:-}" && test "${TINYHOST_VPS_ACKNOWLEDGE:-}" = "$TINYHOST_VPS_SSH_TARGET"
+        msg: TINYHOST_VPS_ACKNOWLEDGE must exactly equal TINYHOST_VPS_SSH_TARGET.
+    cmds:
+      - skills/tiny-full-stack-test/scripts/run-unattended.sh

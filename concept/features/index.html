@@ -11,8 +11,10 @@
     <nav><a href="../index.html">TinyHost concept</a><a href="../../docs/delivery/roadmap.md">Roadmap</a></nav>
     <p class="eyebrow">Planned-feature index</p>
     <h1>Ranked by secure user value, not novelty.</h1>
-    <p class="lede">Only unimplemented work belongs here. Yield is practical
-      impact relative to complexity and risk.</p>
+    <p class="lede">Only unimplemented or materially incomplete work belongs
+      here. Implemented V1 foundations remain linked from the main concept but
+      no longer occupy ranking slots. Yield is practical impact relative to
+      complexity and risk.</p>
   </header>
   <main>
     <section>
@@ -23,81 +25,63 @@
         <tbody>
           <tr>
             <td>1</td>
-            <td><a href="secure-static-gateway.html">Secure static gateway</a></td>
+            <td><a href="../flows/operator.html">Minimum-necessary guided operator setup</a></td>
             <td>5</td><td>4</td><td>5</td>
-            <td>Build first; it is the product’s defining proof.</td>
+            <td>Replace the flag/config ceremony with resumable discovery, exact external actions, and generated config.</td>
           </tr>
           <tr>
             <td>2</td>
-            <td><a href="../../docs/delivery/roadmap.md">Immutable deploy + rollback</a></td>
-            <td>5</td><td>4</td><td>4</td>
-            <td>Build immediately after the protected read path.</td>
+            <td><a href="../flows/deployer.html">Inference-first deploy wizard completion</a></td>
+            <td>5</td><td>3</td><td>5</td>
+            <td>Derive project state, ask only about ambiguity, and make the manifest a receipt.</td>
           </tr>
           <tr>
             <td>3</td>
-            <td><a href="../../docs/architecture/components.md">Deployer control plane + scoped tokens</a></td>
+            <td><a href="../../docs/operations/sdk-distribution.md">SDK and signed release publication</a></td>
             <td>4</td><td>3</td><td>4</td>
-            <td>Required for self-service and agent use.</td>
+            <td>Prepared artifacts need confirmed public trust roots and registry namespaces.</td>
           </tr>
           <tr>
             <td>4</td>
-            <td><a href="client-sdk.html">Client SDK + current user + KV + realtime</a></td>
-            <td>4</td><td>3</td><td>4</td>
-            <td>First-class app surface; prove tenant scoping before expansion.</td>
-          </tr>
-          <tr>
-            <td>5</td>
-            <td><a href="blob-storage.html">Lightweight app-scoped blob storage</a></td>
-            <td>4</td><td>3</td><td>4</td>
-            <td>Include the bounded local capability in V1; refuse public URLs and storage infrastructure.</td>
-          </tr>
-          <tr>
-            <td>6</td>
-            <td><a href="agent-skills.html">Coding-agent skill system</a></td>
-            <td>5</td><td>3</td><td>5</td>
-            <td>Required for low-ceremony, safe agent-built apps.</td>
-          </tr>
-          <tr>
-            <td>7</td>
-            <td><a href="hetzner-one-command-install.html">Hetzner install, diagnostics, signed update</a></td>
-            <td>5</td><td>4</td><td>4</td>
-            <td>Mandatory for the easiest production-capable path.</td>
-          </tr>
-          <tr>
-            <td>8</td>
             <td><a href="tinkerbox-brand.html">Tinkerbox naming and icon direction</a></td>
             <td>3</td><td>1</td><td>4</td>
             <td>Explore before public naming hardens; keep the symbol to one box and one face.</td>
           </tr>
           <tr>
-            <td>9</td>
+            <td>5</td>
             <td><a href="capability-broker.html">Operator-governed LLM and service capabilities</a></td>
             <td>5</td><td>5</td><td>3</td>
-            <td>Strong direction after SDK/KV/live; never deliver raw secrets to apps.</td>
+            <td>Strong post-V1 direction; never deliver raw secrets to apps.</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td>Direct S3-compatible blob adapter</td>
+            <td>3</td><td>4</td><td>2</td>
+            <td>Wait for evidence that local VPS blob limits are a real constraint.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Durable realtime history and multi-node fan-out</td>
+            <td>2</td><td>5</td><td>1</td>
+            <td>Defer; V1 intentionally uses KV recovery plus ephemeral single-node hints.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Temporary invitations and groups</td>
+            <td>3</td><td>4</td><td>2</td>
+            <td>Wait for evidence that exact email/domain policies cannot express real use.</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Operator backup and disaster recovery</td>
+            <td>3</td><td>4</td><td>2</td>
+            <td>Do not delay replaceable-app V1; total VPS loss remains explicit.</td>
           </tr>
           <tr>
             <td>10</td>
-            <td>Durable realtime history and multi-node fan-out</td>
-            <td>2</td><td>5</td><td>1</td>
-            <td>Defer; V1 already has bounded, ephemeral single-node channels.</td>
-          </tr>
-          <tr>
-            <td>11</td>
-            <td>Central app SSO exchange</td>
-            <td>3</td><td>4</td><td>2</td>
-            <td>Wait for evidence that per-app login is the dominant pain.</td>
-          </tr>
-          <tr>
-            <td>12</td>
             <td>Backend application runtime</td>
             <td>4</td><td>5</td><td>1</td>
             <td>Refuse in V1; requires a separate security concept.</td>
-          </tr>
-          <tr>
-            <td>13</td>
-            <td>Operator backup and disaster recovery</td>
-            <td>3</td><td>4</td><td>2</td>
-            <td>Advanced feature; toy and utility apps do not justify delaying V1.</td>
           </tr>
         </tbody>
       </table>
@@ -108,6 +92,11 @@
         deployment loop, removes a demonstrated operator/deployer obstacle, or
         has usage evidence. Features that broaden the runtime move downward
         unless their isolation and recovery cost is independently funded.</p>
+      <p>Secure gateway, control plane, immutable deployment, browser SDK, KV,
+        local blobs, realtime, global viewer identity, CLI credential reuse,
+        dashboard project controls, and agent skills are implemented
+        foundations. They remain release-gated by their contracts and tests but
+        are not planned-feature rows.</p>
     </section>
   </main>
   <footer><p>Scores use a 1–5 scale. Re-rank when base behavior ships or evidence changes.</p></footer>

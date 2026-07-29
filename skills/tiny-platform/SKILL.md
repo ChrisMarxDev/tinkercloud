@@ -17,6 +17,22 @@ non-human automation using a scoped deployer token, not as a user. A person may
 act in more than one role, but never transfer authority or credentials between
 roles.
 
+## Minimum-necessary human input
+
+Start human workflows from the requested outcome. Inspect current state, reuse
+verified values, and choose secure defaults before asking a question. Ask only
+for a value or decision that is required, not already known, and impossible to
+discover or safely default. Optional settings belong behind one review/edit
+step instead of a mandatory questionnaire.
+
+Treat generated config and `tiny.yaml` as reviewable receipts and automation
+interfaces, not prerequisite paperwork. Never infer authorization broadening,
+put secrets in argv/ordinary config, run an app build, follow an unverified
+redirect, or add prompts/implicit writes to JSON and non-interactive commands.
+When external DNS, email, or certificate state blocks progress, print one exact
+action, persist only validated safe progress, and resume without re-asking prior
+valid answers.
+
 ## Security boundary
 
 TinyHost's gateway derives app identity from the hostname and viewer identity
@@ -31,6 +47,11 @@ Platform dashboard forms additionally require a double-submit CSRF value and
 call the typed control service with a server-derived control actor. Never put a
 bearer token in a form. Deletion requires `delete:{slug}`; show a newly created
 control token only in its one create response, never in a dashboard read model.
+The operator active-deployer allowlist is one revision-protected exact set:
+validate bounded unique normalized emails, require explicit broadening consent,
+deny operator-email collisions, and atomically revoke removed deployers' API
+tokens/control sessions and pending OTPs. Reactivation invalidates pending OTPs
+before activation; preserve immutable deployer IDs and owned data.
 Control browser sessions, CLI bearer tokens, and app viewer sessions are
 different server-persisted credential types. Bind each control OTP to its
 server-selected browser or CLI channel before delivery; never accept a browser
@@ -38,6 +59,31 @@ control cookie as a bearer, a CLI bearer as a control cookie, or either as an
 app viewer session. A credential-type separation upgrade revokes every legacy
 `api_tokens` row because old values are unclassifiable; require a fresh CLI
 login and never preserve a legacy token by guessing its channel.
+For `tiny login`, load only the protected credential bound to the normalized
+HTTPS server and validate it with authenticated `whoami`. Reuse it without OTP,
+token issuance, or file rewrite only after a complete authorized response. An
+unauthorized or expired bearer may use fresh CLI-channel OTP; transport,
+dependency, malformed-response, unexpected-status, and ambiguous authorization
+errors fail closed without requesting OTP or altering the stored credential.
+`tiny login --force` is the explicit account-switch path: it always uses fresh
+OTP and replaces the stored bearer only after the newly issued bearer passes
+`whoami`; failure retains the previous credential. Treat `429 rate_limited` as
+an actionable retry instruction, never as evidence of email eligibility,
+deployer authority, token existence, or OTP-challenge state.
+After any successful login, save the normalized HTTPS platform URL as the
+non-secret bounded exact `default-server.json` beside server-bound credentials;
+it has the same 0700/0600, no-symlink, atomic-replacement, and fsync boundary.
+Commands may omit `--server` only through that exact saved URL. Explicit
+`--server` is invocation-only. For a recognized human command, exactly missing
+state opens one bounded setup prompt; cache only a normalized HTTPS URL that
+passes direct no-redirect API-v1 proof, then continue (which may say Login
+required). JSON never prompts or caches; malformed/unsafe/non-HTTPS,
+incompatible, redirected, transport-failed, or storage-failed setup fails
+closed. `tiny logout` is real bearer self-revocation: it calls the
+authenticated control route, then removes only that server's local credential
+after success or known unauthorized state. It retains the credential on any
+transport, server, persistence, or local-delete ambiguity; it never revokes a
+browser control session, viewer session, app-scoped token, or another bearer.
 Dashboard access views render only the server-derived current canonical private
 policy. Treat missing, non-private, malformed, cross-owner, or stale policy
 state as unavailable, never as an empty allowlist. The owner is implicit; an
@@ -45,8 +91,8 @@ empty valid allowlist is owner-only, and the next activation may replace it
 with the immutable selected release's `tiny.yaml` policy.
 Access replacement carries the current server-rendered revision and compares it
 inside the write transaction. A revision conflict creates no policy/audit/live
-revocation; refresh instead of overwriting deployment, rollback, or newer
-policy state. Adding an email or domain requires explicit broadening
+revocation; refresh instead of overwriting an activation or newer policy state.
+Adding an email or domain requires explicit broadening
 confirmation.
 The default live boundary is 32 KiB frames/payloads, 20 publishes per second
 per connection, and a bounded outbound queue: slow consumers are disconnected,
@@ -117,11 +163,39 @@ Archive uploads use the configured archive byte limit, independently of the
 small JSON control-body limit. Keep deployment bundles streaming through a
 mode-0600 temporary file; use a fresh random idempotency key per deploy
 invocation and reuse it only for retries of that same invocation.
+For local onboarding, `tiny init [DIR]` creates a strict deterministic V1
+`tiny.yaml` without overwriting; `tiny deploy [DIR]` defaults to `.` and may
+run the same bounded human wizard only when that manifest is missing. Inspect
+the project first: use a valid directory-derived slug and one unambiguous
+conventional output without asking; prompt only when either required value is
+invalid or ambiguous. With no valid output, stop with the exact project-owned
+build action; never select an arbitrary directory or run the build. Reuse an
+existing same-owner manifest slug automatically; keep unavailable-name errors
+generic. Default to owner-only and no capability unless an existing manifest or
+deliberate review edit enables it; build inspection may warn but never grant
+authority. Put
+description, combined email/domain allowlist, capabilities, and SPA fallback
+behind one review/edit step, and name access broadening in the same final deploy
+action. Write a missing manifest as a consequence of that action; never add a
+separate manifest confirmation. JSON mode must never
+prompt, create a manifest, request OTP, or persist a credential. Before a human
+deploy uses a saved bearer, prove it with API-version plus `whoami`; only a
+definite unauthorized result may use OTP, and store only a freshly verified
+token. Reject traversal, symlinks in any project/output/fallback component, and
+non-regular fallback files before archive creation. `--server` is invocation
+local and never changes the saved default.
+Before activation, certificate readiness may retry only its exact app-origin
+HTTPS proof: use the server's finite context-cancellable 45-second budget,
+finite attempts, no redirects, exact host, verified TLS chain, and the normal
+non-redirect readiness statuses. Redirect, wrong-host, unverified TLS,
+cancellation, or budget exhaustion denies activation and preserves the previous
+release. Never use this retry for policy, ownership, archive validation,
+anonymous-denial, or post-activation checks.
 `tiny deploy` may create a missing manifest-named app only after the server's
 ownership-scoped app list confirms it is not already owned; a slug conflict is
 never success. The validated manifest allowlist is immutable candidate metadata:
-activation and rollback atomically install the selected release pointer and its
-exact canonical private policy. Never gate a candidate on an older current
+activation atomically installs the selected release pointer and its exact
+canonical private policy. Never gate a candidate on an older current
 policy or send an owner/app identity from browser code.
 CLI deployment success requires its own fresh anonymous GET through the real
 HTTP/TLS transport to the activated protected app URL. The authenticated
@@ -158,10 +232,15 @@ timestamp after an authorization succeeds. Recheck active user, revocation,
 expiry, exact scope, and app binding atomically with that update; failed checks
 or persistence failures deny and must not alter it. Token lists and dashboards
 may show that timestamp, never token values or hashes, IPs, or user agents.
-Before retaining an update, probe `/_tiny/api/v1/capabilities` on a locally verified active app host
-through the composed HTTPS gateway. Only its `401` JSON `not_authorized`
-envelope with no-store security headers is health evidence; 404, redirect,
-2xx, malformed denial, timeout, and transport failure require rollback.
+Before retaining an update, deterministically select the lexicographically
+first locally verified active app and probe `/_tiny/api/v1/capabilities` on its
+derived host through the composed HTTPS gateway. Accept no caller app slug,
+host, path, or URL. Only its `401` JSON `not_authorized` envelope with no-store
+security headers is health evidence; 404, redirect, 2xx, malformed denial,
+timeout, and transport failure require rollback. If no active app exists, prove
+that exact database state plus platform health, socket confinement, and safe
+unknown-app-host denial; ambiguous state requires rollback, and the first
+deployment still owns the full protected-app denial proof.
 The replacement binary's candidate doctor may tolerate only the updater-owned,
 private, non-symlinked `update-rollback/previous` snapshot that remains until
 that same update commits. It must still run every other doctor check; ordinary
@@ -205,6 +284,15 @@ app hostnames, private DNS, trusted-network verification, and VPN acceptance
 tests. Users still authenticate with TinyHost email OTP and current per-app
 policy; VPN membership grants no identity. VPN-only remains unsupported until
 those gates are implemented.
+For the human operator path, `tinyhost setup` discovers host facts, asks for one
+controlled base domain and initial operator email, derives conventional
+platform/app/sender/ACME values, and pauses with exact DNS/Resend actions. It
+resumes without re-asking valid answers and generates the explicit
+non-interactive config/credential references. Keep
+`tinyhost init --non-interactive` strict and non-prompting for automation.
+Secrets remain root-owned: accept a protected file, or a no-echo prompt only
+after supported-shell handling passes audit; never accept a secret in argv or
+ordinary config.
 `tinyhost status` is offline and must never read provider credentials. Run
 `sudo tinyhost doctor` for Resend diagnostics: it reads only the root-owned
 mode-0600 credential file (default `/etc/tinyhost/credentials/tinyhost.env`),
@@ -253,7 +341,8 @@ Deployment descriptions are optional immutable `tiny.yaml` presentation text:
 trim edge whitespace, permit empty, and reject invalid UTF-8, Unicode controls,
 U+2028/U+2029, or more than 280 Unicode code points after trimming. Persist it
 only inside the release manifest; dashboard release rows may show it and the
-app summary comes only from the current deployment, so rollback restores it.
+app summary comes only from the current deployment; failed activation preserves
+the existing summary.
 Dashboard launch controls may link only the server-derived stable
 `https://{slug}.{app_suffix}/` origin in a new tab with `noopener noreferrer`;
 never expose a release hash/path or imply a gateway-auth bypass. A malformed

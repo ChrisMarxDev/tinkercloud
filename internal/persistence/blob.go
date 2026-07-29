@@ -253,7 +253,7 @@ func (r *BlobRepository) Reconcile(ctx context.Context) error {
 	// Process finite pages. This is restart-safe and does not turn a long-lived
 	// catalog into an unbounded in-memory cleanup list.
 	for {
-		rows, e := r.Store.DB.QueryContext(ctx, "SELECT b.app_id,b.id FROM app_blobs b LEFT JOIN applications a ON a.id=b.app_id WHERE b.state IN ('staging','deleting') OR a.status='deleted' ORDER BY b.app_id,b.id LIMIT 256")
+		rows, e := r.Store.DB.QueryContext(ctx, "SELECT b.app_id,b.id FROM app_blobs b LEFT JOIN applications a ON a.id=b.app_id WHERE b.state IN ('staging','deleting') OR a.status IN ('deleting','deleted') ORDER BY b.app_id,b.id LIMIT 256")
 		if e != nil {
 			return e
 		}
@@ -393,6 +393,21 @@ func (r *BlobRepository) Reconcile(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// RemoveAppNamespace removes an app's now-empty private blob directory after
+// Reconcile has proved that no cataloged or orphaned bytes remain.
+func (r *BlobRepository) RemoveAppNamespace(app string) error {
+	if r == nil || r.Bytes == nil {
+		return blob.ErrUnavailable
+	}
+	remover, ok := r.Bytes.(interface{ RemoveAppNamespace(string) error })
+	if !ok {
+		return blob.ErrUnavailable
+	}
+	unlock := r.lockApp(app)
+	defer unlock()
+	return remover.RemoveAppNamespace(app)
 }
 
 var _ blob.Repository = (*BlobRepository)(nil)

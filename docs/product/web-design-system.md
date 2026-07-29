@@ -133,11 +133,41 @@ polite count announces the narrowed result and a no-results panel says to
 adjust the search, description, or status filter, rather than implying that the account owns
 no apps.
 
+Successful irreversible deletion redirects to a dashboard whose operational
+read model has already excluded that app: it is absent from the list, local
+search/filter results, and visible count because confirmed deletion permanently
+removes the app and its owned data. It is not represented as a deleted card, a
+`deleted` filter option, or a restore action. This is server truth, never
+JavaScript-only hiding. If deletion is denied or fails, retain the app in the
+dashboard and say plainly that deletion did not complete; do not imply that
+revocation, removal, or cleanup succeeded.
+
 An active app with a configured stable gateway origin may show one compact
 external-launch icon. It is a native link with an accessible label and title,
 opens only `https://{slug}.{app_suffix}/` in a new tab with `noopener noreferrer`,
 and does not imply that it bypasses the app's ordinary authentication policy.
 Release hashes and immutable release paths are never links.
+Release history is read-only in V1: show immutable metadata without a rollback
+button, form, or client-side approximation. Failed activation preservation is
+reported as server truth, not an operator/deployer action.
+
+The operator-only deployer section uses one native multiline active allowlist
+form, prefilled from a server-rendered revisioned snapshot. It makes authority
+broadening explicit and says that removed addresses are signed out and cannot
+deploy; it is neither an account picker nor a viewer-identity control.
+
+### Minimum-necessary input
+
+Do not render a field merely because a config or API schema contains it. Reuse
+trusted server state, derive server-owned values, and apply secure defaults
+before asking. Optional fields belong behind a review/edit disclosure. A field
+or confirmation is justified only when its answer is required, not already
+known, and unsafe to default.
+
+Never ask a browser actor for an app ID, owner ID, policy revision, stable URL,
+storage path, credential selector, or other value the server can derive.
+Authorization broadening and permanent deletion remain explicit even when the
+rest of the form is inferred.
 
 ### Forms and mutations
 
@@ -146,6 +176,10 @@ Release hashes and immutable release paths are never links.
 - Quiet buttons navigate or sign out.
 - Danger buttons suspend, revoke, or delete.
 - A destructive panel states the exact app, deployer, token, or release target.
+- A successful delete confirmation says the app and its owned data are
+  permanently removed; it offers no restore action.
+- A denied or failed delete says deletion did not complete and preserves the
+  still-visible app as the safe next step.
 - Access-policy forms summarize the resulting private policy before submission.
 - Busy state disables the submitted control but never changes authorization
   semantics.

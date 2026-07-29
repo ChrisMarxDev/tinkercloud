@@ -68,6 +68,19 @@ the control-plane mark, stylesheet, or chrome.
   items. Hide controls until initialization, leave every item visible without
   JavaScript, use labelled native controls plus a polite result count, and do
   not fetch, persist, or use filtering as authorization.
+- After a successful irreversible app deletion, the redirected operational
+  dashboard's server read model excludes the app from its list, local
+  search/filter inputs and results, and visible count because confirmed
+  deletion permanently removes the app and its owned data. The dashboard
+  renders no deleted card, `deleted` filter option, or restore affordance;
+  JavaScript-only hiding is forbidden. A denied or failed delete keeps the app
+  visible and explicitly says deletion did not complete without claiming
+  revocation, removal, or cleanup.
+- For the operator-only active-deployer allowlist, use one labelled native
+  textarea prefilled from the server-rendered active snapshot plus a visible
+  broadening checkbox. State that removed emails are signed out and cannot
+  deploy; keep revision, authorization, collision, idempotency, audit, CSRF,
+  and origin checks on the typed server path.
 - Escape user-controlled text through `html/template`. Never introduce unsafe
   HTML injection to make a component convenient.
 - Keep the server self-contained and the dependency surface narrow.
@@ -117,6 +130,12 @@ Every visible state change must:
 - preserve focus and semantic state;
 - become effectively immediate under `prefers-reduced-motion`;
 - never delay server truth, revocation, denial, or error text.
+
+For irreversible deletion, distinguish the terminal server outcome in durable
+copy: success redirects to an operational list that omits the permanently
+removed app and clearly says its owned data is gone; denial or failure leaves
+the app in that list and says deletion did not complete. Do not add a restore
+affordance or use client-side list filtering to simulate either outcome.
 
 Use native `details` and `summary` for disclosure. Use native `dialog` for modal
 focus and Escape behavior. Keep no-JavaScript behavior usable.

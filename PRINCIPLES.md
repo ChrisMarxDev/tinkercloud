@@ -39,8 +39,7 @@ request. Convenience caches must never extend authorization.
 ## 7. Releases are immutable and activation is atomic
 
 Upload, validation, staging, policy creation, and verification occur before
-activation. Failure preserves the last known-good release. Rollback selects an
-existing immutable release.
+activation. Failure preserves the last known-good release.
 
 ## 8. One operator should understand the server
 
@@ -104,6 +103,21 @@ Create one generic Tiny platform skill first as the canonical agent workflow.
 Specialized app-development, deployment, and operator skills copy the relevant
 shared rules into themselves so they work independently. CI must detect drift
 between the generic source and copied sections.
+
+## 17. Ask only for necessary information
+
+Every human flow starts from the outcome the person requested. TinyHost derives
+safe values from current state, reuses already verified information, and
+chooses secure defaults before asking a question. It asks only for a value or
+decision that is both necessary to continue and impossible to discover or
+safely default.
+
+A generated config or manifest is a durable receipt and automation interface,
+not prerequisite paperwork. Human commands may guide, validate, and persist the
+minimum required state in context; deterministic and JSON automation remains
+explicit and non-interactive. Security-sensitive secrets still use narrow
+credential boundaries, but that boundary must not force unrelated non-secret
+ceremony.
 
 ## Non-negotiable invariant
 

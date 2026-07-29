@@ -62,6 +62,14 @@
         </div>
       </section>
 
+      <section class="tiny-section" aria-labelledby="deployer-allowlist-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Operator only</p><h2 id="deployer-allowlist-title">Active deployer allowlist</h2></div>
+          <p>One revision-protected authority set using ordinary semantic controls.</p>
+        </div>
+        <form class="tiny-card tiny-card--flat tiny-stack"><p class="tiny-card__meta" id="showcase-deployer-help">One normalized email per line. Removed addresses are signed out and cannot deploy.</p><label class="tiny-field" for="showcase-deployer-emails"><span class="tiny-label">Allowed deployer emails</span><textarea class="tiny-textarea" id="showcase-deployer-emails" aria-describedby="showcase-deployer-help">dev@example.com</textarea></label><label class="tiny-choice"><input class="tiny-checkbox" type="checkbox"><span>I confirm that adding any email grants deployment authority.</span></label><div><button class="tiny-button tiny-button--primary" type="button">Save active deployers</button></div></form>
+      </section>
+
       <section class="tiny-section" aria-labelledby="feedback-title">
         <div class="tiny-section-header">
           <div><p class="tiny-eyebrow">Feedback</p><h2 id="feedback-title">Notices carry words, not just color</h2></div>
@@ -132,12 +140,12 @@
           <details class="tiny-disclosure-card">
             <summary>
               <span class="tiny-disclosure-card__summary">
-                <span class="tiny-disclosure-card__title">Releases and rollback</span>
+                <span class="tiny-disclosure-card__title">Immutable releases</span>
                 <span class="tiny-disclosure-card__meta">4 immutable releases · current rel_01J</span>
               </span>
             </summary>
             <div class="tiny-disclosure-card__body">
-              <p>Rollback selects a verified release and keeps the current one active until checks pass.</p>
+              <p>Failed activation preserves the current release until every check passes.</p>
               <button class="tiny-button tiny-button--secondary" type="button">View releases</button>
             </div>
           </details>
@@ -205,7 +213,7 @@
             <div>
               <p class="tiny-eyebrow">Danger zone</p>
               <h3>Delete payroll-preview</h3>
-              <p class="tiny-card__meta">Access is revoked before deletion continues.</p>
+              <p class="tiny-card__meta">After successful irreversible deletion, this app and its owned data are permanently removed. It cannot be restored.</p>
             </div>
             <label class="tiny-field">
               <span class="tiny-label">Type <code>delete:payroll-preview</code></span>
@@ -234,7 +242,6 @@
               <option value="active">active</option>
               <option value="suspended">suspended</option>
               <option value="deleting">deleting</option>
-              <option value="deleted">deleted</option>
               <option value="failed">failed</option>
             </select>
           </label>
@@ -279,7 +286,7 @@
               </div>
             </details>
             <details class="tiny-details"><summary>Tokens</summary><div class="tiny-details__body"><p>One active app-scoped token.</p></div></details>
-            <details class="tiny-details"><summary>Releases and rollback</summary><div class="tiny-details__body"><p>Four immutable releases.</p></div></details>
+            <details class="tiny-details"><summary>Immutable releases</summary><div class="tiny-details__body"><p>Four immutable releases.</p></div></details>
           </div>
         </article>
 

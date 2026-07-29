@@ -35,5 +35,5 @@ valid request ID matching `X-Request-ID`, `Cache-Control: no-store`, and
   timeout, TLS, or transport failure is deployment verification failure.
 - The deployer credential remains restricted to the control-plane requests and
   is never delivered to the untrusted app origin.
-- This does not replace candidate-aware atomic activation or its rollback
-  behavior; it is a client-side success gate after that server transition.
+- This does not replace candidate-aware atomic activation or failed-activation
+  preservation; it is a client-side success gate after that server transition.
