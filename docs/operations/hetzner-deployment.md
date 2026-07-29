@@ -136,8 +136,10 @@ sudo tinyhost update \
   --release-base https://releases.example.net/tinyhost/v1.0.0/
 ```
 
-For an air-gapped host, copy all three signed artifact files onto the VPS and
-use `--binary`, `--metadata`, and `--signature` together. The command does not
+For an air-gapped host, copy the server artifact triplet and signed
+`release-manifest.json` triplet onto the VPS. Use `--binary`, `--metadata`,
+`--signature`, `--release-manifest`, `--release-manifest-metadata`, and
+`--release-manifest-signature` together. The command does not
 follow redirects, accepts only the pinned signed `tinyhost-linux-amd64` release,
 and rejects private or link-local release origins. It derives public health from
 installed state and deterministically selects a locally verified active app for

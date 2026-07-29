@@ -40,5 +40,9 @@ jobs:
       - run: ./scripts/ci-security-gates.sh
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
       - run: ./scripts/check-skill-drift
+      - run: ./scripts/check-beta-release-workflow.sh
+      - run: ./scripts/check-beta-release-workflow-self-test.sh
+      - run: ./scripts/check-release-key-drift.sh
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - run: ./scripts/release-test.sh
       - run: ./packaging/install_test.sh

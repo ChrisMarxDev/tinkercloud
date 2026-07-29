@@ -1,0 +1,4 @@
+interface:
+  display_name: "TinyHost Deployer"
+  short_description: "Build and deploy protected TinyHost apps"
+  default_prompt: "Use $tiny-deployer to build or deploy this app and verify that it remains private."

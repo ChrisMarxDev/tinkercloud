@@ -99,9 +99,10 @@ lost across disconnects or restarts; clients recover by reading current state.
 
 ## 16. Agent skills are self-contained
 
-Create one generic Tiny platform skill first as the canonical agent workflow.
-Specialized app-development, deployment, and operator skills copy the relevant
-shared rules into themselves so they work independently. CI must detect drift
+Create one generic Tiny platform skill first as the canonical authoring source.
+Two role-facing skills copy the relevant shared rules so they work
+independently: one deployer skill owns app development through verified
+deployment, and one operator skill owns host operation. CI must detect drift
 between the generic source and copied sections.
 
 ## 17. Ask only for necessary information

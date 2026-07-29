@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const testServer = "https://tiny.pulsebrief.io"
+const testServer = "https://tiny.example.test"
 
 func TestFileStoreRoundTripAndLastLoginWins(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "credentials")
@@ -72,12 +72,12 @@ func TestFileStoreRejectsUnsafeAndTamperedState(t *testing.T) {
 			}
 		}},
 		{"unknown JSON field", func(t *testing.T, _ string, path string) {
-			if err := os.WriteFile(path, []byte(`{"version":1,"server":"https://tiny.pulsebrief.io","token":"token","extra":true}`), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(`{"version":1,"server":"https://tiny.example.test","token":"token","extra":true}`), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}},
 		{"duplicate JSON field", func(t *testing.T, _ string, path string) {
-			if err := os.WriteFile(path, []byte(`{"version":1,"server":"https://tiny.pulsebrief.io","token":"token","token":"replacement"}`), 0600); err != nil {
+			if err := os.WriteFile(path, []byte(`{"version":1,"server":"https://tiny.example.test","token":"token","token":"replacement"}`), 0600); err != nil {
 				t.Fatal(err)
 			}
 		}},
@@ -181,10 +181,10 @@ func TestFileStoreDefaultServerRoundTripAndStrictDecoding(t *testing.T) {
 	}
 	path := filepath.Join(dir, defaultServerFile)
 	for _, body := range []string{
-		`{"version":1,"server":"https://tiny.pulsebrief.io","extra":true}`,
-		`{"version":1,"server":"https://tiny.pulsebrief.io","server":"https://other.example"}`,
-		`{"version":1,"server":"http://tiny.pulsebrief.io"}`,
-		`{"version":2,"server":"https://tiny.pulsebrief.io"}`,
+		`{"version":1,"server":"https://tiny.example.test","extra":true}`,
+		`{"version":1,"server":"https://tiny.example.test","server":"https://other.example"}`,
+		`{"version":1,"server":"http://tiny.example.test"}`,
+		`{"version":2,"server":"https://tiny.example.test"}`,
 		`{`,
 	} {
 		if err := os.WriteFile(path, []byte(body), 0600); err != nil {

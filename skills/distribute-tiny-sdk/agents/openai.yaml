@@ -1,0 +1,4 @@
+interface:
+  display_name: "Distribute Tiny SDK"
+  short_description: "Prepare and release the TypeScript client SDK"
+  default_prompt: "Use $distribute-tiny-sdk to prepare and verify the TypeScript client package without publishing it."

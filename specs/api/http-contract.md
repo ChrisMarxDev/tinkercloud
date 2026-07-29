@@ -27,6 +27,16 @@ host or reserved `/_tiny/api/v1` routes on an app host.
   for raw HTTP and already shipped clients. A supplied malformed or unsupported
   major returns `426 sdk_version_incompatible` with a safe request ID and an
   actionable upgrade message after the normal app authorization boundary.
+- SDK HTTP calls also send `X-Tiny-App-API-Version: 1`; live sockets offer
+  `tiny.sdk.<semver>.api.1` as their single subprotocol. A supplied malformed or
+  unsupported value is denied before capability dispatch or live hub attach.
+- Released workstation clients send `X-Tiny-CLI-Version: <semver>` and
+  `X-Tiny-Control-API-Version: 1` on protected control requests. Missing
+  headers retain the V1 migration allowance; a supplied incomplete or
+  unsupported pair receives `426 cli_version_incompatible`.
+- `GET /api/v1/compatibility` returns only the static build compatibility
+  matrix with no-store/nosniff headers. It is unauthenticated and contains no
+  identity, app, host, credential, or persistence-derived data.
 
 ## App host: pre-authentication
 

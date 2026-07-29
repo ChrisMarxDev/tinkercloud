@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/tinyhost/tiny/internal/compatibility"
 )
 
 const MaxBody = 1 << 20
@@ -93,6 +95,9 @@ type Dispatcher struct {
 	// configured archive limit; an unset dispatcher fails conservatively at the
 	// JSON limit for tests and incomplete wiring.
 	ArchiveUploadBytes int64
+	// Compatibility is static build policy. It must never contain host,
+	// identity, app, persistence, or credential-derived values.
+	Compatibility compatibility.Matrix
 }
 type LoginChannel string
 
@@ -160,6 +165,16 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]int{"api_version": 1}, "")
 		return
 	}
+	if r.URL.Path == "/api/v1/compatibility" && r.Method == "GET" {
+		matrix := d.Compatibility
+		if matrix.ServerVersion == "" {
+			matrix = compatibility.Runtime("")
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		write(w, http.StatusOK, matrix, "")
+		return
+	}
 	if r.URL.Path == "/api/v1/auth/otp" && r.Method == "POST" {
 		var v struct {
 			Email string `json:"email"`
@@ -210,6 +225,10 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/v1/") {
 		write(w, 404, nil, "not_found")
+		return
+	}
+	if !compatibleControlClient(r.Header.Get("X-Tiny-CLI-Version"), r.Header.Get("X-Tiny-Control-API-Version")) {
+		write(w, http.StatusUpgradeRequired, nil, "cli_version_incompatible")
 		return
 	}
 	if d.Auth == nil || d.Service == nil {
@@ -366,6 +385,16 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			write(w, 404, nil, "not_found")
 		}
 	}
+}
+
+func compatibleControlClient(clientVersion, apiVersion string) bool {
+	if clientVersion == "" && apiVersion == "" {
+		return true
+	}
+	if clientVersion == "" || apiVersion != compatibility.ControlAPIVersion {
+		return false
+	}
+	return compatibility.Current("0.1.0").ControlAPI.Client.Contains(clientVersion)
 }
 func (d Dispatcher) archiveUploadLimit() int64 {
 	if d.ArchiveUploadBytes > 0 {

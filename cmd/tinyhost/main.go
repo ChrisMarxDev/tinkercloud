@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/tinyhost/tiny/internal/certificates"
+	"github.com/tinyhost/tiny/internal/compatibility"
 	"github.com/tinyhost/tiny/internal/compose"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/controlapi"
@@ -176,7 +177,7 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
-	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes}, Auth: controlAuth, Views: controlService, Actions: controlService, Login: controlLogin, RateLimits: limits}
+	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion)}, Auth: controlAuth, Views: controlService, Actions: controlService, Login: controlLogin, RateLimits: limits}
 	if err := blobs.Reconcile(context.Background()); err != nil {
 		return nil, hub, err
 	}

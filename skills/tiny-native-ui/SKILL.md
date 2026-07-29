@@ -211,7 +211,7 @@ styles when the complaint concerns an exact property such as border width.
 After changing this skill, keep `agents/openai.yaml` aligned and run:
 
 ```text
-python3 /Users/christophermarx/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/tiny-native-ui
+python3 "${SKILL_CREATOR_ROOT:?set to the skill-creator directory}/scripts/quick_validate.py" skills/tiny-native-ui
 ```
 
 Report the component outcome, rules captured, visual verification, tests run,

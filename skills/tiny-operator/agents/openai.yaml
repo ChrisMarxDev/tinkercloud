@@ -1,0 +1,4 @@
+interface:
+  display_name: "TinyHost Operator"
+  short_description: "Install and safely operate a TinyHost server"
+  default_prompt: "Use $tiny-operator to diagnose or operate this TinyHost server safely."

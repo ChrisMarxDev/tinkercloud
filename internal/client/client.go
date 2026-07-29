@@ -16,9 +16,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/tinyhost/tiny/internal/compatibility"
 )
 
 var ErrUnauthorized = errors.New("not authorized")
+
+// BuildVersion is injected into released tiny binaries. Development builds
+// omit compatibility headers so older V1 servers retain the documented
+// migration behavior.
+var BuildVersion = "dev"
 
 // ErrRateLimited is intentionally response-detail free. Authentication clients
 // can react consistently to a retryable throttling result without exposing a
@@ -249,6 +256,7 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 		return DeploymentResult{}, e
 	}
 	req.Header.Set("Content-Type", "application/gzip")
+	setCompatibilityHeaders(req)
 	req.Header.Set("Idempotency-Key", key)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	h := c.HTTP
@@ -570,6 +578,7 @@ func (c Client) Do(ctx context.Context, method, path, key string, in, out any) e
 		return e
 	}
 	r.Header.Set("Content-Type", "application/json")
+	setCompatibilityHeaders(r)
 	if c.Token != "" {
 		r.Header.Set("Authorization", "Bearer "+c.Token)
 	}
@@ -598,4 +607,12 @@ func (c Client) Do(ctx context.Context, method, path, key string, in, out any) e
 		return json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(out)
 	}
 	return nil
+}
+
+func setCompatibilityHeaders(r *http.Request) {
+	if _, err := compatibility.Parse(BuildVersion); err != nil {
+		return
+	}
+	r.Header.Set("X-Tiny-CLI-Version", BuildVersion)
+	r.Header.Set("X-Tiny-Control-API-Version", compatibility.ControlAPIVersion)
 }

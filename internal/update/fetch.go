@@ -22,12 +22,39 @@ var ErrFetch = errors.New("release download failed")
 
 const (
 	MaxBinaryBytes    int64 = 100 << 20
+	MaxManifestBytes  int64 = 1 << 20
 	MaxMetadataBytes  int64 = 16 << 10
 	MaxSignatureBytes int64 = 4 << 10
 )
 
 type ReleaseURLs struct {
 	Binary, Metadata, Signature string
+}
+
+func ManifestURLsFor(releaseBase, metadataURL string) (ReleaseURLs, error) {
+	if (releaseBase == "") == (metadataURL == "") {
+		return ReleaseURLs{}, ErrFetch
+	}
+	var base string
+	if releaseBase != "" {
+		u, err := parseReleaseURL(releaseBase)
+		if err != nil || !strings.HasSuffix(u.Path, "/") {
+			return ReleaseURLs{}, ErrFetch
+		}
+		base = u.String()
+	} else {
+		u, err := parseReleaseURL(metadataURL)
+		const suffix = "tinyhost-linux-amd64.metadata.json"
+		if err != nil || !strings.HasSuffix(u.Path, suffix) {
+			return ReleaseURLs{}, ErrFetch
+		}
+		base = strings.TrimSuffix(u.String(), suffix)
+	}
+	return ReleaseURLs{
+		Binary:    base + "release-manifest.json",
+		Metadata:  base + "release-manifest.json.metadata.json",
+		Signature: base + "release-manifest.json.signature",
+	}, nil
 }
 
 // ReleaseURLsFor returns the three immutable files from either a release
@@ -181,6 +208,22 @@ func (f Fetcher) Release(ctx context.Context, urls ReleaseURLs) (binary, metadat
 		return nil, nil, nil, ErrFetch
 	}
 	return binary, metadata, signature, nil
+}
+
+func (f Fetcher) Manifest(ctx context.Context, urls ReleaseURLs) (manifest, metadata, signature []byte, err error) {
+	if !sameOrigin(urls.Binary, urls.Metadata) || !sameOrigin(urls.Binary, urls.Signature) {
+		return nil, nil, nil, ErrFetch
+	}
+	if manifest, err = f.Get(ctx, urls.Binary, MaxManifestBytes); err != nil {
+		return nil, nil, nil, ErrFetch
+	}
+	if metadata, err = f.Get(ctx, urls.Metadata, MaxMetadataBytes); err != nil {
+		return nil, nil, nil, ErrFetch
+	}
+	if signature, err = f.Get(ctx, urls.Signature, MaxSignatureBytes); err != nil {
+		return nil, nil, nil, ErrFetch
+	}
+	return manifest, metadata, signature, nil
 }
 
 func sameOrigin(a, b string) bool {

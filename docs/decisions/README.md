@@ -11,7 +11,7 @@
 | [0007](0007-defer-backups.md) | Defer operator backups beyond V1 | Accepted |
 | [0008](0008-sdk-and-capability-boundary.md) | First-class SDK and server-side capability broker boundary | Accepted direction |
 | [0009](0009-v1-kv-and-ephemeral-realtime.md) | Bounded KV plus ephemeral app-scoped realtime in V1 | Accepted for V1 |
-| [0010](0010-generic-first-agent-skills.md) | Generic-first, self-contained coding-agent skills | Accepted for V1 |
+| [0010](0010-generic-first-agent-skills.md) | Generic-first, self-contained coding-agent skills | Accepted for V1; package split superseded by 0042 |
 | [0012](0012-candidate-aware-activation-gates.md) | Candidate-aware immutable activation gates | Accepted; rollback portion superseded by 0039 |
 | [0013](0013-confirmed-app-deletion.md) | Confirmed app deletion permanently removes an app playground | Accepted for V1 |
 | [0014](0014-signed-release-artifacts.md) | Signed artifacts pinned to an Ed25519 release key | Accepted for V1 |
@@ -41,6 +41,11 @@
 | [0039](0039-defer-deployer-release-rollback.md) | Defer deployer-selected release rollback | Accepted post-V1 |
 | [0040](0040-operator-deployer-allowlist-reconciliation.md) | Reconcile one active deployer allowlist | Accepted for V1 |
 | [0041](0041-minimum-necessary-guided-flows.md) | Minimum-necessary guided human flows | Accepted for V1 |
+| [0042](0042-two-role-facing-agent-skills.md) | Two role-facing agent skills | Accepted for V1 |
+| [0043](0043-workstation-cli-host-operations.md) | Workstation CLI coordinates a fixed SSH host grammar | Accepted for distribution preparation |
+| [0044](0044-signed-distribution-compatibility-manifest.md) | Signed distribution compatibility manifest | Accepted for distribution preparation |
+| [0045](0045-separate-maintainer-distribution-skills.md) | Separate maintainer skills for CLI and SDK distribution | Accepted for distribution preparation |
+| [0046](0046-github-beta-release-channel.md) | GitHub prereleases are the pre-rename beta channel | Accepted for beta distribution |
 
 ## Decision rule
 

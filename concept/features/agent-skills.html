@@ -35,8 +35,8 @@
       <section class="half">
         <p class="eyebrow">Scope</p>
         <ul>
-          <li>Generic platform skill first, then standalone app-development,
-            deployment, and operator skill packages.</li>
+          <li>Generic canonical source first, then one standalone deployer
+            lifecycle skill and one operator skill.</li>
           <li>SDK, manifest, capability, security, and troubleshooting references.</li>
           <li>Deterministic build and protection-verification scripts.</li>
           <li>CI checks against real contracts and examples.</li>
@@ -61,12 +61,11 @@
   → copy marked relevant sections into each specialization
   → CI generator/check rejects drift
 
-tiny-app-development
-  → choose SDK capability
-  → build static app
-  → validate manifest
-
-tiny-deploy
+tiny-deployer
+  → understand or inspect the app
+  → choose SDK capabilities
+  → propose access policy
+  → build + validate manifest
   → deploy immutable release
   → verify anonymous denial
   → verify authenticated behavior

@@ -704,6 +704,9 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 		"--binary", remoteDir+"/tinyhost-linux-amd64",
 		"--metadata", remoteDir+"/tinyhost-linux-amd64.metadata.json",
 		"--signature", remoteDir+"/tinyhost-linux-amd64.signature",
+		"--release-manifest", remoteDir+"/release-manifest.json",
+		"--release-manifest-metadata", remoteDir+"/release-manifest.json.metadata.json",
+		"--release-manifest-signature", remoteDir+"/release-manifest.json.signature",
 		"--app-slug", probeSlug)
 }
 

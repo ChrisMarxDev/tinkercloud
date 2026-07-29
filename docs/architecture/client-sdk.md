@@ -134,8 +134,11 @@ malformed major receives the same actionable `426` error.
 
 ## Compatibility
 
-- The SDK exposes its version in requests.
-- The server returns supported capability/API versions.
+- The SDK exposes its strict version and app-API version in HTTP requests and
+  the WebSocket subprotocol.
+- The server publishes the bounded static compatibility matrix at
+  `/api/v1/compatibility`; the exact `/api/v1/version` health document remains
+  stable.
 - Capability modules are independently versionable.
 - Realtime reconnect does not imply replay; apps reread relevant KV state.
 - Additive response fields do not break older clients.

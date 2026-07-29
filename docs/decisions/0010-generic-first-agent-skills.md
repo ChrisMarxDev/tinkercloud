@@ -1,6 +1,6 @@
 # ADR 0010: Generic-first, self-contained agent skills
 
-**Status:** Accepted for V1
+**Status:** Accepted for V1; role-package split superseded by ADR 0042
 
 ## Context
 
@@ -10,10 +10,10 @@ drift.
 
 ## Decision
 
-Author `tiny-platform` first. Build `tiny-app-development`, `tiny-deploy`, and
-`tiny-operator` by copying the relevant marked shared sections into each
-package. Every specialized skill is standalone and never requires another
-skill at runtime.
+Author `tiny-platform` first. Copy relevant marked shared sections into
+standalone role skills that never require another skill at runtime. ADR 0042
+subsequently consolidates app development and deployment into `tiny-deployer`
+beside `tiny-operator`.
 
 Use portable Markdown and scripts, packaged as Codex-compatible `SKILL.md`
 skills first. A generator/check command owns copied blocks, and CI fails when

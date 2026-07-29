@@ -119,8 +119,11 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		return 0
 	}
 	if len(args) == 1 && args[0] == "version" {
-		fmt.Fprintln(stdout, "tiny v1")
+		fmt.Fprintln(stdout, "tiny "+client.BuildVersion)
 		return 0
+	}
+	if len(args) >= 1 && args[0] == "host" {
+		return runHost(args[1:], *jsonOutput, stdout, stderr)
 	}
 	if (len(args) == 1 || len(args) == 2) && args[0] == "init" {
 		project := "."

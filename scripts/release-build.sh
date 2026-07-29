@@ -13,7 +13,11 @@ version=$1
 out=$2
 case "$version" in *[!A-Za-z0-9._+-]*|'') usage;; esac
 test -n "${TINYHOST_RELEASE_SIGNING_KEY:-}" || usage
-test -f "$TINYHOST_RELEASE_SIGNING_KEY" || { echo "release signing key unavailable" >&2; exit 1; }
+# Keep the explicit path in this shell only; Go and npm child builds do not
+# inherit a signing-key environment variable.
+signing_key=$TINYHOST_RELEASE_SIGNING_KEY
+unset TINYHOST_RELEASE_SIGNING_KEY
+test -f "$signing_key" || { echo "release signing key unavailable" >&2; exit 1; }
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 public_key=${TINYHOST_RELEASE_PUBLIC_KEY:-"$root/packaging/release-public-key.pem"}
@@ -24,6 +28,10 @@ command -v npm >/dev/null || { echo "npm is required" >&2; exit 1; }
 command -v node >/dev/null || { echo "node is required" >&2; exit 1; }
 
 sdk_version=$(cd "$root/sdk/typescript" && node -p "require('./package.json').version")
+node -e 'if (!/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(process.argv[1])) process.exit(1)' "$version" || {
+  echo "release version must be strict MAJOR.MINOR.PATCH" >&2
+  exit 1
+}
 test "$version" = "$sdk_version" || {
   echo "release version $version does not match SDK version $sdk_version" >&2
   exit 1
@@ -35,7 +43,7 @@ test "$version" = "$sdk_version" || {
 work=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-release.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 openssl pkey -pubin -in "$public_key" -outform DER >"$work/public.der" 2>/dev/null || { echo "invalid release public key" >&2; exit 1; }
-openssl pkey -in "$TINYHOST_RELEASE_SIGNING_KEY" -pubout -outform DER >"$work/private-public.der" 2>/dev/null || { echo "invalid release signing key" >&2; exit 1; }
+openssl pkey -in "$signing_key" -pubout -outform DER >"$work/private-public.der" 2>/dev/null || { echo "invalid release signing key" >&2; exit 1; }
 cmp -s "$work/public.der" "$work/private-public.der" || { echo "release signing key does not match pinned public key" >&2; exit 1; }
 key_b64=$(tail -c 32 "$work/public.der" | base64 | tr -d '\n')
 test "${#key_b64}" -eq 44 || { echo "invalid Ed25519 release public key" >&2; exit 1; }
@@ -46,19 +54,26 @@ stage=$(mktemp -d "$out/.tinyhost-release.XXXXXX")
 cleanup_stage() { rm -rf "$stage"; }
 trap 'cleanup_stage; rm -rf "$work"' EXIT HUP INT TERM
 
-build_flags="-buildid= -s -w -X main.releasePublicKeyBase64=$key_b64"
+server_build_flags="-buildid= -s -w -X main.releasePublicKeyBase64=$key_b64 -X main.buildVersion=$version"
+client_build_flags="-buildid= -s -w -X github.com/tinyhost/tiny/internal/client.BuildVersion=$version"
 (
   cd "$root"
   # -trimpath, disabled VCS stamping, and an empty build ID make identical
   # source/toolchain/input builds byte-stable. SOURCE_DATE_EPOCH is recorded
   # below if supplied by the release environment.
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$build_flags" -o "$stage/tinyhost-linux-amd64" ./cmd/tinyhost
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-buildid= -s -w" -o "$stage/tiny-linux-amd64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "-buildid= -s -w" -o "$stage/tiny-linux-arm64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "-buildid= -s -w" -o "$stage/tiny-darwin-amd64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "-buildid= -s -w" -o "$stage/tiny-darwin-arm64" ./cmd/tiny
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$server_build_flags" -o "$stage/tinyhost-linux-amd64" ./cmd/tinyhost
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-linux-amd64" ./cmd/tiny
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-linux-arm64" ./cmd/tiny
+  CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-darwin-amd64" ./cmd/tiny
+  CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-darwin-arm64" ./cmd/tiny
 )
 chmod 0755 "$stage/tinyhost-linux-amd64" "$stage"/tiny-linux-* "$stage"/tiny-darwin-*
+cp "$root/packaging/systemd/tinyhost.service" "$stage/tinyhost.service"
+cp "$root/packaging/install-host.sh" "$stage/install-host.sh"
+cp "$root/packaging/install-client.sh" "$stage/install-client.sh"
+chmod 0644 "$stage/tinyhost.service"
+chmod 0755 "$stage/install-host.sh"
+chmod 0755 "$stage/install-client.sh"
 
 # The SDK package is built from the same checkout and copied into the release
 # directory. A task-local cache makes the release independent of user cache
@@ -84,7 +99,7 @@ sign_artifact() {
   # payload is exactly VERSION\\nAPI\\nSCHEMA\\nSHA256 (see internal/update).
   printf '{"version":"%s","api":"1","schema":"1","sha256":"%s"}\n' "$version" "$digest" >"$metadata"
   printf '%s\n1\n1\n%s' "$version" "$digest" >"$work/signed"
-  openssl pkeyutl -sign -inkey "$TINYHOST_RELEASE_SIGNING_KEY" -rawin -in "$work/signed" -out "$work/signature" >/dev/null 2>&1
+  openssl pkeyutl -sign -inkey "$signing_key" -rawin -in "$work/signed" -out "$work/signature" >/dev/null 2>&1
   test "$(wc -c <"$work/signature" | tr -d ' ')" = 64 || { echo "unexpected signature length" >&2; exit 1; }
   base64 <"$work/signature" | tr -d '\n' >"$signature"
   printf '\n' >>"$signature"
@@ -94,6 +109,9 @@ sign_artifact tiny-linux-amd64
 sign_artifact tiny-linux-arm64
 sign_artifact tiny-darwin-amd64
 sign_artifact tiny-darwin-arm64
+sign_artifact tinyhost.service
+sign_artifact install-host.sh
+sign_artifact install-client.sh
 sign_artifact "tinyhost-sdk-$version.tgz"
 
 # Dependency evidence is deliberately plain and reviewable, rather than a
@@ -124,7 +142,7 @@ sign_artifact "tinyhost-sdk-$version.tgz"
   echo "go_ldflags=-buildid= -s -w"
   echo "source_date_epoch=${SOURCE_DATE_EPOCH:-unset}"
   echo "release_public_key_sha256=$(sha256sum "$public_key" | awk '{print $1}')"
-  for artifact in tinyhost-linux-amd64 tiny-linux-amd64 tiny-linux-arm64 tiny-darwin-amd64 tiny-darwin-arm64 "tinyhost-sdk-$version.tgz"; do
+  for artifact in tinyhost-linux-amd64 tiny-linux-amd64 tiny-linux-arm64 tiny-darwin-amd64 tiny-darwin-arm64 tinyhost.service install-host.sh install-client.sh "tinyhost-sdk-$version.tgz"; do
     echo "artifact=$artifact sha256=$(sha256sum "$stage/$artifact" | awk '{print $1}')"
   done
 } >"$stage/provenance.txt"
@@ -135,7 +153,7 @@ sign_artifact "tinyhost-sdk-$version.tgz"
 (
   cd "$stage"
   {
-    printf '{"schema":"1","files":{'
+    printf '{"schema":"2","version":"%s","compatibility":{"server_version":"%s","control_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"app_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"schema_version":"1","release_manifest_schema":"2"},"files":{' "$version" "$version"
     first=1
     for file in $(find . -maxdepth 1 -type f ! -name release-manifest.json -print | sed 's#^./##' | LC_ALL=C sort); do
       test "$first" = 1 || printf ','

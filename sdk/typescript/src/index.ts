@@ -1,4 +1,5 @@
 export const SDK_VERSION = "0.1.0";
+export const APP_API_VERSION = "1";
 export type JSONValue = null | boolean | number | string | JSONValue[] | {
   [key: string]: JSONValue;
 };
@@ -103,6 +104,7 @@ async function responseFor(
       headers: {
         "Accept": "application/json",
         "X-Tiny-SDK-Version": SDK_VERSION,
+        "X-Tiny-App-API-Version": APP_API_VERSION,
         ...init.headers,
       },
     });
@@ -201,7 +203,7 @@ type Socket = {
   onmessage: ((e: MessageEvent) => void) | null;
 };
 export type LiveOptions = {
-  webSocket: (url: string) => Socket;
+  webSocket: (url: string, protocols?: string | string[]) => Socket;
   origin: string;
   schedule?: (fn: () => void, ms: number) => unknown;
   cancel?: (id: unknown) => void;
@@ -209,7 +211,7 @@ export type LiveOptions = {
 };
 export interface TinyClientOptions {
   fetch?: FetchLike;
-  webSocket?: (url: string) => Socket;
+  webSocket?: (url: string, protocols?: string | string[]) => Socket;
   origin?: string;
   schedule?: LiveOptions["schedule"];
   cancel?: LiveOptions["cancel"];
@@ -334,6 +336,7 @@ export class LiveChannel {
     this.status = this.status === "offline" ? "connecting" : "reconnecting";
     const s = this.socket = this.options.webSocket(
       this.options.origin.replace(/^http/, "ws") + "/_tiny/ws/v1",
+      `tiny.sdk.${SDK_VERSION}.api.${APP_API_VERSION}`,
     );
     s.onopen = () => {
       this.status = "connected";
@@ -434,7 +437,7 @@ export function createTiny(
 ): TinyClient {
   const fetcher = options.fetch ?? fetch;
   const liveOptions: LiveOptions = {
-    webSocket: options.webSocket ?? ((url) => new WebSocket(url)),
+    webSocket: options.webSocket ?? ((url, protocols) => new WebSocket(url, protocols)),
     origin: options.origin ?? globalThis.location?.origin ?? "",
     schedule: options.schedule,
     cancel: options.cancel,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/tinyhost/tiny/internal/appauth"
+	"github.com/tinyhost/tiny/internal/compatibility"
 )
 
 // WebSocketAdapter is invoked only by the already-authorized gateway dispatcher.
@@ -44,7 +45,16 @@ func (a WebSocketAdapter) Upgrade(ctx context.Context, auth appauth.Authorizatio
 		http.Error(w, "not authorized", http.StatusForbidden)
 		return
 	}
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	protocol, ok := compatibleSubprotocol(r.Header.Get("Sec-WebSocket-Protocol"))
+	if !ok {
+		http.Error(w, "SDK version incompatible", http.StatusUpgradeRequired)
+		return
+	}
+	options := &websocket.AcceptOptions{InsecureSkipVerify: true}
+	if protocol != "" {
+		options.Subprotocols = []string{protocol}
+	}
+	c, err := websocket.Accept(w, r, options)
 	if err != nil {
 		return
 	}
@@ -119,6 +129,28 @@ func (a WebSocketAdapter) Upgrade(ctx context.Context, auth appauth.Authorizatio
 			}
 		}
 	}
+}
+
+func compatibleSubprotocol(raw string) (string, bool) {
+	if raw == "" {
+		return "", true
+	}
+	if strings.Contains(raw, ",") {
+		return "", false
+	}
+	const prefix = "tiny.sdk."
+	const separator = ".api."
+	if !strings.HasPrefix(raw, prefix) {
+		return "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(raw, prefix), separator)
+	if len(parts) != 2 || parts[1] != compatibility.AppAPIVersion {
+		return "", false
+	}
+	if !compatibility.Current("0.1.0").AppAPI.Client.Contains(parts[0]) {
+		return "", false
+	}
+	return raw, true
 }
 
 func (a WebSocketAdapter) now() func() time.Time {

@@ -4,6 +4,11 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
+if test "$(id -u)" != 0 && "$root/packaging/install-host.sh" https://releases.example.test/v1/ >/dev/null 2>&1; then
+  echo "host installer accepted a non-root caller" >&2
+  exit 1
+fi
+
 # The non-root installer carries the public release key as data. Extract that
 # literal PEM without sourcing the installer, then compare canonical public-key
 # DER with the repository authority. This never reads a production private key.

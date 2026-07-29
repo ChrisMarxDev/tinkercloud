@@ -36,6 +36,22 @@ func TestEnsureAppCreatesMissingOwnedSlug(t *testing.T) {
 	}
 }
 
+func TestReleasedClientSendsCompatibilityHeaders(t *testing.T) {
+	old := BuildVersion
+	BuildVersion = "0.1.0"
+	t.Cleanup(func() { BuildVersion = old })
+	c := New("https://tiny.test", "secret")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("X-Tiny-CLI-Version") != "0.1.0" || r.Header.Get("X-Tiny-Control-API-Version") != "1" {
+			t.Fatalf("compatibility headers = %#v", r.Header)
+		}
+		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: r}, nil
+	})}
+	if err := c.Do(context.Background(), http.MethodPost, "/api/v1/auth/logout", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEnsureAppForeignSlugConflictRemainsDenied(t *testing.T) {
 	requests := 0
 	c := New("https://tiny.test", "secret")

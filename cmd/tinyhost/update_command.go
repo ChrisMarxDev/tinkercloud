@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/compatibility"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/persistence"
 	"github.com/tinyhost/tiny/internal/update"
@@ -40,13 +41,16 @@ func runUpdate(args []string, out io.Writer) error {
 	binary := fs.String("binary", "", "")
 	metadata := fs.String("metadata", "", "")
 	signature := fs.String("signature", "", "")
+	releaseManifest := fs.String("release-manifest", "", "")
+	releaseManifestMetadata := fs.String("release-manifest-metadata", "", "")
+	releaseManifestSignature := fs.String("release-manifest-signature", "", "")
 	releaseBase := fs.String("release-base", "", "")
 	metadataURL := fs.String("metadata-url", "", "")
 	artifactName := fs.String("artifact", "tinyhost-linux-amd64", "")
 	target := fs.String("target", "/usr/local/bin/tinyhost", "")
 	appSlug := fs.String("app-slug", "", "")
 	rollback := fs.Bool("rollback", false, "")
-	if fs.Parse(args) != nil || *target == "" || !updateSlug.MatchString(*appSlug) {
+	if fs.Parse(args) != nil || *target == "" || (*appSlug != "" && !updateSlug.MatchString(*appSlug)) {
 		return errors.New("tinyhost: invalid_arguments")
 	}
 	cfg, err := config.LoadYAML(*cfgPath)
@@ -55,7 +59,7 @@ func runUpdate(args []string, out io.Writer) error {
 	}
 	installer := update.FileInstaller{Target: *target, RollbackDir: filepath.Join(cfg.DataDirectory, "update-rollback")}
 	if *rollback {
-		if *binary != "" || *metadata != "" || *signature != "" || *releaseBase != "" || *metadataURL != "" {
+		if *binary != "" || *metadata != "" || *signature != "" || *releaseManifest != "" || *releaseManifestMetadata != "" || *releaseManifestSignature != "" || *releaseBase != "" || *metadataURL != "" {
 			return errors.New("tinyhost: invalid_arguments")
 		}
 		// Restore precedes every DB/app check. Root rollback remains available if
@@ -63,18 +67,38 @@ func runUpdate(args []string, out io.Writer) error {
 		if err := restoreBeforeProbe(context.Background(), installer, restarterFunc(updateServiceRestart)); err != nil {
 			return errors.New("tinyhost: rollback_failed")
 		}
+		if *appSlug == "" {
+			*appSlug, err = firstActiveProbeApp(context.Background(), cfg)
+			if err != nil {
+				return errors.New("tinyhost: rollback_failed")
+			}
+		}
 		if err := requireActiveProbeApp(context.Background(), cfg, *appSlug); err != nil || !allHealthy(context.Background(), updateChecks(cfg, *appSlug, *target, *cfgPath)) || installer.Commit(context.Background()) != nil {
 			return errors.New("tinyhost: rollback_failed")
 		}
 		_, err := io.WriteString(out, "rollback restored and healthy\n")
 		return err
 	}
+	if *appSlug == "" {
+		*appSlug, err = firstActiveProbeApp(context.Background(), cfg)
+		if err != nil {
+			return errors.New("tinyhost: active_app_required")
+		}
+	}
 	if err := requireActiveProbeApp(context.Background(), cfg, *appSlug); err != nil {
 		return errors.New("tinyhost: active_app_required")
 	}
 	checks := updateChecks(cfg, *appSlug, *target, *cfgPath)
 	a, key, err := updateArtifact(context.Background(), *binary, *metadata, *signature, *releaseBase, *metadataURL, cfg.UpdateReleaseBase, *artifactName)
-	if err != nil || a.API != "1" || a.Schema != "1" {
+	if err != nil || !compatibility.CompatibleArtifact(a.Version, a.API, a.Schema) {
+		return errors.New("tinyhost: verification_failed")
+	}
+	artifactLocal := *binary != "" || *metadata != "" || *signature != ""
+	manifestLocal := *releaseManifest != "" || *releaseManifestMetadata != "" || *releaseManifestSignature != ""
+	if artifactLocal != manifestLocal {
+		return errors.New("tinyhost: verification_failed")
+	}
+	if _, err = updateReleaseCompatibility(context.Background(), a, key, *releaseManifest, *releaseManifestMetadata, *releaseManifestSignature, *releaseBase, *metadataURL, cfg.UpdateReleaseBase); err != nil {
 		return errors.New("tinyhost: verification_failed")
 	}
 	state, err := update.ApplyAfterRestart(context.Background(), key, a, installer, restarterFunc(updateServiceRestart), checks...)
@@ -92,9 +116,57 @@ func runUpdate(args []string, out io.Writer) error {
 	return err
 }
 
+func updateReleaseCompatibility(ctx context.Context, server update.Artifact, key ed25519.PublicKey, manifest, metadata, signature, releaseBase, metadataURL, configuredBase string) (compatibility.Matrix, error) {
+	local := manifest != "" || metadata != "" || signature != ""
+	remote := releaseBase != "" || metadataURL != ""
+	if local {
+		if remote || manifest == "" || metadata == "" || signature == "" {
+			return compatibility.Matrix{}, errors.New("invalid compatibility source")
+		}
+		raw, err := readUpdateInput(manifest, update.MaxManifestBytes)
+		if err != nil {
+			return compatibility.Matrix{}, err
+		}
+		meta, err := readUpdateInput(metadata, update.MaxMetadataBytes)
+		if err != nil {
+			return compatibility.Matrix{}, err
+		}
+		sig, err := readUpdateInput(signature, update.MaxSignatureBytes)
+		if err != nil {
+			return compatibility.Matrix{}, err
+		}
+		return update.VerifyReleaseManifest(key, raw, meta, sig, server)
+	}
+	if releaseBase == "" && metadataURL == "" {
+		releaseBase = configuredBase
+	}
+	urls, err := update.ManifestURLsFor(releaseBase, metadataURL)
+	if err != nil {
+		return compatibility.Matrix{}, err
+	}
+	raw, meta, sig, err := (update.Fetcher{Client: updateHTTPClient, ValidateURL: updateFetchValidator}).Manifest(ctx, urls)
+	if err != nil {
+		return compatibility.Matrix{}, err
+	}
+	return update.VerifyReleaseManifest(key, raw, meta, sig, server)
+}
+
+func readUpdateInput(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	value, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil || int64(len(value)) > limit {
+		return nil, errors.New("update input unavailable")
+	}
+	return value, nil
+}
+
 func updateArtifact(ctx context.Context, binary, metadata, signature, releaseBase, metadataURL, configuredBase, artifact string) (update.Artifact, ed25519.PublicKey, error) {
 	local := binary != "" || metadata != "" || signature != ""
-	remote := releaseBase != "" || metadataURL != "" || configuredBase != ""
+	remote := releaseBase != "" || metadataURL != ""
 	if local {
 		if remote || binary == "" || metadata == "" || signature == "" {
 			return update.Artifact{}, nil, errors.New("invalid source")
@@ -160,6 +232,15 @@ func requireActiveProbeApp(ctx context.Context, cfg config.Config, slug string) 
 	defer store.Close()
 	_, err = store.ResolveActive(ctx, slug)
 	return err
+}
+
+func firstActiveProbeApp(ctx context.Context, cfg config.Config) (string, error) {
+	store, err := persistence.OpenSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinyhost.db"))
+	if err != nil {
+		return "", err
+	}
+	defer store.Close()
+	return store.FirstActiveAppSlug(ctx)
 }
 
 type restarterFunc func(context.Context) error

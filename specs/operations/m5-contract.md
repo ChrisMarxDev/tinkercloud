@@ -149,8 +149,9 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   Candidate doctor health may tolerate only the updater-owned secure rollback
   snapshot that must remain until commit; it must not mask any other doctor
   failure or alter ordinary rollback-pending diagnostics.
-- Manual updates use either three local air-gapped artifact files or one
-  operator-configured/explicit HTTPS release origin. Remote retrieval accepts
+- Manual updates use either the local air-gapped server artifact triplet plus
+  the signed release-manifest triplet, or one operator-configured/explicit
+  HTTPS release origin. Remote retrieval accepts
   only the V1 `tinyhost-linux-amd64` filename, follows no redirects, rejects
   credentials, query strings, private/link-local/loopback origins, cross-origin
   components, and bodies over the per-component limits. The public health URL
@@ -160,6 +161,15 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   socket confinement, and safe unknown-app-host denial; any ambiguous read is
   unhealthy. Update URLs are never accepted as arbitrary health-probe targets
   and V1 has no scheduled updater.
+- A signed update candidate is also rejected before snapshot or replacement
+  unless its strict semantic version, control API, and persistence schema
+  labels satisfy the current compatibility contract. The complete signed
+  release manifest binds the CLI and SDK ranges used by runtime HTTP and
+  WebSocket negotiation.
+- The workstation `tiny host install|status|doctor|update` surface is only a
+  fixed SSH adapter to these root-local operations. It opens no listener,
+  stores no root credential, preserves normal host-key verification, and
+  accepts no arbitrary remote command.
 
 ## Host preflight deny charter
 

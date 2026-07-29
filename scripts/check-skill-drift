@@ -1,8 +1,85 @@
 #!/bin/sh
 set -eu
+
 src=skills/tiny-platform/SKILL.md
-for dst in skills/tiny-app-development/SKILL.md skills/tiny-deploy/SKILL.md skills/tiny-operator/SKILL.md skills/tiny-full-stack-test/SKILL.md; do
-  a=$(sed -n '/<!-- shared:security:start -->/,/<!-- shared:security:end -->/p' "$src")
-  b=$(sed -n '/<!-- shared:security:start -->/,/<!-- shared:security:end -->/p' "$dst")
-  test "$a" = "$b" || { echo "shared skill block drift: $dst" >&2; exit 1; }
-done
+
+compare_block() {
+  block_name=$1
+  dst=$2
+  start="<!-- shared:${block_name}:start -->"
+  end="<!-- shared:${block_name}:end -->"
+  canonical=$(sed -n "\\|${start}|,\\|${end}|p" "$src")
+  copied=$(sed -n "\\|${start}|,\\|${end}|p" "$dst")
+  test -n "$canonical" || {
+    echo "missing canonical skill block: ${block_name}" >&2
+    exit 1
+  }
+  test "$canonical" = "$copied" || {
+    echo "shared skill block drift (${block_name}): ${dst}" >&2
+    exit 1
+  }
+}
+
+compare_block role-common skills/tiny-deployer/SKILL.md
+compare_block deployer skills/tiny-deployer/SKILL.md
+compare_block role-common skills/tiny-operator/SKILL.md
+compare_block operator skills/tiny-operator/SKILL.md
+compare_block role-common skills/tiny-full-stack-test/SKILL.md
+
+check_distribution_skill() {
+  skill=$1
+  file="skills/${skill}/SKILL.md"
+  metadata="skills/${skill}/agents/openai.yaml"
+  test -f "$file" && test -f "$metadata" || {
+    echo "missing distribution skill: ${skill}" >&2
+    exit 1
+  }
+  ! grep -F "[TODO" "$file" >/dev/null || {
+    echo "unfinished distribution skill: ${skill}" >&2
+    exit 1
+  }
+  grep -F "name: ${skill}" "$file" >/dev/null || {
+    echo "distribution skill name drift: ${skill}" >&2
+    exit 1
+  }
+  grep -F "specs/operations/distribution-contract.md" "$file" >/dev/null || {
+    echo "distribution contract missing from skill: ${skill}" >&2
+    exit 1
+  }
+  grep -F "default_prompt: \"Use \$${skill}" "$metadata" >/dev/null || {
+    echo "distribution skill metadata drift: ${skill}" >&2
+    exit 1
+  }
+}
+
+check_distribution_skill distribute-tiny-cli
+check_distribution_skill distribute-tiny-sdk
+
+grep -F "task distribution:prepare" skills/distribute-tiny-cli/SKILL.md >/dev/null || {
+  echo "CLI distribution task drift" >&2
+  exit 1
+}
+grep -F 'The npm `bin` key, launcher target, native artifact names' skills/distribute-tiny-cli/SKILL.md >/dev/null || {
+  echo "CLI distribution rename gate drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run beta-release.yml' skills/distribute-tiny-cli/SKILL.md >/dev/null || {
+  echo "CLI GitHub beta workflow drift" >&2
+  exit 1
+}
+grep -F 'task release:beta-check' skills/distribute-tiny-cli/SKILL.md >/dev/null || {
+  echo "CLI GitHub beta verification drift" >&2
+  exit 1
+}
+grep -F "npm test --prefix sdk/typescript" skills/distribute-tiny-sdk/SKILL.md >/dev/null || {
+  echo "SDK distribution test drift" >&2
+  exit 1
+}
+grep -F 'The npm tarball contains exactly `LICENSE`, `README.md`, `dist/index.d.ts`' skills/distribute-tiny-sdk/SKILL.md >/dev/null || {
+  echo "SDK distribution file gate drift" >&2
+  exit 1
+}
+grep -F 'GitHub beta workflow publishes the SDK tarball' skills/distribute-tiny-sdk/SKILL.md >/dev/null || {
+  echo "SDK GitHub beta workflow drift" >&2
+  exit 1
+}

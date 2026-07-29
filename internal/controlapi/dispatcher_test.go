@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/compatibility"
 	"github.com/tinyhost/tiny/internal/ratelimit"
 )
 
@@ -165,6 +166,28 @@ func TestDispatcherBodyAndUploadBoundaries(t *testing.T) {
 	s.err = errors.New("SUPER_SECRET")
 	if w := call(d, "POST", "/api/v1/apps", `{"slug":"x"}`); strings.Contains(w.Body.String(), "SUPER_SECRET") {
 		t.Fatal(w.Body.String())
+	}
+}
+
+func TestCompatibilityDocumentAndClientDenial(t *testing.T) {
+	d := Dispatcher{Compatibility: compatibility.Current("0.1.0")}
+	w := call(d, http.MethodGet, "/api/v1/compatibility", "")
+	if w.Code != http.StatusOK || w.Header().Get("Cache-Control") != "no-store" || !strings.Contains(w.Body.String(), `"server_version":"0.1.0"`) {
+		t.Fatalf("compatibility response = %d %s", w.Code, w.Body.String())
+	}
+	a := &authFake{a: Actor{ID: "u", Active: true}}
+	s := &svcFake{}
+	d = Dispatcher{Auth: a, Service: s}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
+	r.Header.Set("X-Tiny-CLI-Version", "1.0.0")
+	r.Header.Set("X-Tiny-Control-API-Version", "1")
+	w = httptest.NewRecorder()
+	d.ServeHTTP(w, r)
+	if w.Code != http.StatusUpgradeRequired || !strings.Contains(w.Body.String(), "cli_version_incompatible") {
+		t.Fatalf("incompatible CLI = %d %s", w.Code, w.Body.String())
+	}
+	if a.seen {
+		t.Fatal("compatibility denial reached authentication")
 	}
 }
 

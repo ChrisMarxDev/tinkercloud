@@ -838,9 +838,10 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-SKILL-001:** The repository MUST first create one generic Tiny platform
   skill containing the canonical shared principles, SDK/capability model,
   authentication, deployment, and verification workflow.
-- **FR-SKILL-002:** The repository MUST ship self-contained app-development,
-  deployment, and operator skills by copying the relevant shared sections from
-  the generic skill. Runtime inheritance between installed skills is forbidden.
+- **FR-SKILL-002:** The repository MUST ship one self-contained deployer skill
+  spanning app development through verified deployment and one self-contained
+  operator skill by copying the relevant shared sections from the generic
+  skill. Runtime inheritance between installed skills is forbidden.
 - **FR-SKILL-003:** Skills MUST route to versioned SDK, manifest, capability,
   security, and troubleshooting references.
 - **FR-SKILL-004:** Skills MUST include deterministic verification scripts.
@@ -930,8 +931,7 @@ tiny/
 │   └── typescript/
 ├── skills/
 │   ├── tiny-platform/
-│   ├── tiny-app-development/
-│   ├── tiny-deploy/
+│   ├── tiny-deployer/
 │   └── tiny-operator/
 ├── specs/
 ├── docs/
@@ -1622,9 +1622,16 @@ image identifiers are pinned during repository bootstrap.
 ### D7 — Agent skills
 
 Create one generic `tiny-platform` agent skill first. It is the canonical shared
-workflow and vocabulary. Then create self-contained `tiny-app-development`,
-`tiny-deploy`, and `tiny-operator` skills by copying the relevant shared content
-into each specialized skill.
+workflow and vocabulary. Then create self-contained `tiny-deployer` and
+`tiny-operator` skills by copying the relevant shared content into each
+role-facing skill. `tiny-deployer` owns app understanding, SDK use, build,
+access-policy review, deployment, and independent protection verification.
+
+Create separate maintainer-facing `distribute-tiny-cli` and
+`distribute-tiny-sdk` skills. They reuse the signed release and compatibility
+contracts but never inherit deployer or operator authority. Inspection and
+local preparation are the default; publication requires explicit authorization
+for finalized identities, version, destinations, and channel.
 
 The specialized skills do not require the generic skill at runtime. Copy markers
 or generation/check scripts make CI fail when shared sections drift. Content is
@@ -1657,6 +1664,20 @@ an application build, or introduce prompts into JSON/non-interactive use.
 Missing required external state such as DNS or a verified sending domain
 produces one exact action and a resumable continuation rather than a wall of
 flags.
+
+### D10 — Pre-rename beta distribution
+
+Before the final public rename, one manually approved GitHub prerelease channel
+MAY distribute the complete signed release directly from an exact
+`vMAJOR.MINOR.PATCH` tag reachable from `main`. The workflow MUST test before
+signing, use a protected beta-only signing environment, verify local and
+uploaded draft bytes, and publish only a prerelease. CLI, host, and SDK tarball
+consumers use the same exact versioned GitHub release.
+
+This beta path MUST NOT publish npm, JSR, Homebrew, stable/latest channels,
+reserve final identities, change DNS, or enable silent updates. The committed
+beta authority MUST be replaced across every embedded trust anchor by a new
+operator-controlled production authority before the first stable release.
 
 ## 23. Additional accepted defaults
 

@@ -18,12 +18,11 @@ import (
 
 	"github.com/tinyhost/tiny/internal/appauth"
 	"github.com/tinyhost/tiny/internal/blob"
+	"github.com/tinyhost/tiny/internal/compatibility"
 	"github.com/tinyhost/tiny/internal/kv"
 )
 
 const apiPrefix = "/_tiny/api/v1"
-
-const supportedSDKMajor = "0"
 
 type KV interface {
 	Get(rctx context.Context, auth appauth.AuthorizationContext, key string) (*kv.Entry, error)
@@ -62,7 +61,8 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	if !compatibleSDKVersion(r.Header.Get("X-Tiny-SDK-Version")) {
+	if !compatibleSDKVersion(r.Header.Get("X-Tiny-SDK-Version")) ||
+		!compatibleAPIVersion(r.Header.Get("X-Tiny-App-API-Version")) {
 		writeError(w, http.StatusUpgradeRequired, "sdk_version_incompatible", "Update @tinyhost/sdk to a supported version and retry.", auth.RequestID())
 		return
 	}
@@ -102,26 +102,16 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 
 // compatibleSDKVersion keeps raw HTTP and previously shipped clients working
 // when they do not send a version header. A supplied header must be complete
-// semver and use the currently supported pre-1.0 major.
+// semver and fall inside the release compatibility range.
 func compatibleSDKVersion(version string) bool {
 	if version == "" {
 		return true
 	}
-	parts := strings.Split(version, ".")
-	if len(parts) != 3 || parts[0] != supportedSDKMajor {
-		return false
-	}
-	for _, part := range parts {
-		if part == "" {
-			return false
-		}
-		for _, r := range part {
-			if r < '0' || r > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	return compatibility.Current("0.1.0").AppAPI.Client.Contains(version)
+}
+
+func compatibleAPIVersion(version string) bool {
+	return version == "" || version == compatibility.AppAPIVersion
 }
 func (d Dispatcher) app(auth appauth.AuthorizationContext, w http.ResponseWriter) {
 	if d.AppSlug == nil || d.AppSlug(auth) == "" {

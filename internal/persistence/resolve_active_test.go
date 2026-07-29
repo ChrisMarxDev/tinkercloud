@@ -75,6 +75,19 @@ func TestEligibleWithoutDeployment(t *testing.T) {
 	}
 }
 
+func TestFirstActiveAppSlugRequiresCurrentImmutableRelease(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.FirstActiveAppSlug(context.Background()); err != apps.ErrNotFound {
+		t.Fatalf("app without release selected: %v", err)
+	}
+	seedActiveRelease(t, s)
+	slug, err := s.FirstActiveAppSlug(context.Background())
+	if err != nil || slug != "alpha" {
+		t.Fatalf("selected %q: %v", slug, err)
+	}
+}
+
 var _ = json.Marshal
 var _ = releases.Manifest{}
 var _ = os.ModeSymlink

@@ -57,7 +57,9 @@ if 'tinyhost-linux-amd64' not in artifacts or not expected_clients.issubset(arti
     raise SystemExit('missing supported server or client artifact')
 if 'release-manifest.json' not in artifacts:
     raise SystemExit('missing signed release manifest')
-if any(not re.fullmatch(r'release-manifest\.json|tinyhost-sdk-[A-Za-z0-9._+-]+\.tgz|tinyhost-linux-amd64|tiny-(?:linux|darwin)-(?:amd64|arm64)', a) for a in artifacts):
+if 'tinyhost.service' not in artifacts or 'install-host.sh' not in artifacts or 'install-client.sh' not in artifacts:
+    raise SystemExit('missing signed installation input')
+if any(not re.fullmatch(r'release-manifest\.json|tinyhost-sdk-[A-Za-z0-9._+-]+\.tgz|tinyhost-linux-amd64|tinyhost\.service|install-(?:host|client)\.sh|tiny-(?:linux|darwin)-(?:amd64|arm64)', a) for a in artifacts):
     raise SystemExit('unknown signed release artifact')
 lines = root.joinpath('SHA256SUMS').read_text(encoding='ascii').splitlines()
 listed = set()
@@ -75,13 +77,44 @@ for metadata in "$dir"/*.metadata.json; do
   verify_one "$artifact" || { echo "release artifact verification failed: $artifact" >&2; exit 1; }
 done
 python3 - "$dir" <<'PY'
-import hashlib, json, pathlib, re, sys
+import hashlib, json, pathlib, re, sys, tarfile
 
 root = pathlib.Path(sys.argv[1])
 try:
     manifest = json.loads(root.joinpath('release-manifest.json').read_bytes())
-    if set(manifest) != {'schema', 'files'} or manifest['schema'] != '1' or not isinstance(manifest['files'], dict):
+    if set(manifest) != {'schema', 'version', 'compatibility', 'files'} or manifest['schema'] != '2' or not isinstance(manifest['files'], dict):
         raise ValueError('invalid signed release manifest')
+    version = manifest['version']
+    if not isinstance(version, str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version):
+        raise ValueError('invalid release version')
+    expected_compatibility = {
+        'server_version': version,
+        'control_api': {'version': '1', 'client': {'min_inclusive': '0.1.0', 'max_exclusive': '1.0.0'}},
+        'app_api': {'version': '1', 'client': {'min_inclusive': '0.1.0', 'max_exclusive': '1.0.0'}},
+        'schema_version': '1',
+        'release_manifest_schema': '2',
+    }
+    if manifest['compatibility'] != expected_compatibility:
+        raise ValueError('release compatibility drift')
+    sdk = 'tinyhost-sdk-' + version + '.tgz'
+    if sdk not in manifest['files']:
+        raise ValueError('release SDK version drift')
+    sdk_artifacts = [name for name in manifest['files'] if name.startswith('tinyhost-sdk-') and name.endswith('.tgz')]
+    if sdk_artifacts != [sdk]:
+        raise ValueError('release SDK platform drift')
+    for metadata_path in root.glob('*.metadata.json'):
+        metadata = json.loads(metadata_path.read_bytes())
+        if set(metadata) != {'version', 'api', 'schema', 'sha256'}:
+            raise ValueError('release metadata shape drift')
+        if metadata['version'] != version or metadata['api'] != '1' or metadata['schema'] != '1':
+            raise ValueError('release artifact compatibility drift')
+    with tarfile.open(root.joinpath(sdk), mode='r:gz') as archive:
+        package = archive.extractfile('package/package.json')
+        if package is None:
+            raise ValueError('SDK package manifest unavailable')
+        sdk_manifest = json.load(package)
+        if sdk_manifest.get('version') != version:
+            raise ValueError('SDK package version drift')
     excluded = {'SHA256SUMS', 'release-manifest.json', 'release-manifest.json.metadata.json', 'release-manifest.json.signature'}
     actual = {p.name for p in root.iterdir() if p.is_file()} - excluded
     if actual != set(manifest['files']):

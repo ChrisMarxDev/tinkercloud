@@ -30,6 +30,26 @@ TINYHOST_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINYHOST_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
 SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.0 "$tmp/release" >/dev/null
 TINYHOST_RELEASE_PUBLIC_KEY="$tmp/public.pem" "$root/scripts/release-verify.sh" "$tmp/release" >/dev/null
+TINYHOST_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
+"$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/distribution" \
+  "@tinyhost/cli" Tiny tiny "https://releases.example.test/v0.1.0/" >/dev/null
+node - "$tmp/distribution" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const root = process.argv[2];
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "npm", "package.json"), "utf8"));
+if (manifest.name !== "@tinyhost/cli" || manifest.version !== "0.1.0" || manifest.dependencies || manifest.scripts) {
+  throw new Error("invalid npm CLI candidate");
+}
+const vendors = fs.readdirSync(path.join(root, "npm", "vendor")).sort();
+if (vendors.join(" ") !== "tiny-darwin-amd64 tiny-darwin-arm64 tiny-linux-amd64 tiny-linux-arm64") {
+  throw new Error("incomplete npm CLI platform matrix");
+}
+const formula = fs.readFileSync(path.join(root, "homebrew", "tiny.rb"), "utf8");
+if (!formula.includes('version "0.1.0"') || !formula.includes("tiny-darwin-amd64") || !formula.includes("tiny-darwin-arm64")) {
+  throw new Error("invalid Homebrew formula candidate");
+}
+NODE
 
 # Rebuild the executable inputs with the same pinned toolchain/source and
 # assert the release promises are not merely documentation.

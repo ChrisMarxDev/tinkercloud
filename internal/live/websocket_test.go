@@ -24,3 +24,16 @@ func TestSameOriginRequiresExactResolvedHost(t *testing.T) {
 		}
 	}
 }
+
+func TestCompatibleSDKSubprotocol(t *testing.T) {
+	for _, raw := range []string{"", "tiny.sdk.0.1.0.api.1", "tiny.sdk.0.999.12.api.1"} {
+		if _, ok := compatibleSubprotocol(raw); !ok {
+			t.Fatalf("rejected %q", raw)
+		}
+	}
+	for _, raw := range []string{"tiny.sdk.1.0.0.api.1", "tiny.sdk.0.1.0.api.2", "tiny.sdk.bad.api.1", "other", "tiny.sdk.0.1.0.api.1, other"} {
+		if _, ok := compatibleSubprotocol(raw); ok {
+			t.Fatalf("accepted %q", raw)
+		}
+	}
+}

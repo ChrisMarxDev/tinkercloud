@@ -39,6 +39,22 @@ func TestReleaseURLsFromMetadataKeepsOrigin(t *testing.T) {
 	}
 }
 
+func TestManifestURLsRemainOnReleaseOrigin(t *testing.T) {
+	urls, err := ManifestURLsFor("https://releases.example/r/", "")
+	if err != nil || urls.Binary != "https://releases.example/r/release-manifest.json" {
+		t.Fatalf("base manifest URLs = %#v, %v", urls, err)
+	}
+	urls, err = ManifestURLsFor("", "https://releases.example/r/tinyhost-linux-amd64.metadata.json")
+	if err != nil || urls.Metadata != "https://releases.example/r/release-manifest.json.metadata.json" {
+		t.Fatalf("metadata-derived manifest URLs = %#v, %v", urls, err)
+	}
+	for _, raw := range []string{"http://releases.example/r/", "https://user@releases.example/r/", "https://releases.example/r/file"} {
+		if _, err = ManifestURLsFor(raw, ""); !errors.Is(err, ErrFetch) {
+			t.Fatalf("accepted manifest base %q", raw)
+		}
+	}
+}
+
 func TestFetcherRejectsOversizeRedirectAndNetworkFailure(t *testing.T) {
 	url := "https://releases.example/r/tinyhost-linux-amd64"
 	for name, do := range map[string]HTTPDoer{

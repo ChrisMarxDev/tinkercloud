@@ -61,6 +61,18 @@ func (s *SQLiteStore) ResolveActive(ctx context.Context, slug string) (apps.App,
 	return a, nil
 }
 
+// FirstActiveAppSlug is the updater's deterministic denial-probe selector. It
+// returns only an app with a current active immutable deployment and never
+// accepts an operator- or network-supplied app identity.
+func (s *SQLiteStore) FirstActiveAppSlug(ctx context.Context) (string, error) {
+	var slug string
+	err := s.DB.QueryRowContext(ctx, "SELECT a.slug FROM applications a JOIN deployments d ON d.id=a.current_deployment_id AND d.app_id=a.id WHERE a.status='active' AND d.state='active' AND d.release_hash <> '' ORDER BY a.slug LIMIT 1").Scan(&slug)
+	if err != nil || !releases.ValidSlug(slug) {
+		return "", apps.ErrNotFound
+	}
+	return slug, nil
+}
+
 // EligibleAppHost is deliberately narrower than ResolveActive: ACME may issue
 // for an active app before its first immutable release exists.
 func (s *SQLiteStore) EligibleAppHost(ctx context.Context, slug string) bool {

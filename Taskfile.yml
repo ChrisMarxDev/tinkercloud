@@ -198,8 +198,20 @@ tasks:
     desc: Run the complete release-pipeline test and installer denial tests
     summary: Uses a temporary test signing key. It never publishes a release.
     cmds:
+      - ./scripts/check-beta-release-workflow.sh
+      - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-release-key-drift.sh
       - ./scripts/release-test.sh
       - ./packaging/install_test.sh
+
+  release:beta-check:
+    desc: Validate the GitHub beta release workflow without publishing
+    summary: Checks workflow syntax, publication denial gates, and embedded release-key drift. It never reads a private key or changes GitHub state.
+    cmds:
+      - ./scripts/check-beta-release-workflow.sh
+      - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-release-key-drift.sh
+      - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   release:build:
     desc: Create signed release artifacts (requires VERSION and OUTPUT)
@@ -218,6 +230,14 @@ tasks:
       vars: [RELEASE_DIR]
     cmds:
       - ./scripts/release-verify.sh "{{.RELEASE_DIR}}"
+
+  distribution:prepare:
+    desc: Generate local npm and Homebrew candidates from a verified signed release
+    summary: This writes package-manager candidates only. It never publishes, creates a release, updates a tap, reserves a name, or advances a channel.
+    requires:
+      vars: [VERSION, RELEASE_DIR, OUTPUT, NPM_PACKAGE, FORMULA_CLASS, COMMAND, RELEASE_BASE]
+    cmds:
+      - ./scripts/distribution-prepare.sh "{{.VERSION}}" "{{.RELEASE_DIR}}" "{{.OUTPUT}}" "{{.NPM_PACKAGE}}" "{{.FORMULA_CLASS}}" "{{.COMMAND}}" "{{.RELEASE_BASE}}"
 
   vps:e2e:
     desc: Run destructive, opt-in live acceptance on an acknowledged disposable VPS

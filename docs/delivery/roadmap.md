@@ -499,6 +499,28 @@ The continuous gate also runs a checked-in-source secret-pattern scanner with
 deny/allow self-tests, every parser fuzz target for a fixed time budget, a
 pinned Go vulnerability scan, and a lockfile-bound production npm audit. It
 does not require a VPS, runtime credential, or public listener.
+The signed complete-release manifest now binds a strict release version and
+the server/CLI/SDK/control-API/app-API/schema compatibility matrix without
+changing the existing per-artifact signature bytes. A publish-free preparation
+task derives a lifecycle-script-free, dependency-free npm CLI candidate and a
+Homebrew formula from a fully verified release. It performs no registry, tap,
+hosted-release, namespace, DNS, or channel mutation. The final public names and
+origins remain intentionally pending the last rename.
+The standalone `distribute-tiny-cli` and `distribute-tiny-sdk` maintainer
+skills turn those gates into explicit inspect, prepare, and publish workflows.
+Preparation remains local and non-mutating; publishing is blocked until the
+operator has finalized the public identities and destinations and has
+explicitly authorized the named release. Repository drift checks validate both
+skill contracts and their invocation metadata.
+An explicitly dispatched `beta-release` GitHub Actions workflow provides the
+temporary pre-rename distribution channel. It accepts only an existing
+`vMAJOR.MINOR.PATCH` tag reachable from `main`, runs the normal gates before
+entering the protected signing environment, builds and verifies one complete
+release, verifies the uploaded draft bytes, and publishes only a GitHub
+prerelease. Direct CLI, host, and SDK-tarball installation use that exact
+versioned release. npm, JSR, Homebrew, stable/latest promotion, and silent
+updates remain disabled. The committed authority is beta-only and must rotate
+across every embedded trust anchor before stable distribution.
 The packaged and generated gateway units are also locally validated without a
 systemd PID 1: they retain the `tinyhost` user, strict sandbox, exactly the
 configured writable paths, and only `CAP_NET_BIND_SERVICE` in their ambient

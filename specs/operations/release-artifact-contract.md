@@ -35,7 +35,10 @@ The only V1 update target is `tinyhost-linux-amd64`. Every V1 release contains
 that server plus `tiny-linux-amd64`, `tiny-linux-arm64`,
 `tiny-darwin-amd64`, `tiny-darwin-arm64`, and one versioned SDK tarball. Each
 of those distributable payloads has its own metadata and signature; a release
-is invalid if any supported client platform is absent. The release public key is public and committed at
+also contains the reviewed `tinyhost.service` unit, `install-host.sh`, and
+`install-client.sh` with their own metadata and signatures and is invalid if an
+installation input or supported client platform is absent. The release public
+key is public and committed at
 `packaging/release-public-key.pem`. A signing private key is supplied only to
 the release environment through `TINYHOST_RELEASE_SIGNING_KEY`; it is never
 written to the repository, artifacts, logs, metadata, SDK, or browser bundle.
@@ -46,9 +49,11 @@ Version drift is a release-build failure rather than a filename rewrite.
 
 `SHA256SUMS` covers every generated release file other than itself, including
 all payloads, sidecars, dependency evidence, and provenance. The signed
-`release-manifest.json` binds the SHA-256 of every release file except itself,
-its metadata/signature, and `SHA256SUMS`; this makes the evidence set
-tamper-evident even if a checksum manifest is replaced. `provenance.txt` lists
+schema-2 `release-manifest.json` binds the release version, the exact
+compatibility matrix from the update-compatibility contract, and the SHA-256 of
+every release file except itself, its metadata/signature, and `SHA256SUMS`;
+this makes the evidence and compatibility policy tamper-evident even if a
+checksum manifest is replaced. `provenance.txt` lists
 the build target and SHA-256 for every distributable payload, allowing a
 reviewer to map each signature to its reproducible build target. Dependency and
 provenance evidence are review aids, not substitutes for signature

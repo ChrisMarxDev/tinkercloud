@@ -128,9 +128,9 @@ diagnostics, and future capabilities.
 
 ## Current test-environment facts, not product requirements
 
-- The current exploratory platform uses `tiny.pulsebrief.io` and the
-  `apps.pulsebrief.io` suffix.
-- `dev@christopher-marx.de` is the exploratory deployer identity and
-  `viewer@christopher-marx.de` is the exploratory viewer identity.
-- These addresses and domains must not become defaults, fixtures, or authority
-  assumptions in the product contract.
+- `dev@christopher-marx.de` is an approved exploratory deployer identity and
+  may appear in repository documentation.
+- Staging hostnames and viewer identities are intentionally omitted. Repository
+  documentation and fixtures use reserved `.example` or `.test` values.
+- Environment-specific identities and domains must not become authority
+  assumptions or product defaults.

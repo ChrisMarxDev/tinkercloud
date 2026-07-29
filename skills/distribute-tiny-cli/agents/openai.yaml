@@ -1,0 +1,4 @@
+interface:
+  display_name: "Distribute Tiny CLI"
+  short_description: "Prepare and release the signed Tiny CLI"
+  default_prompt: "Use $distribute-tiny-cli to prepare and verify CLI distribution candidates without publishing them."
