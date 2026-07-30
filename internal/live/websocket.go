@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
 	"github.com/coder/websocket"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/compatibility"
 )
 
 // WebSocketAdapter is invoked only by the already-authorized gateway dispatcher.
@@ -153,7 +153,7 @@ func compatibleSubprotocol(raw string) (string, bool) {
 	if strings.Contains(raw, ",") {
 		return "", false
 	}
-	const prefix = "tiny.sdk."
+	const prefix = "tinker.sdk."
 	const separator = ".api."
 	if !strings.HasPrefix(raw, prefix) {
 		return "", false

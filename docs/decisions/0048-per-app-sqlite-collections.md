@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost needs a small shared-state primitive beyond key/value storage, without
+Tinkercloud needs a small shared-state primitive beyond key/value storage, without
 turning the V1-shaped single-process host into a database service. A shared
 SQLite `app_kv` table keeps control-plane and app writes on one writer and does
 not physically isolate app data. A separate provider, daemon, or multi-node
@@ -14,11 +14,11 @@ value.
 ## Decision
 
 Keep normal embedded SQLite through the existing CGO-free `modernc.org/sqlite`
-driver. The control plane stays in `tinyhost.db`; each server-derived immutable
+driver. The control plane stays in `tinkercloud.db`; each server-derived immutable
 app ID owns exactly one private local database:
 
 ```text
-tinyhost.db
+tinkercloud.db
 apps/{immutable-app-id}/data.db
 ```
 
@@ -29,7 +29,7 @@ documents, collection revisions, and platform metadata.
 
 ### Development-stage destructive transition
 
-TinyHost has not been released or populated with production app state. Migration
+Tinkercloud has not been released or populated with production app state. Migration
 `0007_remove_legacy_control_app_kv.sql` therefore drops the former shared
 control-database `app_kv` table instead of attempting a partial data copy. The
 KV repository no longer has a control-database fallback: app KV requires an
@@ -48,7 +48,7 @@ freshness hint. The hub remains non-durable; reconnecting clients reread state.
 
 - Independent apps no longer contend for one SQLite writer and their data is
   physically isolated into separately removable files.
-- The single TinyHost process remains the only public/security boundary; no
+- The single Tinkercloud process remains the only public/security boundary; no
   client receives an app ID choice, file path, SQL interface, or credential.
 - Platform schema migration is bounded to the app first accessed, rather than
   extending startup time with all apps. A migration failure affects that app's
@@ -62,7 +62,7 @@ freshness hint. The hub remains non-durable; reconnecting clients reread state.
 ## Rejected alternatives
 
 - **Turso/libSQL:** replication, remote topology, CDC, and current engine risk
-  do not remove TinyHost's authorization, reconciliation, or WebSocket work.
+  do not remove Tinkercloud's authorization, reconciliation, or WebSocket work.
 - **bbolt:** small and pure Go, but adds a second persistence API and makes
   bounded JSON collection querying/indexing a platform-owned problem.
 - **PostgreSQL/Redis:** add a daemon, credentials, lifecycle, recovery surface,

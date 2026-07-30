@@ -1,17 +1,17 @@
 {{define "content"}}
-<main class="tiny-auth" id="main">
-  <section class="tiny-auth-card" aria-labelledby="token-title">
-    <a class="tiny-brand" href="/dashboard">
-      <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
-      <span>tinyhost</span>
+<main class="tinker-auth" id="main">
+  <section class="tinker-auth-card" aria-labelledby="token-title">
+    <a class="tinker-brand" href="/dashboard">
+      <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+      <span>tinkercloud</span>
     </a>
-    <p class="tiny-eyebrow">Display once</p>
+    <p class="tinker-eyebrow">Display once</p>
     <h1 id="token-title">Your token is ready.</h1>
-    <div class="tiny-notice tiny-notice--warning" role="alert">
-      <p><strong>Copy it now.</strong> TinyHost will not display this value again.</p>
+    <div class="tinker-notice tinker-notice--warning" role="alert">
+      <p><strong>Copy it now.</strong> Tinkercloud will not display this value again.</p>
     </div>
-    <p class="tiny-token">{{.Token.Token}}</p>
-    <dl class="tiny-definition">
+    <p class="tinker-token">{{.Token.Token}}</p>
+    <dl class="tinker-definition">
       <dt>Expires</dt>
       <dd>{{.Token.ExpiresAt}}</dd>
       {{if .Token.Scopes}}
@@ -19,7 +19,7 @@
         <dd>{{range $index, $scope := .Token.Scopes}}{{if $index}}, {{end}}<code>{{$scope}}</code>{{end}}</dd>
       {{end}}
     </dl>
-    <a class="tiny-button tiny-button--primary tiny-button--full" href="/dashboard">
+    <a class="tinker-button tinker-button--primary tinker-button--full" href="/dashboard">
       Return to dashboard
     </a>
   </section>

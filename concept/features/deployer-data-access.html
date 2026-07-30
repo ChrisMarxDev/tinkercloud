@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Deployer Data Access</title>
+  <title>Tinkercloud — Deployer Data Access</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <p class="eyebrow">Implemented M4 deployer capability · live VPS evidence pending</p>
     <h1>Inspect an app’s data from the CLI without exposing its database.</h1>
     <p class="lede">Give an authenticated deployer bounded API and CLI access
-      to the KV entries and JSON documents of an app they own. TinyHost still
+      to the KV entries and JSON documents of an app they own. Tinkercloud still
       derives the immutable app identity, keeps SQLite private, and applies
       current authorization on every request.</p>
     <p class="promise">Owner-scoped data operations, not remote SQL.</p>
@@ -23,7 +23,7 @@
         <p class="eyebrow">Reason and value</p>
         <h2>Make support and recovery possible without VPS access</h2>
         <p>Today a deployer can create, deploy, configure, and observe an app,
-          but cannot safely inspect the state created through Tiny’s SDK.
+          but cannot safely inspect the state created through Tinkercloud’s SDK.
           Bounded data access makes it practical to diagnose a broken poll,
           repair one malformed document, confirm an import, or automate a
           controlled export. It uses the same app-local data model as the SDK
@@ -64,18 +64,18 @@
     <section id="experience">
       <p class="eyebrow">Deployer experience</p>
       <h2>The saved login is enough; ask only for the target and operation</h2>
-      <pre>tiny data kv list my-app --prefix settings/
-tiny data kv get my-app settings/theme
+      <pre>tinker data kv list my-app --prefix settings/
+tinker data kv get my-app settings/theme
 
-tiny data collections list my-app
-tiny data documents list my-app tasks --limit 50
-tiny data documents get my-app tasks doc_abcdefghijklmnopqrstuv
+tinker data collections list my-app
+tinker data documents list my-app tasks --limit 50
+tinker data documents get my-app tasks doc_abcdefghijklmnopqrstuv
 
 # Stable machine-readable output for every command
-tiny data documents list my-app tasks --json</pre>
-      <p>The CLI reuses its saved TinyHost server and deployer login. It does
+tinker data documents list my-app tasks --json</pre>
+      <p>The CLI reuses its saved Tinkercloud server and deployer login. It does
         not create a local database configuration, request a database
-        credential, or ask for information TinyHost can derive. Human output is
+        credential, or ask for information Tinkercloud can derive. Human output is
         readable; <code>--json</code> preserves the versioned API envelope for
         scripts.</p>
     </section>
@@ -158,7 +158,7 @@ GET /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}</pre>
           boundary while retaining one private database authority.</li>
         <li>Update the HTTP and control-auth contracts, scope allowlists, CLI
           contract, roadmap evidence, and the canonical
-          <code>skills/tiny-platform</code> source.</li>
+          <code>skills/tinkercloud-platform</code> source.</li>
         <li>Refresh marked specialized-skill copies and run the skill drift
           check when the workflow becomes available.</li>
       </ul>

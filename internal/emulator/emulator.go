@@ -1,5 +1,5 @@
-// Package emulator provides a deliberately local-only Tiny app development server.
-// It is not a TinyHost gateway and must never be used to expose an app to a network.
+// Package emulator provides a deliberately local-only Tinkercloud app development server.
+// It is not a Tinkercloud gateway and must never be used to expose an app to a network.
 package emulator
 
 import (
@@ -21,12 +21,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
 	"github.com/coder/websocket"
-	"github.com/tinyhost/tiny/internal/compatibility"
 	_ "modernc.org/sqlite"
 )
 
-const apiPrefix = "/_tiny/api/v1"
+const apiPrefix = "/_tinker/api/v1"
 
 // The emulator is loopback-only, but it still runs untrusted app JavaScript.
 // Keep its websocket accounting bounded so local development cannot turn one
@@ -88,7 +88,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if !loopbackAddress(cfg.Listen) {
 		return nil, fmt.Errorf("emulator refuses non-loopback listener %q", cfg.Listen)
 	}
-	dsn := "file:tiny-emulator?mode=memory&cache=shared"
+	dsn := "file:tinker-emulator?mode=memory&cache=shared"
 	if cfg.StateDir != "" {
 		state, e := filepath.Abs(cfg.StateDir)
 		if e != nil {
@@ -98,7 +98,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("create emulator state directory: %w", e)
 		}
 		cfg.StateDir = state
-		dsn = filepath.Join(state, "tiny-emulator.db")
+		dsn = filepath.Join(state, "tinker-emulator.db")
 	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *Server) Handler() http.Handler { return http.HandlerFunc(s.serveHTTP) }
 func (s *Server) ListenAndServe() error {
 	l, err := net.Listen("tcp", s.cfg.Listen)
 	if err != nil {
-		return fmt.Errorf("tiny emulator cannot listen on %s (choose --listen with a free loopback port): %w", s.cfg.Listen, err)
+		return fmt.Errorf("tinker emulator cannot listen on %s (choose --listen with a free loopback port): %w", s.cfg.Listen, err)
 	}
 	return s.Serve(l)
 }
@@ -152,7 +152,7 @@ func (s *Server) Serve(l net.Listener) error {
 
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if r.URL.Path == "/_tiny/ws/v1" {
+	if r.URL.Path == "/_tinker/ws/v1" {
 		s.websocket(w, r)
 		return
 	}
@@ -172,7 +172,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 func errJSON(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": "Tiny emulator request failed."}})
+	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": "Tinker emulator request failed."}})
 }
 func (s *Server) api(w http.ResponseWriter, r *http.Request) {
 	p := r.URL.EscapedPath()
@@ -748,7 +748,7 @@ func addSubscription(subscriptions map[string]struct{}, key string) bool {
 
 // emulatorSubprotocol intentionally mirrors the hosted current-SDK boundary.
 // The loopback emulator is not a compatibility escape hatch: a browser client
-// still has to speak the current Tiny app API before it can receive live data.
+// still has to speak the current Tinkercloud app API before it can receive live data.
 func emulatorSubprotocol(raw string) (string, bool) {
 	if raw == "" {
 		return "", true
@@ -756,7 +756,7 @@ func emulatorSubprotocol(raw string) (string, bool) {
 	if strings.Contains(raw, ",") {
 		return "", false
 	}
-	const prefix = "tiny.sdk."
+	const prefix = "tinker.sdk."
 	const separator = ".api."
 	if !strings.HasPrefix(raw, prefix) {
 		return "", false

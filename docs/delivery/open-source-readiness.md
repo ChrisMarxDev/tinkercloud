@@ -2,7 +2,7 @@
 
 **Status:** Run this checklist immediately before making the repository public.
 
-This is a publication gate, not evidence that TinyHost is production-ready.
+This is a publication gate, not evidence that Tinkercloud is production-ready.
 Public source and a public installable release are separate decisions. The
 repository may become public while clearly marked pre-release; publishing
 packages, binaries, or production-readiness claims requires the additional
@@ -20,10 +20,10 @@ URL, or GitHub setting that proves each item.
   OTPs, and local absolute paths are not approved for publication.
 - [x] Repository examples and tests use reserved `.example`, `.test`, and
   documentation IP ranges.
-- [x] TinyHost may be published as explicitly pre-release source before its V1
+- [x] Tinkercloud may be published as explicitly pre-release source before its V1
   production gates pass.
-- [x] The final public history will be created only after the last product and
-  namespace rename, as one reviewed initial commit.
+- [x] The final public history will be created only after the Tinkercloud
+  identity change is complete, as one reviewed initial commit.
 
 ## 1. Freeze the exact publication candidate
 
@@ -46,27 +46,28 @@ Reviewer:
 Date:
 ```
 
-## 2. Complete the final namespace and product rename
+## 2. Verify the Tinkercloud namespace and product identity
 
-- [ ] Decide the public repository owner and name.
-- [ ] Align the Git remote, `go.mod` module path, internal Go imports, README
+- [x] Decide the public repository owner and name.
+- [x] Align the Git remote, `go.mod` module path, internal Go imports, README
   clone commands, issue/security URLs, package metadata, release metadata,
   installer URLs, Homebrew formula, npm package, and JSR package.
-- [ ] Confirm the CLI, server binary, SDK package, cookie names, service name,
+- [x] Confirm the CLI, server binary, SDK package, cookie names, service name,
   config paths, and documentation use the final intended names.
-- [ ] Claim every required organization, npm, JSR, Homebrew, and package
-  namespace before describing it as available.
-- [ ] Search for superseded names and classify every remaining match as an
+- [ ] Verify ownership of every npm, JSR, Homebrew, and package destination
+  before describing it as available. Tinkercloud does not require a GitHub
+  organization for V1.
+- [x] Search for superseded names and classify every remaining match as an
   intentional compatibility alias or remove it.
 
 Evidence:
 
 ```text
-Repository:
-Go module:
-npm package:
-JSR package:
-CLI/server names:
+Repository: https://github.com/ChrisMarxDev/tinkercloud
+Go module: github.com/ChrisMarxDev/tinkercloud
+npm package: @tinkercloud/sdk and @tinkercloud/cli
+JSR package: @tinkercloud/sdk
+CLI/server names: tinker / tinkercloud
 ```
 
 ## 3. Create the final initial history
@@ -75,7 +76,7 @@ Perform this while the repository is private.
 
 - [ ] Preserve the reviewed candidate tree before changing Git history.
 - [ ] Replace the exploratory history with one reviewed initial commit after
-  the final rename.
+  the Tinkercloud identity change.
 - [ ] Use only the approved public author name and email.
 - [ ] Ensure no old branch, tag, pull-request ref, release, artifact, cache, or
   fork keeps the exploratory history reachable.

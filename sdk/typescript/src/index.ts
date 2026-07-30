@@ -21,7 +21,7 @@ export interface Capability {
   name: string;
   version: number;
   limits?: Record<string, number>;
-  /** Browser-safe notice when a capability sends app content outside TinyHost. */
+  /** Browser-safe notice when a capability sends app content outside Tinkercloud. */
   disclosure?: string;
 }
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -43,7 +43,7 @@ export interface KVList<T extends JSONValue = JSONValue> {
   next_cursor?: string;
 }
 export type JSONObject = { [key: string]: JSONValue };
-export interface TinyDocument<T extends JSONObject = JSONObject> {
+export interface TinkerDocument<T extends JSONObject = JSONObject> {
   id: string;
   data: T;
   version: number;
@@ -51,7 +51,7 @@ export interface TinyDocument<T extends JSONObject = JSONObject> {
   updatedAt: string;
 }
 export interface CollectionList<T extends JSONObject = JSONObject> {
-  documents: TinyDocument<T>[];
+  documents: TinkerDocument<T>[];
   revision: number;
   nextCursor?: string;
 }
@@ -70,20 +70,20 @@ export type CollectionSyncStatus =
   | "closed";
 export interface CollectionSubscription<T extends JSONObject = JSONObject> {
   onSnapshot(snapshot: CollectionList<T>): void;
-  onCreate?(document: TinyDocument<T>): void;
-  onUpdate?(document: TinyDocument<T>): void;
+  onCreate?(document: TinkerDocument<T>): void;
+  onUpdate?(document: TinkerDocument<T>): void;
   onDelete?(id: string): void;
   onStatus?(status: CollectionSyncStatus): void;
   onError?(error: unknown): void;
 }
-export interface TinyCollection<T extends JSONObject = JSONObject> {
-  create(data: T, options?: RequestOptions): Promise<TinyDocument<T>>;
-  get(id: string, options?: RequestOptions): Promise<TinyDocument<T> | null>;
+export interface TinkerCollection<T extends JSONObject = JSONObject> {
+  create(data: T, options?: RequestOptions): Promise<TinkerDocument<T>>;
+  get(id: string, options?: RequestOptions): Promise<TinkerDocument<T> | null>;
   update(
     id: string,
     data: T,
     options?: CollectionWriteOptions,
-  ): Promise<TinyDocument<T>>;
+  ): Promise<TinkerDocument<T>>;
   delete(
     id: string,
     options?: CollectionWriteOptions,
@@ -100,7 +100,7 @@ export interface ListOptions extends RequestOptions {
   cursor?: string;
 }
 /** Metadata for one opaque, app-scoped attachment. */
-export interface TinyBlob {
+export interface TinkerBlob {
   id: string;
   name: string;
   size: number;
@@ -112,10 +112,10 @@ export interface BlobListOptions extends RequestOptions {
   cursor?: string;
 }
 export interface BlobList {
-  blobs: TinyBlob[];
+  blobs: TinkerBlob[];
   nextCursor?: string;
 }
-export class TinyError extends Error {
+export class TinkerError extends Error {
   constructor(
     message: string,
     public readonly code: string,
@@ -125,40 +125,40 @@ export class TinyError extends Error {
     this.name = new.target.name;
   }
 }
-export class TinyNotAuthenticatedError extends TinyError {}
-export class TinyNotAuthorizedError extends TinyError {}
-export class TinyCapabilityUnavailableError extends TinyError {}
-export class TinyValidationError extends TinyError {}
-export class TinyVersionConflictError extends TinyError {}
-export class TinyQuotaExceededError extends TinyError {}
-export class TinyRateLimitedError extends TinyError {}
-export class TinyTemporarilyUnavailableError extends TinyError {}
-/** The installed SDK major cannot safely speak to this TinyHost API. Upgrade it. */
-export class TinyVersionIncompatibleError extends TinyError {}
+export class TinkerNotAuthenticatedError extends TinkerError {}
+export class TinkerNotAuthorizedError extends TinkerError {}
+export class TinkerCapabilityUnavailableError extends TinkerError {}
+export class TinkerValidationError extends TinkerError {}
+export class TinkerVersionConflictError extends TinkerError {}
+export class TinkerQuotaExceededError extends TinkerError {}
+export class TinkerRateLimitedError extends TinkerError {}
+export class TinkerTemporarilyUnavailableError extends TinkerError {}
+/** The installed SDK major cannot safely speak to this Tinkercloud API. Upgrade it. */
+export class TinkerVersionIncompatibleError extends TinkerError {}
 /** The chat request was rejected before provider work. */
-export class TinyInvalidRequestError extends TinyError {}
+export class TinkerInvalidRequestError extends TinkerError {}
 /** The operator-approved chat budget has been exhausted. */
-export class TinyQuotaExhaustedError extends TinyError {}
+export class TinkerQuotaExhaustedError extends TinkerError {}
 /** The chat request was cancelled. */
-export class TinyCancelledError extends TinyError {}
+export class TinkerCancelledError extends TinkerError {}
 type FetchLike = typeof fetch;
-function errorFor(code: string, message: string, id?: string): TinyError {
-  const C: Record<string, typeof TinyError> = {
-    not_authenticated: TinyNotAuthenticatedError,
-    not_authorized: TinyNotAuthorizedError,
-    capability_unavailable: TinyCapabilityUnavailableError,
-    validation_failed: TinyValidationError,
-    version_conflict: TinyVersionConflictError,
-    quota_exceeded: TinyQuotaExceededError,
-    rate_limited: TinyRateLimitedError,
-    temporarily_unavailable: TinyTemporarilyUnavailableError,
-    sdk_version_incompatible: TinyVersionIncompatibleError,
-    unauthorized: TinyNotAuthorizedError,
-    invalid_request: TinyInvalidRequestError,
-    quota_exhausted: TinyQuotaExhaustedError,
-    cancelled: TinyCancelledError,
+function errorFor(code: string, message: string, id?: string): TinkerError {
+  const C: Record<string, typeof TinkerError> = {
+    not_authenticated: TinkerNotAuthenticatedError,
+    not_authorized: TinkerNotAuthorizedError,
+    capability_unavailable: TinkerCapabilityUnavailableError,
+    validation_failed: TinkerValidationError,
+    version_conflict: TinkerVersionConflictError,
+    quota_exceeded: TinkerQuotaExceededError,
+    rate_limited: TinkerRateLimitedError,
+    temporarily_unavailable: TinkerTemporarilyUnavailableError,
+    sdk_version_incompatible: TinkerVersionIncompatibleError,
+    unauthorized: TinkerNotAuthorizedError,
+    invalid_request: TinkerInvalidRequestError,
+    quota_exhausted: TinkerQuotaExhaustedError,
+    cancelled: TinkerCancelledError,
   };
-  return new (C[code] ?? TinyError)(message, code, id);
+  return new (C[code] ?? TinkerError)(message, code, id);
 }
 async function responseFor(
   fetcher: FetchLike,
@@ -172,8 +172,8 @@ async function responseFor(
       credentials: "same-origin",
       headers: {
         "Accept": "application/json",
-        "X-Tiny-SDK-Version": SDK_VERSION,
-        "X-Tiny-App-API-Version": APP_API_VERSION,
+        "X-Tinker-SDK-Version": SDK_VERSION,
+        "X-Tinker-App-API-Version": APP_API_VERSION,
         ...init.headers,
       },
     });
@@ -181,21 +181,21 @@ async function responseFor(
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
     }
-    throw new TinyTemporarilyUnavailableError(
-      "TinyHost is temporarily unavailable.",
+    throw new TinkerTemporarilyUnavailableError(
+      "Tinkercloud is temporarily unavailable.",
       "temporarily_unavailable",
     );
   }
   return response;
 }
-async function errorForResponse(response: Response): Promise<TinyError> {
+async function errorForResponse(response: Response): Promise<TinkerError> {
   const body = await response.json().catch(() => undefined) as {
     error?: { code: string; message: string; request_id?: string };
   };
   const e = body?.error;
   return errorFor(
     e?.code ?? "temporarily_unavailable",
-    e?.message ?? "TinyHost is temporarily unavailable.",
+    e?.message ?? "Tinkercloud is temporarily unavailable.",
     e?.request_id,
   );
 }
@@ -208,8 +208,8 @@ async function json<T>(
   if (!response.ok) throw await errorForResponse(response);
   const body = await response.json().catch(() => undefined) as T | undefined;
   if (body === undefined) {
-    throw new TinyTemporarilyUnavailableError(
-      "TinyHost returned an invalid response.",
+    throw new TinkerTemporarilyUnavailableError(
+      "Tinkercloud returned an invalid response.",
       "temporarily_unavailable",
     );
   }
@@ -225,11 +225,11 @@ async function nullableJSON<T>(
   } catch (error) {
     // A missing key is ordinary recovery state, not an exceptional transport
     // failure. Authorization and capability errors remain typed failures.
-    if (error instanceof TinyError && error.code === "not_found") return null;
+    if (error instanceof TinkerError && error.code === "not_found") return null;
     throw error;
   }
 }
-function blobMetadata(value: unknown): TinyBlob {
+function blobMetadata(value: unknown): TinkerBlob {
   const blob = value as {
     id?: unknown;
     name?: unknown;
@@ -242,8 +242,8 @@ function blobMetadata(value: unknown): TinyBlob {
     typeof blob.size !== "number" || !Number.isFinite(blob.size) || blob.size < 0 ||
     typeof blob.content_type !== "string" || typeof blob.created_at !== "string"
   ) {
-    throw new TinyTemporarilyUnavailableError(
-      "TinyHost returned invalid blob metadata.",
+    throw new TinkerTemporarilyUnavailableError(
+      "Tinkercloud returned invalid blob metadata.",
       "temporarily_unavailable",
     );
   }
@@ -265,12 +265,12 @@ function chatResponse(value: unknown): ChatResponse {
     typeof output !== "number" || !Number.isSafeInteger(output) || output < 0 ||
     (reply.finish_reason !== "stop" && reply.finish_reason !== "length") ||
     typeof reply.request_id !== "string" || reply.request_id.length === 0
-  ) throw new TinyTemporarilyUnavailableError("TinyHost returned an invalid chat response.", "temporarily_unavailable");
+  ) throw new TinkerTemporarilyUnavailableError("Tinkercloud returned an invalid chat response.", "temporarily_unavailable");
   return { message: { role: "assistant", content: reply.message.content }, usage: { inputTokens: input, outputTokens: output }, finishReason: reply.finish_reason, requestId: reply.request_id };
 }
 function documentMetadata<T extends JSONObject>(
   value: unknown,
-): TinyDocument<T> {
+): TinkerDocument<T> {
   const document = value as {
     id?: unknown;
     data?: unknown;
@@ -287,8 +287,8 @@ function documentMetadata<T extends JSONObject>(
     typeof document.created_at !== "string" ||
     typeof document.updated_at !== "string"
   ) {
-    throw new TinyTemporarilyUnavailableError(
-      "TinyHost returned invalid document metadata.",
+    throw new TinkerTemporarilyUnavailableError(
+      "Tinkercloud returned invalid document metadata.",
       "temporarily_unavailable",
     );
   }
@@ -323,7 +323,7 @@ export type LiveOptions = {
   cancel?: (id: unknown) => void;
   random?: () => number;
 };
-export interface TinyClientOptions {
+export interface TinkerClientOptions {
   fetch?: FetchLike;
   webSocket?: (url: string, protocols?: string | string[]) => Socket;
   origin?: string;
@@ -331,7 +331,7 @@ export interface TinyClientOptions {
   cancel?: LiveOptions["cancel"];
   random?: () => number;
 }
-export interface TinyClient {
+export interface TinkerClient {
   user: {
     current(options?: RequestOptions): Promise<CurrentUser>;
   };
@@ -363,10 +363,10 @@ export interface TinyClient {
   db: {
     collection<T extends JSONObject = JSONObject>(
       name: string,
-    ): TinyCollection<T>;
+    ): TinkerCollection<T>;
   };
   blobs: {
-    upload(file: File, options?: RequestOptions): Promise<TinyBlob>;
+    upload(file: File, options?: RequestOptions): Promise<TinkerBlob>;
     get(id: string, options?: RequestOptions): Promise<Blob | null>;
     list(options?: BlobListOptions): Promise<BlobList>;
     delete(id: string, options?: RequestOptions): Promise<{ deleted: boolean }>;
@@ -501,8 +501,8 @@ export class LiveChannel {
     if (!this.wanted || this.socket) return;
     this.setStatus(this.status === "offline" ? "connecting" : "reconnecting");
     const s = this.socket = this.options.webSocket(
-      this.options.origin.replace(/^http/, "ws") + "/_tiny/ws/v1",
-      `tiny.sdk.${SDK_VERSION}.api.${APP_API_VERSION}`,
+      this.options.origin.replace(/^http/, "ws") + "/_tinker/ws/v1",
+      `tinker.sdk.${SDK_VERSION}.api.${APP_API_VERSION}`,
     );
     s.onopen = () => {
       this.setStatus("connected");
@@ -521,7 +521,7 @@ export class LiveChannel {
     s.onclose = () => {
       this.socket = undefined;
       if (this.pending) {
-        this.pending.reject(new TinyTemporarilyUnavailableError("Live connection closed.", "temporarily_unavailable"));
+        this.pending.reject(new TinkerTemporarilyUnavailableError("Live connection closed.", "temporarily_unavailable"));
         this.pending = undefined;
       }
       if (!this.wanted) return;
@@ -533,7 +533,7 @@ export class LiveChannel {
     };
     s.onerror = () => {
       if (this.pending) {
-        this.pending.reject(new TinyTemporarilyUnavailableError("Live connection failed.", "temporarily_unavailable"));
+        this.pending.reject(new TinkerTemporarilyUnavailableError("Live connection failed.", "temporarily_unavailable"));
         this.pending = undefined;
       }
     };
@@ -589,7 +589,7 @@ export class LiveChannel {
   }
   publish(event: string, payload: JSONValue): void {
     if (this.socket?.readyState !== 1) {
-      throw new TinyTemporarilyUnavailableError(
+      throw new TinkerTemporarilyUnavailableError(
         "Live channel is not connected.",
         "temporarily_unavailable",
       );
@@ -614,7 +614,7 @@ export class LiveChannel {
     }
     this.retry = undefined;
     if (this.pending) {
-      this.pending.reject(new TinyTemporarilyUnavailableError("Live connection closed.", "temporarily_unavailable"));
+      this.pending.reject(new TinkerTemporarilyUnavailableError("Live connection closed.", "temporarily_unavailable"));
       this.pending = undefined;
     }
     this.socket?.close();
@@ -633,8 +633,8 @@ function collectionClient<T extends JSONObject>(
   name: string,
   fetcher: FetchLike,
   managedLive: () => LiveChannel,
-): TinyCollection<T> {
-  const base = `/_tiny/api/v1/db/${encodeURIComponent(name)}`;
+): TinkerCollection<T> {
+  const base = `/_tinker/api/v1/db/${encodeURIComponent(name)}`;
   const list = async (
     options: CollectionListOptions = {},
     snapshot = false,
@@ -653,8 +653,8 @@ function collectionClient<T extends JSONObject>(
       !Number.isSafeInteger(page.revision) ||
       page.revision < 0
     ) {
-      throw new TinyTemporarilyUnavailableError(
-        "TinyHost returned an invalid collection snapshot.",
+      throw new TinkerTemporarilyUnavailableError(
+        "Tinkercloud returned an invalid collection snapshot.",
         "temporarily_unavailable",
       );
     }
@@ -713,7 +713,7 @@ function collectionClient<T extends JSONObject>(
       let refreshing = false;
       let dirty = true;
       let initialized = false;
-      let current = new Map<string, TinyDocument<T>>();
+      let current = new Map<string, TinkerDocument<T>>();
 
       const refresh = async () => {
         if (stopped) return;
@@ -790,9 +790,9 @@ function collectionClient<T extends JSONObject>(
     },
   };
 }
-export function createTiny(
-  options: TinyClientOptions = {},
-): TinyClient {
+export function createTinker(
+  options: TinkerClientOptions = {},
+): TinkerClient {
   const fetcher = options.fetch ?? fetch;
   const liveOptions: LiveOptions = {
     webSocket: options.webSocket ?? ((url, protocols) => new WebSocket(url, protocols)),
@@ -816,17 +816,17 @@ export function createTiny(
   return {
     user: {
       current: (o: RequestOptions = {}) =>
-        json<CurrentUser>(fetcher, "/_tiny/api/v1/me", { signal: o.signal }),
+        json<CurrentUser>(fetcher, "/_tinker/api/v1/me", { signal: o.signal }),
     },
     app: {
       info: (o: RequestOptions = {}) =>
-        json<AppInfo>(fetcher, "/_tiny/api/v1/app", { signal: o.signal }),
+        json<AppInfo>(fetcher, "/_tinker/api/v1/app", { signal: o.signal }),
     },
     capabilities: {
       list: (o: RequestOptions = {}) =>
         json<{ capabilities: Capability[] }>(
           fetcher,
-          "/_tiny/api/v1/capabilities",
+          "/_tinker/api/v1/capabilities",
           { signal: o.signal },
         ),
     },
@@ -836,7 +836,7 @@ export function createTiny(
         // wire contract explicit and stable. In particular, do not leak a
         // browser-only camelCase field into the Go JSON decoder.
         complete: async (request: ChatRequest, o: RequestOptions = {}) =>
-          chatResponse(await json<unknown>(fetcher, "/_tiny/api/v1/llm/chat", {
+          chatResponse(await json<unknown>(fetcher, "/_tinker/api/v1/llm/chat", {
             method: "POST", signal: o.signal,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -852,13 +852,13 @@ export function createTiny(
       get: <T extends JSONValue>(key: string, o: RequestOptions = {}) =>
         nullableJSON<KVEntry<T>>(
           fetcher,
-          `/_tiny/api/v1/kv/${encodeURIComponent(key)}`,
+          `/_tinker/api/v1/kv/${encodeURIComponent(key)}`,
           { signal: o.signal },
         ),
       set: <T extends JSONValue>(key: string, value: T, o: SetOptions = {}) =>
         json<KVEntry<T>>(
           fetcher,
-          `/_tiny/api/v1/kv/${encodeURIComponent(key)}`,
+          `/_tinker/api/v1/kv/${encodeURIComponent(key)}`,
           {
             method: "PUT",
             signal: o.signal,
@@ -872,7 +872,7 @@ export function createTiny(
       delete: (key: string, o: SetOptions = {}) =>
         json<{ deleted: boolean }>(
           fetcher,
-          `/_tiny/api/v1/kv/${encodeURIComponent(key)}`,
+          `/_tinker/api/v1/kv/${encodeURIComponent(key)}`,
           {
             method: "DELETE",
             signal: o.signal,
@@ -885,7 +885,7 @@ export function createTiny(
         if (o.prefix) q.set("prefix", o.prefix);
         if (o.cursor) q.set("cursor", o.cursor);
         if (o.limit) q.set("limit", String(o.limit));
-        const page = await json<KVList<T>>(fetcher, `/_tiny/api/v1/kv?${q}`, {
+        const page = await json<KVList<T>>(fetcher, `/_tinker/api/v1/kv?${q}`, {
           signal: o.signal,
         });
         // Older servers serialized an empty Go slice as `entries: null`. Keep
@@ -902,7 +902,7 @@ export function createTiny(
         const body = new FormData();
         // The display name is multipart metadata, never a server storage key.
         body.append("file", file, file.name);
-        const response = await responseFor(fetcher, "/_tiny/api/v1/blobs", {
+        const response = await responseFor(fetcher, "/_tinker/api/v1/blobs", {
           method: "POST",
           signal: o.signal,
           body,
@@ -913,7 +913,7 @@ export function createTiny(
       get: async (id: string, o: RequestOptions = {}) => {
         const response = await responseFor(
           fetcher,
-          `/_tiny/api/v1/blobs/${encodeURIComponent(id)}`,
+          `/_tinker/api/v1/blobs/${encodeURIComponent(id)}`,
           { signal: o.signal },
         );
         if (response.status === 404) return null;
@@ -926,7 +926,7 @@ export function createTiny(
         if (o.limit) q.set("limit", String(o.limit));
         const page = await json<{ blobs?: unknown; next_cursor?: unknown }>(
           fetcher,
-          `/_tiny/api/v1/blobs?${q}`,
+          `/_tinker/api/v1/blobs?${q}`,
           { signal: o.signal },
         );
         return {
@@ -937,7 +937,7 @@ export function createTiny(
       delete: (id: string, o: RequestOptions = {}) =>
         json<{ deleted: boolean }>(
           fetcher,
-          `/_tiny/api/v1/blobs/${encodeURIComponent(id)}`,
+          `/_tinker/api/v1/blobs/${encodeURIComponent(id)}`,
           {
             method: "DELETE",
             signal: o.signal,
@@ -953,7 +953,7 @@ export function createTiny(
         ) => void,
       ) => {
         // KV notifications use their own protocol frame, not a custom channel.
-        // `_tiny*` is intentionally reserved and would be rejected by the hub.
+        // `_tinker*` is intentionally reserved and would be rejected by the hub.
         const c = sharedLive();
         const off = c.onKv(prefix, handler);
         // A listener reconnects in the background. Consume the first failed
@@ -967,4 +967,4 @@ export function createTiny(
     },
   };
 }
-export const tiny: TinyClient = createTiny();
+export const tinker: TinkerClient = createTinker();

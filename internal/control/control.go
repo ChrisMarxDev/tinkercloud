@@ -5,8 +5,8 @@ package control
 import (
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/audit"
-	"github.com/tinyhost/tiny/internal/tokens"
+	"github.com/ChrisMarxDev/tinkercloud/internal/audit"
+	"github.com/ChrisMarxDev/tinkercloud/internal/tokens"
 	"time"
 )
 

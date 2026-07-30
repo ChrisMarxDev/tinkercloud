@@ -10,7 +10,7 @@ second listener.
 - The gateway derives the immutable app ID from the validated host and passes
   it in a sealed `AuthorizationContext`. Browser input never selects an app
   database, collection namespace, or document storage path.
-- TinyHost stores each app's data at `apps/{immutable-app-id}/data.db` below
+- Tinkercloud stores each app's data at `apps/{immutable-app-id}/data.db` below
   the private data root. The control database remains separate and owns apps,
   policy, sessions, deployments, audit, and all authorization state.
 - A collection is app-shared current state. It has no per-viewer ACL,
@@ -24,7 +24,7 @@ Each document is an object of the form:
 ```json
 {
   "id": "doc_abcdefghijklmnopqrstuv",
-  "data": { "title": "Ship TinyHost", "done": false },
+  "data": { "title": "Ship Tinkercloud", "done": false },
   "version": 1,
   "created_at": "2026-07-29T12:00:00Z",
   "updated_at": "2026-07-29T12:00:00Z"
@@ -35,7 +35,7 @@ Each document is an object of the form:
   alphanumeric characters, and may contain lowercase ASCII alphanumerics,
   `_`, and `-` internally.
 - IDs are server-issued opaque `doc_` identifiers. Callers may not supply one
-  for creation. A route ID must match TinyHost's server-issued format.
+  for creation. A route ID must match Tinkercloud's server-issued format.
 - Data must be a JSON object, not an array, scalar, or `null`.
 - Create, get, update, delete, bounded ID-ordered list, and bounded snapshot
   are the initial operations. Updates/deletes accept an optional expected
@@ -72,13 +72,13 @@ or resume cursor. On reconnect or a missed hint, the SDK reads an authoritative
 snapshot/list from SQLite.
 
 The SDK multiplexes managed KV-prefix and collection subscriptions for one
-Tiny client over one app-scoped WebSocket. A listener's cleanup affects only
+Tinker client over one app-scoped WebSocket. A listener's cleanup affects only
 that listener; the connection closes when the last managed listener leaves.
 The typed `unsubscribe_kv` and `unsubscribe_collection` frames remove the
 corresponding server-side subscription immediately, so a removed listener
 cannot receive a later hint. Reconnect creates a new connection, resubscribes
 only the remaining subscriptions, and recovers current state through the same
-authoritative reads. Explicit `tiny.live.channel(name)` channels remain
+authoritative reads. Explicit `tinker.live.channel(name)` channels remain
 independent application channels.
 
 ## Deny-path charter

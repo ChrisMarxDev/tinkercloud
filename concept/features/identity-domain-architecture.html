@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — One Domain, One Browser Identity</title>
+  <title>Tinkercloud — One Domain, One Browser Identity</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -41,14 +41,14 @@
       <table>
         <thead><tr><th>Hostname</th><th>Owner and purpose</th><th>Browser credential received</th></tr></thead>
         <tbody>
-          <tr><td><code>admin.&lt;domain&gt;</code></td><td>TinyHost dashboard and sole browser OTP identity broker.</td><td>Platform identity only; host-only.</td></tr>
+          <tr><td><code>admin.&lt;domain&gt;</code></td><td>Tinkercloud dashboard and sole browser OTP identity broker.</td><td>Platform identity only; host-only.</td></tr>
           <tr><td><code>&lt;slug&gt;.&lt;domain&gt;</code></td><td>One server-derived deployed app origin.</td><td>That app’s host-only child session only.</td></tr>
-          <tr><td><code>api</code>, <code>auth</code>, <code>status</code>, <code>www</code>, <code>docs</code>, <code>install</code></td><td>Reserved labels; never app slugs. They are either an explicit TinyHost route or fail closed.</td><td>None unless an exact TinyHost route later defines one.</td></tr>
+          <tr><td><code>api</code>, <code>auth</code>, <code>status</code>, <code>www</code>, <code>docs</code>, <code>install</code></td><td>Reserved labels; never app slugs. They are either an explicit Tinkercloud route or fail closed.</td><td>None unless an exact Tinkercloud route later defines one.</td></tr>
         </tbody>
       </table>
       <p>The operator configures <code>*.&lt;domain&gt;</code> once. DNS wildcard
         routing and TLS coverage are separate: a wildcard DNS record does not
-        supply a certificate. TinyHost may issue certificates on demand for
+        supply a certificate. Tinkercloud may issue certificates on demand for
         each exact admin/app host; a wildcard certificate is optional.</p>
     </section>
 
@@ -104,7 +104,7 @@
         child session is valid only for its resolved app and remains subject to
         current policy on every protected request and WebSocket upgrade.</p>
       <p><strong>Logout:</strong> app-local logout revokes only the current app child
-        session. Global TinyHost logout at <code>admin</code> revokes the platform
+        session. Global Tinkercloud logout at <code>admin</code> revokes the platform
         identity and every derived child session after the revocation transaction
         commits. It does not revoke CLI tokens. An identity switch similarly
         invalidates the previous identity’s child sessions.</p>

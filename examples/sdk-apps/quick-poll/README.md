@@ -11,4 +11,4 @@ A private, replaceable preference poll demonstrating:
 
 This is not a secret or tamper-proof ballot: every allowed viewer runs
 untrusted app JavaScript within the shared app capability boundary. Build from
-the parent directory with `npm run build`, then run `tiny deploy .` here.
+the parent directory with `npm run build`, then run `tinker deploy .` here.

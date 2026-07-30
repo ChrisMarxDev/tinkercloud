@@ -18,7 +18,7 @@ func TestWebSocketDefaultFrameLimitDeniesOversizeFrame(t *testing.T) {
 	}))
 	defer s.Close()
 
-	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tiny/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
+	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tinker/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestWebSocketPublishRateLimitUsesInjectedClock(t *testing.T) {
 	}))
 	defer s.Close()
 
-	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tiny/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
+	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tinker/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestWebSocketSilentPeerClosesWithinLivenessBound(t *testing.T) {
 	// The client deliberately never calls Read. coder/websocket can only
 	// service server pings while reading, so this models a peer retaining an
 	// otherwise-open TCP connection without responding to a ping.
-	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tiny/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
+	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tinker/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestWebSocketPongResponsivePeerStaysAlive(t *testing.T) {
 	}))
 	defer s.Close()
 
-	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tiny/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
+	c, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(s.URL, "http")+"/_tinker/ws/v1", &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {s.URL}}})
 	if err != nil {
 		t.Fatal(err)
 	}

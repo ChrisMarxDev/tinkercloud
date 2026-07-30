@@ -12,9 +12,9 @@ import (
 
 var (
 	// ErrInvalidSlug means the input is not one canonical DNS hostname label
-	// accepted for a TinyHost app origin.
+	// accepted for a Tinkercloud app origin.
 	ErrInvalidSlug = errors.New("invalid app slug")
-	// ErrReservedSlug means the canonical hostname label belongs to TinyHost,
+	// ErrReservedSlug means the canonical hostname label belongs to Tinkercloud,
 	// rather than to a deployer app.
 	ErrReservedSlug = errors.New("reserved app slug")
 )

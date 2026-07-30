@@ -6,13 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 	"net/http"
 	"sync"
 	"time"
 )
 
-const AppCookieName = "__Host-tiny_app"
+const AppCookieName = "__Host-tinker_app"
 
 func AppCookie(token string, expiry time.Time) *http.Cookie {
 	return &http.Cookie{Name: AppCookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expiry}

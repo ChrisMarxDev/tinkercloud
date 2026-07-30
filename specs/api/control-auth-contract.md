@@ -14,10 +14,10 @@ bearer, and a bearer is never accepted from a browser cookie. Authority is
 issued only to a normalized active authorized deployer and every use rechecks
 active status, expiry, revocation, scope, and resource ownership.
 
-The interactive deployer CLI persists its bearer only in one Tiny-owned
+The interactive deployer CLI persists its bearer only in one Tinkercloud-owned
 per-user credential file per normalized HTTPS platform server URL:
-`os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`. The
-platform-specific Tiny configuration directory is mode `0700`; the credential
+`os.UserConfigDir()/tinker/<sha256(normalized-server)>.json`. The
+platform-specific Tinker configuration directory is mode `0700`; the credential
 file is a regular, non-symlinked mode-`0600` file. Creation and replacement
 reject symlinks and use an atomic same-directory replacement, so a partial
 write can never be treated as a credential. The file is bounded, versioned JSON
@@ -28,14 +28,14 @@ or environment variables and is never emitted in CLI output or logs. This local
 persistence is only for CLI bearer reuse; it is neither a browser identity nor
 an app credential.
 
-`tiny login` first loads that exact server-bound credential and calls the
+`tinker login` first loads that exact server-bound credential and calls the
 authenticated `GET /api/v1/whoami` endpoint. A complete, authorized response
 reuses the existing bearer without requesting an OTP, issuing a new token, or
 rewriting the credential file; the CLI confirms the server-derived identity.
 An unauthorized or expired bearer is not reusable and falls back to the normal
 CLI-channel OTP flow. Transport, dependency, malformed-response, unexpected
 status, and ambiguous authorization failures fail closed: they neither start an
-OTP request nor change the stored credential. `tiny login --force` is the
+OTP request nor change the stored credential. `tinker login --force` is the
 explicit account-switch path. It skips reuse, completes a fresh OTP, and
 replaces the stored bearer only after a successful authenticated `whoami`
 confirmation for the newly issued token; failure leaves the prior credential
@@ -56,9 +56,9 @@ failure category—`cli_otp_issuance_entropy` or one of
 `cli_otp_issuance_persistence_commit`—with no email, transaction, provider
 response, database error, path, or credential value.
 
-After any successful `tiny login`—whether it reused a validated bearer or
+After any successful `tinker login`—whether it reused a validated bearer or
 completed fresh OTP—the CLI persists the normalized HTTPS platform URL as a
-separate non-secret default in `os.UserConfigDir()/tiny/default-server.json`.
+separate non-secret default in `os.UserConfigDir()/tinker/default-server.json`.
 It uses exact bounded versioned JSON containing only `version` and `server`,
 the same non-symlinked mode-`0700` directory and mode-`0600` regular-file
 checks as credentials, atomic replacement, and directory fsync. A later CLI
@@ -80,7 +80,7 @@ bearer. The route derives both deployer and bearer-row ID from authentication,
 then atomically revokes exactly that bearer and records a safe audit event. It
 has no token ID, app ID, cookie, or body input, and cannot revoke browser
 identity families, app sessions, app-scoped bearer tokens, or any other CLI
-bearer. A CLI `tiny logout` deletes only the matching local
+bearer. A CLI `tinker logout` deletes only the matching local
 server-bound credential after this success. `401 not_authorized` means the
 bearer is already unusable and permits that same local cleanup; transport,
 5xx, persistence, malformed-response, and other ambiguous failures retain the
@@ -121,7 +121,7 @@ at most one credential.
 The exact `admin.<domain>` host exposes a server-rendered login and dashboard at
 `/login` and `/`. The form OTP flow has the same generic delivery response for
 every syntactically valid email. Successful verification sets only the
-host-only `__Host-tiny_identity` cookie (`Secure`, `HttpOnly`, `SameSite=Lax`,
+host-only `__Host-tinker_identity` cookie (`Secure`, `HttpOnly`, `SameSite=Lax`,
 `Path=/`, no `Domain`). The same identity can start app-bound handoffs without
 another OTP, but it receives dashboard data only after a current role check.
 
@@ -152,7 +152,7 @@ an email or domain beyond the current policy, `confirm_broadening: true` is
 also required; the dashboard presents an explicit confirmation and a safe
 post-success summary.
 
-`tiny access set APP --file POLICY.json` first reads the caller's current
+`tinker access set APP --file POLICY.json` first reads the caller's current
 server-derived policy. It uses that read only to fill a missing
 `expected_revision` and to identify additions in the requested complete policy;
 it never computes authorization locally. When the requested revision still
@@ -173,7 +173,7 @@ cannot turn a broadened write into an authorized one.
 - A deployer cannot receive operator-only deployer or audit read models.
 - A missing, cross-origin, or mismatched CSRF form cannot change dashboard or
   global identity state.
-- Dashboard “Sign out of TinyHost” succeeds only after it durably revokes the
+- Dashboard “Sign out of Tinkercloud” succeeds only after it durably revokes the
   presented identity family and every derived app session. Missing revocation
   wiring or persistence failure leaves cookies intact, returns a safe server
   failure, and cannot revoke a CLI/agent bearer. App-local logout revokes only
@@ -188,7 +188,7 @@ cannot turn a broadened write into an authorized one.
   stale policy state is unavailable rather than rendered as an empty allowlist.
 - The owner is always an implicit viewer. An empty displayed allowlist means
   owner-only, never public; the dashboard explains that a future activation can
-  replace the current revision with the selected immutable `tiny.yaml` policy.
+  replace the current revision with the selected immutable `tinker.yaml` policy.
 - Login, dashboard, and error rendering never disclose OTPs, bearer values,
   token hashes, provider values, or filesystem paths.
 - Incorrect OTP submissions consume the configured attempt budget even though

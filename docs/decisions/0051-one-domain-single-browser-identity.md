@@ -4,21 +4,21 @@
 
 ## Context
 
-TinyHost currently describes a configured platform host, app hosts beneath an
+Tinkercloud currently describes a configured platform host, app hosts beneath an
 app suffix, a platform-host global viewer identity, host-only app sessions, and
 a distinct dashboard/control browser session. The separate dashboard browser
 session duplicates OTP/browser credential machinery and makes one person’s
 browser state harder to explain, revoke, and audit. It also risks future
 compatibility layers where different browser credentials overlap.
 
-TinyHost must keep the gateway as the only public security boundary and keep
+Tinkercloud must keep the gateway as the only public security boundary and keep
 untrusted app origins isolated. Browser authentication cannot turn a matching
 email into dashboard role or app access; deployer CLI credentials must remain
 separate.
 
 ## Decision
 
-The operator supplies one root domain. TinyHost reserves the exact hostname
+The operator supplies one root domain. Tinkercloud reserves the exact hostname
 `admin.<domain>` for the dashboard and the **sole browser identity broker**.
 Deployed apps use exactly `<slug>.<domain>` under `*.<domain>`. `admin`, `api`,
 `auth`, `status`, `www`, `docs`, and `install` are reserved labels and cannot be
@@ -42,7 +42,7 @@ host-only `__Host-` child session. The identity cookie is never accepted on an
 app request as app authority. Redirect preservation applies to a safe path and
 query only; fragments are not guaranteed.
 
-App-local logout revokes only the current app’s child session. Global TinyHost
+App-local logout revokes only the current app’s child session. Global Tinkercloud
 logout and browser identity switching happen only at `admin.<domain>` and, after
 the revocation transaction commits, revoke every derived child app session and
 close affected live connections. They do not revoke CLI bearer tokens. CLI and
@@ -54,7 +54,7 @@ browser login/control-session issuance model is removed during implementation;
 it must not coexist as a second browser issuance path.
 
 Wildcard DNS routing and TLS are distinct requirements. The operator needs one
-wildcard DNS record. TinyHost may continue issuing certificates on demand for
+wildcard DNS record. Tinkercloud may continue issuing certificates on demand for
 each exact admin/app hostname; a wildcard certificate is optional. Setup and
 activation evidence must prove trusted certificate coverage for the exact host
 being served because wildcard DNS alone is insufficient.

@@ -1,4 +1,4 @@
-module github.com/tinyhost/tiny
+module github.com/ChrisMarxDev/tinkercloud
 
 go 1.25.0
 

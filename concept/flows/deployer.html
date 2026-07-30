@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Complete Deployer Flow</title>
+  <title>Tinkercloud — Complete Deployer Flow</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <nav>
       <a href="../index.html">Product concept</a>
       <a href="operator.html">Operator flow</a>
-      <a href="tinyhost-operator-deployer-flows.tldraw">Editable canvas</a>
+      <a href="tinkercloud-operator-deployer-flows.tldraw">Editable canvas</a>
       <a href="../../PRINCIPLES.md">Principles</a>
       <a href="../../PRD.md">PRD</a>
     </nav>
@@ -21,7 +21,7 @@
       installation, deploy-first onboarding, persistent login, generated
       manifest, verified activation, daily management, account switching,
       logout, and permanent app deletion.</p>
-    <p class="promise">The deployer runs <code>tiny deploy .</code>. TinyHost
+    <p class="promise">The deployer runs <code>tinker deploy .</code>. Tinkercloud
       asks only for a necessary decision it cannot safely infer.</p>
   </header>
 
@@ -47,7 +47,7 @@
         <p class="eyebrow">Scope</p>
         <ul>
           <li>Operator-authorized deployer email.</li>
-          <li>Signed macOS/Linux <code>tiny</code> client.</li>
+          <li>Signed macOS/Linux <code>tinker</code> client.</li>
           <li>Useful static project; existing build output is reused, while
             missing output produces one exact project-owned build action.</li>
           <li>Verified default platform and persistent scoped bearer.</li>
@@ -63,7 +63,7 @@
           <li>No project-local deployer credential.</li>
           <li>No public app or implicit viewer-access broadening.</li>
           <li>No deployer-selected release rollback.</li>
-          <li>No required hand-authored <code>tiny.yaml</code>.</li>
+          <li>No required hand-authored <code>tinker.yaml</code>.</li>
         </ul>
       </section>
     </div>
@@ -81,7 +81,7 @@
         <tbody>
           <tr>
             <td>1</td>
-            <td>Receive the TinyHost platform URL from the operator.</td>
+            <td>Receive the Tinkercloud platform URL from the operator.</td>
             <td>The operator has already placed the deployer email in the global active allowlist.</td>
             <td>No invitation account, password, team, or organization setup.</td>
             <td>The existing email inbox is assumed.</td>
@@ -89,7 +89,7 @@
           </tr>
           <tr>
             <td>2</td>
-            <td>Install the signed <code>tiny</code> client as the normal OS account, without <code>sudo</code>.</td>
+            <td>Install the signed <code>tinker</code> client as the normal OS account, without <code>sudo</code>.</td>
             <td>The installer selects the local OS/architecture and verifies the release signature before writing to the per-user executable location.</td>
             <td>An alternate signed release source only when intentionally overriding the trusted default.</td>
             <td>OS, architecture, and install path.</td>
@@ -99,13 +99,13 @@
             <td>3</td>
             <td>Open a useful static application project.</td>
             <td>The existing framework/toolchain remains responsible for source and dependencies.</td>
-            <td>No TinyHost project template is required.</td>
+            <td>No Tinkercloud project template is required.</td>
             <td>The current directory is the project root.</td>
-            <td>TinyHost hosts built static output; it does not own the app’s build system.</td>
+            <td>Tinkercloud hosts built static output; it does not own the app’s build system.</td>
           </tr>
           <tr>
             <td>4</td>
-            <td>Run <code>tiny deploy .</code> from the project root.</td>
+            <td>Run <code>tinker deploy .</code> from the project root.</td>
             <td>The CLI begins local, platform, authentication, manifest, and deployment preflight as one resumable flow.</td>
             <td>None yet.</td>
             <td>Project path defaults to the current directory.</td>
@@ -113,11 +113,11 @@
           </tr>
           <tr>
             <td>5</td>
-            <td>If no valid built output exists, run the exact project-owned build action Tiny identifies, then rerun <code>tiny deploy .</code>.</td>
-            <td>TinyHost never executes the build; with existing output it skips this branch entirely.</td>
+            <td>If no valid built output exists, run the exact project-owned build action Tinker identifies, then rerun <code>tinker deploy .</code>.</td>
+            <td>Tinkercloud never executes the build; with existing output it skips this branch entirely.</td>
             <td>No build-command prompt.</td>
             <td>Existing build scripts/toolchain remain authoritative.</td>
-            <td>Building is necessary only when output is absent; arbitrary local script execution remains outside TinyHost.</td>
+            <td>Building is necessary only when output is absent; arbitrary local script execution remains outside Tinkercloud.</td>
           </tr>
         </tbody>
       </table>
@@ -137,15 +137,15 @@
           <tr>
             <td>6</td>
             <td>If no default exists, enter the HTTPS platform URL received from the operator.</td>
-            <td>Tiny normalizes it, follows no redirect, proves API compatibility, and saves only the verified non-secret URL.</td>
+            <td>Tinker normalizes it, follows no redirect, proves API compatibility, and saves only the verified non-secret URL.</td>
             <td>One platform URL, once.</td>
             <td>Later human commands reuse it. An explicit <code>--server</code> override is invocation-only.</td>
-            <td>The CLI cannot discover which independent TinyHost the deployer intends to use.</td>
+            <td>The CLI cannot discover which independent Tinkercloud the deployer intends to use.</td>
           </tr>
           <tr>
             <td>7</td>
             <td>If a saved bearer exists, provide no input.</td>
-            <td>Tiny calls version and authenticated <code>whoami</code>; a valid bearer confirms the deployer and continues silently.</td>
+            <td>Tinker calls version and authenticated <code>whoami</code>; a valid bearer confirms the deployer and continues silently.</td>
             <td>None.</td>
             <td>Server and identity come from protected saved state and server proof.</td>
             <td>Repeated login is unnecessary while current authorization remains valid.</td>
@@ -169,7 +169,7 @@
           <tr>
             <td>10</td>
             <td>Provide no storage choice or password.</td>
-            <td>Tiny confirms the new bearer with <code>whoami</code>, then atomically stores it in the protected per-user Tiny credential file.</td>
+            <td>Tinker confirms the new bearer with <code>whoami</code>, then atomically stores it in the protected per-user Tinker credential file.</td>
             <td>None.</td>
             <td>OS config path, hashed server filename, directory/file modes, and atomic replacement.</td>
             <td>Credential mechanics are not a product decision. Failure preserves any previous valid credential.</td>
@@ -191,8 +191,8 @@
         <tbody>
           <tr>
             <td>11</td>
-            <td>If a valid <code>tiny.yaml</code> exists, provide no input; otherwise provide no manifest.</td>
-            <td>Tiny validates and reuses an existing manifest without rewriting. When absent, it inspects only the non-symlinked project and conventional static-output candidates.</td>
+            <td>If a valid <code>tinker.yaml</code> exists, provide no input; otherwise provide no manifest.</td>
+            <td>Tinker validates and reuses an existing manifest without rewriting. When absent, it inspects only the non-symlinked project and conventional static-output candidates.</td>
             <td>None when explicit valid manifest state or exactly one safe output exists.</td>
             <td>Existing reviewed manifest wins; otherwise slug comes from the directory and output from unambiguous evidence.</td>
             <td>Known explicit state and filesystem facts should not be re-entered.</td>
@@ -200,7 +200,7 @@
           <tr>
             <td>12</td>
             <td>If multiple valid outputs exist, select the intended directory. If none exists, stop and build rather than choosing an arbitrary folder.</td>
-            <td>Tiny validates the selected path remains beneath the project and contains a deployable entry document.</td>
+            <td>Tinker validates the selected path remains beneath the project and contains a deployable entry document.</td>
             <td>Output directory only when discovery is ambiguous.</td>
             <td>No framework selection or build command.</td>
             <td>Uploading the wrong directory is unsafe; choosing among ambiguous evidence is necessary.</td>
@@ -208,7 +208,7 @@
           <tr>
             <td>13</td>
             <td>If the derived slug is invalid or generically unavailable, enter a replacement app name.</td>
-            <td>Tiny normalizes and checks the stable slug against platform rules/ownership; an existing same-owner app is reused automatically.</td>
+            <td>Tinker normalizes and checks the stable slug against platform rules/ownership; an existing same-owner app is reused automatically.</td>
             <td>App name only when the directory default cannot work.</td>
             <td>Valid directory name or existing same-owner app otherwise.</td>
             <td>A stable hostname needs a valid slug; asking every deployer is unnecessary.</td>
@@ -216,7 +216,7 @@
           <tr>
             <td>14</td>
             <td>Provide no standalone capability answer.</td>
-            <td>Tiny reuses explicit manifest capabilities or defaults to none. Detected SDK usage may produce a warning/evidence in review, never authority.</td>
+            <td>Tinker reuses explicit manifest capabilities or defaults to none. Detected SDK usage may produce a warning/evidence in review, never authority.</td>
             <td>Capabilities are entered only through deliberate “Edit” intent.</td>
             <td>No capability by default; never enable surface from unproven build inspection.</td>
             <td>An answer must express deployer intent; detection alone cannot prove required authority.</td>
@@ -224,7 +224,7 @@
           <tr>
             <td>15</td>
             <td>Review one deployment screen: server, slug, output, owner-only/current policy, immutable description, capabilities, fallback, and limits. Choose “Edit” only for deliberate customization.</td>
-            <td>Tiny displays slug, output, owner-only access, capabilities, fallback, server, and limits.</td>
+            <td>Tinker displays slug, output, owner-only access, capabilities, fallback, server, and limits.</td>
             <td>No intermediate confirmation; optional values only after choosing “Edit.”</td>
             <td>Owner-only private access, empty description, no fallback, and explicit-manifest capabilities or none.</td>
             <td>Optional product metadata must not become mandatory questions. Access broadening is explicit.</td>
@@ -232,7 +232,7 @@
           <tr>
             <td>16</td>
             <td>Choose one final action. When access broadens, its label names the consequence, for example “Deploy and grant access to 3 addresses.”</td>
-            <td>Tiny normalizes viewer rules, binds the candidate private policy, and begins deployment.</td>
+            <td>Tinker normalizes viewer rules, binds the candidate private policy, and begins deployment.</td>
             <td>One explicit final action; broadening is part of that same clearly named action.</td>
             <td>The deployer owner remains an implicit viewer.</td>
             <td>Authorization broadening must never be inferred from convenience.</td>
@@ -240,7 +240,7 @@
           <tr>
             <td>17</td>
             <td>Provide no separate manifest confirmation.</td>
-            <td>After the single final action, Tiny atomically writes a missing strict deterministic <code>tiny.yaml</code> without overwriting an existing file.</td>
+            <td>After the single final action, Tinker atomically writes a missing strict deterministic <code>tinker.yaml</code> without overwriting an existing file.</td>
             <td>No YAML syntax, schema version, config path, or “accept manifest?” question.</td>
             <td>Manifest location is the project root and records the reviewed choices.</td>
             <td>The file is a consequence/receipt of the confirmed deploy, not another decision.</td>
@@ -263,7 +263,7 @@
           <tr>
             <td>18</td>
             <td>After the one final action in step 16, provide no more input on the happy path.</td>
-            <td>Tiny validates manifest, credential, paths, symlinks, limits, policy, and server compatibility before creating bytes.</td>
+            <td>Tinker validates manifest, credential, paths, symlinks, limits, policy, and server compatibility before creating bytes.</td>
             <td>No second deploy approval; no app ID, owner ID, archive path, or hostname.</td>
             <td>App identity/ownership and stable URL are server-derived.</td>
             <td>One deployment intent must not become review + manifest + deploy confirmations.</td>
@@ -271,7 +271,7 @@
           <tr>
             <td>19</td>
             <td>Wait while the CLI archives and uploads.</td>
-            <td>Tiny creates a private deterministic temporary archive, streams it with a fresh idempotency key, and always removes the temporary file.</td>
+            <td>Tinker creates a private deterministic temporary archive, streams it with a fresh idempotency key, and always removes the temporary file.</td>
             <td>None.</td>
             <td>Archive format, temporary path, idempotency key, and upload endpoint.</td>
             <td>Transport mechanics are not questions.</td>
@@ -303,7 +303,7 @@
           <tr>
             <td>23</td>
             <td>Open or copy the returned stable protected URL.</td>
-            <td>Tiny reports URL, deployment ID, immutable description, capabilities, and policy summary only after all gates pass.</td>
+            <td>Tinker reports URL, deployment ID, immutable description, capabilities, and policy summary only after all gates pass.</td>
             <td>None.</td>
             <td>Stable URL and IDs come from the activation result.</td>
             <td>Never ask the deployer to construct or guess an app URL.</td>
@@ -358,7 +358,7 @@
           <tr>
             <td>27</td>
             <td>Edit viewer email/domain access when needed and confirm broadening.</td>
-            <td>TinyHost revision-checks and atomically replaces current private policy; removal affects the next request and closes matching live access.</td>
+            <td>Tinkercloud revision-checks and atomically replaces current private policy; removal affects the next request and closes matching live access.</td>
             <td>Only intended viewer rules and broadening confirmation.</td>
             <td>Owner rule, app ID, policy revision, sessions, and revocation targets.</td>
             <td>The deployer decides who may view; internal policy selectors are server-derived.</td>
@@ -366,7 +366,7 @@
           <tr>
             <td>28</td>
             <td>Create/revoke scoped deployment-agent tokens only when automation is needed.</td>
-            <td>TinyHost shows a new secret once, stores only its hash, and enforces scope/expiry/ownership on every use.</td>
+            <td>Tinkercloud shows a new secret once, stores only its hash, and enforces scope/expiry/ownership on every use.</td>
             <td>Choose the narrow deployment-only preset; raw scopes/expiry appear only behind “Edit,” and broader scope requires explicit confirmation.</td>
             <td>Bounded default expiry, token ID, random secret, owner, and server.</td>
             <td>A token is unnecessary for normal interactive deploys.</td>
@@ -381,8 +381,8 @@
           </tr>
           <tr>
             <td>30</td>
-            <td>Deploy a new build with <code>tiny deploy .</code>.</td>
-            <td>Tiny reuses platform, credential, and manifest, then repeats validation/activation/protection proof.</td>
+            <td>Deploy a new build with <code>tinker deploy .</code>.</td>
+            <td>Tinker reuses platform, credential, and manifest, then repeats validation/activation/protection proof.</td>
             <td>No confirmation when state is unchanged. Ask only for local ambiguity or explicit policy broadening.</td>
             <td>Known project/server/identity values are not re-asked.</td>
             <td>Repeat deploy should feel like one command, not onboarding again.</td>
@@ -404,15 +404,15 @@
         <tbody>
           <tr>
             <td>31</td>
-            <td>Run <code>tiny login --force</code> to change deployer account.</td>
-            <td>Tiny keeps the previous bearer until fresh OTP and <code>whoami</code> prove the new account, then atomically replaces it.</td>
+            <td>Run <code>tinker login --force</code> to change deployer account.</td>
+            <td>Tinker keeps the previous bearer until fresh OTP and <code>whoami</code> prove the new account, then atomically replaces it.</td>
             <td>New email and OTP.</td>
             <td>Server and credential path.</td>
             <td>Account switching is deliberate; ordinary login should not repeatedly prompt.</td>
           </tr>
           <tr>
             <td>32</td>
-            <td>Run <code>tiny logout</code> to stop using the CLI account.</td>
+            <td>Run <code>tinker logout</code> to stop using the CLI account.</td>
             <td>The server revokes exactly the current CLI bearer; only confirmed revocation/already-unauthorized state permits local deletion. The default server remains.</td>
             <td>No token ID, server URL, or confirmation on the normal path.</td>
             <td>Exact bearer from authentication context and its local file.</td>
@@ -429,7 +429,7 @@
           <tr>
             <td>34</td>
             <td>Wait for deletion completion.</td>
-            <td>TinyHost first fails the app closed, closes live connections, then permanently removes app-owned policy, deployments/releases, tokens, viewer sessions, KV, blobs, app audit, and server-derived bytes.</td>
+            <td>Tinkercloud first fails the app closed, closes live connections, then permanently removes app-owned policy, deployments/releases, tokens, viewer sessions, KV, blobs, app audit, and server-derived bytes.</td>
             <td>None.</td>
             <td>All deletion targets are derived from the owned app.</td>
             <td>Success is impossible while cleanup remains uncertain.</td>
@@ -449,7 +449,7 @@
     <section id="implementation">
       <p class="eyebrow">Implementation sketch</p>
       <h2>One command composes bounded existing contracts</h2>
-      <pre>tiny deploy .
+      <pre>tinker deploy .
 → discover project + verified default platform
 → reuse bearer or complete OTP
 → derive safe manifest defaults

@@ -3,7 +3,7 @@
 ## Purpose
 
 These cases must fail before the two role-facing skill files are considered
-usable by an agent with no prior TinyHost knowledge.
+usable by an agent with no prior Tinkercloud knowledge.
 
 ## Deployer denials
 

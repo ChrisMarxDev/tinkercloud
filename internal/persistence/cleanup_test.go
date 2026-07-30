@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/jobs"
+	"github.com/ChrisMarxDev/tinkercloud/internal/jobs"
 )
 
 func TestCleanupCandidatesAndExecutionPreserveActiveAndRecovery(t *testing.T) {

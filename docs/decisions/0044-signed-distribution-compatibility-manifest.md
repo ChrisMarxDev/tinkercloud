@@ -4,7 +4,7 @@ Status: Accepted for distribution preparation
 
 ## Context
 
-TinyHost already signs each payload with version, API, schema, and digest
+Tinkercloud already signs each payload with version, API, schema, and digest
 labels. Package-manager candidates and self-update need a richer compatibility
 statement, but changing the artifact signature bytes would invalidate existing
 installers and verifiers.
@@ -24,7 +24,8 @@ or channel mutation.
 ## Consequences
 
 Existing artifact verification remains stable. Compatibility becomes
-tamper-evident and reviewable before install/update. The final product rename
-can replace public package/origin templates without redesigning the release
-format. Advancing a minimum client/SDK version becomes a deliberate contract
-change with denial tests and migration evidence.
+tamper-evident and reviewable before install/update. The locked product
+identity and a future release-origin decision can update public
+package/origin metadata without redesigning the release format. Advancing a
+minimum client/SDK version becomes a deliberate contract change with denial
+tests and migration evidence.

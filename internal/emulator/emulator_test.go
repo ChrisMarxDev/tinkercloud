@@ -61,19 +61,19 @@ func TestKVAndCollectionCRUDAndPersistence(t *testing.T) {
 	state := t.TempDir()
 	s := app(t, state)
 	h := s.Handler()
-	w := request(t, h, "PUT", "/_tiny/api/v1/kv/x", `{"value":{"ok":true}}`)
+	w := request(t, h, "PUT", "/_tinker/api/v1/kv/x", `{"value":{"ok":true}}`)
 	if w.Code != 200 {
 		t.Fatalf("set: %d %s", w.Code, w.Body.String())
 	}
-	w = request(t, h, "GET", "/_tiny/api/v1/kv/x", "")
+	w = request(t, h, "GET", "/_tinker/api/v1/kv/x", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"ok":true`) {
 		t.Fatalf("get: %d %s", w.Code, w.Body.String())
 	}
-	w = request(t, h, "PUT", "/_tiny/api/v1/kv/x", `{"value":1,"expected_version":99}`)
+	w = request(t, h, "PUT", "/_tinker/api/v1/kv/x", `{"value":1,"expected_version":99}`)
 	if w.Code != 409 {
 		t.Fatalf("conflict: %d", w.Code)
 	}
-	w = request(t, h, "POST", "/_tiny/api/v1/db/tasks", `{"data":{"title":"test"}}`)
+	w = request(t, h, "POST", "/_tinker/api/v1/db/tasks", `{"data":{"title":"test"}}`)
 	if w.Code != 201 || !strings.Contains(w.Body.String(), `"id":"doc_`) || !strings.Contains(w.Body.String(), "created_at") {
 		t.Fatalf("collection create: %d %s", w.Code, w.Body.String())
 	}
@@ -81,7 +81,7 @@ func TestKVAndCollectionCRUDAndPersistence(t *testing.T) {
 		ID string `json:"id"`
 	}
 	_ = json.Unmarshal(w.Body.Bytes(), &created)
-	w = request(t, h, "GET", "/_tiny/api/v1/db/tasks?snapshot=1", "")
+	w = request(t, h, "GET", "/_tinker/api/v1/db/tasks?snapshot=1", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"revision":1`) {
 		t.Fatalf("snapshot: %d %s", w.Code, w.Body.String())
 	}
@@ -95,22 +95,22 @@ func TestKVAndCollectionCRUDAndPersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer next.Close()
-	w = request(t, next.Handler(), "GET", "/_tiny/api/v1/db/tasks/"+created.ID, "")
+	w = request(t, next.Handler(), "GET", "/_tinker/api/v1/db/tasks/"+created.ID, "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "test") {
 		t.Fatalf("persist: %d %s", w.Code, w.Body.String())
 	}
 }
 func TestAPIIdentityAndUnknownMethodDenial(t *testing.T) {
 	s := app(t, "")
-	w := request(t, s.Handler(), "GET", "/_tiny/api/v1/me", "")
+	w := request(t, s.Handler(), "GET", "/_tinker/api/v1/me", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "local-viewer") {
 		t.Fatalf("identity: %d %s", w.Code, w.Body.String())
 	}
-	w = request(t, s.Handler(), "POST", "/_tiny/api/v1/me", "")
+	w = request(t, s.Handler(), "POST", "/_tinker/api/v1/me", "")
 	if w.Code != 404 {
 		t.Fatalf("method: %d", w.Code)
 	}
-	w = request(t, s.Handler(), "PUT", "/_tiny/api/v1/kv/a%2Fb", `{"value":1}`)
+	w = request(t, s.Handler(), "PUT", "/_tinker/api/v1/kv/a%2Fb", `{"value":1}`)
 	if w.Code != 400 {
 		t.Fatalf("escaped slash: %d", w.Code)
 	}
@@ -119,7 +119,7 @@ func TestLiveKVNotification(t *testing.T) {
 	s := app(t, "")
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tiny/ws/v1"
+	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tinker/ws/v1"
 	c, _, err := websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {ts.URL}}})
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestLiveKVNotification(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForEmulatorSubscription(t, s, "kv:x")
-	w := request(t, s.Handler(), "PUT", "/_tiny/api/v1/kv/x", `{"value":1}`)
+	w := request(t, s.Handler(), "PUT", "/_tinker/api/v1/kv/x", `{"value":1}`)
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
@@ -148,7 +148,7 @@ func TestCollectionWebSocketCompatibility(t *testing.T) {
 	s := app(t, "")
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tiny/ws/v1"
+	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tinker/ws/v1"
 	c, _, e := websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {ts.URL}}})
 	if e != nil {
 		t.Fatal(e)
@@ -158,7 +158,7 @@ func TestCollectionWebSocketCompatibility(t *testing.T) {
 		t.Fatal(e)
 	}
 	waitForEmulatorSubscription(t, s, "collection:tasks")
-	w := request(t, s.Handler(), "POST", "/_tiny/api/v1/db/tasks", `{"data":{"title":"test"}}`)
+	w := request(t, s.Handler(), "POST", "/_tinker/api/v1/db/tasks", `{"data":{"title":"test"}}`)
 	if w.Code != 201 {
 		t.Fatal(w.Code)
 	}
@@ -209,7 +209,7 @@ func TestWebSocketRejectsNonLoopbackOrigin(t *testing.T) {
 	s := app(t, "")
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
-	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tiny/ws/v1"
+	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tinker/ws/v1"
 	_, response, err := websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"https://example.test"}}})
 	if err == nil || response == nil || response.StatusCode != http.StatusForbidden {
 		t.Fatalf("non-loopback websocket origin accepted: response=%#v err=%v", response, err)
@@ -222,7 +222,7 @@ func TestWebSocketBoundsFramesAndSubscriptions(t *testing.T) {
 	defer ts.Close()
 	dial := func(t *testing.T) *websocket.Conn {
 		t.Helper()
-		ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tiny/ws/v1"
+		ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tinker/ws/v1"
 		c, _, err := websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {ts.URL}}})
 		if err != nil {
 			t.Fatal(err)
@@ -261,7 +261,7 @@ func TestWebSocketBoundsFramesAndSubscriptions(t *testing.T) {
 func TestCollectionWritesAreAtomicAndFailedWritesDoNotPublish(t *testing.T) {
 	s := app(t, "")
 	h := s.Handler()
-	w := request(t, h, "POST", "/_tiny/api/v1/db/tasks", `{"data":{"title":"first"}}`)
+	w := request(t, h, "POST", "/_tinker/api/v1/db/tasks", `{"data":{"title":"first"}}`)
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create: %d %s", w.Code, w.Body.String())
 	}
@@ -274,7 +274,7 @@ func TestCollectionWritesAreAtomicAndFailedWritesDoNotPublish(t *testing.T) {
 
 	ts := httptest.NewServer(h)
 	defer ts.Close()
-	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tiny/ws/v1"
+	ws := "ws" + strings.TrimPrefix(ts.URL, "http") + "/_tinker/ws/v1"
 	c, _, err := websocket.Dial(context.Background(), ws, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {ts.URL}}})
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +295,7 @@ func TestCollectionWritesAreAtomicAndFailedWritesDoNotPublish(t *testing.T) {
 		go func(title string) {
 			defer wg.Done()
 			<-start
-			response := request(t, h, http.MethodPut, "/_tiny/api/v1/db/tasks/"+created.ID, `{"data":{"title":"`+title+`"},"expected_version":1}`)
+			response := request(t, h, http.MethodPut, "/_tinker/api/v1/db/tasks/"+created.ID, `{"data":{"title":"`+title+`"},"expected_version":1}`)
 			codes <- response.Code
 		}(title)
 	}
@@ -325,7 +325,7 @@ func TestCollectionWritesAreAtomicAndFailedWritesDoNotPublish(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"version":2`) {
 		t.Fatalf("successful change event: %v %s", err, raw)
 	}
-	w = request(t, h, http.MethodPut, "/_tiny/api/v1/db/tasks/"+created.ID, `{"data":{"title":"stale"},"expected_version":1}`)
+	w = request(t, h, http.MethodPut, "/_tinker/api/v1/db/tasks/"+created.ID, `{"data":{"title":"stale"},"expected_version":1}`)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("stale write: %d %s", w.Code, w.Body.String())
 	}
@@ -340,17 +340,17 @@ func TestMutationDecoderRejectsExtraJSONAndInvalidDocumentID(t *testing.T) {
 	s := app(t, "")
 	h := s.Handler()
 	for _, path := range []string{
-		"/_tiny/api/v1/db/tasks/not-a-server-issued-id",
-		"/_tiny/api/v1/db/tasks/doc_abcdefghijklmnopqrstuvw", // 23 suffix bytes
+		"/_tinker/api/v1/db/tasks/not-a-server-issued-id",
+		"/_tinker/api/v1/db/tasks/doc_abcdefghijklmnopqrstuvw", // 23 suffix bytes
 	} {
 		if w := request(t, h, http.MethodGet, path, ""); w.Code != http.StatusBadRequest {
 			t.Fatalf("id %s: %d", path, w.Code)
 		}
 	}
-	if w := request(t, h, http.MethodPut, "/_tiny/api/v1/kv/strict", `{"value":1}{"value":2}`); w.Code != http.StatusBadRequest {
+	if w := request(t, h, http.MethodPut, "/_tinker/api/v1/kv/strict", `{"value":1}{"value":2}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("multi-value kv body: %d %s", w.Code, w.Body.String())
 	}
-	if w := request(t, h, http.MethodPost, "/_tiny/api/v1/db/tasks", `{"data":{"title":"x"}} {}`); w.Code != http.StatusBadRequest {
+	if w := request(t, h, http.MethodPost, "/_tinker/api/v1/db/tasks", `{"data":{"title":"x"}} {}`); w.Code != http.StatusBadRequest {
 		t.Fatalf("multi-value document body: %d %s", w.Code, w.Body.String())
 	}
 }
@@ -358,7 +358,7 @@ func TestMutationDecoderRejectsExtraJSONAndInvalidDocumentID(t *testing.T) {
 func TestKVConcurrentStaleVersionHasOneWinner(t *testing.T) {
 	s := app(t, "")
 	h := s.Handler()
-	if w := request(t, h, http.MethodPut, "/_tiny/api/v1/kv/counter", `{"value":0}`); w.Code != http.StatusOK {
+	if w := request(t, h, http.MethodPut, "/_tinker/api/v1/kv/counter", `{"value":0}`); w.Code != http.StatusOK {
 		t.Fatalf("seed: %d %s", w.Code, w.Body.String())
 	}
 	start := make(chan struct{})
@@ -369,7 +369,7 @@ func TestKVConcurrentStaleVersionHasOneWinner(t *testing.T) {
 		go func(value int) {
 			defer wg.Done()
 			<-start
-			w := request(t, h, http.MethodPut, "/_tiny/api/v1/kv/counter", fmt.Sprintf(`{"value":%d,"expected_version":1}`, value))
+			w := request(t, h, http.MethodPut, "/_tinker/api/v1/kv/counter", fmt.Sprintf(`{"value":%d,"expected_version":1}`, value))
 			codes <- w.Code
 		}(value)
 	}

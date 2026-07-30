@@ -15,7 +15,7 @@ func TestMiddlewareRedactsSensitiveRequestParts(t *testing.T) {
 		w.Header().Set("X-Request-ID", "req_abc123")
 		w.WriteHeader(http.StatusUnauthorized)
 	}), slog.New(slog.NewJSONHandler(&out, nil)))
-	r := httptest.NewRequest(http.MethodPost, "https://secret.example/_tiny/auth/otp?email=person@example.com&token=secret", strings.NewReader("cookie=bad"))
+	r := httptest.NewRequest(http.MethodPost, "https://secret.example/_tinker/auth/otp?email=person@example.com&token=secret", strings.NewReader("cookie=bad"))
 	r.Header.Set("Cookie", "session=secret")
 	h.ServeHTTP(httptest.NewRecorder(), r)
 	got := out.String()
@@ -42,7 +42,7 @@ func TestRouteClassNeverContainsPath(t *testing.T) {
 
 func TestServiceRejectsCallerSuppliedPath(t *testing.T) {
 	var out bytes.Buffer
-	Service(slog.New(slog.NewJSONHandler(&out, nil)), "/var/lib/tinyhost/releases/private", "succeeded", 1)
+	Service(slog.New(slog.NewJSONHandler(&out, nil)), "/var/lib/tinkercloud/releases/private", "succeeded", 1)
 	if strings.Contains(out.String(), "/var/lib/") || !strings.Contains(out.String(), "service.unknown") {
 		t.Fatalf("unsafe service log: %s", out.String())
 	}

@@ -48,7 +48,7 @@ func Issue(id, userID, appID string, scopes []Scope, expires time.Time) (Record,
 	if _, err := rand.Read(b); err != nil {
 		return Record{}, "", err
 	}
-	raw := "tiny_" + base64.RawURLEncoding.EncodeToString(b)
+	raw := "tinker_" + base64.RawURLEncoding.EncodeToString(b)
 	r := Record{ID: id, UserID: userID, AppID: appID, Hash: sha256.Sum256([]byte(raw)), Scopes: map[Scope]struct{}{}, ExpiresAt: expires.UTC()}
 	for _, s := range scopes {
 		if s == "" {
@@ -60,7 +60,7 @@ func Issue(id, userID, appID string, scopes []Scope, expires time.Time) (Record,
 }
 func (r Record) Authenticate(raw string, now time.Time) error {
 	h := sha256.Sum256([]byte(raw))
-	if !strings.HasPrefix(raw, "tiny_") || subtle.ConstantTimeCompare(r.Hash[:], h[:]) != 1 {
+	if !strings.HasPrefix(raw, "tinker_") || subtle.ConstantTimeCompare(r.Hash[:], h[:]) != 1 {
 		return ErrInvalid
 	}
 	if r.RevokedAt != nil {

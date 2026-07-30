@@ -29,8 +29,8 @@ async function exampleNames() {
 async function rewriteJavaScript(path) {
   const source = await readFile(path, "utf8");
   const browserSource = source
-    .replaceAll('from "@tinyhost/sdk"', 'from "./tiny-sdk.js"')
-    .replaceAll('import("@tinyhost/sdk")', 'import("./tiny-sdk.js")')
+    .replaceAll('from "@tinkercloud/sdk"', 'from "./tinker-sdk.js"')
+    .replaceAll('import("@tinkercloud/sdk")', 'import("./tinker-sdk.js")')
     .replaceAll('from "../../shared/errors.js"', 'from "./errors.js"');
   await writeFile(path, browserSource);
 }
@@ -41,7 +41,7 @@ async function buildExample(name, output) {
   await cp(source, output, { recursive: true });
   await cp(join(shared, "styles.css"), join(output, "styles.css"));
   await cp(join(shared, "errors.js"), join(output, "errors.js"));
-  await cp(sdk, join(output, "tiny-sdk.js"));
+  await cp(sdk, join(output, "tinker-sdk.js"));
   await rewriteJavaScript(join(output, "app.js"));
   await rewriteJavaScript(join(output, "errors.js"));
 }
@@ -52,7 +52,7 @@ async function assertRelease(name, output) {
     "errors.js",
     "index.html",
     "styles.css",
-    "tiny-sdk.js",
+    "tinker-sdk.js",
   ];
   const files = (await readdir(output)).sort();
   for (const file of required) {
@@ -66,19 +66,19 @@ async function assertRelease(name, output) {
   )) {
     const source = await readFile(join(output, file), "utf8");
     if (
-      file !== "tiny-sdk.js" &&
-      /(?:from\s+|import\()["']@tinyhost\/sdk["']/.test(source)
+      file !== "tinker-sdk.js" &&
+      /(?:from\s+|import\()["']@tinkercloud\/sdk["']/.test(source)
     ) {
       throw new Error(`${name}/${file}: unresolved SDK package import`);
     }
     if (
-      file !== "tiny-sdk.js" &&
+      file !== "tinker-sdk.js" &&
       (source.includes("http://") || source.includes("https://"))
     ) {
       throw new Error(`${name}/${file}: remote URL is not allowed`);
     }
     if (
-      file !== "tiny-sdk.js" &&
+      file !== "tinker-sdk.js" &&
       /\b(?:appId|app_id|viewerToken|deployerToken|apiSecret)\b/.test(source)
     ) {
       throw new Error(`${name}/${file}: client-selected identity or credential`);
@@ -94,7 +94,7 @@ if (names.length < 3) {
 let temporaryRoot;
 try {
   if (checkOnly) {
-    temporaryRoot = await mkdtemp(join(tmpdir(), "tiny-sdk-examples-"));
+    temporaryRoot = await mkdtemp(join(tmpdir(), "tinker-sdk-examples-"));
   }
   for (const name of names) {
     const output = checkOnly

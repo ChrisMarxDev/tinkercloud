@@ -3,11 +3,11 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$root"
-fuzz_time=${TINYHOST_FUZZ_TIME:-5s}
+fuzz_time=${TINKERCLOUD_FUZZ_TIME:-5s}
 # Keep the gate usable in restricted shells as well as CI. Callers may still
 # supply their own cache directory (for example, a CI cache action).
 if test -z "${GOCACHE:-}"; then
-  GOCACHE="${TMPDIR:-/tmp}/tinyhost-go-fuzz-cache"
+  GOCACHE="${TMPDIR:-/tmp}/tinkercloud-go-fuzz-cache"
   export GOCACHE
 fi
 mkdir -p "$GOCACHE"

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
 )
 
 type uiAuth struct {
@@ -45,7 +45,7 @@ func (a *uiActions) ReplaceAccess(_ context.Context, _ Actor, slug string, in Ac
 }
 func (a *uiActions) CreateToken(_ context.Context, _ Actor, slug string, _ TokenInput, _ string) (TokenResult, error) {
 	a.calls = append(a.calls, "token:"+slug)
-	return TokenResult{ID: "tok_safe", Token: "tiny_only_once", ExpiresAt: "later"}, a.err
+	return TokenResult{ID: "tok_safe", Token: "tinker_only_once", ExpiresAt: "later"}, a.err
 }
 func (a *uiActions) RevokeToken(_ context.Context, _ Actor, slug, token, _ string) error {
 	a.calls = append(a.calls, "revoke:"+slug+":"+token)
@@ -95,8 +95,8 @@ func (v *uiViews) Dashboard(_ context.Context, a Actor) (DashboardView, error) {
 
 func uiRequest(t *testing.T, p Platform, method, path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(method, "https://tiny.test"+path, strings.NewReader(body))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(method, "https://tinker.test"+path, strings.NewReader(body))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	for _, c := range cookies {
 		r.AddCookie(c)
@@ -108,10 +108,10 @@ func uiRequest(t *testing.T, p Platform, method, path, body string, cookies ...*
 
 func uiSameOriginRequest(t *testing.T, p Platform, method, path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest(method, "https://tiny.test"+path, strings.NewReader(body))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(method, "https://tinker.test"+path, strings.NewReader(body))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "https://tiny.test")
+	r.Header.Set("Origin", "https://tinker.test")
 	for _, c := range cookies {
 		r.AddCookie(c)
 	}
@@ -233,11 +233,11 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/login", "")
 	body := w.Body.String()
 	for _, want := range []string{
-		`class="tiny-auth-card"`,
-		`class="tiny-brand__mark"`,
-		`--tiny-canvas:`,
-		`--tiny-primary:`,
-		`TinyUI`,
+		`class="tinker-auth-card"`,
+		`class="tinker-brand__mark"`,
+		`--tinker-canvas:`,
+		`--tinker-primary:`,
+		`TinkerUI`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("login missing design-system contract %q: %s", want, body)
@@ -270,16 +270,16 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 	for _, want := range []string{
 		`data-state="active"`,
 		`data-state="degraded"`,
-		`data-tiny-app-filter hidden`,
+		`data-tinker-app-filter hidden`,
 		`aria-controls="app-list"`,
 		`id="app-list"`,
-		`data-tiny-app-list`,
-		`data-tiny-app-card`,
-		`data-tiny-app-slug="alpha"`,
-		`data-tiny-app-status="active"`,
-		`data-tiny-app-filter-count role="status" aria-live="polite"`,
+		`data-tinker-app-list`,
+		`data-tinker-app-card`,
+		`data-tinker-app-slug="alpha"`,
+		`data-tinker-app-status="active"`,
+		`data-tinker-app-filter-count role="status" aria-live="polite"`,
 		`No matching apps.`,
-		`<details class="tiny-details">`,
+		`<details class="tinker-details">`,
 		`Replace current policy`,
 		`Type <code>delete:alpha</code>`,
 		`Your VPS remains the recovery authority`,
@@ -307,7 +307,7 @@ func TestPlatformUIDashboardEscapesDescriptionsAndUsesOnlyStableGatewayLink(t *t
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", Description: `<script>alert("x")</script>`, StableURL: "https://alpha.apps.example.test/", Access: DashboardAccess{Mode: "private", Revision: 1}, Releases: []DashboardRelease{{ID: "d", State: "active", Description: "Immutable summary"}}}}}}}
 	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
 	body := w.Body.String()
-	for _, want := range []string{`data-tiny-app-description="&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;"`, `href="https://alpha.apps.example.test/"`, `target="_blank"`, `rel="noopener noreferrer"`, `aria-label="Open alpha in a new tab"`, `aria-label="Show QR code for alpha"`, `data-tiny-dialog-open="qr-alpha"`, `class="tiny-qr"`, `Scan with your phone`, `normal sign-in and access policy still apply`, `Immutable summary`} {
+	for _, want := range []string{`data-tinker-app-description="&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;"`, `href="https://alpha.apps.example.test/"`, `target="_blank"`, `rel="noopener noreferrer"`, `aria-label="Open alpha in a new tab"`, `aria-label="Show QR code for alpha"`, `data-tinker-dialog-open="qr-alpha"`, `class="tinker-qr"`, `Scan with your phone`, `normal sign-in and access policy still apply`, `Immutable summary`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q: %s", want, body)
 		}
@@ -324,7 +324,7 @@ func TestPlatformUIDashboardOmitsQRControlWhenStableURLCannotBeEncoded(t *testin
 	if !strings.Contains(body, `aria-label="Open alpha in a new tab"`) {
 		t.Fatalf("dashboard unexpectedly removed the independent stable launch link: %s", body)
 	}
-	for _, forbidden := range []string{`aria-label="Show QR code for alpha"`, `data-tiny-dialog-open="qr-alpha"`, `class="tiny-qr"`} {
+	for _, forbidden := range []string{`aria-label="Show QR code for alpha"`, `data-tinker-dialog-open="qr-alpha"`, `class="tinker-qr"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("dashboard rendered unsupported QR state %q: %s", forbidden, body)
 		}
@@ -344,7 +344,7 @@ func TestPlatformUIErrorStatesAreStyledAndKeepSafeStatusCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			w := uiRequest(t, p, tc.method, tc.path, "")
 			body := w.Body.String()
-			if w.Code != tc.want || !strings.Contains(body, `class="tiny-auth-card"`) || !strings.Contains(body, "Safe next step") || !strings.Contains(body, `role="alert"`) {
+			if w.Code != tc.want || !strings.Contains(body, `class="tinker-auth-card"`) || !strings.Contains(body, "Safe next step") || !strings.Contains(body, `role="alert"`) {
 				t.Fatalf("status=%d body=%s", w.Code, body)
 			}
 		})
@@ -362,10 +362,10 @@ func TestPlatformUIStalePolicyConflictIsStyledAndDoesNotExposeState(t *testing.T
 		}
 	}
 	form := url.Values{"csrf": {csrf.Value}, "expected_revision": {"1"}}
-	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/access", strings.NewReader(form.Encode()))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodPost, "https://tinker.test/apps/alpha/access", strings.NewReader(form.Encode()))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "https://tiny.test")
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
@@ -389,10 +389,10 @@ func TestPlatformUIRollbackFormRouteIsAbsentEvenWithValidBrowserTrustChecks(t *t
 		t.Fatal("missing CSRF cookie")
 	}
 	form := url.Values{"csrf": {csrf.Value}, "deployment": {"old-release"}}
-	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/rollback", strings.NewReader(form.Encode()))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodPost, "https://tinker.test/apps/alpha/rollback", strings.NewReader(form.Encode()))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "https://tiny.test")
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
@@ -412,15 +412,15 @@ func TestPlatformUICSRFAndSecretRedaction(t *testing.T) {
 			csrf = c
 		}
 	}
-	if csrf == nil || !csrf.Secure || !csrf.HttpOnly || strings.Contains(w.Body.String(), "secret_hash") || strings.Contains(w.Body.String(), "tiny_") {
+	if csrf == nil || !csrf.Secure || !csrf.HttpOnly || strings.Contains(w.Body.String(), "secret_hash") || strings.Contains(w.Body.String(), "tinker_") {
 		t.Fatalf("unsafe dashboard: cookies=%#v body=%s", w.Result().Cookies(), w.Body.String())
 	}
 	control := &http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"}
 	if w = uiRequest(t, p, http.MethodPost, "/logout", "csrf="+url.QueryEscape(csrf.Value), control, csrf); w.Code != http.StatusNotFound {
 		t.Fatalf("originless csrf accepted: %d", w.Code)
 	}
-	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/logout", strings.NewReader("csrf="+url.QueryEscape(csrf.Value)))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodPost, "https://tinker.test/logout", strings.NewReader("csrf="+url.QueryEscape(csrf.Value)))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", "https://evil.test")
 	r.AddCookie(control)
@@ -430,7 +430,7 @@ func TestPlatformUICSRFAndSecretRedaction(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("cross-origin csrf accepted: %d", w.Code)
 	}
-	r.Header.Set("Origin", "https://tiny.test")
+	r.Header.Set("Origin", "https://tinker.test")
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
 	if w.Code != http.StatusNotFound {
@@ -454,8 +454,8 @@ func TestPlatformUIMutationsRequireActorOriginCSRFAndConfirmation(t *testing.T) 
 	}
 	control := &http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"}
 	request := func(path, form, origin string) *httptest.ResponseRecorder {
-		r := httptest.NewRequest(http.MethodPost, "https://tiny.test"+path, strings.NewReader(form+"&csrf="+url.QueryEscape(csrf.Value)))
-		r.Host = "tiny.test"
+		r := httptest.NewRequest(http.MethodPost, "https://tinker.test"+path, strings.NewReader(form+"&csrf="+url.QueryEscape(csrf.Value)))
+		r.Host = "tinker.test"
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		r.Header.Set("Origin", origin)
 		r.AddCookie(control)
@@ -464,16 +464,16 @@ func TestPlatformUIMutationsRequireActorOriginCSRFAndConfirmation(t *testing.T) 
 		p.ServeHTTP(x, r)
 		return x
 	}
-	if w = request("/apps/alpha/delete", "confirmation=delete%3Awrong", "https://tiny.test"); w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+	if w = request("/apps/alpha/delete", "confirmation=delete%3Awrong", "https://tinker.test"); w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
 		t.Fatalf("wrong delete confirmation: %d %#v", w.Code, actions.calls)
 	}
 	if w = request("/apps/alpha/delete", "confirmation=delete%3Aalpha", "https://evil.test"); w.Code != http.StatusForbidden || len(actions.calls) != 0 {
 		t.Fatalf("cross origin mutation: %d %#v", w.Code, actions.calls)
 	}
-	if w = request("/apps/alpha/delete", "confirmation=delete%3Aalpha", "https://tiny.test"); w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "delete:alpha" {
+	if w = request("/apps/alpha/delete", "confirmation=delete%3Aalpha", "https://tinker.test"); w.Code != http.StatusSeeOther || len(actions.calls) != 1 || actions.calls[0] != "delete:alpha" {
 		t.Fatalf("valid deletion form: %d %#v", w.Code, actions.calls)
 	}
-	if w = request("/deployers/a%40example.test/suspend", "confirmation=suspend%3Aa%40example.test", "https://tiny.test"); w.Code != http.StatusNotFound || len(actions.calls) != 1 {
+	if w = request("/deployers/a%40example.test/suspend", "confirmation=suspend%3Aa%40example.test", "https://tinker.test"); w.Code != http.StatusNotFound || len(actions.calls) != 1 {
 		t.Fatalf("deployer escalated: %d %#v", w.Code, actions.calls)
 	}
 }
@@ -497,19 +497,19 @@ func TestPlatformUITokenIsDisplayedOnlyByCreateResponse(t *testing.T) {
 			csrf = c
 		}
 	}
-	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/tokens", strings.NewReader("scopes=app%3Aread&expires_in_seconds=3600&csrf="+url.QueryEscape(csrf.Value)))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r := httptest.NewRequest(http.MethodPost, "https://tinker.test/apps/alpha/tokens", strings.NewReader("scopes=app%3Aread&expires_in_seconds=3600&csrf="+url.QueryEscape(csrf.Value)))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tiny_only_once") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "tinker_only_once") {
 		t.Fatalf("create token response: %d %s", w.Code, w.Body.String())
 	}
 	w = uiRequest(t, p, http.MethodGet, "/", "")
-	if strings.Contains(w.Body.String(), "tiny_only_once") {
+	if strings.Contains(w.Body.String(), "tinker_only_once") {
 		t.Fatal("raw token persisted in dashboard")
 	}
 }
@@ -538,10 +538,10 @@ func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) 
 		t.Fatal("missing csrf")
 	}
 	form := url.Values{"emails": {"Alice@Example.test\nbob@example.test"}, "domains": {"Example.test"}, "expected_revision": {"7"}, "confirm_broadening": {"confirm"}, "csrf": {csrf.Value}}
-	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/access", strings.NewReader(form.Encode()))
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodPost, "https://tinker.test/apps/alpha/access", strings.NewReader(form.Encode()))
+	r.Host = "tinker.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.Header.Set("Origin", "https://tiny.test")
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
@@ -582,10 +582,10 @@ func TestPlatformUIAccessRejectsMissingOrMalformedExpectedRevision(t *testing.T)
 	}
 	for _, revision := range []string{"", "1st", "0"} {
 		form := url.Values{"csrf": {csrf.Value}, "expected_revision": {revision}}
-		r := httptest.NewRequest(http.MethodPost, "https://tiny.test/apps/alpha/access", strings.NewReader(form.Encode()))
-		r.Host = "tiny.test"
+		r := httptest.NewRequest(http.MethodPost, "https://tinker.test/apps/alpha/access", strings.NewReader(form.Encode()))
+		r.Host = "tinker.test"
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		r.Header.Set("Origin", "https://tiny.test")
+		r.Header.Set("Origin", "https://tinker.test")
 		r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 		r.AddCookie(csrf)
 		w = httptest.NewRecorder()
@@ -656,7 +656,7 @@ func TestPlatformUIAPIKeysUnavailableHasNoMutationForm(t *testing.T) {
 	}}}
 	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
 	body := w.Body.String()
-	if w.Code != http.StatusOK || !strings.Contains(body, "API key management is unavailable") || !strings.Contains(body, "tinyhost llm enable") || strings.Contains(body, `action="/dashboard/llm/connections"`) {
+	if w.Code != http.StatusOK || !strings.Contains(body, "API key management is unavailable") || !strings.Contains(body, "tinkercloud llm enable") || strings.Contains(body, `action="/dashboard/llm/connections"`) {
 		t.Fatalf("unavailable api keys = %d %s", w.Code, body)
 	}
 	if !strings.Contains(body, "Legacy provider") {

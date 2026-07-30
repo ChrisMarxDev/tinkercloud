@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost app creators use several JavaScript package managers. Building a
+Tinkercloud app creators use several JavaScript package managers. Building a
 different SDK for each manager would multiply release evidence and create
 opportunities for API or security drift. Deno and TypeScript-first users also
 benefit from a source-native registry.
@@ -14,7 +14,7 @@ namespace have not been confirmed. No registry publication is authorized yet.
 
 ## Decision
 
-Prepare `@tinyhost/sdk` for two registry artifacts with one name, version, and
+Prepare `@tinkercloud/sdk` for two registry artifacts with one name, version, and
 public API:
 
 - npm receives the compiled ESM runtime, declarations, README, and license;

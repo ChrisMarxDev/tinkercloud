@@ -4,17 +4,17 @@
 
 ## Context
 
-TinyHost's deployer workflow should start from a completed local app rather
+Tinkercloud's deployer workflow should start from a completed local app rather
 than require deployers to learn a separate manifest ceremony. At the same time,
-`tiny.yaml`, filesystem paths, CLI credentials, and server selection form a
+`tinker.yaml`, filesystem paths, CLI credentials, and server selection form a
 local trust boundary: convenience cannot turn automation into hidden prompts,
 write outside the project, or accept an unproven bearer.
 
 ## Decision
 
-`tiny init [DIR]` is the explicit manifest creator. `tiny deploy [DIR]` uses
+`tinker init [DIR]` is the explicit manifest creator. `tinker deploy [DIR]` uses
 the current directory by default and, for a human invocation only, runs the
-same bounded setup when `tiny.yaml` is absent. It atomically writes a strict,
+same bounded setup when `tinker.yaml` is absent. It atomically writes a strict,
 deterministically generated V1 manifest without overwriting an existing file.
 The wizard inspects the project first. It uses a valid directory-derived slug
 and one unambiguous conventional output directory without asking. It asks for a

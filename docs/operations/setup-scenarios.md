@@ -1,6 +1,6 @@
-# TinyHost setup scenarios
+# Tinkercloud setup scenarios
 
-This document separates the network topology TinyHost supports in V1 from
+This document separates the network topology Tinkercloud supports in V1 from
 topologies that are secure in principle but still need product work.
 
 ## Support matrix
@@ -10,12 +10,12 @@ topologies that are secure in principle but still need product work.
 | Solo operator or startup on a public Hetzner VPS | Canonical V1 topology | Secure when V1 gates and operator duties are met | Public DNS and inbound TCP 80/443 |
 | Company with VPN-only ingress | Accepted direction, not yet implemented | Secure when the company supplies TLS and all VPN acceptance gates pass | One certificate covering the admin and app hosts, private DNS, and trusted-network probes |
 
-The VPN is an additional network boundary. It does not replace TinyHost's
+The VPN is an additional network boundary. It does not replace Tinkercloud's
 per-app policy, viewer authentication, session, or authorization checks.
 
 ## Accepted setup experience
 
-The operator runs `sudo tinyhost setup` on a fresh supported machine. The
+The operator runs `sudo tinkercloud setup` on a fresh supported machine. The
 assistant asks for the root domain and initial operator email, then derives
 `admin.<domain>`, `<slug>.<domain>`, the sending address, and ACME contact. It asks only
 for values it cannot discover or safely default:
@@ -26,7 +26,7 @@ for values it cannot discover or safely default:
 4. for the future VPN-only mode, the certificate and private-key credential
    sources.
 
-The ACME contact defaults to the operator email in public mode. TinyHost handles
+The ACME contact defaults to the operator email in public mode. Tinkercloud handles
 host checks, service identity, directories, configuration, credentials,
 database initialization, systemd installation, startup, and final security
 verification. It reports one actionable prerequisite when DNS, email,
@@ -41,13 +41,13 @@ of SSH or firewall policy.
 ### Intended use
 
 A technical person or small startup buys a dedicated supported Hetzner VPS,
-prepares DNS and email, installs TinyHost, and deploys private utility apps.
-Viewers reach the app over the Internet and authenticate through TinyHost.
+prepares DNS and email, installs Tinkercloud, and deploys private utility apps.
+Viewers reach the app over the Internet and authenticate through Tinkercloud.
 
 ```text
 Internet
   → operator-owned firewall
-  → TinyHost TCP 80/443
+  → Tinkercloud TCP 80/443
   → hostname routing
   → app session and current policy
   → private app content/capability
@@ -64,43 +64,43 @@ The PRD's setup target starts only after these external prerequisites exist:
 5. An operator decision about the host/cloud firewall and SSH source rules.
 
 DNS propagation, buying the server, verifying the sending domain, and choosing
-firewall policy are not part of the ten-minute TinyHost initialization target.
+firewall policy are not part of the ten-minute Tinkercloud initialization target.
 
-### TinyHost setup
+### Tinkercloud setup
 
 ```text
-verify and install the signed tinyhost binary
-→ run tinyhost setup
+verify and install the signed tinkercloud binary
+→ run tinkercloud setup
 → discover host state; ask base domain + operator email
 → show exact DNS/Resend actions and resume after completion
 → generate the service identity, config, credentials, SQLite, and operator
 → obtain the platform certificate through public HTTP-01
 → prove the public HTTPS gateway
 → reconcile the active-deployer allowlist
-→ tiny login
-→ tiny deploy
+→ tinker login
+→ tinker deploy
 → prove anonymous denial before reporting success
 ```
 
 The deterministic automation contract remains
-`tinyhost init --non-interactive`. The human product path is the planned
-`tinyhost setup` assistant in the
+`tinkercloud init --non-interactive`. The human product path is the planned
+`tinkercloud setup` assistant in the
 [complete operator flow](../../concept/flows/operator.html); it calls the same
 validation/domain services and generates the explicit automation state.
 
 ### Network exposure
 
-- TinyHost adds only TCP 80 and 443.
+- Tinkercloud adds only TCP 80 and 443.
 - Port 80 serves ACME HTTP-01 and safe redirects or denials.
 - Port 443 serves the platform and app gateway.
 - Login, OTP request, and version routes are intentionally reachable before
   authentication but have no private app-content dependency.
 - Apps receive no individual port, process, raw storage URL, or direct backend.
-- TinyHost does not change SSH or firewall policy.
+- Tinkercloud does not change SSH or firewall policy.
 
 ### Security ownership
 
-TinyHost owns:
+Tinkercloud owns:
 
 - TLS termination and validated hostname routing;
 - operator, deployer, and viewer authentication boundaries;
@@ -122,35 +122,35 @@ The operator owns:
 This topology can be secure for V1's replaceable toy, prototype, and utility
 apps. It is not suitable for business-critical durability. Internet users can
 reach the gateway, but private app bytes and capabilities remain behind
-TinyHost authentication and current policy.
+Tinkercloud authentication and current policy.
 
 ## Scenario 2: company with VPN-only ingress
 
 ### Intended use
 
-The company permits access to the TinyHost server only from its VPN. TinyHost
+The company permits access to the Tinkercloud server only from its VPN. Tinkercloud
 still provides per-app viewer authorization inside that network.
 
 ```text
 Company device
   → company VPN
   → operator-owned firewall
-  → TinyHost TCP 80/443
-  → TinyHost app authentication and policy
+  → Tinkercloud TCP 80/443
+  → Tinkercloud app authentication and policy
 ```
 
 This is a sound defense-in-depth topology. VPN membership must not become a
-browser-controlled identity or bypass TinyHost authorization. Users still log
-in to TinyHost with an email one-time code and receive access only to apps whose
+browser-controlled identity or bypass Tinkercloud authorization. Users still log
+in to Tinkercloud with an email one-time code and receive access only to apps whose
 current policy allows them.
 
 ### What already works
 
-- TinyHost can listen on the same TCP 80/443 gateway behind a firewall.
+- Tinkercloud can listen on the same TCP 80/443 gateway behind a firewall.
 - Hostname routing, cookies, app isolation, KV, and WebSockets are compatible
   with a VPN.
 - Resend can work when the server retains outbound HTTPS access.
-- TinyHost does not need to understand VPN users, routes, or credentials.
+- Tinkercloud does not need to understand VPN users, routes, or credentials.
 
 ### What blocks V1 support
 
@@ -174,10 +174,10 @@ The first VPN-only setup will ask for one company-provided certificate and its
 matching private key. That certificate must cover the admin and app hostnames,
 such as `admin.example.com` and `*.example.com`.
 
-The company obtains and renews the certificate. TinyHost validates it, protects
+The company obtains and renews the certificate. Tinkercloud validates it, protects
 the private key, serves HTTPS, warns about expiry, and refuses setup or
 deployment success when VPN-reachable TLS and anonymous-denial checks fail.
-TinyHost will not add DNS-provider automation or operate a private certificate
+Tinkercloud will not add DNS-provider automation or operate a private certificate
 authority for this first mode.
 
 This is an accepted direction, not a claim that VPN-only setup works in the
@@ -194,7 +194,7 @@ Before claiming VPN-only support:
 3. Replace the public proof with a trusted-network proof that keeps exact TLS,
    hostname, response, and anonymous-denial validation.
 4. Add VPN-topology install, renewal, deploy, revocation, and failure tests.
-5. Keep TinyHost app authentication enabled; VPN membership alone grants no
+5. Keep Tinkercloud app authentication enabled; VPN membership alone grants no
    app identity or access.
 
 ### Security verdict
@@ -205,7 +205,7 @@ complete, not to weaken the gateway.
 
 ## Current open setup issues
 
-1. Implement and test the guided `tinyhost setup` assistant.
+1. Implement and test the guided `tinkercloud setup` assistant.
 2. Benchmark and document the smallest recommended Hetzner plan.
 3. Implement the accepted operator-supplied VPN certificate and
    trusted-network verification model.

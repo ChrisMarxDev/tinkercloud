@@ -1,4 +1,4 @@
-// Package webui owns the trusted, embedded visual system for TinyHost-native
+// Package webui owns the trusted, embedded visual system for Tinkercloud-native
 // HTML. It contains no authorization or application state.
 package webui
 
@@ -9,37 +9,37 @@ import (
 	"html/template"
 )
 
-//go:embed assets/tinyhost.css
+//go:embed assets/tinkercloud.css
 var stylesheet string
 
-//go:embed assets/tiny-cloud-mark.svg
+//go:embed assets/tinkercloud-mark.svg
 var cloudMark string
 
-//go:embed assets/tinyhost.js
+//go:embed assets/tinkercloud.js
 var interactions string
 
 // FuncMap exposes only trusted, compile-time assets. User-controlled values
 // must continue through html/template's normal escaping.
 func FuncMap() template.FuncMap {
 	return template.FuncMap{
-		"tinyCSS":  func() template.CSS { return template.CSS(stylesheet) },
-		"tinyJS":   func() template.JS { return template.JS(interactions) },
-		"tinyMark": func() template.HTML { return template.HTML(cloudMark) },
-		"tinyQR":   qrCodeData,
+		"tinkerCSS":  func() template.CSS { return template.CSS(stylesheet) },
+		"tinkerJS":   func() template.JS { return template.JS(interactions) },
+		"tinkerMark": func() template.HTML { return template.HTML(cloudMark) },
+		"tinkerQR":   qrCodeData,
 	}
 }
 
-// TinyStyleCSPSource returns the exact CSP hash source for a template that
+// TinkerStyleCSPSource returns the exact CSP hash source for a template that
 // embeds Stylesheet in a style element. It lets the gateway allow the trusted,
 // compile-time bytes without allowing arbitrary inline style.
-func TinyStyleCSPSource() string {
+func TinkerStyleCSPSource() string {
 	return cspHash(stylesheet)
 }
 
-// TinyScriptCSPSource returns the exact CSP hash source for a template that
+// TinkerScriptCSPSource returns the exact CSP hash source for a template that
 // embeds Interactions in a script element. It lets the gateway allow the
 // trusted, compile-time helper without unsafe-inline or a new asset route.
-func TinyScriptCSPSource() string {
+func TinkerScriptCSPSource() string {
 	return cspHash(interactions)
 }
 

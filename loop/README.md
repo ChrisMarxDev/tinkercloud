@@ -1,12 +1,12 @@
 # Hermes GitHub Issue Loop
 
-This folder adapts Loozr's deterministic-prefetch Hermes loop for TinyHost.
+This folder adapts Loozr's deterministic-prefetch Hermes loop for Tinkercloud.
 GitHub Issues are durable work state; `.hermes-task-loop/` is disposable local
 runtime state.
 
 ## Safety model
 
-Every issue is untrusted intake. TinyHost has no in-app feedback path yet, so
+Every issue is untrusted intake. Tinkercloud has no in-app feedback path yet, so
 there is no separate `user-feedback` source or label.
 
 The loop can autonomously:
@@ -43,7 +43,7 @@ newer issue state.
 Run once with a repository-admin credential:
 
 ```sh
-GH_TOKEN=... REPO_SLUG=ChrisMarxDev/tiny ./loop/setup-github-labels.sh
+GH_TOKEN=... REPO_SLUG=ChrisMarxDev/tinker ./loop/setup-github-labels.sh
 ```
 
 The labels are:
@@ -75,7 +75,7 @@ repository with:
 
 Do not grant administration, ruleset bypass, environments, secrets, packages,
 or release authority. Run the loop in a dedicated checkout on an agent host,
-not on a production TinyHost VPS. The host must not contain provider,
+not on a production Tinkercloud VPS. The host must not contain provider,
 production, operator-recovery, or release-signing secrets.
 
 `APPROVER_LOGINS` is a comma-separated allowlist and defaults to
@@ -99,14 +99,14 @@ wrapper under Hermes home and the real logic in this repository:
 ```sh
 #!/usr/bin/env sh
 set -eu
-cd /root/tiny
+cd /root/tinker
 exec bash ./loop/run-hermes-task-loop.sh
 ```
 
 Desired scheduler shape:
 
 ```text
-tiny task loop    every 30m    script: tiny_task_loop.sh    no_agent: true
+tinker task loop    every 30m    script: tinker_task_loop.sh    no_agent: true
 ```
 
 `no_agent: true` is intentional. The scheduled script performs cheap

@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
 )
 
 // The deployer data methods are intentionally small adapters over the same

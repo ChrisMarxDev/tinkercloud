@@ -1,7 +1,7 @@
 # Deployer data access contract
 
 This contract defines the bounded control-plane API used by an authenticated
-deployer and the `tiny data` CLI to inspect and deliberately repair managed app
+deployer and the `tinker data` CLI to inspect and deliberately repair managed app
 data. It extends the existing KV and JSON document-collection primitives. It
 does **not** expose SQLite, SQL, database schemas, files, connection strings,
 or a second database listener.
@@ -117,12 +117,12 @@ Document creation accepts one bounded JSON object and always receives its
 opaque ID from the server. There are no bulk write, wildcard delete, arbitrary
 filter, schema, migration, import, or transaction-script operations.
 
-Before an app-data write begins, TinyHost durably records a metadata-only audit
+Before an app-data write begins, Tinkercloud durably records a metadata-only audit
 intent in the separate control database. The intent contains actor, app,
 operation kind, resource name/opaque record ID, request ID, and a one-way
 request digest; it never stores the JSON value/document body. Failure to
 persist that intent denies the mutation before opening/mutating the app
-database. After a successful app-data commit, TinyHost marks the intent
+database. After a successful app-data commit, Tinkercloud marks the intent
 `succeeded`. Exact completed retries return the existing safe receipt; reuse
 with different input denies. If the separate outcome update fails after the
 app commit, a later exact retry reconciles only when current versioned app
@@ -135,23 +135,23 @@ none; the hint remains non-durable and app clients reconcile current state.
 
 ## CLI contract
 
-`tiny data` reuses the normal saved platform URL and authenticated deployer
+`tinker data` reuses the normal saved platform URL and authenticated deployer
 credential. It never asks for a database URL, app ID, database credential, or
 an ad-hoc config file. Its app argument is a public owned slug passed to the
 control API; the server determines the private data scope.
 
 ```text
-tiny data kv list APP [--prefix PREFIX] [--limit N] [--cursor CURSOR] [--json]
-tiny data kv get APP KEY [--json]
-tiny data kv set APP KEY (--file FILE | --stdin) [--expected-version N] [--json]
-tiny data kv delete APP KEY --expected-version N [--confirm delete:APP:KEY] [--json]
+tinker data kv list APP [--prefix PREFIX] [--limit N] [--cursor CURSOR] [--json]
+tinker data kv get APP KEY [--json]
+tinker data kv set APP KEY (--file FILE | --stdin) [--expected-version N] [--json]
+tinker data kv delete APP KEY --expected-version N [--confirm delete:APP:KEY] [--json]
 
-tiny data collections list APP [--limit N] [--cursor CURSOR] [--json]
-tiny data documents list APP COLLECTION [--limit N] [--cursor CURSOR] [--json]
-tiny data documents get APP COLLECTION ID [--json]
-tiny data documents create APP COLLECTION (--file FILE | --stdin) [--json]
-tiny data documents update APP COLLECTION ID (--file FILE | --stdin) --expected-version N [--json]
-tiny data documents delete APP COLLECTION ID --expected-version N [--confirm delete:APP:COLLECTION:ID] [--json]
+tinker data collections list APP [--limit N] [--cursor CURSOR] [--json]
+tinker data documents list APP COLLECTION [--limit N] [--cursor CURSOR] [--json]
+tinker data documents get APP COLLECTION ID [--json]
+tinker data documents create APP COLLECTION (--file FILE | --stdin) [--json]
+tinker data documents update APP COLLECTION ID (--file FILE | --stdin) --expected-version N [--json]
+tinker data documents delete APP COLLECTION ID --expected-version N [--confirm delete:APP:COLLECTION:ID] [--json]
 ```
 
 Interactive human mode asks the deployer to type the exact target-bound
@@ -166,7 +166,7 @@ commands.
 
 Existing CLI bearers are not scope-upgraded in place. A credential issued
 before deployer data access remains least-privilege and receives
-`not_authorized`; an exact owner explicitly runs `tiny login --force` once to
+`not_authorized`; an exact owner explicitly runs `tinker login --force` once to
 obtain a newly scoped interactive bearer.
 
 ## Compatibility and evidence

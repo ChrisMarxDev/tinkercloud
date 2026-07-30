@@ -1,11 +1,11 @@
 #!/bin/sh
 # Create passphrase-protected, repo-local SSH connection material for the
-# dedicated TinyHost acceptance VPS. Host-key trust is completed separately
+# dedicated Tinkercloud acceptance VPS. Host-key trust is completed separately
 # after an out-of-band fingerprint check.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-destination=${TINYHOST_VPS_SSH_DIR:-"$root/.tiny/vps"}
+destination=${TINKERCLOUD_VPS_SSH_DIR:-"$root/.tinker/vps"}
 
 usage() {
   echo "usage: $0 HOST_OR_IPV4 [SSH_PORT]" >&2
@@ -70,12 +70,12 @@ if test -f "$key" && test -f "$key.pub"; then
 else
   echo "Create a dedicated key for the disposable testing VPS."
   echo "Choose a passphrase when ssh-keygen prompts; load it with ssh-add before an unattended test."
-  ssh-keygen -t ed25519 -a 100 -f "$key" -C "tinyhost-testing-vps"
+  ssh-keygen -t ed25519 -a 100 -f "$key" -C "tinkercloud-testing-vps"
 fi
 
 : >"$known_hosts"
 cat >"$config" <<EOF
-Host tinyhost-test
+Host tinkercloud-test
   HostName $host
   User root
   Port $port
@@ -98,4 +98,4 @@ echo "  ssh-keyscan -p $port -t ed25519 $host > \"$known_hosts.candidate\""
 echo "  ssh-keygen -lf \"$known_hosts.candidate\""
 echo "Compare that fingerprint out of band. Only after it matches:"
 echo "  mv \"$known_hosts.candidate\" \"$known_hosts\""
-echo "  ssh -F \"$config\" tinyhost-test"
+echo "  ssh -F \"$config\" tinkercloud-test"

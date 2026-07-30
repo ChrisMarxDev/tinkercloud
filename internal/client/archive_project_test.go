@@ -4,8 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -42,7 +42,7 @@ func TestArchiveProjectIsolatedAndReproducible(t *testing.T) {
 		t.Fatal("not reproducible")
 	}
 	got := names(a.Bytes())
-	if len(got) != 2 || got[0] != "tiny.yaml" || got[1] != "index.html" {
+	if len(got) != 2 || got[0] != "tinker.yaml" || got[1] != "index.html" {
 		t.Fatal(got)
 	}
 	dir := t.TempDir()
@@ -64,7 +64,7 @@ func TestArchiveProjectIsolatedAndReproducible(t *testing.T) {
 func TestArchiveProjectExcludesManifestWhenOutputIsProjectRoot(t *testing.T) {
 	r := t.TempDir()
 	m := []byte("version: 1\nname: demo\nbuild:\n  output: .\n")
-	if err := os.WriteFile(filepath.Join(r, "tiny.yaml"), m, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(r, "tinker.yaml"), m, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(r, "index.html"), []byte("ok"), 0600); err != nil {
@@ -75,14 +75,14 @@ func TestArchiveProjectExcludesManifestWhenOutputIsProjectRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := names(out.Bytes())
-	if len(got) != 2 || got[0] != "tiny.yaml" || got[1] != "index.html" {
+	if len(got) != 2 || got[0] != "tinker.yaml" || got[1] != "index.html" {
 		t.Fatalf("archive contains duplicate/missing manifest: %#v", got)
 	}
 }
 
 func TestHumanStarterAppIsOwnerOnlyAndDeployable(t *testing.T) {
 	project := filepath.Join("..", "..", "examples", "starter-app")
-	manifest, err := os.ReadFile(filepath.Join(project, "tiny.yaml"))
+	manifest, err := os.ReadFile(filepath.Join(project, "tinker.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestHumanStarterAppIsOwnerOnlyAndDeployable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Name != "tiny-ritual" || parsed.BuildOutput != "." ||
+	if parsed.Name != "tinker-ritual" || parsed.BuildOutput != "." ||
 		len(parsed.Emails) != 0 || len(parsed.Domains) != 0 ||
 		parsed.KV || parsed.Realtime {
 		t.Fatalf("starter manifest expanded its owner-only boundary: %#v", parsed)
@@ -100,7 +100,7 @@ func TestHumanStarterAppIsOwnerOnlyAndDeployable(t *testing.T) {
 	if err := ArchiveProject(project, manifest, &archive); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"tiny.yaml", "app.js", "index.html", "styles.css"}
+	want := []string{"tinker.yaml", "app.js", "index.html", "styles.css"}
 	if got := names(archive.Bytes()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("starter archive = %#v, want %#v", got, want)
 	}
@@ -113,7 +113,7 @@ func TestHumanStarterAppIsOwnerOnlyAndDeployable(t *testing.T) {
 		source := string(content)
 		if strings.Contains(source, "http://") ||
 			strings.Contains(source, "https://") ||
-			strings.Contains(source, "@tinyhost/sdk") {
+			strings.Contains(source, "@tinkercloud/sdk") {
 			t.Fatalf("%s introduced a remote or capability dependency", name)
 		}
 	}

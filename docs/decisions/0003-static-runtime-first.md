@@ -10,11 +10,11 @@ resource scheduling, secret injection, and host escape concerns.
 
 ## Decision
 
-V1 deploys static releases served by TinyHost and offers narrowly scoped
+V1 deploys static releases served by Tinkercloud and offers narrowly scoped
 platform capabilities. Current-user, bounded KV, lightweight local blobs, and
 ephemeral realtime ship in V1; durable realtime and user-controlled server
 processes do not. Blob scope is restricted by ADR 0030 to a bounded,
-gateway-authorized, app-scoped capability backed by TinyHost's private local
+gateway-authorized, app-scoped capability backed by Tinkercloud's private local
 data directory; it does not introduce app code execution or a public file
 server.
 

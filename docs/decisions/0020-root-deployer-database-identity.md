@@ -4,7 +4,7 @@
 
 ## Context
 
-`tinyhost deployers` is a root-only recovery command, but opening SQLite as
+`tinkercloud deployers` is a root-only recovery command, but opening SQLite as
 root can create or replace the database's WAL and SHM sidecars as root-owned.
 The unprivileged gateway then cannot persist OTP challenges or other state.
 
@@ -12,16 +12,16 @@ The unprivileged gateway then cannot persist OTP challenges or other state.
 
 The root parent validates its local caller and non-secret input, then starts
 one fixed internal child operation. That child permanently drops to the
-installed `tinyhost` UID and primary GID before it opens SQLite. The service
-identity, not root, creates and mutates `tinyhost.db`, `tinyhost.db-wal`, and
-`tinyhost.db-shm`. No broad mode change is used to compensate for ownership.
+installed `tinkercloud` UID and primary GID before it opens SQLite. The service
+identity, not root, creates and mutates `tinkercloud.db`, `tinkercloud.db-wal`, and
+`tinkercloud.db-shm`. No broad mode change is used to compensate for ownership.
 
 For recovery from the pre-decision regression, root may hand off only the three
 known regular root-owned SQLite artifacts after no-symlink and non-permissive
 mode validation. It uses a no-follow ownership syscall; it never recursively
 changes the data directory or uses permissive `chmod`.
 
-The parent restarts only an already-active `tinyhost.service` after the child
+The parent restarts only an already-active `tinkercloud.service` after the child
 has durably committed and closed SQLite, then confirms it is active. This
 refresh clears a demonstrated cross-process SQLite connection failure without
 starting a deliberately stopped service. If refresh fails, the command returns

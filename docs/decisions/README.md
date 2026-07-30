@@ -22,9 +22,9 @@
 | [0019](0019-root-deployer-command-grammar.md) | Root-only deployer command grammar | Accepted for V1 |
 | [0023](0023-policy-revision-concurrency.md) | Optimistic concurrency for access-policy replacement | Accepted for V1; rollback references superseded by 0039 |
 | [0020](0020-root-deployer-database-identity.md) | Root deployer command writes SQLite as the service identity | Accepted for V1 |
-| [0021](0021-embedded-native-web-design-system.md) | Embedded dependency-free design system for TinyHost-owned web UI | Accepted for V1 |
+| [0021](0021-embedded-native-web-design-system.md) | Embedded dependency-free design system for Tinkercloud-owned web UI | Accepted for V1 |
 | [0024](0024-separated-control-browser-sessions.md) | Separate control browser sessions from CLI bearer tokens | Dashboard-session portion superseded by 0051; CLI bearer separation retained |
-| [0025](0025-tinyhost-owned-port-confinement.md) | Confine TinyHost-owned network exposure to TCP 80 and 443 | Accepted for V1 |
+| [0025](0025-tinkercloud-owned-port-confinement.md) | Confine Tinkercloud-owned network exposure to TCP 80 and 443 | Accepted for V1 |
 | [0026](0026-sdk-registry-distribution.md) | One SDK API across npm and JSR | Accepted for preparation |
 | [0027](0027-immutable-deployment-descriptions-and-stable-launch.md) | Immutable deployment descriptions and stable dashboard launch | Accepted; rollback portion superseded by 0039 |
 | [0028](0028-operator-supplied-tls-for-vpn-only.md) | Operator-supplied TLS for the first VPN-only topology | Accepted post-V1 direction |
@@ -45,12 +45,13 @@
 | [0043](0043-workstation-cli-host-operations.md) | Workstation CLI coordinates a fixed SSH host grammar | Accepted for distribution preparation |
 | [0044](0044-signed-distribution-compatibility-manifest.md) | Signed distribution compatibility manifest | Accepted for distribution preparation |
 | [0045](0045-separate-maintainer-distribution-skills.md) | Separate maintainer skills for CLI and SDK distribution | Accepted for distribution preparation |
-| [0046](0046-github-beta-release-channel.md) | GitHub prereleases are the pre-rename beta channel | Accepted for beta distribution |
+| [0046](0046-github-beta-release-channel.md) | GitHub prereleases are the pre-stable beta channel | Accepted for beta distribution |
 | [0047](0047-operator-governed-llm-chat.md) | Operator-governed encrypted LLM chat capability | Accepted for post-V1 L1/L2 |
 | [0048](0048-per-app-sqlite-collections.md) | Per-app SQLite databases and bounded document collections | Accepted |
 | [0049](0049-typed-deployer-app-data-access.md) | Typed deployer access to managed app data | Accepted |
 | [0050](0050-local-deployer-workstation-otp-automation.md) | Local deployer-workstation OTP automation is not CI credentialing | Accepted for V1 test infrastructure |
 | [0051](0051-one-domain-single-browser-identity.md) | One root domain and a single browser identity broker | Accepted replacement architecture; implementation in progress |
+| [0052](0052-tinkercloud-product-identity.md) | Tinkercloud product and distribution identity | Accepted |
 
 ## Decision rule
 

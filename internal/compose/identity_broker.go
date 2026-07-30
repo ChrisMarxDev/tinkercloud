@@ -17,14 +17,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/browseridentity"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/otp"
-	"github.com/tinyhost/tiny/internal/persistence"
-	"github.com/tinyhost/tiny/internal/ratelimit"
-	"github.com/tinyhost/tiny/internal/sessions"
-	webui "github.com/tinyhost/tiny/web"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/ratelimit"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
+	webui "github.com/ChrisMarxDev/tinkercloud/web"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 	// completions started by the same browser. It is never sent to app hosts,
 	// templates, URLs, forms, JavaScript, or logs.
 	BrowserBindingCookieName = browseridentity.BindingCookieName
-	identityStateCookieName  = "__Host-tiny_identity_state"
+	identityStateCookieName  = "__Host-tinker_identity_state"
 	browserBindingLifetime   = 30 * 24 * time.Hour
 	browserBindingMaxBytes   = 256
 )
@@ -122,7 +122,7 @@ func (b IdentityBroker) platformHost() string {
 	if b.PlatformHost != "" {
 		return b.PlatformHost
 	}
-	return "tiny.test"
+	return "tinker.test"
 }
 
 func (b IdentityBroker) appSuffix() string {
@@ -157,7 +157,7 @@ func (b IdentityBroker) AppLogin(appID, returnPath string, w http.ResponseWriter
 		expires = b.now().Add(b.otpTTL())
 	}
 	http.SetCookie(w, &http.Cookie{Name: identityStateCookieName, Value: state, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires})
-	http.Redirect(w, r, "https://"+b.platformHost()+"/_tiny/identity?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
+	http.Redirect(w, r, "https://"+b.platformHost()+"/_tinker/identity?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
 	return true
 }
 
@@ -207,32 +207,32 @@ func (b IdentityBroker) PlatformHandler(next http.Handler) http.Handler {
 			b.platformLogout(w, r)
 			return
 		}
-		if !strings.HasPrefix(r.URL.Path, "/_tiny/identity") {
+		if !strings.HasPrefix(r.URL.Path, "/_tinker/identity") {
 			next.ServeHTTP(w, r)
 			return
 		}
 		switch r.URL.Path {
-		case "/_tiny/identity":
+		case "/_tinker/identity":
 			if r.Method == http.MethodGet {
 				b.identityPage(w, r)
 				return
 			}
-		case "/_tiny/identity/otp":
+		case "/_tinker/identity/otp":
 			if r.Method == http.MethodPost {
 				b.requestOTP(w, r)
 				return
 			}
-		case "/_tiny/identity/verify":
+		case "/_tinker/identity/verify":
 			if r.Method == http.MethodPost {
 				b.verifyOTP(w, r)
 				return
 			}
-		case "/_tiny/identity/use-another":
+		case "/_tinker/identity/use-another":
 			if r.Method == http.MethodPost {
 				b.useAnother(w, r)
 				return
 			}
-		case "/_tiny/identity/logout":
+		case "/_tinker/identity/logout":
 			if r.Method == http.MethodPost {
 				b.logout(w, r)
 				return
@@ -615,7 +615,7 @@ func (b IdentityBroker) redirectCallback(w http.ResponseWriter, r *http.Request,
 		b.retry(w)
 		return
 	}
-	http.Redirect(w, r, "https://"+appHost(h.AppSlug, b.appSuffix())+"/_tiny/auth/callback?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
+	http.Redirect(w, r, "https://"+appHost(h.AppSlug, b.appSuffix())+"/_tinker/auth/callback?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
 }
 
 func (b IdentityBroker) rotateIdentity(w http.ResponseWriter, session persistence.IdentitySession, raw string) {
@@ -743,10 +743,10 @@ type platformCodePage struct {
 }
 type platformNoRolePage struct{ Email, CSRF string }
 
-var identityEmailTemplate = template.Must(template.New("identity-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="identity-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">Private app</p><h1 id="identity-title">Sign in to continue.</h1><p class="tiny-auth-card__intro">Use an email address the app owner has allowed.</p><form class="tiny-stack" method="post" action="/_tiny/identity/otp"><label class="tiny-field" for="email"><span class="tiny-label">Email address</span><input class="tiny-input" id="email" name="email" type="email" required autocomplete="email"></label><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Send one-time code</button></form><p class="tiny-auth-card__footer">This message is the same for every address.</p></section></main><script>{{tinyJS}}</script></body></html>`))
-var identityCodeTemplate = template.Must(template.New("identity-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="code-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">One small step</p><h1 id="code-title">Check your email.</h1><p class="tiny-auth-card__intro">If that address is authorized, a one-time code has been sent.</p><form class="tiny-stack" method="post" action="/_tiny/identity/verify"><label class="tiny-field" for="code"><span class="tiny-label">One-time code</span><input class="tiny-input tiny-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="handoff" value="{{.Handoff}}"><input type="hidden" name="transaction" value="{{.Transaction}}"><button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
-var identityDeniedTemplate = template.Must(template.New("identity-denied").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access unavailable · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="denied-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">Private app</p><h1 id="denied-title">This account cannot open this app.</h1><div class="tiny-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. Ask the app owner for access, or use another email.</p></div><form class="tiny-stack" method="post" action="/_tiny/identity/use-another"><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tiny-button tiny-button--secondary tiny-button--full" type="submit">Use another email</button></form><p class="tiny-auth-card__footer">Changing email signs this browser out of TinyHost apps after verification. We do not reveal the app’s access rules.</p></section></main><script>{{tinyJS}}</script></body></html>`))
-var identityRetryTemplate = template.Must(template.New("identity-retry").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="retry-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><h1 id="retry-title">Sign-in needs another try.</h1><div class="tiny-notice" role="alert"><p>We could not complete that sign-in step. Your access has not changed.</p></div><p class="tiny-auth-card__footer">Return to the protected app and try again.</p></section></main><script>{{tinyJS}}</script></body></html>`))
-var platformEmailTemplate = template.Must(template.New("platform-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="platform-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">Your tiny cloud</p><h1 id="platform-title">Sign in to TinyHost.</h1><p class="tiny-auth-card__intro">Use your email to continue to the dashboard and any apps you can access.</p><form class="tiny-stack" method="post" action="/login"><label class="tiny-field" for="email"><span class="tiny-label">Email address</span><input class="tiny-input" id="email" name="email" type="email" required autocomplete="email"></label>{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Send one-time code</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
-var platformCodeTemplate = template.Must(template.New("platform-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="platform-code-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">One small step</p><h1 id="platform-code-title">Check your email.</h1><p class="tiny-auth-card__intro">If that address can sign in, a one-time code has been sent.</p><form class="tiny-stack" method="post" action="/login/verify"><label class="tiny-field" for="code"><span class="tiny-label">One-time code</span><input class="tiny-input tiny-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="transaction" value="{{.Transaction}}">{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
-var platformNoRoleTemplate = template.Must(template.New("platform-no-role").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard unavailable · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="no-role-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">Dashboard</p><h1 id="no-role-title">This account cannot use the dashboard.</h1><div class="tiny-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. You can still open apps where you have access.</p></div><form class="tiny-stack" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="tiny-button tiny-button--secondary tiny-button--full" type="submit">Sign out of TinyHost</button></form><p class="tiny-auth-card__footer">Sign out, then use another email if you need dashboard access.</p></section></main><script>{{tinyJS}}</script></body></html>`))
+var identityEmailTemplate = template.Must(template.New("identity-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="identity-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>protected by tinkercloud</span></div><p class="tinker-eyebrow">Private app</p><h1 id="identity-title">Sign in to continue.</h1><p class="tinker-auth-card__intro">Use an email address the app owner has allowed.</p><form class="tinker-stack" method="post" action="/_tinker/identity/otp"><label class="tinker-field" for="email"><span class="tinker-label">Email address</span><input class="tinker-input" id="email" name="email" type="email" required autocomplete="email"></label><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tinker-button tinker-button--primary tinker-button--full" type="submit">Send one-time code</button></form><p class="tinker-auth-card__footer">This message is the same for every address.</p></section></main><script>{{tinkerJS}}</script></body></html>`))
+var identityCodeTemplate = template.Must(template.New("identity-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="code-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>protected by tinkercloud</span></div><p class="tinker-eyebrow">One small step</p><h1 id="code-title">Check your email.</h1><p class="tinker-auth-card__intro">If that address is authorized, a one-time code has been sent.</p><form class="tinker-stack" method="post" action="/_tinker/identity/verify"><label class="tinker-field" for="code"><span class="tinker-label">One-time code</span><input class="tinker-input tinker-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="handoff" value="{{.Handoff}}"><input type="hidden" name="transaction" value="{{.Transaction}}"><button class="tinker-button tinker-button--primary tinker-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinkerJS}}</script></body></html>`))
+var identityDeniedTemplate = template.Must(template.New("identity-denied").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access unavailable · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="denied-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>protected by tinkercloud</span></div><p class="tinker-eyebrow">Private app</p><h1 id="denied-title">This account cannot open this app.</h1><div class="tinker-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. Ask the app owner for access, or use another email.</p></div><form class="tinker-stack" method="post" action="/_tinker/identity/use-another"><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tinker-button tinker-button--secondary tinker-button--full" type="submit">Use another email</button></form><p class="tinker-auth-card__footer">Changing email signs this browser out of Tinkercloud apps after verification. We do not reveal the app’s access rules.</p></section></main><script>{{tinkerJS}}</script></body></html>`))
+var identityRetryTemplate = template.Must(template.New("identity-retry").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="retry-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>protected by tinkercloud</span></div><h1 id="retry-title">Sign-in needs another try.</h1><div class="tinker-notice" role="alert"><p>We could not complete that sign-in step. Your access has not changed.</p></div><p class="tinker-auth-card__footer">Return to the protected app and try again.</p></section></main><script>{{tinkerJS}}</script></body></html>`))
+var platformEmailTemplate = template.Must(template.New("platform-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="platform-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>tinkercloud</span></div><p class="tinker-eyebrow">Your Tinkercloud</p><h1 id="platform-title">Sign in to Tinkercloud.</h1><p class="tinker-auth-card__intro">Use your email to continue to the dashboard and any apps you can access.</p><form class="tinker-stack" method="post" action="/login"><label class="tinker-field" for="email"><span class="tinker-label">Email address</span><input class="tinker-input" id="email" name="email" type="email" required autocomplete="email"></label>{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tinker-button tinker-button--primary tinker-button--full" type="submit">Send one-time code</button></form></section></main><script>{{tinkerJS}}</script></body></html>`))
+var platformCodeTemplate = template.Must(template.New("platform-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="platform-code-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>tinkercloud</span></div><p class="tinker-eyebrow">One small step</p><h1 id="platform-code-title">Check your email.</h1><p class="tinker-auth-card__intro">If that address can sign in, a one-time code has been sent.</p><form class="tinker-stack" method="post" action="/login/verify"><label class="tinker-field" for="code"><span class="tinker-label">One-time code</span><input class="tinker-input tinker-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="transaction" value="{{.Transaction}}">{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tinker-button tinker-button--primary tinker-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinkerJS}}</script></body></html>`))
+var platformNoRoleTemplate = template.Must(template.New("platform-no-role").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard unavailable · Tinkercloud</title><style>{{tinkerCSS}}</style></head><body><a class="tinker-skip" href="#main">Skip to content</a><main class="tinker-auth" id="main"><section class="tinker-auth-card" aria-labelledby="no-role-title"><div class="tinker-brand"><span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span><span>tinkercloud</span></div><p class="tinker-eyebrow">Dashboard</p><h1 id="no-role-title">This account cannot use the dashboard.</h1><div class="tinker-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. You can still open apps where you have access.</p></div><form class="tinker-stack" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="tinker-button tinker-button--secondary tinker-button--full" type="submit">Sign out of Tinkercloud</button></form><p class="tinker-auth-card__footer">Sign out, then use another email if you need dashboard access.</p></section></main><script>{{tinkerJS}}</script></body></html>`))

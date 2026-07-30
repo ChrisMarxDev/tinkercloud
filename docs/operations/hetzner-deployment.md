@@ -7,11 +7,11 @@ solo/startup flow and the current VPN-only support gap.
 ## Target experience
 
 On a clean Hetzner Cloud Ubuntu 24.04 LTS or Ubuntu 26.04 LTS x86-64 VPS
-dedicated to TinyHost:
+dedicated to Tinkercloud:
 
 ```bash
-sudo sh ./packaging/install.sh ./tinyhost ./tinyhost.json ./tinyhost.sig
-sudo tinyhost setup
+sudo sh ./packaging/install.sh ./tinkercloud ./tinkercloud.json ./tinkercloud.sig
+sudo tinkercloud setup
 ```
 
 The guided setup discovers the host, asks for one controlled base domain and
@@ -25,10 +25,10 @@ ordinary health/security gates. See the
 The install script is a thin convenience wrapper. It:
 
 1. Detects supported Linux architecture.
-2. Downloads the matching `tinyhost` release.
+2. Downloads the matching `tinkercloud` release.
 3. Verifies its checksum and signature.
 4. Installs the binary in a standard executable path.
-5. Runs `tinyhost install-service`.
+5. Runs `tinkercloud install-service`.
 
 All meaningful setup logic lives in the signed binary, not a large mutable
 shell script. Operators may download and verify the binary manually instead.
@@ -40,12 +40,12 @@ document the human must author before setup.
 Automation and recovery still use the explicit contract:
 
 ```bash
-sudo tinyhost init --non-interactive \
+sudo tinkercloud init --non-interactive \
   --domain example.com \
   --operator-email operator@example.com \
   --email-from access@example.com --acme-email operator@example.com \
-  --resend-api-key-file /root/tinyhost-resend.key \
-  --hmac-key-file /root/tinyhost-hmac.key
+  --resend-api-key-file /root/tinkercloud-resend.key \
+  --hmac-key-file /root/tinkercloud-hmac.key
 ```
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
@@ -55,7 +55,7 @@ no-echo prompt only if that path passes the supported-shell secret-handling
 audit; otherwise it guides creation/selection of a protected file. Neither path
 places a secret in argv, ordinary config, or terminal output. Initialization
 copies the values into
-`/etc/tinyhost/credentials/tinyhost.env` at mode `0600`; the config contains
+`/etc/tinkercloud/credentials/tinkercloud.env` at mode `0600`; the config contains
 only `env:` references. Do not pass API keys as command-line values.
 
 The shared initialization domain:
@@ -63,9 +63,9 @@ The shared initialization domain:
 1. Validates the exact Ubuntu 24.04 LTS/amd64 or Ubuntu 26.04 LTS/amd64
    allowlist, NTP synchronization, and exclusive availability of public ports
    80 and 443. Interim, end-of-life, malformed, and future unverified releases
-   deny before host mutation. DNS and disk are checked by `tinyhost doctor`
+   deny before host mutation. DNS and disk are checked by `tinkercloud doctor`
    after initialization, not by the resumable preflight.
-2. Creates the dedicated `tinyhost` service user and private data directory.
+2. Creates the dedicated `tinkercloud` service user and private data directory.
 3. Writes root-owned secret references and non-secret typed configuration.
 4. Initializes SQLite and applies embedded migrations.
 5. Creates the first operator.
@@ -82,7 +82,7 @@ The shared initialization domain:
 10. Prints the dashboard URL.
 
 Initialization is resumable and idempotent. It records each completed durable
-step in `/etc/tinyhost/init-state.json`; a failed step remains retryable and
+step in `/etc/tinkercloud/init-state.json`; a failed step remains retryable and
 the command never advertises the service as ready until both health probes pass.
 
 ## Required external preparation
@@ -99,28 +99,28 @@ The accepted first post-V1 direction is one operator-supplied certificate/key
 pair covering the admin and app hostnames, as described in
 [ADR 0028](../decisions/0028-operator-supplied-tls-for-vpn-only.md).
 
-`sudo tinyhost doctor` validates and explains these dependencies after the
-service starts, but TinyHost cannot safely create DNS or verify email-domain
+`sudo tinkercloud doctor` validates and explains these dependencies after the
+service starts, but Tinkercloud cannot safely create DNS or verify email-domain
 ownership without additional provider credentials. Unlike the offline-safe
-`tinyhost status`, doctor reads the root-only systemd credential file directly
+`tinkercloud status`, doctor reads the root-only systemd credential file directly
 for its read-only Resend check; it never prints the file path, references, key,
 or provider response body. The default is
-`/etc/tinyhost/credentials/tinyhost.env`; use `--config` and `--credentials`
+`/etc/tinkercloud/credentials/tinkercloud.env`; use `--config` and `--credentials`
 only for an explicit root-owned test or recovery layout.
 
 ## Resulting host shape
 
 ```text
-/usr/local/bin/tinyhost          # one signed server binary
-/etc/tinyhost/config.yaml        # non-secret configuration
-/etc/tinyhost/credentials/       # root-owned secrets
-/var/lib/tinyhost/               # SQLite, releases, keys, update rollback
-/etc/systemd/system/tinyhost.service
+/usr/local/bin/tinkercloud          # one signed server binary
+/etc/tinkercloud/config.yaml        # non-secret configuration
+/etc/tinkercloud/credentials/       # root-owned secrets
+/var/lib/tinkercloud/               # SQLite, releases, keys, update rollback
+/etc/systemd/system/tinkercloud.service
 ```
 
-TinyHost's installed network-exposure delta is exactly its public TCP 80/443
+Tinkercloud's installed network-exposure delta is exactly its public TCP 80/443
 gateway listeners. The installer does not modify the operator's firewall, SSH,
-or pre-existing listeners. The service runs as the unprivileged `tinyhost` user
+or pre-existing listeners. The service runs as the unprivileged `tinkercloud` user
 after installation. Its systemd sandbox grants exactly
 `CAP_NET_BIND_SERVICE` through both the ambient and bounding capability sets,
 default-denies socket binds, allows only TCP 80/443, and restricts socket
@@ -131,16 +131,16 @@ protections; it does not run the gateway as root.
 
 ```bash
 # Use the configured updates.release_base, or name the HTTPS release directory.
-sudo tinyhost update
-sudo tinyhost update \
-  --release-base https://releases.example.net/tinyhost/v1.0.0/
+sudo tinkercloud update
+sudo tinkercloud update \
+  --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/
 ```
 
 For an air-gapped host, copy the server artifact triplet and signed
 `release-manifest.json` triplet onto the VPS. Use `--binary`, `--metadata`,
 `--signature`, `--release-manifest`, `--release-manifest-metadata`, and
 `--release-manifest-signature` together. The command does not
-follow redirects, accepts only the pinned signed `tinyhost-linux-amd64` release,
+follow redirects, accepts only the pinned signed `tinkercloud-linux-amd64` release,
 and rejects private or link-local release origins. It derives public health from
 installed state and deterministically selects a locally verified active app for
 the anonymous capability-denial probe. If no active app exists, it proves that
@@ -153,7 +153,7 @@ file) in the root-owned config:
 
 ```yaml
 updates:
-  release_base: https://releases.example.net/tinyhost/v1.0.0/
+  release_base: https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/
 ```
 
 Changing this value selects where the manually invoked updater looks; it never
@@ -176,7 +176,7 @@ check compatibility
 The control-credential separation migration revokes every bearer token created
 before that upgrade because old rows could have represented either a dashboard
 cookie or a CLI token. After the healthy upgrade, operators and deployers run
-`tiny login` once to obtain a fresh CLI-only bearer; browser dashboard users
+`tinker login` once to obtain a fresh CLI-only bearer; browser dashboard users
 sign in again. No legacy credential is converted or retained.
 
 No silent auto-update in V1. A later opt-in schedule can call the same command.
@@ -186,9 +186,9 @@ No silent auto-update in V1. A later opt-in schedule can call the same command.
 Root access is authoritative:
 
 ```bash
-sudo tinyhost recover operator --email new@example.com
-sudo tinyhost doctor
-sudo tinyhost update --rollback
+sudo tinkercloud recover operator --email new@example.com
+sudo tinkercloud doctor
+sudo tinkercloud update --rollback
 ```
 
 Recovery commands require a local root shell and are never exposed as remote
@@ -197,13 +197,13 @@ failed update; it is not a deployer application-release rollback.
 
 ## Deployer installation
 
-Deployer machines install only the smaller `tiny` client:
+Deployer machines install only the smaller `tinker` client:
 
 ```bash
-TINYHOST_CLIENT_RELEASE_BASE=https://releases.example.net/tinyhost/v1.0.0/ \
+TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/ \
   ./packaging/install-client.sh
-tiny login
-tiny deploy .
+tinker login
+tinker deploy .
 ```
 
 Run the installer as the deployer user, never with `sudo`. It validates the
@@ -225,18 +225,18 @@ Hosting is not open merely because someone knows the platform URL:
    credentials while their immutable IDs and owned apps remain. Audit failure
    rolls back the entire reconciliation.
    Root recovery/automation may still authorize one normalized address with
-   `tinyhost deployers authorize <email>`. The root-only command grammar is
-   `tinyhost deployers <authorize|suspend|revoke> [--config PATH] <email>`;
-   `--config` defaults to `/etc/tinyhost/config.yaml` and must appear before
+   `tinkercloud deployers authorize <email>`. The root-only command grammar is
+   `tinkercloud deployers <authorize|suspend|revoke> [--config PATH] <email>`;
+   `--config` defaults to `/etc/tinkercloud/config.yaml` and must appear before
    the email. It writes SQLite in a fixed child that drops to the unprivileged
-   `tinyhost` service identity, including a narrowly validated handoff of any
+   `tinkercloud` service identity, including a narrowly validated handoff of any
    legacy root-owned DB/WAL/SHM artifacts; it never loosens database modes.
    Once the child has committed and closed, the root parent refreshes an
-   already-running TinyHost service and confirms it is active. It never starts
+   already-running Tinkercloud service and confirms it is active. It never starts
    an inactive service. If that refresh fails, the command reports that the
-   authorization was applied but service refresh failed; run `sudo tinyhost
+   authorization was applied but service refresh failed; run `sudo tinkercloud
    doctor` before relying on the new deployer.
-2. The deployer runs `tiny login`. If no verified default platform exists, the
+2. The deployer runs `tinker login`. If no verified default platform exists, the
    human CLI asks once for `https://admin.example.com`, proves compatibility
    without redirects, saves only that URL, and continues. JSON never prompts.
 3. The CLI requests an OTP; the platform returns the same safe response whether
@@ -244,17 +244,17 @@ Hosting is not open merely because someone knows the platform URL:
 4. The deployer enters the emailed code in the CLI.
 5. After OTP verification and a current deployer-status check, the server
    issues a server-bound, scoped CLI token.
-6. The CLI stores the token in its protected per-user Tiny credential file,
-   never a project file: `os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`.
+6. The CLI stores the token in its protected per-user Tinker credential file,
+   never a project file: `os.UserConfigDir()/tinker/<sha256(normalized-server)>.json`.
    The configuration directory is mode `0700`; the regular non-symlinked
-   credential file is mode `0600` and is atomically replaced in place. `tiny
+   credential file is mode `0600` and is atomically replaced in place. `tinker
    login` is needed once per valid token; later CLI commands reuse it silently.
 7. Every control-plane request rechecks token validity, deployer status, scope,
    and target ownership. Revocation takes effect on the next request.
 
-The canonical deploy-first human flow is `tiny deploy .`: it can perform the
+The canonical deploy-first human flow is `tinker deploy .`: it can perform the
 same missing-platform/login steps, derive safe local project defaults, and
-generate a missing `tiny.yaml` as a reviewable receipt. It never runs the
+generate a missing `tinker.yaml` as a reviewable receipt. It never runs the
 project build command. See the
 [complete deployer flow](../../concept/flows/deployer.html).
 

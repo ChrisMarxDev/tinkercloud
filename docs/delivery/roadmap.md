@@ -6,9 +6,9 @@ the implementing team after spikes.
 
 ## Next implementation slice — M5/M3 minimum-necessary guided flows
 
-Outcome: a human operator can run `tinyhost setup`, and a human deployer can run
-`tiny deploy .`, without preparing configuration paperwork or repeatedly
-entering information TinyHost can discover, verify, reuse, or safely default.
+Outcome: a human operator can run `tinkercloud setup`, and a human deployer can run
+`tinker deploy .`, without preparing configuration paperwork or repeatedly
+entering information Tinkercloud can discover, verify, reuse, or safely default.
 The exhaustive targets are the
 [operator flow](../../concept/flows/operator.html) and
 [deployer flow](../../concept/flows/deployer.html).
@@ -27,7 +27,7 @@ Already implemented foundations:
 
 Remaining vertical path:
 
-- add the resumable human `tinyhost setup` assistant over the strict
+- add the resumable human `tinkercloud setup` assistant over the strict
   non-interactive initialization contract;
 - derive conventional platform/app/sender values from one base domain and
   pause with exact DNS/Resend actions;
@@ -46,7 +46,7 @@ Exit evidence:
   config or repeated answers;
 - interrupted external DNS/email work resumes at the exact blocked step;
 - a useful built static project reaches a protected URL from
-  `tiny deploy .` without hand-authored YAML;
+  `tinker deploy .` without hand-authored YAML;
 - every human prompt proves its input is required, unknown, and unsafe to
   default; and
 - JSON/non-interactive behavior remains deterministic and non-prompting.
@@ -150,7 +150,7 @@ failure denies and rolls back. Bounded token list and dashboard models expose
 only this safe timestamp (never a raw token/hash, IP, or user agent), and
 cross-owner token reads are denied.
 
-Evidence implemented: TinyHost-owned platform login, app-origin login,
+Evidence implemented: Tinkercloud-owned platform login, app-origin login,
 one-time-code verification, display-once token, dashboard, and operations
 templates now consume one embedded dependency-free native web system. It
 preserves generic non-enumerating auth responses, server-rendered forms,
@@ -177,13 +177,13 @@ but never CLI/agent bearers.
 The server-rendered dashboard displays each owned app's current canonical
 private allowlist and policy revision, with editable prepopulated email/domain
 fields. It labels an empty list as owner-only and explains that an immutable
-deployment's `tiny.yaml` policy replaces the current revision at activation;
+deployment's `tinker.yaml` policy replaces the current revision at activation;
 the read model fails unavailable rather than silently showing absent or stale
 policy state as empty.
 
 ## M3 — Immutable deployment loop
 
-Outcome: `tiny deploy` returns a verified protected URL with failed-activation
+Outcome: `tinker deploy` returns a verified protected URL with failed-activation
 preservation.
 
 Components:
@@ -207,7 +207,7 @@ ambient policy), and atomically swaps release pointer plus policy revision on
 activation. Failure injection proves a failed activation preserves the prior
 pointer and policy together.
 
-Evidence implemented: an optional validated `tiny.yaml` description is stored
+Evidence implemented: an optional validated `tinker.yaml` description is stored
 only in each immutable deployment manifest. Dashboard history shows the
 matching release description while the app summary follows `current_deployment_id`,
 so failed activation preserves the active app without a mutable app field.
@@ -232,11 +232,11 @@ exact activation host is derived as `<slug>.<domain>` from the single
 configured root domain; `admin.<domain>` is reserved for the dashboard and
 browser identity broker.
 
-The human first-app path now includes the dependency-free, owner-only Tiny
+The human first-app path now includes the dependency-free, owner-only Tinker
 Ritual sample and a short Markdown setup guide. A regression parses its real
 manifest, proves its allowlist stays owner-only with capabilities disabled, and
 archives exactly the four intended deployment files. Local preview is explicitly
-presentation evidence only; it does not stand in for TinyHost authentication,
+presentation evidence only; it does not stand in for Tinkercloud authentication,
 TLS, activation, or anonymous-denial evidence.
 
 Evidence implemented: restart recovery is database-led and evaluates stable
@@ -281,7 +281,7 @@ authorized host-only session, proving identity/app/capability discovery and
 app-scoped KV get/set/list/delete. The contract also proves that no SDK input
 selects another app, raw clients without a version header remain compatible,
 and an unsupported supplied SDK major maps to the actionable typed
-`TinyVersionIncompatibleError`. Checked-in SDK examples compile and the
+`TinkerVersionIncompatibleError`. Checked-in SDK examples compile and the
 uncompressed ESM output has a 12 KiB regression gate.
 Distribution preparation now keeps the compiled npm artifact, TypeScript-native
 JSR artifact, and exported SDK version synchronized. The npm tarball has an
@@ -309,7 +309,7 @@ SQL surface.
 Decision and contract:
 
 - ADR [`0048`](../decisions/0048-per-app-sqlite-collections.md) keeps the
-  existing `modernc.org/sqlite` engine and separates `tinyhost.db` control state
+  existing `modernc.org/sqlite` engine and separates `tinkercloud.db` control state
   from `apps/{immutable-app-id}/data.db` app state;
 - [`specs/capabilities/collections-contract.md`](../../specs/capabilities/collections-contract.md)
   defines server-issued document IDs, optimistic versions, bounded lists and
@@ -327,11 +327,11 @@ Evidence implemented:
   isolation, traversal, stale-write, quota, concurrent-limit,
   failed-transaction, and deletion tests fail closed;
 - collection create/get/update/delete/list/snapshot routes, SDK
-  `tiny.db.collection(...)`, optimistic conflicts, and app-scoped
+  `tinker.db.collection(...)`, optimistic conflicts, and app-scoped
   `collection.changed` hints are implemented; reconnect and tab visibility
   recover from authoritative snapshots rather than event replay;
 - the Reactive Collections example and SDK tests cover the typed surface; and
-- `tiny dev` uses project-local normal SQLite and supports the local subset of
+- `tinker dev` uses project-local normal SQLite and supports the local subset of
   viewer/app information, KV, collections, and live freshness hints while
   refusing non-loopback listeners. It explicitly excludes production auth,
   deployment, blobs, LLM/provider calls, and deployment protection evidence.
@@ -346,7 +346,7 @@ Remaining release evidence:
 ### Implemented M4 slice — lightweight app-scoped blobs
 
 Outcome: an authenticated static app can store and retrieve small attachments
-through `@tinyhost/sdk` without operating a bucket, mount, storage server, or
+through `@tinkercloud/sdk` without operating a bucket, mount, storage server, or
 backend process.
 
 Contract and decision:
@@ -354,9 +354,9 @@ Contract and decision:
 - [`specs/capabilities/blob-contract.md`](../../specs/capabilities/blob-contract.md)
   and ADR [`0030`](../decisions/0030-v1-lightweight-local-blob-storage.md)
   define the public and persistence boundary;
-- `tiny.yaml`, capability discovery, the sealed authorization context, gateway
+- `tinker.yaml`, capability discovery, the sealed authorization context, gateway
   route registry, HTTP contract, SDK, deployable Attachment Shelf example, and
-  TinyHost skills move together;
+  Tinkercloud skills move together;
 - the implementation uses a narrow internal streaming blob-store interface and
   a private standard-library local adapter; and
 - the deployment shape remains one server process, one embedded SQLite engine,
@@ -428,8 +428,8 @@ Components:
 - structured logs, admin views, security diagnostics;
 - signed, reproducible release pipeline.
 
-Evidence implemented: `tinyhost status` remains an offline diagnostic and does
-not load provider credentials. `sudo tinyhost doctor` independently validates
+Evidence implemented: `tinkercloud status` remains an offline diagnostic and does
+not load provider credentials. `sudo tinkercloud doctor` independently validates
 the root-only systemd credential file before making its bounded read-only
 Resend request, so it does not depend on systemd's inherited environment.
 Absent, symlinked, non-root-owned, permissive, malformed, duplicate, and
@@ -439,7 +439,7 @@ skill-drift, and offline security-gate evidence pass.
 
 The root-only deployer authorization command now validates its local root
 caller, narrowly hands off any legacy root-owned SQLite DB/WAL/SHM artifacts,
-then mutates SQLite in a permanently dropped `tinyhost` child. New and repaired
+then mutates SQLite in a permanently dropped `tinkercloud` child. New and repaired
 artifacts stay owned by the gateway identity without permissive mode changes.
 After its durable close, the root parent refreshes an already-running service
 and verifies it remains active; it never starts an inactive service.
@@ -447,10 +447,10 @@ and verifies it remains active; it never starts an inactive service.
 ### Planned M5 slice — lightweight host resource overview
 
 Outcome: the authenticated operator can see a small recent CPU, RAM, and
-TinyHost data-volume storage chart in the existing admin board and can recognize
+Tinkercloud data-volume storage chart in the existing admin board and can recognize
 resource pressure without SSHing into the VPS.
 
-This remains part of the single `tinyhost` process. It uses a low-cadence,
+This remains part of the single `tinkercloud` process. It uses a low-cadence,
 fixed-size in-memory sample window and server-rendered output; it adds no
 Prometheus/Grafana stack, database time-series table, public metrics endpoint,
 client polling loop, or second listener. History resets on server restart.
@@ -493,10 +493,10 @@ Exit evidence:
 ### Planned M5 slice — guided operator setup
 
 Outcome: after SSHing into a clean supported VPS, an operator can complete
-TinyHost setup through one understandable guided flow without composing the
-full `tinyhost init --non-interactive` command by hand.
+Tinkercloud setup through one understandable guided flow without composing the
+full `tinkercloud init --non-interactive` command by hand.
 
-The working CLI shape is a root-local `tinyhost setup` assistant. Before
+The working CLI shape is a root-local `tinkercloud setup` assistant. Before
 implementation, its final command contract and deny charter must be added to
 the M5 operations contract. It must call the existing resumable init
 application service rather than create a second installation pipeline.
@@ -520,7 +520,7 @@ The assistant:
   service, and public verification, and resumes safely after interruption;
 - turns DNS, Resend, TLS, permission, port, and public-health failures into one
   actionable next step without weakening fail-closed behavior;
-- retains `tinyhost init --non-interactive` for agents, CI, and reproducible
+- retains `tinkercloud init --non-interactive` for agents, CI, and reproducible
   automation; and
 - opens no temporary web setup listener, issues no bootstrap URL/token, and
   adds no remote recovery or authorization bypass.
@@ -561,16 +561,18 @@ the server/CLI/SDK/control-API/app-API/schema compatibility matrix without
 changing the existing per-artifact signature bytes. A publish-free preparation
 task derives a lifecycle-script-free, dependency-free npm CLI candidate and a
 Homebrew formula from a fully verified release. It performs no registry, tap,
-hosted-release, namespace, DNS, or channel mutation. The final public names and
-origins remain intentionally pending the last rename.
-The standalone `distribute-tiny-cli` and `distribute-tiny-sdk` maintainer
+hosted-release, namespace, DNS, or channel mutation. ADR 0052 locks the
+Tinkercloud product, command, package, formula, tap, and GitHub identities;
+registry availability and any future official domain remain separate
+publication decisions.
+The standalone `distribute-tinker-cli` and `distribute-tinkercloud-sdk` maintainer
 skills turn those gates into explicit inspect, prepare, and publish workflows.
 Preparation remains local and non-mutating; publishing is blocked until the
-operator has finalized the public identities and destinations and has
-explicitly authorized the named release. Repository drift checks validate both
-skill contracts and their invocation metadata.
+operator has verified ownership of the public destinations and explicitly
+authorized the named release. Repository drift checks validate both skill
+contracts and their invocation metadata.
 An explicitly dispatched `beta-release` GitHub Actions workflow provides the
-temporary pre-rename distribution channel. It accepts only an existing
+pre-stable distribution channel. It accepts only an existing
 `vMAJOR.MINOR.PATCH` tag reachable from `main`, runs the normal gates before
 entering the protected signing environment, builds and verifies one complete
 release, verifies the uploaded draft bytes, and publishes only a GitHub
@@ -579,14 +581,14 @@ versioned release. npm, JSR, Homebrew, stable/latest promotion, and silent
 updates remain disabled. The committed authority is beta-only and must rotate
 across every embedded trust anchor before stable distribution.
 The packaged and generated gateway units are also locally validated without a
-systemd PID 1: they retain the `tinyhost` user, strict sandbox, exactly the
+systemd PID 1: they retain the `tinkercloud` user, strict sandbox, exactly the
 configured writable paths, and only `CAP_NET_BIND_SERVICE` in their ambient
 and bounding capability sets for ports 80/443. Their cgroup bind policy denies
 all other TCP and UDP binds, allows only TCP 80/443, and restricts address
 families to Unix, IPv4, and IPv6 sockets. Production config rejects other
 listener ports. The VPS inventory rejects any additional non-loopback listener
-owned by TinyHost while leaving firewall, SSH, and operator-owned listeners
-outside TinyHost's mutation scope.
+owned by Tinkercloud while leaving firewall, SSH, and operator-owned listeners
+outside Tinkercloud's mutation scope.
 Host preflight uses an exact Ubuntu 24.04 LTS/amd64 and Ubuntu 26.04 LTS/amd64
 allowlist. Its denial matrix rejects non-Linux/non-amd64 hosts, other
 distributions, duplicated or malformed OS metadata, EOL interim releases
@@ -624,15 +626,15 @@ certificate/key pair covering the platform and wildcard app hostnames. Secure
 support still needs private or split DNS rules, protected certificate
 installation and atomic replacement, trusted-network health and
 anonymous-denial probes, expiry diagnostics, and a real VPN acceptance suite.
-VPN membership must not replace TinyHost app identity, session, or policy
-checks. Users retain TinyHost email OTP login and per-app authorization in the
+VPN membership must not replace Tinkercloud app identity, session, or policy
+checks. Users retain Tinkercloud email OTP login and per-app authorization in the
 first VPN-only mode; central SSO remains a separate later candidate. This work
 is not authorized to weaken the M5 public proof and is not scheduled ahead of
 the committed V1 blob slice.
 
 ## Implemented M4 extension — deployer data access
 
-Outcome: an authenticated deployer can use the saved `tiny` CLI login to
+Outcome: an authenticated deployer can use the saved `tinker` CLI login to
 inspect and deliberately repair the bounded KV/document state of an app they
 own, without receiving SQLite access or a new database service.
 
@@ -647,7 +649,7 @@ Implemented L1–L3 boundary and required evidence:
 - control bearer authentication rechecks active deployer status, expiry,
   revocation, exact `data:read`/`data:write` scope, optional app binding, and
   ownership before resolving an internal immutable app ID or opening data;
-- the control API and `tiny data` CLI reuse existing KV/collection response,
+- the control API and `tinker data` CLI reuse existing KV/collection response,
   pagination, validation, quota, optimistic-version, cancellation, and
   idempotency semantics. They expose bounded list/get plus individual create,
   update, and delete operations—not SQLite paths/files, SQL, arbitrary filters,
@@ -673,7 +675,7 @@ utility-data disclaimer as M4.
 
 ## Implemented post-V1 extension — operator-governed LLM chat
 
-Outcome: an operator can keep an Anthropic or Gemini key behind TinyHost,
+Outcome: an operator can keep an Anthropic or Gemini key behind Tinkercloud,
 approve one bounded profile for an app, and let an authorized viewer use
 provider-neutral non-streaming chat without exposing a secret, provider URL,
 connection, model selector, or app identifier.
@@ -690,12 +692,12 @@ Implemented L1/L2 evidence:
 - root-local enablement, write-only operator connection/rotation controls,
   profile/grant controls, activation gating, safe discovery, fixed Anthropic
   and Gemini adapters, the protected app route, SDK
-  `tiny.llm.chat.complete`, and a deployable example are implemented;
+  `tinker.llm.chat.complete`, and a deployable example are implemented;
 - local unit, persistence, provider-conformance, UI, SDK, and composed
   real-listener tests cover two-app isolation, revocation, strict input,
   rate/quota/concurrency admission, conservative ambiguous outcomes, redirects,
   cancellation, and secret/prompt/completion leakage; and
-- `tiny dev` deliberately reports no LLM capability and performs no provider
+- `tinker dev` deliberately reports no LLM capability and performs no provider
   call, because emulating grants, spend, and secret handling would misrepresent
   production authorization.
 

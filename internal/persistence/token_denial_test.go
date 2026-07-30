@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 )
 
 func tokenLastUsed(t *testing.T, s *SQLiteStore, raw string) sql.NullString {

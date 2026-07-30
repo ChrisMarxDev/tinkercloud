@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 )
 
 func TestControlAuthenticatorAppBoundToken(t *testing.T) {

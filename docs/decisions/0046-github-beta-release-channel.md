@@ -1,14 +1,14 @@
-# ADR 0046: GitHub prereleases are the pre-rename beta channel
+# ADR 0046: GitHub prereleases are the pre-stable beta channel
 
 Status: Accepted for beta distribution
 
 ## Context
 
-Maintainers need an installable beta before the final product, package, tap, and
-domain rename. npm and Homebrew would make working identities durable and add
-registry/tap state that must later be migrated. The existing signed release
-already contains the complete CLI, server, SDK, installer, compatibility, and
-verification evidence needed for a direct GitHub channel.
+Maintainers need an installable beta before stable registry, tap, and domain
+distribution is authorized. npm and Homebrew would create registry/tap state
+that requires separate ownership and publication approval. The existing signed
+release already contains the complete CLI, server, SDK, installer,
+compatibility, and verification evidence needed for a direct GitHub channel.
 
 Running the eventual production signing authority inside ordinary CI would
 unnecessarily expand stable-release trust before that authority and identity
@@ -35,10 +35,10 @@ anchor together.
 ## Consequences
 
 Beta consumers can install the CLI and server directly from immutable,
-versioned GitHub assets. Maintainers operate one temporary public channel
-without reserving final registry identities. Compromise of the beta authority
-can affect beta consumers, so the environment requires human approval and the
-authority is never promoted to production trust.
+versioned GitHub assets. Maintainers operate one public prerelease channel
+without claiming npm, JSR, or Homebrew availability. Compromise of the beta
+authority can affect beta consumers, so the environment requires human
+approval and the authority is never promoted to production trust.
 
 Every public beta consumes a new strict numeric patch version. Failures after
 publication reconcile forward; published assets and tags are never replaced.

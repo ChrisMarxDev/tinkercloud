@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const work = mkdtempSync(join(tmpdir(), "tinyhost-sdk-consumer-"));
+const work = mkdtempSync(join(tmpdir(), "tinkercloud-sdk-consumer-"));
 const cache = join(work, "npm-cache");
 const packageRoot = new URL("../", import.meta.url);
 const expectedVersion = JSON.parse(
@@ -64,11 +64,11 @@ try {
 
   const installedManifest = JSON.parse(
     readFileSync(
-      join(consumer, "node_modules", "@tinyhost", "sdk", "package.json"),
+      join(consumer, "node_modules", "@tinkercloud", "sdk", "package.json"),
       "utf8",
     ),
   );
-  assert.equal(installedManifest.name, "@tinyhost/sdk");
+  assert.equal(installedManifest.name, "@tinkercloud/sdk");
   assert.equal(installedManifest.version, expectedVersion);
   assert.equal(installedManifest.dependencies, undefined);
 
@@ -77,10 +77,10 @@ try {
     probe,
     [
       'import assert from "node:assert/strict";',
-      'import { SDK_VERSION, createTiny, tiny } from "@tinyhost/sdk";',
+      'import { SDK_VERSION, createTinker, tinker } from "@tinkercloud/sdk";',
       `assert.equal(SDK_VERSION, ${JSON.stringify(expectedVersion)});`,
-      'assert.equal(typeof createTiny, "function");',
-      'assert.equal(typeof tiny.user.current, "function");',
+      'assert.equal(typeof createTinker, "function");',
+      'assert.equal(typeof tinker.user.current, "function");',
       "",
     ].join("\n"),
   );

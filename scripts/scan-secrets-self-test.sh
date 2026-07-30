@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-secret-scan.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-secret-scan.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/allow" "$tmp/deny"
 
@@ -30,11 +30,11 @@ git -C "$tmp/repo" init -q
 printf '%s\n' '.env' >"$tmp/repo/.gitignore"
 printf '%s%s\n' "$private_prefix" "$private_suffix" >"$tmp/repo/untracked-private.pem"
 printf '%s%s\n' 'ghp_' 'abcdefghijklmnopqrstuvwxyz0123456789AB' >"$tmp/repo/.env"
-if TINYHOST_SECRET_SCAN_ROOT="$tmp/repo" "$root/scripts/scan-secrets.sh" >/dev/null 2>&1; then
+if TINKERCLOUD_SECRET_SCAN_ROOT="$tmp/repo" "$root/scripts/scan-secrets.sh" >/dev/null 2>&1; then
   echo "untracked first-commit secret was accepted by secret scan" >&2
   exit 1
 fi
 rm "$tmp/repo/untracked-private.pem"
-TINYHOST_SECRET_SCAN_ROOT="$tmp/repo" "$root/scripts/scan-secrets.sh" >/dev/null
+TINKERCLOUD_SECRET_SCAN_ROOT="$tmp/repo" "$root/scripts/scan-secrets.sh" >/dev/null
 
 echo "secret scan deny/allow/first-commit self-test passed"

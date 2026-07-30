@@ -19,15 +19,15 @@ visible() {
   fi
 }
 
-ignored tinyhost-vps-known_hosts
+ignored tinkercloud-vps-known_hosts
 ignored resend-api-key
 ignored local-resend.key
 ignored app-hmac.key
-ignored .tiny/credentials.json
-ignored .tiny/vps/id_ed25519
-ignored .tiny/vps/id_ed25519.pub
-ignored .tiny/vps/known_hosts
-ignored .tiny/vps/ssh_config
+ignored .tinker/credentials.json
+ignored .tinker/vps/id_ed25519
+ignored .tinker/vps/id_ed25519.pub
+ignored .tinker/vps/known_hosts
+ignored .tinker/vps/ssh_config
 ignored .hermes-task-loop/issues.json
 ignored GITHUB_TOKEN
 ignored landing/.git/config

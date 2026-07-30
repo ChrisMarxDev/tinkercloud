@@ -1,13 +1,13 @@
 # SDK example applications deny-path charter
 
 The public examples are documentation that users will copy. They must make the
-TinyHost boundary easier to preserve, not teach browser-side substitutes for
+Tinkercloud boundary easier to preserve, not teach browser-side substitutes for
 authorization or durable delivery.
 
 ## Boundary and ownership
 
-- App and viewer identity come only from `tiny.app.info()` and
-  `tiny.user.current()` over the current same-origin session.
+- App and viewer identity come only from `tinker.app.info()` and
+  `tinker.user.current()` over the current same-origin session.
 - KV keys and live channels remain in the gateway-derived app namespace.
 - Browser code contains no app selector, bearer credential, provider secret,
   database credential, alternate API origin, or raw reserved-endpoint call.
@@ -45,7 +45,7 @@ authorization or durable delivery.
 1. type-check every example source file against the supported SDK;
 2. build all three deployable release directories in a temporary location;
 3. prove each release contains `index.html`, `app.js`, `errors.js`,
-   `styles.css`, and `tiny-sdk.js`;
+   `styles.css`, and `tinker-sdk.js`;
 4. prove package imports were resolved to the local SDK file; and
 5. reject remote URLs, explicit app-selection fields, and credential-like
    browser configuration in example-owned source and built artifacts.

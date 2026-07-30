@@ -1,6 +1,6 @@
-# M5 TinyHost port-bind denial charter
+# M5 Tinkercloud port-bind denial charter
 
-TinyHost changes the host network surface only by opening its HTTP and HTTPS
+Tinkercloud changes the host network surface only by opening its HTTP and HTTPS
 gateway listeners. It does not claim ownership of the operator's firewall, SSH
 service, or pre-existing processes.
 
@@ -12,8 +12,8 @@ Before the port hardening slice is complete, executable evidence must prove:
   only TCP 80 and TCP 443;
 - removing or broadening any bind-policy directive makes local unit validation
   fail before `systemctl` runs;
-- a live inventory with healthy TinyHost listeners on 80/443 plus a
-  TinyHost-owned listener on any other non-loopback port fails;
+- a live inventory with healthy Tinkercloud listeners on 80/443 plus a
+  Tinkercloud-owned listener on any other non-loopback port fails;
 - a pre-existing listener owned by another process is not attributed to
-  TinyHost; and
+  Tinkercloud; and
 - firewall and SSH configuration are not mutated by installation.

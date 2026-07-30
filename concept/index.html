@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Development Concept</title>
+  <title>Tinkercloud — Development Concept</title>
   <link rel="stylesheet" href="assets/concept.css">
 </head>
 <body>
@@ -17,18 +17,18 @@
       <a href="#decision">Decision</a>
       <a href="flows/operator.html">Operator flow</a>
       <a href="flows/deployer.html">Deployer flow</a>
-      <a href="flows/tinyhost-operator-deployer-flows.tldraw">Editable canvas</a>
+      <a href="flows/tinkercloud-operator-deployer-flows.tldraw">Editable canvas</a>
       <a href="../PRD.md">Canonical PRD</a>
       <a href="features/index.html">Feature ranking</a>
     </nav>
     <p class="eyebrow">Reconciled implementation concept · July 2026</p>
     <h1>A private app gateway that happens to deploy apps.</h1>
-    <p class="lede">TinyHost lets one technical operator provide a safe,
+    <p class="lede">Tinkercloud lets one technical operator provide a safe,
       self-hosted deployment destination to people and agents who should not
       need to understand infrastructure or implement authentication.</p>
     <p class="promise">No private app file, API, socket, blob, or backend request
-      is reachable until TinyHost has authenticated and authorized it.</p>
-    <p class="promise">A human starts with the intended outcome. TinyHost asks
+      is reachable until Tinkercloud has authenticated and authorized it.</p>
+    <p class="promise">A human starts with the intended outcome. Tinkercloud asks
       only for information it cannot discover or safely default; generated
       config is a receipt, not prerequisite paperwork.</p>
   </header>
@@ -42,14 +42,14 @@
           <p>Small internal and client-facing apps are cheap to create but
             surprisingly expensive to expose safely. Authentication is repeated,
             inconsistently implemented, and easy for AI-generated software to
-            omit. TinyHost makes privacy a property of the hosting boundary,
+            omit. Tinkercloud makes privacy a property of the hosting boundary,
             independent of app framework or developer discipline.</p>
           <p>The smallest compelling experience is one command that returns a
             protected URL and verifies that anonymous requests receive no app
             bytes.</p>
           <p><strong>North star:</strong> Shopify Quick's folder-to-secure-URL,
             client capability APIs, bundled agent skills, and “keep it simple,
-            embrace the constraints” philosophy—adapted to TinyHost's stricter
+            embrace the constraints” philosophy—adapted to Tinkercloud's stricter
             per-app authorization model.</p>
           <p><a href="../docs/product/north-star-quick.md">Quick comparison and
             decision filter</a></p>
@@ -67,8 +67,8 @@
         <p class="eyebrow">V1 scope</p>
         <h2>One protected static loop</h2>
         <ul>
-          <li>One <code>tinyhost</code> server binary on a clean Hetzner VPS.</li>
-          <li>A separate small <code>tiny</code> deployer CLI.</li>
+          <li>One <code>tinkercloud</code> server binary on a clean Hetzner VPS.</li>
+          <li>A separate small <code>tinker</code> deployer CLI.</li>
           <li>Operator control plane with one exact active-deployer allowlist.</li>
           <li>Persistent deployer CLI login, remembered verified server, account
             switching, and real logout.</li>
@@ -155,7 +155,7 @@ dispatchProtected(authz, classifiedEndpoint)</pre>
         · <a href="../docs/security/threat-model.md">Threat model</a>
         · <a href="flows/operator.html">Complete operator flow</a>
         · <a href="flows/deployer.html">Complete deployer flow</a>
-        · <a href="flows/tinyhost-operator-deployer-flows.tldraw">Editable flow canvas</a>
+        · <a href="flows/tinkercloud-operator-deployer-flows.tldraw">Editable flow canvas</a>
         · <a href="../docs/product/flow-necessity-audit-2026-07.md">Input necessity audit</a></p>
     </section>
 

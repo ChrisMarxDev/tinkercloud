@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 func seedViewerPolicy(t *testing.T, s *SQLiteStore) {

@@ -25,7 +25,7 @@ const options = {
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.NodeJs,
   baseUrl: new URL("..", import.meta.url).pathname,
-  paths: { "@tinyhost/sdk": ["src/index.ts"] },
+  paths: { "@tinkercloud/sdk": ["src/index.ts"] },
   skipLibCheck: true,
 };
 const program = ts.createProgram(names, options);

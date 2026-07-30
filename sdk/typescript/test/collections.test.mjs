@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  createTiny,
-  TinyVersionConflictError,
+  createTinker,
+  TinkerVersionConflictError,
 } from "../dist/index.js";
 
 class FakeSocket {
@@ -32,7 +32,7 @@ function response(body, status = 200) {
 async function fakeFetch(input, init = {}) {
   const url = new URL(input, "https://app.test");
   const parts = url.pathname.split("/").filter(Boolean);
-  assert.deepEqual(parts.slice(0, 4), ["_tiny", "api", "v1", "db"]);
+  assert.deepEqual(parts.slice(0, 4), ["_tinker", "api", "v1", "db"]);
   assert.equal(decodeURIComponent(parts[4]), "tasks");
   const id = parts[5] && decodeURIComponent(parts[5]);
   const method = init.method ?? "GET";
@@ -86,7 +86,7 @@ async function fakeFetch(input, init = {}) {
   throw new Error(`unexpected request ${method} ${url}`);
 }
 
-const tiny = createTiny({
+const tinker = createTinker({
   origin: "https://app.test",
   fetch: fakeFetch,
   webSocket: () => {
@@ -101,7 +101,7 @@ const tiny = createTiny({
   },
   random: () => 0,
 });
-const tasks = tiny.db.collection("tasks");
+const tasks = tinker.db.collection("tasks");
 
 const created = await tasks.create({ title: "One", done: false });
 assert.equal(created.id, "doc_1");
@@ -117,7 +117,7 @@ const updated = await tasks.update(created.id, {
 assert.equal(updated.version, 2);
 await assert.rejects(
   tasks.update(created.id, { title: "stale" }, { expectedVersion: 1 }),
-  TinyVersionConflictError,
+  TinkerVersionConflictError,
 );
 assert.deepEqual((await tasks.list()).documents.map((document) => document.id), [
   created.id,

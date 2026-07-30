@@ -3,243 +3,243 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TinyHost native web system</title>
-  <link rel="stylesheet" href="assets/tinyhost.css?v=1">
-  <script src="assets/tinyhost.js?v=1" defer></script>
+  <title>Tinkercloud native web system</title>
+  <link rel="stylesheet" href="assets/tinkercloud.css?v=1">
+  <script src="assets/tinkercloud.js?v=1" defer></script>
 </head>
 <body>
-  <a class="tiny-skip" href="#main">Skip to content</a>
-  <div class="tiny-shell">
-    <header class="tiny-topbar">
-      <a class="tiny-brand" href="#">
-        <span class="tiny-brand__mark" aria-hidden="true">
-          <img src="assets/tiny-cloud-mark.svg" alt="">
+  <a class="tinker-skip" href="#main">Skip to content</a>
+  <div class="tinker-shell">
+    <header class="tinker-topbar">
+      <a class="tinker-brand" href="#">
+        <span class="tinker-brand__mark" aria-hidden="true">
+          <img src="assets/tinkercloud-mark.svg" alt="">
         </span>
-        <span>tinyhost</span>
+        <span>tinkercloud</span>
       </a>
-      <div class="tiny-topbar__account">
-        <div class="tiny-account">
+      <div class="tinker-topbar__account">
+        <div class="tinker-account">
           <strong>operator@acme.com</strong>
           <span>operator</span>
         </div>
-        <form class="tiny-inline-form" method="post" action="/logout">
+        <form class="tinker-inline-form" method="post" action="/logout">
           <input type="hidden" name="csrf" value="server-rendered-token">
-          <button class="tiny-button tiny-button--quiet tiny-button--small" type="submit">Sign out of TinyHost</button>
+          <button class="tinker-button tinker-button--quiet tinker-button--small" type="submit">Sign out of Tinkercloud</button>
         </form>
       </div>
     </header>
 
-    <main class="tiny-main" id="main">
-      <div class="tiny-page-heading">
-        <div class="tiny-page-heading__copy">
-          <p class="tiny-eyebrow">Native web system</p>
+    <main class="tinker-main" id="main">
+      <div class="tinker-page-heading">
+        <div class="tinker-page-heading__copy">
+          <p class="tinker-eyebrow">Native web system</p>
           <h1>Small, warm, and secure.</h1>
           <p>
-            Shared foundations and states for TinyHost login, dashboard,
+            Shared foundations and states for Tinkercloud login, dashboard,
             diagnostics, tokens, and operations.
           </p>
         </div>
-        <span class="tiny-status" data-state="active">Ready to use</span>
+        <span class="tinker-status" data-state="active">Ready to use</span>
       </div>
 
-      <section class="tiny-section" aria-labelledby="actions-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Actions</p><h2 id="actions-title">Buttons and status</h2></div>
+      <section class="tinker-section" aria-labelledby="actions-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Actions</p><h2 id="actions-title">Buttons and status</h2></div>
         </div>
-        <div class="tiny-card tiny-stack">
-          <div class="tiny-cluster">
-            <button class="tiny-button tiny-button--primary" type="button">Primary action</button>
-            <button class="tiny-button tiny-button--secondary" type="button">Secondary</button>
-            <button class="tiny-button tiny-button--quiet" type="button">Quiet action</button>
-            <button class="tiny-button tiny-button--danger" type="button">Destructive</button>
-            <button class="tiny-button tiny-button--primary" type="button" data-state="busy" aria-busy="true" disabled>Saving policy</button>
+        <div class="tinker-card tinker-stack">
+          <div class="tinker-cluster">
+            <button class="tinker-button tinker-button--primary" type="button">Primary action</button>
+            <button class="tinker-button tinker-button--secondary" type="button">Secondary</button>
+            <button class="tinker-button tinker-button--quiet" type="button">Quiet action</button>
+            <button class="tinker-button tinker-button--danger" type="button">Destructive</button>
+            <button class="tinker-button tinker-button--primary" type="button" data-state="busy" aria-busy="true" disabled>Saving policy</button>
           </div>
-          <div class="tiny-cluster">
-            <span class="tiny-status" data-state="active">active</span>
-            <span class="tiny-status" data-state="degraded">degraded</span>
-            <span class="tiny-status" data-state="suspended">suspended</span>
-            <span class="tiny-status" data-state="validating">validating</span>
-            <span class="tiny-status" data-state="offline">offline</span>
-            <span class="tiny-status" data-state="unknown">unknown</span>
+          <div class="tinker-cluster">
+            <span class="tinker-status" data-state="active">active</span>
+            <span class="tinker-status" data-state="degraded">degraded</span>
+            <span class="tinker-status" data-state="suspended">suspended</span>
+            <span class="tinker-status" data-state="validating">validating</span>
+            <span class="tinker-status" data-state="offline">offline</span>
+            <span class="tinker-status" data-state="unknown">unknown</span>
           </div>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="deployer-allowlist-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Operator only</p><h2 id="deployer-allowlist-title">Active deployer allowlist</h2></div>
+      <section class="tinker-section" aria-labelledby="deployer-allowlist-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Operator only</p><h2 id="deployer-allowlist-title">Active deployer allowlist</h2></div>
           <p>One revision-protected authority set using ordinary semantic controls.</p>
         </div>
-        <form class="tiny-card tiny-card--flat tiny-stack"><p class="tiny-card__meta" id="showcase-deployer-help">One normalized email per line. Removed addresses are signed out and cannot deploy.</p><label class="tiny-field" for="showcase-deployer-emails"><span class="tiny-label">Allowed deployer emails</span><textarea class="tiny-textarea" id="showcase-deployer-emails" aria-describedby="showcase-deployer-help">dev@example.com</textarea></label><label class="tiny-choice"><input class="tiny-checkbox" type="checkbox"><span>I confirm that adding any email grants deployment authority.</span></label><div><button class="tiny-button tiny-button--primary" type="button">Save active deployers</button></div></form>
+        <form class="tinker-card tinker-card--flat tinker-stack"><p class="tinker-card__meta" id="showcase-deployer-help">One normalized email per line. Removed addresses are signed out and cannot deploy.</p><label class="tinker-field" for="showcase-deployer-emails"><span class="tinker-label">Allowed deployer emails</span><textarea class="tinker-textarea" id="showcase-deployer-emails" aria-describedby="showcase-deployer-help">dev@example.com</textarea></label><label class="tinker-choice"><input class="tinker-checkbox" type="checkbox"><span>I confirm that adding any email grants deployment authority.</span></label><div><button class="tinker-button tinker-button--primary" type="button">Save active deployers</button></div></form>
       </section>
 
-      <section class="tiny-section" aria-labelledby="feedback-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Feedback</p><h2 id="feedback-title">Notices carry words, not just color</h2></div>
+      <section class="tinker-section" aria-labelledby="feedback-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Feedback</p><h2 id="feedback-title">Notices carry words, not just color</h2></div>
         </div>
-        <div class="tiny-grid tiny-grid--2">
-          <div class="tiny-notice" role="status"><p><strong>Private policy updated.</strong> The next request uses revision 8.</p></div>
-          <div class="tiny-notice tiny-notice--success" role="status"><p><strong>Deployment active.</strong> Anonymous denial was verified.</p></div>
-          <div class="tiny-notice tiny-notice--warning" role="status"><p><strong>Email degraded.</strong> Existing sessions continue; new sign-ins are paused.</p></div>
-          <div class="tiny-notice tiny-notice--danger" role="alert"><p><strong>Writes disabled.</strong> Free disk space on the VPS before retrying.</p></div>
+        <div class="tinker-grid tinker-grid--2">
+          <div class="tinker-notice" role="status"><p><strong>Private policy updated.</strong> The next request uses revision 8.</p></div>
+          <div class="tinker-notice tinker-notice--success" role="status"><p><strong>Deployment active.</strong> Anonymous denial was verified.</p></div>
+          <div class="tinker-notice tinker-notice--warning" role="status"><p><strong>Email degraded.</strong> Existing sessions continue; new sign-ins are paused.</p></div>
+          <div class="tinker-notice tinker-notice--danger" role="alert"><p><strong>Writes disabled.</strong> Free disk space on the VPS before retrying.</p></div>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="overlays-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Overlays</p><h2 id="overlays-title">Toasts and dialogs</h2></div>
+      <section class="tinker-section" aria-labelledby="overlays-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Overlays</p><h2 id="overlays-title">Toasts and dialogs</h2></div>
           <p>Short feedback stays light. Decisions still name the exact consequence.</p>
         </div>
-        <div class="tiny-card tiny-stack">
-          <div class="tiny-cluster">
+        <div class="tinker-card tinker-stack">
+          <div class="tinker-cluster">
             <button
-              class="tiny-button tiny-button--primary"
+              class="tinker-button tinker-button--primary"
               type="button"
-              data-tiny-toast-message="The next request uses policy revision 8."
-              data-tiny-toast-title="Private policy updated"
-              data-tiny-toast-tone="success"
+              data-tinker-toast-message="The next request uses policy revision 8."
+              data-tinker-toast-title="Private policy updated"
+              data-tinker-toast-tone="success"
             >Show success toast</button>
             <button
-              class="tiny-button tiny-button--secondary"
+              class="tinker-button tinker-button--secondary"
               type="button"
-              data-tiny-toast-message="Email is unavailable. Existing sessions continue."
-              data-tiny-toast-title="Email degraded"
-              data-tiny-toast-tone="warning"
+              data-tinker-toast-message="Email is unavailable. Existing sessions continue."
+              data-tinker-toast-title="Email degraded"
+              data-tinker-toast-tone="warning"
             >Show warning toast</button>
             <button
-              class="tiny-button tiny-button--danger"
+              class="tinker-button tinker-button--danger"
               type="button"
-              data-tiny-dialog-open="suspend-dialog"
+              data-tinker-dialog-open="suspend-dialog"
             >Open confirmation dialog</button>
           </div>
-          <p class="tiny-card__meta">
+          <p class="tinker-card__meta">
             Toasts announce non-blocking results. Dialogs use the native browser
             focus loop, Escape handling, and focus return.
           </p>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="disclosure-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Progressive disclosure</p><h2 id="disclosure-title">Expandable cards</h2></div>
+      <section class="tinker-section" aria-labelledby="disclosure-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Progressive disclosure</p><h2 id="disclosure-title">Expandable cards</h2></div>
           <p>Important state stays visible while secondary controls remain tucked away.</p>
         </div>
-        <div class="tiny-grid tiny-grid--2">
-          <details class="tiny-disclosure-card" open>
+        <div class="tinker-grid tinker-grid--2">
+          <details class="tinker-disclosure-card" open>
             <summary>
-              <span class="tiny-disclosure-card__summary">
-                <span class="tiny-disclosure-card__title">Access policy</span>
-                <span class="tiny-disclosure-card__meta">Owner + everyone at acme.com</span>
+              <span class="tinker-disclosure-card__summary">
+                <span class="tinker-disclosure-card__title">Access policy</span>
+                <span class="tinker-disclosure-card__meta">Owner + everyone at acme.com</span>
               </span>
             </summary>
-            <div class="tiny-disclosure-card__body">
-              <dl class="tiny-definition">
+            <div class="tinker-disclosure-card__body">
+              <dl class="tinker-definition">
                 <dt>Owner</dt><dd>operator@acme.com</dd>
                 <dt>Domain</dt><dd><code>acme.com</code></dd>
                 <dt>Revision</dt><dd>8</dd>
               </dl>
             </div>
           </details>
-          <details class="tiny-disclosure-card">
+          <details class="tinker-disclosure-card">
             <summary>
-              <span class="tiny-disclosure-card__summary">
-                <span class="tiny-disclosure-card__title">Immutable releases</span>
-                <span class="tiny-disclosure-card__meta">4 immutable releases · current rel_01J</span>
+              <span class="tinker-disclosure-card__summary">
+                <span class="tinker-disclosure-card__title">Immutable releases</span>
+                <span class="tinker-disclosure-card__meta">4 immutable releases · current rel_01J</span>
               </span>
             </summary>
-            <div class="tiny-disclosure-card__body">
+            <div class="tinker-disclosure-card__body">
               <p>Failed activation preserves the current release until every check passes.</p>
-              <button class="tiny-button tiny-button--secondary" type="button">View releases</button>
+              <button class="tinker-button tinker-button--secondary" type="button">View releases</button>
             </div>
           </details>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="forms-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Forms</p><h2 id="forms-title">Plain inputs, exact consequences</h2></div>
+      <section class="tinker-section" aria-labelledby="forms-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Forms</p><h2 id="forms-title">Plain inputs, exact consequences</h2></div>
         </div>
-        <div class="tiny-auth-preview">
-          <article class="tiny-auth-card" aria-labelledby="auth-example-title">
-            <a class="tiny-brand" href="#">
-              <span class="tiny-brand__mark" aria-hidden="true"><img src="assets/tiny-cloud-mark.svg" alt=""></span>
-              <span>protected by tinyhost</span>
+        <div class="tinker-auth-preview">
+          <article class="tinker-auth-card" aria-labelledby="auth-example-title">
+            <a class="tinker-brand" href="#">
+              <span class="tinker-brand__mark" aria-hidden="true"><img src="assets/tinkercloud-mark.svg" alt=""></span>
+              <span>protected by tinkercloud</span>
             </a>
-            <p class="tiny-eyebrow">Private app</p>
+            <p class="tinker-eyebrow">Private app</p>
             <h1 id="auth-example-title">Sign in to continue.</h1>
-            <p class="tiny-auth-card__intro">Use an email address the app owner has allowed.</p>
-            <form class="tiny-stack">
-              <label class="tiny-field">
-                <span class="tiny-label">Email address</span>
-                <input class="tiny-input" type="email" autocomplete="email">
+            <p class="tinker-auth-card__intro">Use an email address the app owner has allowed.</p>
+            <form class="tinker-stack">
+              <label class="tinker-field">
+                <span class="tinker-label">Email address</span>
+                <input class="tinker-input" type="email" autocomplete="email">
               </label>
-              <button class="tiny-button tiny-button--primary tiny-button--full" type="button">Send one-time code</button>
+              <button class="tinker-button tinker-button--primary tinker-button--full" type="button">Send one-time code</button>
             </form>
-            <p class="tiny-auth-card__footer">This app is on the open internet, securely gated by TinyHost.</p>
+            <p class="tinker-auth-card__footer">This app is on the open internet, securely gated by Tinkercloud.</p>
           </article>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="form-controls-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Controls</p><h2 id="form-controls-title">Policy and confirmation forms</h2></div>
+      <section class="tinker-section" aria-labelledby="form-controls-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Controls</p><h2 id="form-controls-title">Policy and confirmation forms</h2></div>
         </div>
-        <div class="tiny-grid tiny-grid--2">
-          <article class="tiny-card tiny-stack">
-            <label class="tiny-field" data-state="invalid">
-              <span class="tiny-label">Email address</span>
-              <input class="tiny-input" type="email" value="viewer@acme" aria-invalid="true" aria-describedby="viewer-email-help viewer-email-error">
-              <span class="tiny-help" id="viewer-email-help">One exact viewer identity.</span>
-              <span class="tiny-error" id="viewer-email-error">Enter a complete email address.</span>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-card tinker-stack">
+            <label class="tinker-field" data-state="invalid">
+              <span class="tinker-label">Email address</span>
+              <input class="tinker-input" type="email" value="viewer@acme" aria-invalid="true" aria-describedby="viewer-email-help viewer-email-error">
+              <span class="tinker-help" id="viewer-email-help">One exact viewer identity.</span>
+              <span class="tinker-error" id="viewer-email-error">Enter a complete email address.</span>
             </label>
-            <label class="tiny-field">
-              <span class="tiny-label">Allowed domains</span>
-              <textarea class="tiny-textarea">acme.com</textarea>
-              <span class="tiny-help">One normalized domain per line.</span>
+            <label class="tinker-field">
+              <span class="tinker-label">Allowed domains</span>
+              <textarea class="tinker-textarea">acme.com</textarea>
+              <span class="tinker-help">One normalized domain per line.</span>
             </label>
-            <label class="tiny-field">
-              <span class="tiny-label">Policy mode</span>
-              <select class="tiny-select"><option>Exact viewers and domains</option><option>Exact viewers only</option></select>
+            <label class="tinker-field">
+              <span class="tinker-label">Policy mode</span>
+              <select class="tinker-select"><option>Exact viewers and domains</option><option>Exact viewers only</option></select>
             </label>
-            <label class="tiny-choice">
-              <input class="tiny-checkbox" type="checkbox">
+            <label class="tinker-choice">
+              <input class="tinker-checkbox" type="checkbox">
               <span>I confirm this change broadens access.</span>
             </label>
-            <label class="tiny-choice">
-              <input class="tiny-radio" type="radio" name="policy-preview" checked>
+            <label class="tinker-choice">
+              <input class="tinker-radio" type="radio" name="policy-preview" checked>
               <span>Preview policy before replacing it.</span>
             </label>
-            <button class="tiny-button tiny-button--primary" type="button">Replace private policy</button>
+            <button class="tinker-button tinker-button--primary" type="button">Replace private policy</button>
           </article>
 
-          <article class="tiny-card tiny-card--danger tiny-stack">
+          <article class="tinker-card tinker-card--danger tinker-stack">
             <div>
-              <p class="tiny-eyebrow">Danger zone</p>
+              <p class="tinker-eyebrow">Danger zone</p>
               <h3>Delete payroll-preview</h3>
-              <p class="tiny-card__meta">After successful irreversible deletion, this app and its owned data are permanently removed. It cannot be restored.</p>
+              <p class="tinker-card__meta">After successful irreversible deletion, this app and its owned data are permanently removed. It cannot be restored.</p>
             </div>
-            <label class="tiny-field">
-              <span class="tiny-label">Type <code>delete:payroll-preview</code></span>
-              <input class="tiny-input tiny-mono" autocomplete="off">
+            <label class="tinker-field">
+              <span class="tinker-label">Type <code>delete:payroll-preview</code></span>
+              <input class="tinker-input tinker-mono" autocomplete="off">
             </label>
-            <button class="tiny-button tiny-button--danger" type="button">Delete app</button>
+            <button class="tinker-button tinker-button--danger" type="button">Delete app</button>
           </article>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="app-filter-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Progressive list filter</p><h2 id="app-filter-title">Find an authorized app</h2></div>
+      <section class="tinker-section" aria-labelledby="app-filter-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Progressive list filter</p><h2 id="app-filter-title">Find an authorized app</h2></div>
           <p>The controls appear only after local enhancement; without it every app remains visible.</p>
         </div>
-        <div class="tiny-app-filter" data-tiny-app-filter hidden>
-          <label class="tiny-field" for="showcase-app-filter-query">
-            <span class="tiny-label">Search apps</span>
-            <input class="tiny-input" id="showcase-app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="showcase-app-list" data-tiny-app-filter-query>
+        <div class="tinker-app-filter" data-tinker-app-filter hidden>
+          <label class="tinker-field" for="showcase-app-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="showcase-app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="showcase-app-list" data-tinker-app-filter-query>
           </label>
-          <label class="tiny-field" for="showcase-app-filter-status">
-            <span class="tiny-label">Status</span>
-            <select class="tiny-select" id="showcase-app-filter-status" aria-controls="showcase-app-list" data-tiny-app-filter-status>
+          <label class="tinker-field" for="showcase-app-filter-status">
+            <span class="tinker-label">Status</span>
+            <select class="tinker-select" id="showcase-app-filter-status" aria-controls="showcase-app-list" data-tinker-app-filter-status>
               <option value="">All statuses</option>
               <option value="creating">creating</option>
               <option value="active">active</option>
@@ -248,194 +248,194 @@
               <option value="failed">failed</option>
             </select>
           </label>
-          <p class="tiny-app-filter__count" data-tiny-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+          <p class="tinker-app-filter__count" data-tinker-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
         </div>
-        <div class="tiny-grid tiny-grid--2" id="showcase-app-list" data-tiny-app-list>
-          <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="payroll-preview" data-tiny-app-description="Payroll review for finance" data-tiny-app-status="active">
-            <div class="tiny-app-card__summary"><div class="tiny-card__header"><div><h3>payroll-preview</h3><p class="tiny-card__meta">Payroll review for finance</p></div><div class="tiny-app-card__actions"><a class="tiny-button tiny-button--secondary tiny-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tiny-button tiny-button--secondary tiny-icon-action" type="button" data-tiny-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tiny-status" data-state="active">active</span></div><p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
+        <div class="tinker-grid tinker-grid--2" id="showcase-app-list" data-tinker-app-list>
+          <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="payroll-preview" data-tinker-app-description="Payroll review for finance" data-tinker-app-status="active">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><div class="tinker-app-card__actions"><a class="tinker-button tinker-button--secondary tinker-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tinker-status" data-state="active">active</span></div><p class="tinker-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
           </article>
-          <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="migration-sandbox" data-tiny-app-description="Safe migration rehearsal" data-tiny-app-status="suspended">
-            <div class="tiny-app-card__summary"><div class="tiny-card__header"><h3>migration-sandbox</h3><span class="tiny-status" data-state="suspended">suspended</span></div><p class="tiny-card__meta">Private policy r3 · 1 release · 0 tokens</p></div>
+          <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="migration-sandbox" data-tinker-app-description="Safe migration rehearsal" data-tinker-app-status="suspended">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><h3>migration-sandbox</h3><span class="tinker-status" data-state="suspended">suspended</span></div><p class="tinker-card__meta">Private policy r3 · 1 release · 0 tokens</p></div>
           </article>
         </div>
-        <div class="tiny-empty tiny-app-filter__no-results" data-tiny-app-filter-empty hidden>
-          <div class="tiny-empty__icon" aria-hidden="true">⌕</div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-app-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
           <h3>No matching apps.</h3>
           <p>Try a different app slug, description, or status filter. Your authorized apps have not changed.</p>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="data-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Operational data</p><h2 id="data-title">Cards, details, and tables</h2></div>
+      <section class="tinker-section" aria-labelledby="data-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Operational data</p><h2 id="data-title">Cards, details, and tables</h2></div>
         </div>
-        <article class="tiny-card tiny-app-card">
-          <div class="tiny-app-card__summary">
-            <div class="tiny-card__header">
-              <div><p class="tiny-eyebrow">Application</p><h3>payroll-preview</h3></div>
-              <span class="tiny-status" data-state="active">active</span>
+        <article class="tinker-card tinker-app-card">
+          <div class="tinker-app-card__summary">
+            <div class="tinker-card__header">
+              <div><p class="tinker-eyebrow">Application</p><h3>payroll-preview</h3></div>
+              <span class="tinker-status" data-state="active">active</span>
             </div>
-            <p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p>
+            <p class="tinker-card__meta">Private policy r7 · 4 releases · 1 token</p>
           </div>
-          <div class="tiny-app-card__body">
-            <details class="tiny-details" open>
+          <div class="tinker-app-card__body">
+            <details class="tinker-details" open>
               <summary>Access policy</summary>
-              <div class="tiny-details__body">
-                <dl class="tiny-definition">
+              <div class="tinker-details__body">
+                <dl class="tinker-definition">
                   <dt>Owner</dt><dd>operator@acme.com</dd>
                   <dt>Domains</dt><dd><code>acme.com</code></dd>
                   <dt>Revision</dt><dd>7</dd>
                 </dl>
               </div>
             </details>
-            <details class="tiny-details"><summary>Tokens</summary><div class="tiny-details__body"><p>One active app-scoped token.</p></div></details>
-            <details class="tiny-details"><summary>Immutable releases</summary><div class="tiny-details__body"><p>Four immutable releases.</p></div></details>
+            <details class="tinker-details"><summary>Tokens</summary><div class="tinker-details__body"><p>One active app-scoped token.</p></div></details>
+            <details class="tinker-details"><summary>Immutable releases</summary><div class="tinker-details__body"><p>Four immutable releases.</p></div></details>
           </div>
         </article>
 
-        <div class="tiny-table-wrap">
-          <table class="tiny-table">
+        <div class="tinker-table-wrap">
+          <table class="tinker-table">
             <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Target</th></tr></thead>
             <tbody>
-              <tr><td>2 minutes ago</td><td>policy.replaced</td><td><span class="tiny-status" data-state="succeeded">succeeded</span></td><td>payroll-preview</td></tr>
-              <tr><td>Yesterday</td><td>deployment.activated</td><td><span class="tiny-status" data-state="succeeded">succeeded</span></td><td>rel_01J</td></tr>
+              <tr><td>2 minutes ago</td><td>policy.replaced</td><td><span class="tinker-status" data-state="succeeded">succeeded</span></td><td>payroll-preview</td></tr>
+              <tr><td>Yesterday</td><td>deployment.activated</td><td><span class="tinker-status" data-state="succeeded">succeeded</span></td><td>rel_01J</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="states-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">Server states</p><h2 id="states-title">Visible failure paths and durable progress</h2></div>
+      <section class="tinker-section" aria-labelledby="states-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Server states</p><h2 id="states-title">Visible failure paths and durable progress</h2></div>
           <p>These are server-rendered states. No client-side state grants access or hides a denial.</p>
         </div>
-        <div class="tiny-grid tiny-grid--2">
-          <article class="tiny-state tiny-state--loading" role="status">
-            <p class="tiny-state__title">Loading deployments</p>
-            <p class="tiny-state__copy">Fetching the current deployment list from this TinyHost server.</p>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-state tinker-state--loading" role="status">
+            <p class="tinker-state__title">Loading deployments</p>
+            <p class="tinker-state__copy">Fetching the current deployment list from this Tinkercloud server.</p>
           </article>
-          <article class="tiny-state tiny-state--stale" role="status">
-            <p class="tiny-state__title">Showing cached deployment data</p>
-            <p class="tiny-state__copy">The latest safe list is still visible while refresh continues.</p>
-            <p class="tiny-state__meta">Last safe update: 10:42 UTC</p>
+          <article class="tinker-state tinker-state--stale" role="status">
+            <p class="tinker-state__title">Showing cached deployment data</p>
+            <p class="tinker-state__copy">The latest safe list is still visible while refresh continues.</p>
+            <p class="tinker-state__meta">Last safe update: 10:42 UTC</p>
           </article>
-          <article class="tiny-state tiny-state--unavailable" role="alert">
-            <p class="tiny-state__title">Deployment status is unavailable</p>
-            <p class="tiny-state__copy">Try again from this page. Do not assume an activation completed.</p>
+          <article class="tinker-state tinker-state--unavailable" role="alert">
+            <p class="tinker-state__title">Deployment status is unavailable</p>
+            <p class="tinker-state__copy">Try again from this page. Do not assume an activation completed.</p>
           </article>
-          <article class="tiny-state tiny-state--error" role="alert">
-            <p class="tiny-state__title">Deployment validation failed</p>
-            <p class="tiny-state__copy">Your previous release remains active. Review the safe validation summary before retrying.</p>
+          <article class="tinker-state tinker-state--error" role="alert">
+            <p class="tinker-state__title">Deployment validation failed</p>
+            <p class="tinker-state__copy">Your previous release remains active. Review the safe validation summary before retrying.</p>
           </article>
         </div>
-        <div class="tiny-card tiny-stack tiny-stack--spaced">
-          <div class="tiny-progress" aria-labelledby="progress-title">
-            <div class="tiny-card__header"><div><h3 id="progress-title">Release validation</h3><p class="tiny-card__meta">Step 2 of 4: checking the staged archive.</p></div><span class="tiny-status" data-state="validating">validating</span></div>
+        <div class="tinker-card tinker-stack tinker-stack--spaced">
+          <div class="tinker-progress" aria-labelledby="progress-title">
+            <div class="tinker-card__header"><div><h3 id="progress-title">Release validation</h3><p class="tinker-card__meta">Step 2 of 4: checking the staged archive.</p></div><span class="tinker-status" data-state="validating">validating</span></div>
             <progress value="2" max="4">2 of 4 stages complete</progress>
-            <ol class="tiny-stage-list">
+            <ol class="tinker-stage-list">
               <li data-state="complete">Upload received</li>
               <li aria-current="step">Archive validation in progress</li>
               <li>Anonymous denial probe</li>
               <li>Atomic activation</li>
             </ol>
           </div>
-          <nav class="tiny-pagination" aria-label="Deployment history pages">
+          <nav class="tinker-pagination" aria-label="Deployment history pages">
             <span aria-disabled="true">Previous</span>
-            <a href="?page=1" aria-current="page">1<span class="tiny-visually-hidden">, current page</span></a>
+            <a href="?page=1" aria-current="page">1<span class="tinker-visually-hidden">, current page</span></a>
             <a href="?page=2">2</a>
             <a href="?page=2">Next</a>
           </nav>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="empty-title">
-        <div class="tiny-section-header">
-          <div><p class="tiny-eyebrow">List state</p><h2 id="empty-title">Empty is still useful</h2></div>
+      <section class="tinker-section" aria-labelledby="empty-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">List state</p><h2 id="empty-title">Empty is still useful</h2></div>
         </div>
-        <div class="tiny-empty">
-          <div class="tiny-empty__icon" aria-hidden="true">→</div>
+        <div class="tinker-empty">
+          <div class="tinker-empty__icon" aria-hidden="true">→</div>
           <h3>No apps yet.</h3>
-          <p>Build a static app, then run <code>tiny deploy ./dist</code> to create its private URL.</p>
+          <p>Build a static app, then run <code>tinker deploy ./dist</code> to create its private URL.</p>
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="api-keys-showcase-title">
-        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="api-keys-showcase-title">API keys</h2></div><p>Safe metadata is visible; provider API keys never return to the page.</p></div>
-        <div class="tiny-grid tiny-grid--2">
-          <article class="tiny-card tiny-stack"><div><h3>Add an API key</h3><p class="tiny-card__meta">The API key is encrypted after verification and cannot be shown again.</p></div><label class="tiny-field"><span class="tiny-label">Provider</span><select class="tiny-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tiny-field"><span class="tiny-label">API key</span><input class="tiny-input tiny-mono" type="password" autocomplete="new-password"><span class="tiny-help">Write-only. Never displayed or recovered.</span></label><button class="tiny-button tiny-button--primary" type="button">Verify and save API key</button></article>
-          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>Anthropic API key</h3><p class="tiny-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tiny-status" data-state="active">active</span></div><details class="tiny-details"><summary>Disable API key</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future chat calls using this API key will be denied.</p><label class="tiny-field"><span class="tiny-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tiny-input tiny-mono" autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="button">Disable API key</button></div></details></article>
+      <section class="tinker-section" aria-labelledby="api-keys-showcase-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator-only capability</p><h2 id="api-keys-showcase-title">API keys</h2></div><p>Safe metadata is visible; provider API keys never return to the page.</p></div>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-card tinker-stack"><div><h3>Add an API key</h3><p class="tinker-card__meta">The API key is encrypted after verification and cannot be shown again.</p></div><label class="tinker-field"><span class="tinker-label">Provider</span><select class="tinker-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tinker-field"><span class="tinker-label">API key</span><input class="tinker-input tinker-mono" type="password" autocomplete="new-password"><span class="tinker-help">Write-only. Never displayed or recovered.</span></label><button class="tinker-button tinker-button--primary" type="button">Verify and save API key</button></article>
+          <article class="tinker-card tinker-stack"><div class="tinker-card__header"><div><h3>Anthropic API key</h3><p class="tinker-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tinker-status" data-state="active">active</span></div><details class="tinker-details"><summary>Disable API key</summary><div class="tinker-details__body tinker-danger-zone tinker-stack"><p class="tinker-card__meta">Future chat calls using this API key will be denied.</p><label class="tinker-field"><span class="tinker-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tinker-input tinker-mono" autocomplete="off"></label><button class="tinker-button tinker-button--danger" type="button">Disable API key</button></div></details></article>
         </div>
-        <article class="tiny-state tiny-state--unavailable tiny-section__spaced" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinyhost llm enable</code>, then restart TinyHost. API keys cannot be added, rotated, or disabled until it is available.</p></article>
+        <article class="tinker-state tinker-state--unavailable tinker-section__spaced" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinkercloud llm enable</code>, then restart Tinkercloud. API keys cannot be added, rotated, or disabled until it is available.</p></article>
       </section>
 
-      <section class="tiny-section" aria-labelledby="llm-showcase-title">
-        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">LLM chat</h2></div><p>Profiles, app grants, limits, and usage stay separate from API-key management.</p></div>
+      <section class="tinker-section" aria-labelledby="llm-showcase-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">LLM chat</h2></div><p>Profiles, app grants, limits, and usage stay separate from API-key management.</p></div>
       </section>
 
-      <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
+      <p class="tinker-footer-note">Open source. Your VPS. Your Tinkercloud.</p>
     </main>
   </div>
 
-  <dialog class="tiny-dialog tiny-dialog--compact" id="showcase-qr-dialog" aria-labelledby="showcase-qr-title">
-    <div class="tiny-dialog__header">
+  <dialog class="tinker-dialog tinker-dialog--compact" id="showcase-qr-dialog" aria-labelledby="showcase-qr-title">
+    <div class="tinker-dialog__header">
       <div>
-        <p class="tiny-eyebrow">Open on your phone</p>
+        <p class="tinker-eyebrow">Open on your phone</p>
         <h2 id="showcase-qr-title">payroll-preview</h2>
       </div>
       <form method="dialog">
-        <button class="tiny-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
+        <button class="tinker-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
       </form>
     </div>
-    <div class="tiny-dialog__body tiny-qr-dialog__body">
-      <div class="tiny-qr-frame"><canvas class="tiny-qr" width="650" height="650" data-tiny-qr="/mtrPDw/P8EV4cpKSpBuvFpXSUnLt0FobsDAJduntrf72hLsE14dEKixB/qqqqqqqv4BbS3GSkkA762tvw8O4l7qhpHS0mOQoPDiy8ua0TYtJIaCmzctPLrvLxbWjYpJIMDC0NiPDjtTR4PAAtJIaGtE99vLrJaWioQIpJAeHlEku3DjLa2KK6TtJre1lk8/XLt5+f0sKepK6a2q7vxfD96cvl/KPtKopKZrmjTa9vDxlnRqaG4tLZwP4g8PvLz+txQS1GigcQ6tq8qysMrKxJSnHAwMaX9o8Pw0J/34sS3ShoWbR/K8rWloVwhMSnfh4bqn1I8JWtqV0gjS3Zl5arGra8r/j4LwiRSnbhYYXVzo8I3vyoOxAS1eSksWbxet3Q8P2sJthovS0liLhfDnS8v+2Z8tIoaOdjz8HL3LTzvXSGpIsODEkpnfDnJCRuPy/tIoaGkkAl3L/paW+oBBpJEeHsU/tfDqra2qMF9tJHeXsUuq/L/p+O+t03pKoeGqaupnDz7e3fsF3tLYpKeq/rra1vDxb4A=" role="img" aria-label="QR code for this app URL"></canvas></div>
+    <div class="tinker-dialog__body tinker-qr-dialog__body">
+      <div class="tinker-qr-frame"><canvas class="tinker-qr" width="650" height="650" data-tinker-qr="/mtrPDw/P8EV4cpKSpBuvFpXSUnLt0FobsDAJduntrf72hLsE14dEKixB/qqqqqqqv4BbS3GSkkA762tvw8O4l7qhpHS0mOQoPDiy8ua0TYtJIaCmzctPLrvLxbWjYpJIMDC0NiPDjtTR4PAAtJIaGtE99vLrJaWioQIpJAeHlEku3DjLa2KK6TtJre1lk8/XLt5+f0sKepK6a2q7vxfD96cvl/KPtKopKZrmjTa9vDxlnRqaG4tLZwP4g8PvLz+txQS1GigcQ6tq8qysMrKxJSnHAwMaX9o8Pw0J/34sS3ShoWbR/K8rWloVwhMSnfh4bqn1I8JWtqV0gjS3Zl5arGra8r/j4LwiRSnbhYYXVzo8I3vyoOxAS1eSksWbxet3Q8P2sJthovS0liLhfDnS8v+2Z8tIoaOdjz8HL3LTzvXSGpIsODEkpnfDnJCRuPy/tIoaGkkAl3L/paW+oBBpJEeHsU/tfDqra2qMF9tJHeXsUuq/L/p+O+t03pKoeGqaupnDz7e3fsF3tLYpKeq/rra1vDxb4A=" role="img" aria-label="QR code for this app URL"></canvas></div>
       <p>Scan with your phone to open this app. Its normal sign-in and access policy still apply.</p>
-      <a class="tiny-qr-url tiny-mono" href="/">https://payroll-preview.apps.example.test/</a>
+      <a class="tinker-qr-url tinker-mono" href="/">https://payroll-preview.apps.example.test/</a>
     </div>
-    <div class="tiny-dialog__actions">
+    <div class="tinker-dialog__actions">
       <form method="dialog">
-        <button class="tiny-button tiny-button--secondary" type="submit" value="close">Close</button>
+        <button class="tinker-button tinker-button--secondary" type="submit" value="close">Close</button>
       </form>
     </div>
   </dialog>
 
-  <dialog class="tiny-dialog" id="suspend-dialog" aria-labelledby="suspend-dialog-title">
-    <div class="tiny-dialog__header">
+  <dialog class="tinker-dialog" id="suspend-dialog" aria-labelledby="suspend-dialog-title">
+    <div class="tinker-dialog__header">
       <div>
-        <p class="tiny-eyebrow">Confirm suspension</p>
+        <p class="tinker-eyebrow">Confirm suspension</p>
         <h2 id="suspend-dialog-title">Suspend payroll-preview?</h2>
       </div>
       <form method="dialog">
-        <button class="tiny-dialog__close" type="submit" value="cancel" aria-label="Close dialog">×</button>
+        <button class="tinker-dialog__close" type="submit" value="cancel" aria-label="Close dialog">×</button>
       </form>
     </div>
-    <div class="tiny-dialog__body">
+    <div class="tinker-dialog__body">
       <p>
         Viewers will lose access on their next request and affected live
         connections will close. The current release remains stored.
       </p>
-      <div class="tiny-notice tiny-notice--warning">
+      <div class="tinker-notice tinker-notice--warning">
         <p><strong>Exact target:</strong> <code>payroll-preview</code></p>
       </div>
     </div>
-    <div class="tiny-dialog__actions">
+    <div class="tinker-dialog__actions">
       <form method="dialog">
-        <button class="tiny-button tiny-button--secondary" type="submit" value="cancel">Keep app active</button>
+        <button class="tinker-button tinker-button--secondary" type="submit" value="cancel">Keep app active</button>
         <button
-          class="tiny-button tiny-button--danger"
+          class="tinker-button tinker-button--danger"
           type="submit"
           value="confirm"
-          data-tiny-toast-message="Demo only — no server mutation was performed."
-          data-tiny-toast-title="Suspension reviewed"
-          data-tiny-toast-tone="danger"
-          data-tiny-toast-duration="0"
+          data-tinker-toast-message="Demo only — no server mutation was performed."
+          data-tinker-toast-title="Suspension reviewed"
+          data-tinker-toast-tone="danger"
+          data-tinker-toast-duration="0"
         >Suspend payroll-preview</button>
       </form>
     </div>
   </dialog>
 
   <div
-    class="tiny-toast-region"
-    data-tiny-toast-region
+    class="tinker-toast-region"
+    data-tinker-toast-region
     aria-live="polite"
     aria-label="Notifications"
   ></div>

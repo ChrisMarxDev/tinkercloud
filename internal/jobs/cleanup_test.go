@@ -57,7 +57,7 @@ func TestExecutorDoesNotReportInjectedDeleteFailureAsSuccess(t *testing.T) {
 }
 
 func TestRemoveReleaseRestoresModesWhenUnsafeChildAbortsDeletion(t *testing.T) {
-	root, err := os.MkdirTemp("", "tinyhost-cleanup-")
+	root, err := os.MkdirTemp("", "tinkercloud-cleanup-")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,9 +2,9 @@
 
 ## Human starter app
 
-[`starter-app/`](starter-app/) contains **Tiny Ritual**, a dependency-free,
+[`starter-app/`](starter-app/) contains **Tinker Ritual**, a dependency-free,
 owner-only static app designed to be copied, customized, and deployed as a
-person's first TinyHost app.
+person's first Tinkercloud app.
 
 Follow the [human setup guide](../docs/getting-started/first-app.md) to host it.
 

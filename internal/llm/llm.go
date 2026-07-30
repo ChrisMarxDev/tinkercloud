@@ -1,4 +1,4 @@
-// Package llm implements TinyHost's narrow, operator-governed chat capability.
+// Package llm implements Tinkercloud's narrow, operator-governed chat capability.
 // It deliberately contains no HTTP routing or browser-facing identity inputs.
 package llm
 
@@ -10,8 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/capabilities"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/capabilities"
 )
 
 // Stable errors are intentionally detail-free: provider bodies, URLs, models,

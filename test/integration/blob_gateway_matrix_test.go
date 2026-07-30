@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/compose"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/persistence"
-	"github.com/tinyhost/tiny/internal/releases"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // TestBlobGatewayTwoAppMatrix deliberately uses the real SQLite catalog and
@@ -28,7 +28,7 @@ import (
 // through the final storage boundary, not merely through a mock handler.
 func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 	ctx := context.Background()
-	store, err := persistence.OpenSQLite(ctx, filepath.Join(t.TempDir(), "tiny.db"))
+	store, err := persistence.OpenSQLite(ctx, filepath.Join(t.TempDir(), "tinker.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := &persistence.BlobRepository{Store: store, Bytes: blob.LocalStore{Root: store.DataRoot}}
-	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{Domain: "apps.tiny.test", SessionCookie: sessions.AppCookieName}, store, store, store, persistence.KVRepository{Apps: appDatabases}, repo, live.New(live.DefaultLimits()), compose.Login{}, nil)
+	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{Domain: "apps.tinker.test", SessionCookie: sessions.AppCookieName}, store, store, store, persistence.KVRepository{Apps: appDatabases}, repo, live.New(live.DefaultLimits()), compose.Login{}, nil)
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := server.Client()
@@ -108,7 +108,7 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		if err = w.Close(); err != nil {
 			t.Fatal(err)
 		}
-		return request(http.MethodPost, host, "/_tiny/api/v1/blobs", token, origin, &body, w.FormDataContentType())
+		return request(http.MethodPost, host, "/_tinker/api/v1/blobs", token, origin, &body, w.FormDataContentType())
 	}
 	count := func(app string) int {
 		t.Helper()
@@ -121,8 +121,8 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 
 	// Authorization and capability checks run before the blob service/catalog.
 	for name, tc := range map[string]struct{ host, token string }{
-		"anonymous":           {"alpha.apps.tiny.test", ""},
-		"capability-disabled": {"charlie.apps.tiny.test", cToken},
+		"anonymous":           {"alpha.apps.tinker.test", ""},
+		"capability-disabled": {"charlie.apps.tinker.test", cToken},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := upload(tc.host, tc.token, "https://"+tc.host, "never.txt", "NEVER")
@@ -136,12 +136,12 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		})
 	}
 	// A cookie cannot turn a cross-origin form post into an authorized mutation.
-	r := upload("alpha.apps.tiny.test", aToken, "https://evil.test", "cross.txt", "CROSS")
+	r := upload("alpha.apps.tinker.test", aToken, "https://evil.test", "cross.txt", "CROSS")
 	if body := read(r); r.StatusCode != http.StatusForbidden || strings.Contains(body, "CROSS") || count("app-a") != 0 {
 		t.Fatalf("cross origin mutation status=%d body=%q rows=%d", r.StatusCode, body, count("app-a"))
 	}
 
-	r = upload("alpha.apps.tiny.test", aToken, "https://alpha.apps.tiny.test", "report.txt", "APP-A-BYTES")
+	r = upload("alpha.apps.tinker.test", aToken, "https://alpha.apps.tinker.test", "report.txt", "APP-A-BYTES")
 	if r.StatusCode != http.StatusCreated {
 		t.Fatalf("upload status=%d body=%s", r.StatusCode, read(r))
 	}
@@ -156,16 +156,16 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		t.Fatal("ready catalog record was not created")
 	}
 	// The other app has a valid session but must not learn app A's object.
-	r = request(http.MethodGet, "beta.apps.tiny.test", "/_tiny/api/v1/blobs/"+uploaded.ID, bToken, "", nil, "")
+	r = request(http.MethodGet, "beta.apps.tinker.test", "/_tinker/api/v1/blobs/"+uploaded.ID, bToken, "", nil, "")
 	if body := read(r); r.StatusCode != http.StatusNotFound || strings.Contains(body, "APP-A-BYTES") {
 		t.Fatalf("cross-app get status=%d body=%q", r.StatusCode, body)
 	}
 
-	r = request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/blobs/"+uploaded.ID, aToken, "", nil, "")
+	r = request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/blobs/"+uploaded.ID, aToken, "", nil, "")
 	if body := read(r); r.StatusCode != http.StatusOK || body != "APP-A-BYTES" || r.Header.Get("Content-Disposition") != "attachment; filename=report.txt" || r.Header.Get("Cache-Control") != "private, no-store" || r.Header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("unsafe/incorrect download status=%d body=%q disposition=%q cache=%q nosniff=%q", r.StatusCode, body, r.Header.Get("Content-Disposition"), r.Header.Get("Cache-Control"), r.Header.Get("X-Content-Type-Options"))
 	}
-	r = request(http.MethodDelete, "alpha.apps.tiny.test", "/_tiny/api/v1/blobs/"+uploaded.ID, aToken, "https://alpha.apps.tiny.test", nil, "")
+	r = request(http.MethodDelete, "alpha.apps.tinker.test", "/_tinker/api/v1/blobs/"+uploaded.ID, aToken, "https://alpha.apps.tinker.test", nil, "")
 	if body := read(r); r.StatusCode != http.StatusOK || !strings.Contains(body, `"deleted":true`) || count("app-a") != 0 {
 		t.Fatalf("delete status=%d body=%q rows=%d", r.StatusCode, body, count("app-a"))
 	}
@@ -174,7 +174,7 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 	if _, err := store.Revoke(ctx, "app-a", aToken); err != nil {
 		t.Fatal(err)
 	}
-	r = request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/blobs/"+uploaded.ID, aToken, "", nil, "")
+	r = request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/blobs/"+uploaded.ID, aToken, "", nil, "")
 	if body := read(r); r.StatusCode != http.StatusUnauthorized || strings.Contains(body, "APP-A-BYTES") {
 		t.Fatalf("revoked get status=%d body=%q", r.StatusCode, body)
 	}
@@ -185,7 +185,7 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r = upload("alpha.apps.tiny.test", newToken, "https://alpha.apps.tiny.test", "missing.txt", "TO-BE-REMOVED")
+	r = upload("alpha.apps.tinker.test", newToken, "https://alpha.apps.tinker.test", "missing.txt", "TO-BE-REMOVED")
 	if r.StatusCode != http.StatusCreated {
 		t.Fatalf("mismatch upload status=%d body=%s", r.StatusCode, read(r))
 	}
@@ -199,14 +199,14 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 	if err := repo.Bytes.Delete("app-a", mismatch.ID); err != nil {
 		t.Fatal(err)
 	}
-	r = request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/blobs/"+mismatch.ID, newToken, "", nil, "")
+	r = request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/blobs/"+mismatch.ID, newToken, "", nil, "")
 	if body := read(r); r.StatusCode != http.StatusServiceUnavailable || strings.Contains(body, "TO-BE-REMOVED") {
 		t.Fatalf("catalog/byte mismatch status=%d body=%q", r.StatusCode, body)
 	}
 	if err := repo.Reconcile(ctx); err != nil {
 		t.Fatal(err)
 	}
-	r = request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/blobs", newToken, "", nil, "")
+	r = request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/blobs", newToken, "", nil, "")
 	if body := read(r); r.StatusCode != http.StatusOK || !strings.Contains(body, `"blobs":[]`) || count("app-a") != 0 {
 		t.Fatalf("post-reconcile list status=%d body=%q rows=%d", r.StatusCode, body, count("app-a"))
 	}

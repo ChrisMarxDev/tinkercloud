@@ -49,13 +49,13 @@ func RouteClass(method, path string) string {
 	if len(path) >= len("/.well-known/acme-challenge/") && path[:len("/.well-known/acme-challenge/")] == "/.well-known/acme-challenge/" {
 		return "gateway_acme"
 	}
-	if path == "/_tiny/ws/v1" {
+	if path == "/_tinker/ws/v1" {
 		return "app_websocket"
 	}
-	if len(path) >= len("/_tiny/auth/") && path[:len("/_tiny/auth/")] == "/_tiny/auth/" {
+	if len(path) >= len("/_tinker/auth/") && path[:len("/_tinker/auth/")] == "/_tinker/auth/" {
 		return "app_auth"
 	}
-	if len(path) >= len("/_tiny/api/") && path[:len("/_tiny/api/")] == "/_tiny/api/" {
+	if len(path) >= len("/_tinker/api/") && path[:len("/_tinker/api/")] == "/_tinker/api/" {
 		return "app_api"
 	}
 	if len(path) >= len("/api/v1/") && path[:len("/api/v1/")] == "/api/v1/" {
@@ -64,7 +64,7 @@ func RouteClass(method, path string) string {
 	if path == "/login" || path == "/" {
 		return "platform_ui"
 	}
-	if len(path) >= len("/_tiny/") && path[:len("/_tiny/")] == "/_tiny/" {
+	if len(path) >= len("/_tinker/") && path[:len("/_tinker/")] == "/_tinker/" {
 		return "app_reserved"
 	}
 	_ = method // method is deliberately not emitted; class is sufficient.

@@ -6,21 +6,21 @@
 
 The prior specialized packaging separated app development from deployment.
 That split makes a deployer or deployment agent discover and combine two skills
-before it can turn an app idea into a verified TinyHost URL. It also makes the
+before it can turn an app idea into a verified Tinkercloud URL. It also makes the
 most important path less suitable for pasting one Markdown file or referencing
 one URL in a fresh agent conversation.
 
 ## Decision
 
-Keep `tiny-platform` as the canonical shared authoring source and ship two
+Keep `tinkercloud-platform` as the canonical shared authoring source and ship two
 self-contained role-facing skills:
 
-- `tiny-deployer`, combining app understanding, `@tinyhost/sdk` development,
+- `tinkercloud-deployer`, combining app understanding, `@tinkercloud/sdk` development,
   manifest/access decisions, build, deployment, and denial verification; and
-- `tiny-operator`, covering host installation and operation.
+- `tinkercloud-operator`, covering host installation and operation.
 
-Remove the separate `tiny-app-development` and `tiny-deploy` role packages.
-Internal full-stack-test and TinyHost-native-UI skills remain task-specific
+Remove the separate `tinker-app-development` and `tinker-deploy` role packages.
+Internal full-stack-test and Tinkercloud-native-UI skills remain task-specific
 engineering tools rather than human role packages.
 
 The canonical source uses independently checked common, deployer, and operator
@@ -36,4 +36,4 @@ copy markers. Each role file must work from raw Markdown alone.
 - The operator skill stays intentionally smaller and may route technical depth
   to this repository without losing its safety boundaries.
 - Existing references to the two removed skill names must migrate to
-  `tiny-deployer`.
+  `tinkercloud-deployer`.

@@ -11,10 +11,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/otp"
-	"github.com/tinyhost/tiny/internal/ratelimit"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/ratelimit"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,9 +22,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/compatibility"
-	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
 )
 
 const MaxBody = 1 << 20
@@ -321,7 +321,7 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(w, 404, nil, "not_found")
 		return
 	}
-	if !compatibleControlClient(r.Header.Get("X-Tiny-CLI-Version"), r.Header.Get("X-Tiny-Control-API-Version")) {
+	if !compatibleControlClient(r.Header.Get("X-Tinker-CLI-Version"), r.Header.Get("X-Tinker-Control-API-Version")) {
 		write(w, http.StatusUpgradeRequired, nil, "cli_version_incompatible")
 		return
 	}

@@ -54,7 +54,7 @@ the built SDK/package versions.
 
 ## Persistent-state preservation
 
-A supported TinyHost update and its embedded schema migrations operate on the
+A supported Tinkercloud update and its embedded schema migrations operate on the
 installed control database in the configured data directory. They must preserve
 every existing operator and deployer user row (including immutable ID,
 normalized email, role, and status), every app's owner, and every active access

@@ -7,7 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
-	"github.com/tinyhost/tiny/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 	"strings"
 	"time"
 )
@@ -19,7 +19,7 @@ func (s *SQLiteStore) IssueToken(ctx context.Context, user, app string, scopes [
 	if _, e := rand.Read(b); e != nil {
 		return "", e
 	}
-	raw := "tiny_" + base64.RawURLEncoding.EncodeToString(b)
+	raw := "tinker_" + base64.RawURLEncoding.EncodeToString(b)
 	h := sha256.Sum256([]byte(raw))
 	e := s.Write(ctx, func(tx *sql.Tx) error {
 		var active string

@@ -4,16 +4,16 @@
 
 ## Context
 
-Coding agents are a primary TinyHost development audience. Specialized skills
+Coding agents are a primary Tinkercloud development audience. Specialized skills
 must be easy to install independently without letting shared security guidance
 drift.
 
 ## Decision
 
-Author `tiny-platform` first. Copy relevant marked shared sections into
+Author `tinkercloud-platform` first. Copy relevant marked shared sections into
 standalone role skills that never require another skill at runtime. ADR 0042
-subsequently consolidates app development and deployment into `tiny-deployer`
-beside `tiny-operator`.
+subsequently consolidates app development and deployment into `tinkercloud-deployer`
+beside `tinkercloud-operator`.
 
 Use portable Markdown and scripts, packaged as Codex-compatible `SKILL.md`
 skills first. A generator/check command owns copied blocks, and CI fails when

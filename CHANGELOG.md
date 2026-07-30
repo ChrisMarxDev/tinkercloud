@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to TinyHost will be documented in this file.
+All notable changes to Tinkercloud will be documented in this file.
 
 The project follows [Semantic Versioning](https://semver.org/) once public
 versions are released.
@@ -9,7 +9,7 @@ versions are released.
 
 ### Added
 
-- Initial pre-release TinyHost gateway, deployer CLI, browser SDK, operational
+- Initial pre-release Tinkercloud gateway, deployer CLI, browser SDK, operational
   tooling, security contracts, and documentation.
 - Open-source community, governance, security reporting, and repository
   maintenance files.

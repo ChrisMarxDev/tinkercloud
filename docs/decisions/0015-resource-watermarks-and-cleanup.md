@@ -11,7 +11,7 @@ could delete a release that SQLite still identifies as active.
 
 ## Decision
 
-TinyHost derives a disk write gate from a fail-closed disk source and bounded
+Tinkercloud derives a disk write gate from a fail-closed disk source and bounded
 configuration. At the critical watermark it rejects only resource-growth paths:
 app creation, deployment creation, and KV mutation. Static reads and all
 revocation/suspension operations bypass the gate.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Native UI"
+  short_description: "Build and extend Tinkercloud native UI"
+  default_prompt: "Use $tinkercloud-native-ui to create or update a Tinkercloud native UI component."

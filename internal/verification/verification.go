@@ -4,8 +4,8 @@ package verification
 import (
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"path/filepath"
 	"reflect"
 )

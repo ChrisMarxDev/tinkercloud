@@ -1,9 +1,9 @@
 package gateway_test
 
 import (
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/gateway"
-	webui "github.com/tinyhost/tiny/web"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	webui "github.com/ChrisMarxDev/tinkercloud/web"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,14 +11,14 @@ import (
 )
 
 func TestDenyCSPAndNoCORS(t *testing.T) {
-	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test"}}
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tinker.test"}}
 	r := httptest.NewRequest(http.MethodOptions, "http://evil.test/", nil)
 	r.Host = "evil.test"
 	r.Header.Set("Origin", "https://evil.test")
 	w := httptest.NewRecorder()
 	g.ServeHTTP(w, r)
 	csp := w.Header().Get("Content-Security-Policy")
-	for _, v := range []string{"default-src 'self'", "object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "connect-src 'self'", "style-src 'self' " + webui.TinyStyleCSPSource(), "script-src 'self' " + webui.TinyScriptCSPSource()} {
+	for _, v := range []string{"default-src 'self'", "object-src 'none'", "base-uri 'none'", "frame-ancestors 'none'", "connect-src 'self'", "style-src 'self' " + webui.TinkerStyleCSPSource(), "script-src 'self' " + webui.TinkerScriptCSPSource()} {
 		if !strings.Contains(csp, v) {
 			t.Fatal(csp)
 		}

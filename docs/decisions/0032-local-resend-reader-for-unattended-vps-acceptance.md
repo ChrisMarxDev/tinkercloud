@@ -6,19 +6,19 @@
 
 The external VPS acceptance suite intentionally requires real deployer and
 viewer OTP delivery, but manually relaying codes prevents unattended testing.
-Reading challenge state from TinyHost, the VPS, logs, or a test-only endpoint
+Reading challenge state from Tinkercloud, the VPS, logs, or a test-only endpoint
 would weaken the gateway boundary and turn an acceptance test into a bypass.
 
 ## Decision
 
 Use a local-only, dependency-free Resend sent-email reader as the optional
-`TINYHOST_VPS_OTP_COMMAND`. It receives the purpose, exact identity, and
+`TINKERCLOUD_VPS_OTP_COMMAND`. It receives the purpose, exact identity, and
 hostname from the existing black-box harness, reads a local mode-`0600`
 full-access reader key, calls a fixed HTTPS Resend API origin, and emits only
-the one exact TinyHost OTP that passes recipient, sender, subject, recent-time,
+the one exact Tinkercloud OTP that passes recipient, sender, subject, recent-time,
 hostname-shape, body, and consumed-message checks.
 
-The key and consumed-ID ledger remain in the ignored local `.tiny/` directory
+The key and consumed-ID ledger remain in the ignored local `.tinker/` directory
 and are never copied to the VPS, server configuration, browser, SDK, database,
 or logs. Prefer a least-privilege VPS sending key separate from the local
 reader credential. A disposable operator may deliberately reuse a current

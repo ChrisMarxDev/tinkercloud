@@ -7,9 +7,9 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/archive"
-	"github.com/tinyhost/tiny/internal/operations"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/archive"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"os"
 	"path/filepath"
 	"sync"
@@ -76,7 +76,7 @@ func tarGz(name string, data []byte) []byte {
 	t.Write(data)
 	if name == "index.html" {
 		m := []byte("version: 1\nname: app\n")
-		t.WriteHeader(&tar.Header{Name: "tiny.yaml", Mode: 0644, Size: int64(len(m))})
+		t.WriteHeader(&tar.Header{Name: "tinker.yaml", Mode: 0644, Size: int64(len(m))})
 		t.Write(m)
 	}
 	t.Close()
@@ -166,7 +166,7 @@ func TestUploadZipRetained(t *testing.T) {
 	w := zip.NewWriter(&b)
 	f, _ := w.Create("index.html")
 	f.Write([]byte("ok"))
-	m, _ := w.Create("tiny.yaml")
+	m, _ := w.Create("tinker.yaml")
 	m.Write([]byte("version: 1\nname: app\n"))
 	w.Close()
 	root := t.TempDir()

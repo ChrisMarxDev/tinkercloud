@@ -1,11 +1,11 @@
-# TinyHost Core Principles
+# Tinkercloud Core Principles
 
 These principles are decision gates. A feature or implementation that violates
 one should be rejected or redesigned before code review.
 
 ## 1. The gateway is the security boundary
 
-TinyHost is the only process that accepts public traffic. Application content
+Tinkercloud is the only process that accepts public traffic. Application content
 and capabilities—including WebSocket upgrades and live messages—are dispatched
 only after the gateway has resolved an app, validated a session, and evaluated
 the current policy.
@@ -43,10 +43,10 @@ activation. Failure preserves the last known-good release.
 
 ## 8. One operator should understand the server
 
-The production shape is intentionally small: one self-contained `tinyhost`
+The production shape is intentionally small: one self-contained `tinkercloud`
 server binary, one embedded SQLite engine, one control database plus isolated
 app-local database files, one data directory, and one service on a dedicated
-VPS. The deployer-facing `tiny` binary is a separate, smaller distribution.
+VPS. The deployer-facing `tinker` binary is a separate, smaller distribution.
 There is no database daemon, remote database authority, or second persistence
 system. Operational simplicity is part of the security model.
 
@@ -76,7 +76,7 @@ boundaries: it contains no app ID, database credential, provider token, or
 long-lived secret. Capabilities remain server-derived, app-scoped, and
 authorized on every request.
 
-## 13. Secrets stay behind TinyHost
+## 13. Secrets stay behind Tinkercloud
 
 Static app code and browser users are untrusted. Operator-supplied credentials
 must never be delivered to browser JavaScript. Future integrations use
@@ -85,11 +85,11 @@ enforce app grants and quotas, and audit use.
 
 ## 14. Keep it simple and embrace constraints
 
-[Shopify Quick](https://shopify.engineering/quick) is TinyHost's usability north
+[Shopify Quick](https://shopify.engineering/quick) is Tinkercloud's usability north
 star: deploy a folder, receive a secure URL, and reach a small fixed set of
-backend capabilities through an agent-friendly client API. TinyHost should
+backend capabilities through an agent-friendly client API. Tinkercloud should
 prefer a few composable primitives over becoming a general-purpose PaaS. It
-borrows Quick's low ceremony, not its trust model: TinyHost keeps per-app
+borrows Quick's low ceremony, not its trust model: Tinkercloud keeps per-app
 allowlists, app ownership, self-hosting, and fail-closed authorization.
 
 ## 15. Realtime is ephemeral and app-scoped
@@ -101,7 +101,7 @@ lost across disconnects or restarts; clients recover by reading current state.
 
 ## 16. Agent skills are self-contained
 
-Create one generic Tiny platform skill first as the canonical authoring source.
+Create one generic Tinkercloud platform skill first as the canonical authoring source.
 Two role-facing skills copy the relevant shared rules so they work
 independently: one deployer skill owns app development through verified
 deployment, and one operator skill owns host operation. CI must detect drift
@@ -109,7 +109,7 @@ between the generic source and copied sections.
 
 ## 17. Ask only for necessary information
 
-Every human flow starts from the outcome the person requested. TinyHost derives
+Every human flow starts from the outcome the person requested. Tinkercloud derives
 safe values from current state, reuses already verified information, and
 chooses secure defaults before asking a question. It asks only for a value or
 decision that is both necessary to continue and impossible to discover or

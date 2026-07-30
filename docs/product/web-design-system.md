@@ -1,6 +1,6 @@
-# TinyHost native web design system
+# Tinkercloud native web design system
 
-TinyHost's native UI should feel like the landing page grew up into an
+Tinkercloud's native UI should feel like the landing page grew up into an
 operational tool: warm, friendly, small, and unusually clear about security.
 The system deliberately keeps the landing page's cream, grape, cobalt, rounded
 geometry, compact color flourishes, and direct language while reducing display
@@ -8,12 +8,12 @@ scale and decoration for forms and data-heavy screens.
 
 The normative behavior and denial rules live in
 [`specs/ui/native-web-system.md`](../../specs/ui/native-web-system.md). The
-canonical implementation is [`web/assets/tinyhost.css`](../../web/assets/tinyhost.css),
-[`web/assets/tinyhost.js`](../../web/assets/tinyhost.js), and
-[`web/assets/tiny-cloud-mark.svg`](../../web/assets/tiny-cloud-mark.svg).
+canonical implementation is [`web/assets/tinkercloud.css`](../../web/assets/tinkercloud.css),
+[`web/assets/tinkercloud.js`](../../web/assets/tinkercloud.js), and
+[`web/assets/tinkercloud-mark.svg`](../../web/assets/tinkercloud-mark.svg).
 The repository workflow for using the system, creating components, and
 capturing future rules lives in
-[`skills/tiny-native-ui/SKILL.md`](../../skills/tiny-native-ui/SKILL.md).
+[`skills/tinkercloud-native-ui/SKILL.md`](../../skills/tinkercloud-native-ui/SKILL.md).
 
 ## Foundations
 
@@ -21,17 +21,17 @@ capturing future rules lives in
 
 | Token | Role |
 |---|---|
-| `--tiny-canvas` | Warm neutral page background |
-| `--tiny-surface` | Primary paper/card surface |
-| `--tiny-ink` | Deep grape headings and primary text |
-| `--tiny-muted` | Supporting copy and metadata |
-| `--tiny-primary` | Cobalt action, link, and focus color |
-| `--tiny-primary-soft` | Selected and informational surface |
-| `--tiny-positive` / `--tiny-positive-soft` | Healthy, active, verified |
-| `--tiny-warning` / `--tiny-warning-soft` | Degraded, attention, limits |
-| `--tiny-danger` / `--tiny-danger-soft` | Destructive, failed, blocked |
-| `--tiny-accent-pink` / `--tiny-accent-yellow` | Tiny decorative accents only |
-| `--tiny-qr-ink` / `--tiny-qr-surface` | Scanner-safe QR contrast |
+| `--tinker-canvas` | Warm neutral page background |
+| `--tinker-surface` | Primary paper/card surface |
+| `--tinker-ink` | Deep grape headings and primary text |
+| `--tinker-muted` | Supporting copy and metadata |
+| `--tinker-primary` | Cobalt action, link, and focus color |
+| `--tinker-primary-soft` | Selected and informational surface |
+| `--tinker-positive` / `--tinker-positive-soft` | Healthy, active, verified |
+| `--tinker-warning` / `--tinker-warning-soft` | Degraded, attention, limits |
+| `--tinker-danger` / `--tinker-danger-soft` | Destructive, failed, blocked |
+| `--tinker-accent-pink` / `--tinker-accent-yellow` | Small decorative accents only |
+| `--tinker-qr-ink` / `--tinker-qr-surface` | Scanner-safe QR contrast |
 
 Security meaning always includes text. A green dot alone never means
 “authorized,” and a pink surface alone never means “failed.”
@@ -72,7 +72,7 @@ badge, toast, or dialog finishes moving.
 
 Use a single centered auth card with:
 
-1. TinyHost brand or “Protected by TinyHost” lockup.
+1. Tinkercloud brand or “Protected by Tinkercloud” lockup.
 2. One plain heading.
 3. One sentence describing the current step.
 4. A generic status notice when needed.
@@ -101,7 +101,7 @@ its persistence through global sign-out means the viewer remains signed in.
 
 Keep scopes explicit in visible labels: the app-host POST action is “Sign out
 of this app,” while the admin-host action is “Use another email” or “Sign out
-of TinyHost.” The latter explains that dashboard identity and app sessions are
+of Tinkercloud.” The latter explains that dashboard identity and app sessions are
 signed out.
 An allowed handoff may display the verified address as escaped text in the auth
 card. A denied app may also show that already-authenticated address beside the
@@ -125,7 +125,7 @@ and utility-data disclaimers, then progressive disclosure:
   data explicitly rather than drawing a zero value.
 
 The same top bar stays present for operators and deployers. It identifies the
-server-derived current role and offers one quiet `Sign out of TinyHost` form.
+server-derived current role and offers one quiet `Sign out of Tinkercloud` form.
 Sign-out is not cosmetic: the server revokes the global browser identity family
 and all derived app sessions before it clears the identity and CSRF cookies. If
 that durable revocation cannot be completed, the dashboard keeps the current
@@ -136,7 +136,7 @@ A deployer sees a deliberately list-only overview containing only
 server-authorized cards for their own apps. The app list is the primary landing
 surface; operator deployer, audit, health-management, provider, and per-app
 control panels are omitted rather than visually disabled. Deployers continue
-to use the scoped Tiny CLI for management actions.
+to use the scoped Tinker CLI for management actions.
 If that owned-app read model is unavailable, show an explicit unavailable state
 with the safe retry/operator-diagnostic next step; never make an outage look
 like the deployer owns no apps.
@@ -146,12 +146,12 @@ like the deployer owns no apps.
 Keep external-provider setup in a dedicated server-rendered **API keys**
 section before **LLM chat**. The API-key card asks only for a fixed provider
 selection and one write-only password field; it never asks for a display name,
-identifier, URL, or generic secret label. TinyHost derives the label from the
+identifier, URL, or generic secret label. Tinkercloud derives the label from the
 fixed provider and may show only that safe label, provider kind, opaque
 server-generated ID, and durable status afterwards. When key management is not
-server-ready, show a quiet unavailable card with root-only `tinyhost llm enable`
+server-ready, show a quiet unavailable card with root-only `tinkercloud llm enable`
 and restart guidance instead of any credential mutation control; never show the
-root or configuration reason. Rotation has no provider select: TinyHost resolves
+root or configuration reason. Rotation has no provider select: Tinkercloud resolves
 the connection’s stored provider before validating the replacement credential.
 Keep profiles, grants, limits, and usage in **LLM chat**. A profile is a labeled
 form for a fixed model and every limit; grant controls live on the
@@ -164,7 +164,7 @@ When a dashboard has multiple authorized app cards, a local search plus status
 filter may help scan that already-rendered list. It is deliberately a
 progressive presentation aid: controls are hidden until the local helper is
 ready, no-JavaScript users see every authorized card, and no client query,
-storage, or authorization state is involved. Search uses the stable `tiny.yaml`
+storage, or authorization state is involved. Search uses the stable `tinker.yaml`
 slug and the current immutable deployment description case-insensitively;
 status uses the displayed durable state exactly. A
 polite count announces the narrowed result and a no-results panel says to
@@ -276,7 +276,7 @@ their content-dependent height in both directions and supports interruption.
 
 ## Usage
 
-Go templates receive `tinyCSS`, `tinyJS`, and `tinyMark` through
+Go templates receive `tinkerCSS`, `tinkerJS`, and `tinkerMark` through
 `webui.FuncMap()`:
 
 ```go
@@ -288,44 +288,44 @@ t := template.Must(
 ```
 
 ```html
-<style>{{tinyCSS}}</style>
-<script>{{tinyJS}}</script>
-<a class="tiny-brand" href="/">
-  <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
-  <span>tinyhost</span>
+<style>{{tinkerCSS}}</style>
+<script>{{tinkerJS}}</script>
+<a class="tinker-brand" href="/">
+  <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+  <span>tinkercloud</span>
 </a>
 ```
 
 Use classes for composition, but keep semantic HTML:
 
 ```html
-<label class="tiny-field">
-  <span class="tiny-label">Email address</span>
-  <input class="tiny-input" type="email" autocomplete="email" required>
+<label class="tinker-field">
+  <span class="tinker-label">Email address</span>
+  <input class="tinker-input" type="email" autocomplete="email" required>
 </label>
-<button class="tiny-button tiny-button--primary">Send code</button>
+<button class="tinker-button tinker-button--primary">Send code</button>
 ```
 
 The optional embedded interaction helper powers declarative dialog triggers and
 toast creation in richer native screens:
 
 ```html
-<button data-tiny-dialog-open="delete-dialog">Review deletion</button>
-<dialog class="tiny-dialog" id="delete-dialog" aria-labelledby="delete-title">
+<button data-tinker-dialog-open="delete-dialog">Review deletion</button>
+<dialog class="tinker-dialog" id="delete-dialog" aria-labelledby="delete-title">
   <!-- ordinary server-rendered confirmation form -->
 </dialog>
 
 <div
-  class="tiny-toast-region"
-  data-tiny-toast-region
+  class="tinker-toast-region"
+  data-tinker-toast-region
   aria-live="polite"
   aria-label="Notifications"
 ></div>
 ```
 
-Call `TinyUI.toast("Deployment active.", {tone: "success"})` for client-side
+Call `TinkerUI.toast("Deployment active.", {tone: "success"})` for client-side
 feedback that does not carry server authority. Native pages can also render
-`.tiny-toast` markup directly when feedback must survive without JavaScript.
+`.tinker-toast` markup directly when feedback must survive without JavaScript.
 
 Deployed application content is not a consumer of this system. It is for
-TinyHost-owned login, control, diagnostics, and operations surfaces only.
+Tinkercloud-owned login, control, diagnostics, and operations surfaces only.

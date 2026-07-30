@@ -6,11 +6,11 @@ set -eu
 test $# -eq 1 || { echo "usage: $0 RELEASE_DIRECTORY" >&2; exit 2; }
 dir=$1
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-public_key=${TINYHOST_RELEASE_PUBLIC_KEY:-"$root/packaging/release-public-key.pem"}
+public_key=${TINKERCLOUD_RELEASE_PUBLIC_KEY:-"$root/packaging/release-public-key.pem"}
 test -d "$dir" && test -f "$public_key" || { echo "release input unavailable" >&2; exit 1; }
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 
-work=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-release-verify.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-release-verify.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 verify_one() {
   artifact=$1
@@ -50,16 +50,16 @@ import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 artifacts = sorted(p.name[:-len('.metadata.json')] for p in root.glob('*.metadata.json'))
 expected_clients = {
-    'tiny-linux-amd64', 'tiny-linux-arm64',
-    'tiny-darwin-amd64', 'tiny-darwin-arm64',
+    'tinker-linux-amd64', 'tinker-linux-arm64',
+    'tinker-darwin-amd64', 'tinker-darwin-arm64',
 }
-if 'tinyhost-linux-amd64' not in artifacts or not expected_clients.issubset(artifacts):
+if 'tinkercloud-linux-amd64' not in artifacts or not expected_clients.issubset(artifacts):
     raise SystemExit('missing supported server or client artifact')
 if 'release-manifest.json' not in artifacts:
     raise SystemExit('missing signed release manifest')
-if 'tinyhost.service' not in artifacts or 'install-host.sh' not in artifacts or 'install-client.sh' not in artifacts:
+if 'tinkercloud.service' not in artifacts or 'install-host.sh' not in artifacts or 'install-client.sh' not in artifacts:
     raise SystemExit('missing signed installation input')
-if any(not re.fullmatch(r'release-manifest\.json|tinyhost-sdk-[A-Za-z0-9._+-]+\.tgz|tinyhost-linux-amd64|tinyhost\.service|install-(?:host|client)\.sh|tiny-(?:linux|darwin)-(?:amd64|arm64)', a) for a in artifacts):
+if any(not re.fullmatch(r'release-manifest\.json|tinkercloud-sdk-[A-Za-z0-9._+-]+\.tgz|tinkercloud-linux-amd64|tinkercloud\.service|install-(?:host|client)\.sh|tinker-(?:linux|darwin)-(?:amd64|arm64)', a) for a in artifacts):
     raise SystemExit('unknown signed release artifact')
 lines = root.joinpath('SHA256SUMS').read_text(encoding='ascii').splitlines()
 listed = set()
@@ -96,10 +96,10 @@ try:
     }
     if manifest['compatibility'] != expected_compatibility:
         raise ValueError('release compatibility drift')
-    sdk = 'tinyhost-sdk-' + version + '.tgz'
+    sdk = 'tinkercloud-sdk-' + version + '.tgz'
     if sdk not in manifest['files']:
         raise ValueError('release SDK version drift')
-    sdk_artifacts = [name for name in manifest['files'] if name.startswith('tinyhost-sdk-') and name.endswith('.tgz')]
+    sdk_artifacts = [name for name in manifest['files'] if name.startswith('tinkercloud-sdk-') and name.endswith('.tgz')]
     if sdk_artifacts != [sdk]:
         raise ValueError('release SDK platform drift')
     for metadata_path in root.glob('*.metadata.json'):

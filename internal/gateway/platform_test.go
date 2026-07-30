@@ -1,8 +1,8 @@
 package gateway_test
 
 import (
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,9 +10,9 @@ import (
 
 func TestPlatformHostUsesOnlyPlatformHandler(t *testing.T) {
 	called := false
-	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test"}, Platform: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) })}
-	r := httptest.NewRequest("GET", "http://admin.apps.tiny.test/api/v1/whoami", nil)
-	r.Host = "admin.apps.tiny.test"
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tinker.test"}, Platform: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) })}
+	r := httptest.NewRequest("GET", "http://admin.apps.tinker.test/api/v1/whoami", nil)
+	r.Host = "admin.apps.tinker.test"
 	w := httptest.NewRecorder()
 	g.ServeHTTP(w, r)
 	if !called || w.Code != 204 {

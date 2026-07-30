@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
 // BlobRepository owns catalog transitions; LocalStore owns only private bytes.

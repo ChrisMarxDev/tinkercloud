@@ -6,7 +6,7 @@ import (
 )
 
 func TestValidateAcceptsExistingCanonicalAppSlugs(t *testing.T) {
-	for _, value := range []string{"a", "demo", "invoice-review", "a1-b2", "tiny", "tinyhost", "x23456789012345678901234567890123456789012345678901234567890123"} {
+	for _, value := range []string{"a", "demo", "invoice-review", "a1-b2", "tinker", "tinkercloud", "x23456789012345678901234567890123456789012345678901234567890123"} {
 		got, err := Validate(value)
 		if err != nil || got != value {
 			t.Fatalf("Validate(%q) = %q, %v", value, got, err)

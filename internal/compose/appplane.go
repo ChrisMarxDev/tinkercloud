@@ -3,17 +3,17 @@ package compose
 import (
 	"net/http"
 
-	"github.com/tinyhost/tiny/internal/appapi"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/llm"
-	"github.com/tinyhost/tiny/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
 )
 
 // AppPlane composes the only app ingress; it never exposes a second handler.

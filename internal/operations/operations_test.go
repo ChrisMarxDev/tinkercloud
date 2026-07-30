@@ -64,11 +64,11 @@ func TestInitStateRejectsUnknownAndGappedSteps(t *testing.T) {
 }
 
 func TestServiceUnitOnlyAcceptsAbsoluteSingleLinePaths(t *testing.T) {
-	u, err := ServiceUnit("/etc/tinyhost/config.yaml", "/etc/tinyhost/credentials/tinyhost.env", "/srv/tiny-data", "/srv/tiny-acme")
+	u, err := ServiceUnit("/etc/tinkercloud/config.yaml", "/etc/tinkercloud/credentials/tinkercloud.env", "/srv/tinker-data", "/srv/tinker-acme")
 	if err != nil ||
-		!strings.Contains(u, "EnvironmentFile=/etc/tinyhost/credentials/tinyhost.env") ||
-		!strings.Contains(u, "ReadWritePaths=/srv/tiny-data\n") ||
-		!strings.Contains(u, "ReadWritePaths=/srv/tiny-acme\n") {
+		!strings.Contains(u, "EnvironmentFile=/etc/tinkercloud/credentials/tinkercloud.env") ||
+		!strings.Contains(u, "ReadWritePaths=/srv/tinker-data\n") ||
+		!strings.Contains(u, "ReadWritePaths=/srv/tinker-acme\n") {
 		t.Fatal(u, err)
 	}
 	for _, paths := range [][4]string{
@@ -86,11 +86,11 @@ func TestServiceUnitOnlyAcceptsAbsoluteSingleLinePaths(t *testing.T) {
 }
 
 func TestServiceUnitGrantsOnlyGatewayBindCapability(t *testing.T) {
-	u, err := ServiceUnit("/etc/tinyhost/config.yaml", "/etc/tinyhost/credentials/tinyhost.env", "/srv/tiny-data", "/srv/tiny-acme")
+	u, err := ServiceUnit("/etc/tinkercloud/config.yaml", "/etc/tinkercloud/credentials/tinkercloud.env", "/srv/tinker-data", "/srv/tinker-acme")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateServiceUnit(u, "/srv/tiny-data", "/srv/tiny-acme"); err != nil {
+	if err := ValidateServiceUnit(u, "/srv/tinker-data", "/srv/tinker-acme"); err != nil {
 		t.Fatal(err)
 	}
 	for _, unsafe := range []string{
@@ -100,22 +100,22 @@ func TestServiceUnitGrantsOnlyGatewayBindCapability(t *testing.T) {
 		strings.Replace(u, "SocketBindDeny=any", "SocketBindDeny=tcp:1-79", 1),
 		strings.Replace(u, "SocketBindAllow=tcp:80", "SocketBindAllow=udp:80", 1),
 		strings.Replace(u, "SocketBindAllow=tcp:443", "SocketBindAllow=tcp:443\nSocketBindAllow=tcp:8080", 1),
-		strings.Replace(u, "User=tinyhost", "User=root", 1),
+		strings.Replace(u, "User=tinkercloud", "User=root", 1),
 		strings.Replace(u, "NoNewPrivileges=yes", "NoNewPrivileges=no", 1),
-		strings.Replace(u, "ReadWritePaths=/srv/tiny-acme", "ReadWritePaths=/srv/tiny-acme\nReadWritePaths=/etc", 1),
+		strings.Replace(u, "ReadWritePaths=/srv/tinker-acme", "ReadWritePaths=/srv/tinker-acme\nReadWritePaths=/etc", 1),
 	} {
-		if err := ValidateServiceUnit(unsafe, "/srv/tiny-data", "/srv/tiny-acme"); err == nil {
+		if err := ValidateServiceUnit(unsafe, "/srv/tinker-data", "/srv/tinker-acme"); err == nil {
 			t.Fatal("unsafe generated unit accepted")
 		}
 	}
 }
 
 func TestPackagedServiceUnitGrantsOnlyGatewayBindCapability(t *testing.T) {
-	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "systemd", "tinyhost.service"))
+	body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "systemd", "tinkercloud.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateServiceUnit(string(body), "/var/lib/tinyhost", "/var/lib/tinyhost-acme"); err != nil {
+	if err := ValidateServiceUnit(string(body), "/var/lib/tinkercloud", "/var/lib/tinkercloud-acme"); err != nil {
 		t.Fatal(err)
 	}
 }

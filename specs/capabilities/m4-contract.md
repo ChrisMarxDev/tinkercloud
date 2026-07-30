@@ -32,7 +32,7 @@ supply an app ID or viewer identity.
 - A transport adapter is authenticated by the gateway before attaching to the
   hub. The hub does not upgrade HTTP connections.
 - Every connection is scoped to its authorization context's app and session.
-- Channel names cannot be empty, reserved (`_tiny` prefix), or exceed 128
+- Channel names cannot be empty, reserved (`_tinker` prefix), or exceed 128
   bytes. Events are bounded JSON payloads.
 - Delivery is best effort only: there is no history, replay, ordering, resume
   cursor, or durability guarantee. Reconnecting clients reread KV.
@@ -86,7 +86,7 @@ base, or frame ancestors) and never emits wildcard CORS.
 
 ## SDK/API compatibility
 
-- App API clients MAY send `X-Tiny-SDK-Version` as a semantic version. The
+- App API clients MAY send `X-Tinker-SDK-Version` as a semantic version. The
   current V1 API accepts the supported SDK major version (`0` while the SDK is
   pre-1.0). A missing header remains compatible so raw HTTP and previously
   shipped clients are not locked out by header negotiation.
@@ -94,7 +94,7 @@ base, or frame ancestors) and never emits wildcard CORS.
   gateway authorization with `426` and the stable
   `sdk_version_incompatible` code. The response includes only an actionable
   upgrade message and safe request ID; it discloses no app or policy data.
-- SDKs map that error to `TinyVersionIncompatibleError`. Apps upgrade their
+- SDKs map that error to `TinkerVersionIncompatibleError`. Apps upgrade their
   dependency and retry; they do not add an app ID or control-plane credential.
 
 The real-listener SDK contract test proves current user, current app,
@@ -123,8 +123,8 @@ capability discovery, bounded upload, attachment retrieval, cursor listing,
 deletion, cancellation, typed quota/error handling, and the local-disk
 durability disclaimer.
 
-Each example is an ordinary static TinyHost project with a private,
-owner-only-by-default `tiny.yaml`. Its explicit build step copies the built ESM
+Each example is an ordinary static Tinkercloud project with a private,
+owner-only-by-default `tinker.yaml`. Its explicit build step copies the built ESM
 SDK into the release and rewrites only the package import to that local file.
 The deployable release contains no remote script, CDN dependency, app ID,
 viewer token, deployer token, provider secret, or database credential.

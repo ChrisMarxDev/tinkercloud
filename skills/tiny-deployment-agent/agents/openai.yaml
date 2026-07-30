@@ -1,4 +1,0 @@
-interface:
-  display_name: "Tiny Deployment Agent"
-  short_description: "Run one local TinyHost test deploy"
-  default_prompt: "Use $tiny-deployment-agent to make one verified local TinyHost test deployment as an exact deployer identity."

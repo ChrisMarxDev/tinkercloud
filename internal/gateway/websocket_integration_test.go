@@ -2,17 +2,17 @@ package gateway_test
 
 import (
 	"context"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 	"github.com/coder/websocket"
-	"github.com/tinyhost/tiny/internal/appapi"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/compose"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -32,29 +32,29 @@ func TestWebSocketGatewayTwoAppIsolation(t *testing.T) {
 	ad := live.WebSocketAdapter{Hub: hub, Origin: live.SameOrigin}
 	d := compose.NewAppDispatcher(appapi.Dispatcher{})
 	d.Live = &ad
-	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test", SessionCookie: "__Host-tiny_app"}, Apps: repo, Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: d}
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tinker.test", SessionCookie: "__Host-tinker_app"}, Apps: repo, Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: d}
 	s := httptest.NewServer(g)
 	defer s.Close()
 	addr := s.Listener.Addr().String()
 	dial := func(host, token string) (*websocket.Conn, error) {
-		u := "ws://" + host + "/_tiny/ws/v1"
+		u := "ws://" + host + "/_tinker/ws/v1"
 		tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 		}}
-		h := http.Header{"Origin": []string{"http://" + host}, "Cookie": []string{"__Host-tiny_app=" + token}}
+		h := http.Header{"Origin": []string{"http://" + host}, "Cookie": []string{"__Host-tinker_app=" + token}}
 		c, _, e := websocket.Dial(context.Background(), u, &websocket.DialOptions{HTTPClient: &http.Client{Transport: tr}, HTTPHeader: h})
 		return c, e
 	}
-	if c, e := dial("alpha.apps.tiny.test", ""); e == nil {
+	if c, e := dial("alpha.apps.tinker.test", ""); e == nil {
 		c.CloseNow()
 		t.Fatal("anonymous upgraded")
 	}
-	a, e := dial("alpha.apps.tiny.test", ta)
+	a, e := dial("alpha.apps.tinker.test", ta)
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer a.CloseNow()
-	b, e := dial("beta.apps.tiny.test", tb)
+	b, e := dial("beta.apps.tinker.test", tb)
 	if e != nil {
 		t.Fatal(e)
 	}

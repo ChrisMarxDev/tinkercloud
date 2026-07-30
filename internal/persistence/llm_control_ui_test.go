@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/llm"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 type controlLLMValidator struct {

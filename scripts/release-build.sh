@@ -1,10 +1,10 @@
 #!/bin/sh
 # Build a V1 release without ever copying the signing key into the release.
-# Required environment: TINYHOST_RELEASE_SIGNING_KEY=/root/.../ed25519-private.pem
+# Required environment: TINKERCLOUD_RELEASE_SIGNING_KEY=/root/.../ed25519-private.pem
 set -eu
 
 usage() {
-  echo "usage: TINYHOST_RELEASE_SIGNING_KEY=FILE $0 VERSION OUTPUT_DIRECTORY" >&2
+  echo "usage: TINKERCLOUD_RELEASE_SIGNING_KEY=FILE $0 VERSION OUTPUT_DIRECTORY" >&2
   exit 2
 }
 
@@ -12,15 +12,15 @@ test $# -eq 2 || usage
 version=$1
 out=$2
 case "$version" in *[!A-Za-z0-9._+-]*|'') usage;; esac
-test -n "${TINYHOST_RELEASE_SIGNING_KEY:-}" || usage
+test -n "${TINKERCLOUD_RELEASE_SIGNING_KEY:-}" || usage
 # Keep the explicit path in this shell only; Go and npm child builds do not
 # inherit a signing-key environment variable.
-signing_key=$TINYHOST_RELEASE_SIGNING_KEY
-unset TINYHOST_RELEASE_SIGNING_KEY
+signing_key=$TINKERCLOUD_RELEASE_SIGNING_KEY
+unset TINKERCLOUD_RELEASE_SIGNING_KEY
 test -f "$signing_key" || { echo "release signing key unavailable" >&2; exit 1; }
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-public_key=${TINYHOST_RELEASE_PUBLIC_KEY:-"$root/packaging/release-public-key.pem"}
+public_key=${TINKERCLOUD_RELEASE_PUBLIC_KEY:-"$root/packaging/release-public-key.pem"}
 test -f "$public_key" || { echo "release public key unavailable" >&2; exit 1; }
 command -v openssl >/dev/null || { echo "openssl is required" >&2; exit 1; }
 command -v go >/dev/null || { echo "go is required" >&2; exit 1; }
@@ -40,7 +40,7 @@ test "$version" = "$sdk_version" || {
 # Ed25519 SubjectPublicKeyInfo ends in the raw 32-byte public key. Comparing
 # canonical DER prevents a private key for a different release authority from
 # producing artifacts that the shipped binary cannot verify.
-work=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-release.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-release.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 openssl pkey -pubin -in "$public_key" -outform DER >"$work/public.der" 2>/dev/null || { echo "invalid release public key" >&2; exit 1; }
 openssl pkey -in "$signing_key" -pubout -outform DER >"$work/private-public.der" 2>/dev/null || { echo "invalid release signing key" >&2; exit 1; }
@@ -50,28 +50,28 @@ test "${#key_b64}" -eq 44 || { echo "invalid Ed25519 release public key" >&2; ex
 
 mkdir -p "$out"
 test -d "$out" || { echo "output directory unavailable" >&2; exit 1; }
-stage=$(mktemp -d "$out/.tinyhost-release.XXXXXX")
+stage=$(mktemp -d "$out/.tinkercloud-release.XXXXXX")
 cleanup_stage() { rm -rf "$stage"; }
 trap 'cleanup_stage; rm -rf "$work"' EXIT HUP INT TERM
 
 server_build_flags="-buildid= -s -w -X main.releasePublicKeyBase64=$key_b64 -X main.buildVersion=$version"
-client_build_flags="-buildid= -s -w -X github.com/tinyhost/tiny/internal/client.BuildVersion=$version"
+client_build_flags="-buildid= -s -w -X github.com/ChrisMarxDev/tinkercloud/internal/client.BuildVersion=$version"
 (
   cd "$root"
   # -trimpath, disabled VCS stamping, and an empty build ID make identical
   # source/toolchain/input builds byte-stable. SOURCE_DATE_EPOCH is recorded
   # below if supplied by the release environment.
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$server_build_flags" -o "$stage/tinyhost-linux-amd64" ./cmd/tinyhost
-  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-linux-amd64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-linux-arm64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-darwin-amd64" ./cmd/tiny
-  CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tiny-darwin-arm64" ./cmd/tiny
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$server_build_flags" -o "$stage/tinkercloud-linux-amd64" ./cmd/tinkercloud
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tinker-linux-amd64" ./cmd/tinker
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tinker-linux-arm64" ./cmd/tinker
+  CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tinker-darwin-amd64" ./cmd/tinker
+  CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -buildvcs=false -ldflags "$client_build_flags" -o "$stage/tinker-darwin-arm64" ./cmd/tinker
 )
-chmod 0755 "$stage/tinyhost-linux-amd64" "$stage"/tiny-linux-* "$stage"/tiny-darwin-*
-cp "$root/packaging/systemd/tinyhost.service" "$stage/tinyhost.service"
+chmod 0755 "$stage/tinkercloud-linux-amd64" "$stage"/tinker-linux-* "$stage"/tinker-darwin-*
+cp "$root/packaging/systemd/tinkercloud.service" "$stage/tinkercloud.service"
 cp "$root/packaging/install-host.sh" "$stage/install-host.sh"
 cp "$root/packaging/install-client.sh" "$stage/install-client.sh"
-chmod 0644 "$stage/tinyhost.service"
+chmod 0644 "$stage/tinkercloud.service"
 chmod 0755 "$stage/install-host.sh"
 chmod 0755 "$stage/install-client.sh"
 
@@ -87,7 +87,7 @@ sdk_tarball=$(
   npm_config_cache="$npm_cache" npm pack --silent
 )
 test -f "$root/sdk/typescript/$sdk_tarball" || { echo "SDK package build failed" >&2; exit 1; }
-mv "$root/sdk/typescript/$sdk_tarball" "$stage/tinyhost-sdk-$version.tgz"
+mv "$root/sdk/typescript/$sdk_tarball" "$stage/tinkercloud-sdk-$version.tgz"
 
 sha256() { sha256sum "$1" | awk '{print $1}'; }
 sign_artifact() {
@@ -104,22 +104,22 @@ sign_artifact() {
   base64 <"$work/signature" | tr -d '\n' >"$signature"
   printf '\n' >>"$signature"
 }
-sign_artifact tinyhost-linux-amd64
-sign_artifact tiny-linux-amd64
-sign_artifact tiny-linux-arm64
-sign_artifact tiny-darwin-amd64
-sign_artifact tiny-darwin-arm64
-sign_artifact tinyhost.service
+sign_artifact tinkercloud-linux-amd64
+sign_artifact tinker-linux-amd64
+sign_artifact tinker-linux-arm64
+sign_artifact tinker-darwin-amd64
+sign_artifact tinker-darwin-arm64
+sign_artifact tinkercloud.service
 sign_artifact install-host.sh
 sign_artifact install-client.sh
-sign_artifact "tinyhost-sdk-$version.tgz"
+sign_artifact "tinkercloud-sdk-$version.tgz"
 
 # Dependency evidence is deliberately plain and reviewable, rather than a
 # claimed vulnerability scan. It is enough to reproduce exactly what was built.
 (
   cd "$root"
   {
-    echo "TinyHost dependency evidence"
+    echo "Tinkercloud dependency evidence"
     echo "version=$version"
     echo "go=$(go version)"
     echo "source_date_epoch=${SOURCE_DATE_EPOCH:-unset}"
@@ -132,7 +132,7 @@ sign_artifact "tinyhost-sdk-$version.tgz"
   } >"$stage/dependency-evidence.txt"
 )
 {
-  echo "TinyHost reproducible build provenance"
+  echo "Tinkercloud reproducible build provenance"
   echo "version=$version"
   echo "server_goos=linux"
   echo "server_goarch=amd64"
@@ -142,7 +142,7 @@ sign_artifact "tinyhost-sdk-$version.tgz"
   echo "go_ldflags=-buildid= -s -w"
   echo "source_date_epoch=${SOURCE_DATE_EPOCH:-unset}"
   echo "release_public_key_sha256=$(sha256sum "$public_key" | awk '{print $1}')"
-  for artifact in tinyhost-linux-amd64 tiny-linux-amd64 tiny-linux-arm64 tiny-darwin-amd64 tiny-darwin-arm64 tinyhost.service install-host.sh install-client.sh "tinyhost-sdk-$version.tgz"; do
+  for artifact in tinkercloud-linux-amd64 tinker-linux-amd64 tinker-linux-arm64 tinker-darwin-amd64 tinker-darwin-arm64 tinkercloud.service install-host.sh install-client.sh "tinkercloud-sdk-$version.tgz"; do
     echo "artifact=$artifact sha256=$(sha256sum "$stage/$artifact" | awk '{print $1}')"
   done
 } >"$stage/provenance.txt"

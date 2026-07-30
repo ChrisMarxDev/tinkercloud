@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Lightweight Blob Storage</title>
+  <title>Tinkercloud — Lightweight Blob Storage</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -21,9 +21,9 @@
         <p class="eyebrow">Reason and value</p>
         <h2>Files are a common primitive, not a backend runtime</h2>
         <p>Review tools, staff forms, image boards, exports, and document
-          workflows quickly outgrow JSON KV. Requiring each tiny app to operate
+          workflows quickly outgrow JSON KV. Requiring each Tinkercloud app to operate
           S3, signed URLs, CORS, and credentials would recreate the platform
-          ceremony TinyHost exists to remove.</p>
+          ceremony Tinkercloud exists to remove.</p>
         <p>A constrained local capability serves the first useful apps while
           keeping one VPS, one gateway, one SQLite catalog, and one private data
           directory.</p>
@@ -66,11 +66,11 @@
     <section id="flow">
       <p class="eyebrow">User flow</p>
       <h2>One typed capability</h2>
-      <pre>const stored = await tiny.blobs.upload(file);
-const bytes = await tiny.blobs.get(stored.id);
-const page = await tiny.blobs.list({ limit: 100 });
-await tiny.blobs.delete(stored.id);</pre>
-      <p>The app discovers the capability first. TinyHost derives the app and
+      <pre>const stored = await tinker.blobs.upload(file);
+const bytes = await tinker.blobs.get(stored.id);
+const page = await tinker.blobs.list({ limit: 100 });
+await tinker.blobs.delete(stored.id);</pre>
+      <p>The app discovers the capability first. Tinkercloud derives the app and
         viewer from the current host session, checks current policy and limits,
         and never gives browser code a storage credential or app selector.</p>
     </section>
@@ -100,10 +100,10 @@ await tiny.blobs.delete(stored.id);</pre>
         coordination semantics. MinIO adds another service. Go CDK avoids those
         runtime costs, but its local driver is primarily positioned for
         development, includes a generic blob/telemetry layer, and does not
-        replace TinyHost’s SQLite state machine. V1 therefore uses a small
+        replace Tinkercloud’s SQLite state machine. V1 therefore uses a small
         standard-library adapter while keeping the public contract independent
         of storage mechanics.</p>
-      <p><strong>Lightweight gate:</strong> one TinyHost process, one SQLite
+      <p><strong>Lightweight gate:</strong> one Tinkercloud process, one SQLite
         database, one private data directory, one systemd service, bounded
         streaming memory, and no mount, package, provider credential, or
         storage-network dependency.</p>
@@ -126,7 +126,7 @@ await tiny.blobs.delete(stored.id);</pre>
     <section id="decision" class="decision">
       <p class="eyebrow">Do or don’t</p>
       <h2>Include the constrained primitive in V1</h2>
-      <p><strong>Do:</strong> File attachments materially expand the tiny apps
+      <p><strong>Do:</strong> File attachments materially expand the Tinkercloud apps
         people can build, and the existing gateway, streaming, quota, and
         recovery foundations keep the slice bounded.</p>
       <p><strong>Don’t:</strong> Do not turn V1 into an S3 deployment,

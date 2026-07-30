@@ -1,10 +1,10 @@
 # Distribution Skill Contract
 
-TinyHost has two maintainer-facing distribution skills:
+Tinkercloud has two maintainer-facing distribution skills:
 
-- `distribute-tiny-cli` owns the native workstation CLI, signed installer,
+- `distribute-tinker-cli` owns the native workstation CLI, signed installer,
   npm-family executable package, and Homebrew formula;
-- `distribute-tiny-sdk` owns the TypeScript browser client package on npm and
+- `distribute-tinkercloud-sdk` owns the TypeScript browser client package on npm and
   JSR.
 
 They are independent of the deployer and operator role skills. They may share
@@ -24,10 +24,10 @@ that identifies or approves the exact version, finalized public identity,
 destinations, and channel/tag. “Get ready,” “prepare distribution,” “test the
 release,” and equivalent requests do not authorize publication.
 
-During the rename freeze, one exception exists: an explicitly authorized
-GitHub beta may use working names under the beta-release contract. It publishes
-one complete signed prerelease through the protected repository workflow and
-never mutates npm, JSR, Homebrew, stable/latest, or DNS state.
+Before stable distribution, an explicitly authorized GitHub beta may publish
+one complete signed prerelease through the protected repository workflow. It
+uses the locked Tinkercloud identities and never mutates npm, JSR, Homebrew,
+stable/latest, or DNS state.
 
 ## Shared gates
 
@@ -36,7 +36,8 @@ never mutates npm, JSR, Homebrew, stable/latest, or DNS state.
 - Preserve unrelated dirty-worktree changes.
 - Require strict version parity and a complete verified signed release before
   deriving a channel candidate.
-- Treat placeholders and working names as preparation-only inputs.
+- Treat unapproved release origins and unpublished registry destinations as
+  preparation-only inputs.
 - Keep registry, release, tap, and signing credentials out of argv, chat,
   source, artifacts, logs, and reports.
 - Never overwrite an immutable release or published version.
@@ -50,7 +51,7 @@ never mutates npm, JSR, Homebrew, stable/latest, or DNS state.
 - The approved command and product identity agree across the npm `bin` key,
   launcher, native artifact names, Homebrew formula, installer, and
   documentation. A generation parameter affecting only one channel does not
-  establish rename completeness.
+  establish identity consistency.
 - The CLI package contains no server binary, runtime dependency, lifecycle
   downloader, or install-time release-origin selection.
 - Homebrew and the one-line installer refer to the same verified release
@@ -72,4 +73,4 @@ never mutates npm, JSR, Homebrew, stable/latest, or DNS state.
 
 Each skill reports its mode, version, source commit, signed release, channel
 identities, tests actually run, external verification actually observed, and
-every unresolved placeholder or partial-publication state.
+every unresolved origin, namespace-ownership, or partial-publication state.

@@ -2,13 +2,13 @@
 
 This contract covers internal package-manager preparation only. Its commands do
 not publish a package, create a hosted release, change a package-manager tap, or
-reserve a public name. The separately authorized pre-rename GitHub prerelease
-channel is governed by
+claim that a locked public identity is registered or available. The separately
+authorized GitHub prerelease channel is governed by
 [`beta-release-contract.md`](beta-release-contract.md).
 
 ## One source release
 
-- One version produces the `tinyhost` Linux server, the `tiny` workstation CLI
+- One version produces the `tinkercloud` Linux server, the `tinker` workstation CLI
   platform matrix, the TypeScript SDK tarball, signed metadata, checksums,
   provenance, and a signed release manifest.
 - The version must be strict `MAJOR.MINOR.PATCH` and must equal the SDK package,
@@ -22,7 +22,7 @@ channel is governed by
 
 ## Workstation CLI channels
 
-- The canonical executable is the native `tiny` binary.
+- The canonical executable is the native `tinker` binary.
 - The npm package contains all supported CLI binaries and a dependency-free
   launcher. npm, pnpm, Yarn, and Bun therefore install the same bytes and do not
   run lifecycle download scripts.
@@ -35,23 +35,26 @@ channel is governed by
 
 ## Server channel
 
-- `tinyhost` is never installed by a JavaScript package manager.
+- `tinkercloud` is never installed by a JavaScript package manager.
 - A root host bootstrap downloads only the Linux/amd64 server artifact and its
   verification inputs from one HTTPS release origin, verifies them before
   replacement, installs the reviewed service unit, and leaves initialization
   as an explicit operator action.
-- `tiny host install` transports the reviewed bootstrap bundled into the
+- `tinker host install` transports the reviewed bootstrap bundled into the
   installed CLI over an operator-authenticated SSH connection. It does not
   accept an arbitrary remote command or weaken host-key verification.
-- Manual `tinyhost update` remains the only V1 update action. Preparing
+- Manual `tinkercloud update` remains the only V1 update action. Preparing
   distribution does not enable scheduled or silent updates.
 
-## Rename boundary
+## Naming and publication boundary
 
-All public names and origins are generator inputs or templates until the final
-rename is accepted. Preparation MUST NOT:
+Product and distribution identities are locked by
+[`ADR 0052`](../../docs/decisions/0052-tinkercloud-product-identity.md).
+Preparation uses those canonical names, while a release base remains a
+versioned GitHub URL until a separate official-domain decision is accepted.
+Preparation MUST NOT:
 
 - publish to npm, JSR, Homebrew, GitHub Releases, or another registry;
 - create or mutate a public tap, release channel, DNS name, or install URL;
-- infer that a currently available public name is reserved;
+- infer that a configured public name is registered or available;
 - write production credentials or signing keys into an artifact.

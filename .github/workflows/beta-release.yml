@@ -168,7 +168,7 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
           SOURCE_COMMIT: ${{ needs.validate.outputs.source_commit }}
-          SIGNING_KEY_B64: ${{ secrets.TINYHOST_BETA_RELEASE_SIGNING_KEY_B64 }}
+          SIGNING_KEY_B64: ${{ secrets.TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64 }}
         run: |
           set -euo pipefail
           test -n "$SIGNING_KEY_B64" || {
@@ -176,8 +176,8 @@ jobs:
             exit 1
           }
           umask 077
-          key_file=$(mktemp "$RUNNER_TEMP/.tinyhost-beta-release-key.XXXXXX")
-          release_dir="$RUNNER_TEMP/tinyhost-beta-release-v$VERSION"
+          key_file=$(mktemp "$RUNNER_TEMP/.tinkercloud-beta-release-key.XXXXXX")
+          release_dir="$RUNNER_TEMP/tinkercloud-beta-release-v$VERSION"
           cleanup() {
             rm -f "$key_file"
           }
@@ -186,7 +186,7 @@ jobs:
           unset SIGNING_KEY_B64
           chmod 0600 "$key_file"
           source_date_epoch=$(git show -s --format=%ct "$SOURCE_COMMIT")
-          TINYHOST_RELEASE_SIGNING_KEY="$key_file" \
+          TINKERCLOUD_RELEASE_SIGNING_KEY="$key_file" \
             SOURCE_DATE_EPOCH="$source_date_epoch" \
             ./scripts/release-build.sh "$VERSION" "$release_dir"
           echo "RELEASE_DIR=$release_dir" >>"$GITHUB_ENV"
@@ -203,19 +203,19 @@ jobs:
           notes="$RUNNER_TEMP/beta-release-notes.md"
           {
             printf '# Beta release %s\n\n' "$tag"
-            printf 'This is a pre-rename beta. It is not a stable or latest release.\n\n'
+            printf 'This is a beta prerelease. It is not a stable or latest release.\n\n'
             printf 'Install the workstation CLI:\n\n'
             printf '```sh\n'
             printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | \\\\\n" "$release_base"
-            printf '  TINYHOST_CLIENT_RELEASE_BASE=%s sh\n' "$release_base"
+            printf '  TINKER_RELEASE_BASE=%s sh\n' "$release_base"
             printf '```\n\n'
-            printf 'Install TinyHost on a reviewed SSH host after installing the CLI:\n\n'
+            printf 'Install Tinkercloud on a reviewed SSH host after installing the CLI:\n\n'
             printf '```sh\n'
-            printf 'tiny host install root@HOST --release-base %s\n' "$release_base"
+            printf 'tinker host install root@HOST --release-base %s\n' "$release_base"
             printf '```\n\n'
             printf 'Install the TypeScript SDK directly from this GitHub release:\n\n'
             printf '```sh\n'
-            printf 'npm install %stinyhost-sdk-%s.tgz\n' "$release_base" "$VERSION"
+            printf 'npm install %stinkercloud-sdk-%s.tgz\n' "$release_base" "$VERSION"
             printf '```\n\n'
             printf 'Every payload is covered by the attached checksums, Ed25519 signatures, and signed release manifest.\n'
           } >"$notes"
@@ -248,7 +248,7 @@ jobs:
             echo "unexpected draft release state" >&2
             exit 1
           fi
-          remote_dir="$RUNNER_TEMP/tinyhost-beta-remote-v$VERSION"
+          remote_dir="$RUNNER_TEMP/tinkercloud-beta-remote-v$VERSION"
           mkdir -p "$remote_dir"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$remote_dir"
           (
@@ -290,25 +290,25 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           release_base="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/"
-          install_dir="$RUNNER_TEMP/tinyhost-beta-bin"
+          install_dir="$RUNNER_TEMP/tinkercloud-beta-bin"
           curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
             --retry 5 --retry-all-errors "$release_base/install-client.sh" |
-            TINYHOST_CLIENT_RELEASE_BASE="$release_base" \
-            TINYHOST_CLIENT_INSTALL_DIR="$install_dir" sh
-          installed_version=$("$install_dir/tiny" version)
-          if [[ "$installed_version" != "tiny $VERSION" ]]; then
+            TINKER_RELEASE_BASE="$release_base" \
+            TINKER_INSTALL_DIR="$install_dir" sh
+          installed_version=$("$install_dir/tinker" version)
+          if [[ "$installed_version" != "tinker $VERSION" ]]; then
             echo "public beta installer version mismatch" >&2
             exit 1
           fi
-          sdk_consumer="$RUNNER_TEMP/tinyhost-beta-sdk-consumer"
+          sdk_consumer="$RUNNER_TEMP/tinkercloud-beta-sdk-consumer"
           mkdir -p "$sdk_consumer"
           (
             cd "$sdk_consumer"
             npm init --yes >/dev/null
             npm install --ignore-scripts \
-              "$release_base/tinyhost-sdk-$VERSION.tgz" >/dev/null
+              "$release_base/tinkercloud-sdk-$VERSION.tgz" >/dev/null
             SDK_VERSION="$VERSION" node --input-type=module -e '
-              import { SDK_VERSION } from "@tinyhost/sdk";
+              import { SDK_VERSION } from "@tinkercloud/sdk";
               if (SDK_VERSION !== process.env.SDK_VERSION) process.exit(1);
             '
           )

@@ -1,4 +1,4 @@
-# Agent Guidance for TinyHost
+# Agent Guidance for Tinkercloud
 
 Read `PRINCIPLES.md` and then `PRD.md` before planning, coding, or reviewing
 changes. Principles override the PRD; the PRD overrides topic documents and
@@ -6,8 +6,8 @@ examples.
 
 ## Terminology
 
-Use `operator` for a person who hosts and operates TinyHost, `deployer` for a
-person authorized to create and manage their own Tiny apps, and `viewer` for a
+Use `operator` for a person who hosts and operates Tinkercloud, `deployer` for a
+person authorized to create and manage their own Tinkercloud apps, and `viewer` for a
 person who accesses and interacts with a deployed app. Treat `user` as a neutral
 umbrella term for any human: it implies no role, permission, ownership, or
 credential type. A deployment agent is non-human automation acting through a
@@ -35,12 +35,12 @@ The loop never merges or publishes.
 4. Write the deny-path test charter before the happy path.
 5. Record a decision in `docs/decisions/` when a choice changes the deployment,
    trust, persistence, or public interface model.
-6. Update the relevant TinyHost coding-agent skill whenever an SDK, manifest,
+6. Update the relevant Tinkercloud coding-agent skill whenever an SDK, manifest,
    capability, deployment, or verification workflow changes.
-7. Treat `skills/tiny-platform` as the canonical shared skill source. Refresh
+7. Treat `skills/tinkercloud-platform` as the canonical shared skill source. Refresh
    marked copies in each standalone specialized skill and run the drift check.
-8. For TinyHost-owned web UI, read and follow
-   `skills/tiny-native-ui/SKILL.md`. Capture every durable component rule in
+8. For Tinkercloud-owned web UI, read and follow
+   `skills/tinkercloud-native-ui/SKILL.md`. Capture every durable component rule in
    the UI contract, design guidance, implementation, showcase, regression
    tests, and the skill in the same change.
 

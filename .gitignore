@@ -1,14 +1,14 @@
 # Go build products and test output
 /bin/
-/tiny
-/tinyhost
+/tinker
+/tinkercloud
 *.test
 *.prof
 coverage.out
 coverage/
 .coverprofile
 
-# Local TinyHost state: databases, release trees, runtime configuration, and keys
+# Local Tinkercloud state: databases, release trees, runtime configuration, and keys
 /data/
 /runtime/
 /state/
@@ -17,13 +17,13 @@ coverage/
 *.db-wal
 *.sqlite
 *.sqlite3
-tinyhost.yaml
-tinyhost.local.yaml
-tinyhost-vps-known_hosts
+tinkercloud.yaml
+tinkercloud.local.yaml
+tinkercloud-vps-known_hosts
 resend-api-key
 *-resend.key
 *-hmac.key
-.tiny/
+.tinker/
 .env
 .env.*
 !.env.example

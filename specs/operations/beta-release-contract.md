@@ -2,14 +2,14 @@
 
 ## Scope
 
-This contract authorizes one temporary, pre-rename distribution channel:
-manually approved GitHub prereleases containing the complete signed TinyHost
-release. It does not authorize npm, JSR, Homebrew, stable GitHub releases,
-`latest` promotion, DNS changes, or scheduled updates.
+This contract authorizes one pre-stable distribution channel: manually approved
+GitHub prereleases containing the complete signed Tinkercloud release. It does
+not authorize npm, JSR, Homebrew, stable GitHub releases, `latest` promotion,
+DNS changes, or scheduled updates.
 
-Working product and artifact names are acceptable only because every published
-release is visibly marked as a beta. The final rename requires a new stable
-release identity and production signing authority.
+Product and artifact identities are locked by ADR 0052. Every release under
+this contract is visibly marked as beta. Stable distribution requires a new
+production signing authority, but not another product rename.
 
 ## Source identity
 
@@ -42,7 +42,7 @@ version tags. They also enable GitHub release immutability before the first beta
 
 The committed `packaging/release-public-key.pem` authority is beta-only. Its
 matching private key is stored as the environment secret
-`TINYHOST_BETA_RELEASE_SIGNING_KEY_B64`. It is decoded only under
+`TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64`. It is decoded only under
 `RUNNER_TEMP` with a random filename and mode `0600`, immediately before the
 signed release build and removed in the same step. The base64 environment value
 is unset after decoding, and the builder unsets its signing-key environment
@@ -66,7 +66,7 @@ retires the beta authority. Beta trust never silently becomes stable trust.
 6. Download the draft assets into a fresh directory and verify them again.
 7. Publish the verified draft as a prerelease without promoting it to latest.
 8. Exercise the public client installer into a temporary non-root directory and
-   prove `tiny version` equals the release version.
+   prove `tinker version` equals the release version.
 
 The workflow creates no package-manager candidate and invokes no registry or
 tap publisher.
@@ -84,15 +84,15 @@ tap publisher.
 
 ## Consumer paths
 
-For repository `OWNER/REPO` and version `VERSION`, the beta release base is:
+For version `VERSION`, the beta release base is:
 
 ```text
-https://github.com/OWNER/REPO/releases/download/vVERSION/
+https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
 ```
 
 The public client bootstrap downloads `install-client.sh` from that versioned
-base. `tiny host install` and `tiny host update` use the same exact release
+base. `tinker host install` and `tinker host update` use the same exact release
 base. TypeScript consumers may install the exact
-`tinyhost-sdk-VERSION.tgz` GitHub asset by URL without publishing it to an npm
+`tinkercloud-sdk-VERSION.tgz` GitHub asset by URL without publishing it to an npm
 or JSR registry. Consumers must opt into the beta explicitly; documentation
 does not advertise an unversioned stable or latest installer.

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/capabilities"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/capabilities"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
 )
 
 var (
@@ -69,7 +69,7 @@ func New(l Limits) *Hub {
 	return &Hub{limits: l, connections: map[*connection]struct{}{}}
 }
 func validChannel(v string) bool {
-	return v != "" && len([]byte(v)) <= 128 && !strings.HasPrefix(v, "_tiny") && !strings.ContainsRune(v, '\x00')
+	return v != "" && len([]byte(v)) <= 128 && !strings.HasPrefix(v, "_tinker") && !strings.ContainsRune(v, '\x00')
 }
 func validCollection(v string) bool {
 	if len(v) < 1 || len(v) > 64 || !(v[0] >= 'a' && v[0] <= 'z' || v[0] >= '0' && v[0] <= '9') {

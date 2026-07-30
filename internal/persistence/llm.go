@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
 // LLMRepository owns encrypted connection records, operator-selected profiles,

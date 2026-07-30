@@ -8,7 +8,7 @@ import (
 )
 
 func TestSQLiteFreshMigrationAndWriter(t *testing.T) {
-	s, e := OpenSQLite(context.Background(), filepath.Join(t.TempDir(), "tiny.db"))
+	s, e := OpenSQLite(context.Background(), filepath.Join(t.TempDir(), "tinker.db"))
 	if e != nil {
 		t.Fatal(e)
 	}

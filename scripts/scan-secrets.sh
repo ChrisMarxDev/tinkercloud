@@ -3,7 +3,7 @@
 # private-key and common live-token shapes; it complements CI credential controls.
 set -eu
 
-root=${TINYHOST_SECRET_SCAN_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
+root=${TINKERCLOUD_SECRET_SCAN_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}
 cd "$root"
 
 scan_file() {

@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
 // LLMConnectionView is deliberately credential-free metadata for an operator

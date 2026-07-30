@@ -26,30 +26,30 @@ for (const line of (await readFile(resolve(releaseDir, "SHA256SUMS"), "ascii")).
   const match = /^([0-9a-f]{64})  ([-A-Za-z0-9._+]+)$/.exec(line);
   if (match) checksums.set(match[2], match[1]);
 }
-for (const artifact of ["tiny-darwin-amd64", "tiny-darwin-arm64"]) {
+for (const artifact of ["tinker-darwin-amd64", "tinker-darwin-arm64"]) {
   if (!checksums.has(artifact)) throw new Error(`missing checksum: ${artifact}`);
   const digest = createHash("sha256").update(await readFile(resolve(releaseDir, artifact))).digest("hex");
   if (digest !== checksums.get(artifact)) throw new Error(`release artifact drift: ${artifact}`);
 }
 const formula = `# Generated from a locally verified signed release. Do not edit hashes.
 class ${className} < Formula
-  desc "Tiny workstation CLI"
+  desc "Tinker workstation CLI"
   homepage "${origin.origin}/"
   version "${version}"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.arm?
-      url "${base}tiny-darwin-arm64"
-      sha256 "${checksums.get("tiny-darwin-arm64")}"
+      url "${base}tinker-darwin-arm64"
+      sha256 "${checksums.get("tinker-darwin-arm64")}"
     else
-      url "${base}tiny-darwin-amd64"
-      sha256 "${checksums.get("tiny-darwin-amd64")}"
+      url "${base}tinker-darwin-amd64"
+      sha256 "${checksums.get("tinker-darwin-amd64")}"
     end
   end
 
   def install
-    bin.install Dir["tiny-darwin-*"].first => "${commandName}"
+    bin.install Dir["tinker-darwin-*"].first => "${commandName}"
   end
 
   test do

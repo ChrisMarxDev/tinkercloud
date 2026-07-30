@@ -3,7 +3,7 @@ package policies
 import (
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 )
 
 type Policy struct {

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // ErrIdentity is deliberately generic: callers must not distinguish a stale

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 type Status string

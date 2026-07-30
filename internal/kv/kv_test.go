@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 func authorized(t *testing.T, appID string) appauth.AuthorizationContext {

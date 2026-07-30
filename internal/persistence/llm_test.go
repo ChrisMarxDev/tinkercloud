@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
 func llmLimits() llm.Limits {

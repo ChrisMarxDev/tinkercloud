@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost apps should be extremely easy for staff and coding agents to create.
+Tinkercloud apps should be extremely easy for staff and coding agents to create.
 They need one natural interface to identity, data, and future LLM/internal
 services. Operators may hold credentials deployers must be allowed to use but
 must not be able to read.
@@ -14,8 +14,8 @@ JavaScript can be inspected or exfiltrated by the viewer.
 
 ## Decision
 
-Make `@tinyhost/sdk` a first-class V1 product surface for current-user, KV,
-ephemeral realtime, and capability discovery. It calls same-origin TinyHost
+Make `@tinkercloud/sdk` a first-class V1 product surface for current-user, KV,
+ephemeral realtime, and capability discovery. It calls same-origin Tinkercloud
 endpoints and contains no app IDs, database credentials, provider tokens, or
 long-lived secrets.
 
@@ -35,7 +35,7 @@ Do not provide generic raw secret delivery or an unrestricted HTTP proxy.
 ## Consequences
 
 - App creation is low ceremony and consistent across capabilities.
-- TinyHost becomes the policy, quota, audit, and credential boundary for future
+- Tinkercloud becomes the policy, quota, audit, and credential boundary for future
   external services.
 - SDK compatibility, documentation, and coding-agent skills become release
   gates.

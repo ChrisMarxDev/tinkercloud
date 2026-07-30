@@ -5,13 +5,13 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_workflow="$root/.github/workflows/beta-release.yml"
 checker="$root/scripts/check-beta-release-workflow.sh"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-beta-workflow-self-test.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-beta-workflow-self-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 expect_denied() {
   label=$1
   candidate=$2
-  if TINYHOST_BETA_WORKFLOW_FILE="$candidate" "$checker" >/dev/null 2>&1; then
+  if TINKERCLOUD_BETA_WORKFLOW_FILE="$candidate" "$checker" >/dev/null 2>&1; then
     echo "beta workflow checker accepted $label" >&2
     exit 1
   fi

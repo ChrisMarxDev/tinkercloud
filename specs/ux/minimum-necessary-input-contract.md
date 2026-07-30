@@ -19,7 +19,7 @@ confirmations.
 
 ## Human setup
 
-`tinyhost setup` discovers supported host facts and asks for one controlled base
+`tinkercloud setup` discovers supported host facts and asks for one controlled base
 domain plus the initial operator email. It derives conventional platform/app
 hosts, sender, ACME contact, canonical paths, service identity, limits, and
 internal-secret locations. It persists only validated non-secret resumable
@@ -30,18 +30,18 @@ exact external action and a continuation instruction. Provider secrets enter
 only the root-owned credential boundary through a protected file or an audited
 no-echo prompt; they never enter argv, ordinary config, logs, audit, browser
 state, or deployed bytes.
-TinyHost and provider-supplied DNS records are grouped into one DNS-provider
+Tinkercloud and provider-supplied DNS records are grouped into one DNS-provider
 checkpoint when their prerequisite data can be collected first.
 
 ## Human deploy
 
-`tiny deploy [DIR]` defaults to the current directory, reuses a verified default
+`tinker deploy [DIR]` defaults to the current directory, reuses a verified default
 platform and current bearer, and inspects a bounded non-symlinked project. A
 valid directory-derived slug and one unambiguous conventional output directory
 need no prompt. Owner-only is the access default. Description, viewer rules,
 capabilities, and SPA fallback are optional review/edit choices.
 
-When no manifest exists, the CLI writes the strict `tiny.yaml` atomically
+When no manifest exists, the CLI writes the strict `tinker.yaml` atomically
 without overwriting after the one final deploy action. Manifest creation has no
 separate confirmation. The manifest is the durable receipt and future
 automation input.

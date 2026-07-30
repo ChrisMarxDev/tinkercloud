@@ -10,7 +10,7 @@ test -f "$public_key" || {
   exit 1
 }
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-release-key-drift.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-release-key-drift.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 openssl pkey -pubin -in "$public_key" -outform DER \
@@ -50,7 +50,7 @@ extract_and_compare "$root/packaging/install-client.sh" client-installer
 extract_and_compare "$root/packaging/install-host.sh" host-installer
 extract_and_compare "$root/internal/hostops/bootstrap.sh" cli-host-bootstrap
 
-grep -F 'unset TINYHOST_RELEASE_SIGNING_KEY' \
+grep -F 'unset TINKERCLOUD_RELEASE_SIGNING_KEY' \
   "$root/scripts/release-build.sh" >/dev/null || {
   echo "release builder exposes the signing-key path to child builds" >&2
   exit 1

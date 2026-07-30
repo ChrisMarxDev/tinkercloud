@@ -2,7 +2,7 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinyhost-vps-ssh.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-vps-ssh.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir -p "$tmp/bin"
 
@@ -20,23 +20,23 @@ while test "$#" -gt 0; do
 done
 test -n "$key"
 if test "$derive" -eq 1; then
-  printf '%s\n' 'ssh-ed25519 test-public-key tinyhost-testing-vps'
+  printf '%s\n' 'ssh-ed25519 test-public-key tinkercloud-testing-vps'
   exit 0
 fi
 printf '%s\n' 'test private key fixture' >"$key"
-printf '%s\n' 'ssh-ed25519 test-public-key tinyhost-testing-vps' >"$key.pub"
+printf '%s\n' 'ssh-ed25519 test-public-key tinkercloud-testing-vps' >"$key.pub"
 EOF
 chmod 700 "$tmp/bin/ssh-keygen"
 
 ssh_dir="$tmp/material"
-if PATH="$tmp/bin:$PATH" TINYHOST_VPS_SSH_DIR="$ssh_dir" \
+if PATH="$tmp/bin:$PATH" TINKERCLOUD_VPS_SSH_DIR="$ssh_dir" \
   "$root/scripts/setup-vps-ssh.sh" 'host with spaces' >/dev/null 2>&1; then
   echo "unsafe host was accepted" >&2
   exit 1
 fi
 test ! -e "$ssh_dir"
 
-PATH="$tmp/bin:$PATH" TINYHOST_VPS_SSH_DIR="$ssh_dir" \
+PATH="$tmp/bin:$PATH" TINKERCLOUD_VPS_SSH_DIR="$ssh_dir" \
   "$root/scripts/setup-vps-ssh.sh" 203.0.113.10 2222 >/dev/null
 
 test -f "$ssh_dir/id_ed25519"
@@ -53,7 +53,7 @@ if grep -E 'StrictHostKeyChecking +(no|accept-new)' "$ssh_dir/ssh_config" >/dev/
 fi
 
 before=$(cksum "$ssh_dir/id_ed25519")
-if PATH="$tmp/bin:$PATH" TINYHOST_VPS_SSH_DIR="$ssh_dir" \
+if PATH="$tmp/bin:$PATH" TINKERCLOUD_VPS_SSH_DIR="$ssh_dir" \
   "$root/scripts/setup-vps-ssh.sh" 203.0.113.10 2222 >/dev/null 2>&1; then
   echo "existing key was overwritten" >&2
   exit 1
@@ -65,7 +65,7 @@ reuse_dir="$tmp/reuse"
 mkdir -p "$reuse_dir"
 cp "$ssh_dir/id_ed25519" "$reuse_dir/id_ed25519"
 cp "$ssh_dir/id_ed25519.pub" "$reuse_dir/id_ed25519.pub"
-PATH="$tmp/bin:$PATH" TINYHOST_VPS_SSH_DIR="$reuse_dir" \
+PATH="$tmp/bin:$PATH" TINKERCLOUD_VPS_SSH_DIR="$reuse_dir" \
   "$root/scripts/setup-vps-ssh.sh" test-vps.example 22 >/dev/null
 grep -F 'HostName test-vps.example' "$reuse_dir/ssh_config" >/dev/null
 

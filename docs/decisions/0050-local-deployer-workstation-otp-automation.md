@@ -13,9 +13,9 @@ authentication would silently turn a human credential flow into CI authority.
 ## Decision
 
 Provide an opt-in, local-workstation-only wrapper that first validates the
-saved CLI identity with `tiny whoami --json`, and otherwise drives exactly one
-normal `tiny login --force` through the local Resend reader. It accepts only an
-exact requested deployer identity, then performs exactly one normal `tiny
+saved CLI identity with `tinker whoami --json`, and otherwise drives exactly one
+normal `tinker login --force` through the local Resend reader. It accepts only an
+exact requested deployer identity, then performs exactly one normal `tinker
 deploy --json`; the CLI's public anonymous-denial verification remains the
 release proof. It receives only the CLI path, HTTPS server, deployer email, and
 app directory as arguments. Keys, OTPs, and bearers never enter arguments,

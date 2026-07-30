@@ -7,12 +7,12 @@ ownership and contracts, not microservices.
 
 | Future component | Responsibility | Depends on |
 |---|---|---|
-| `cmd/tinyhost` | server, setup, root recovery, signed update/rollback | application services |
-| `cmd/tiny` | deployer CLI, credential-store adapter, machine-readable output | public control-plane client |
+| `cmd/tinkercloud` | server, setup, root recovery, signed update/rollback | application services |
+| `cmd/tinker` | deployer CLI, credential-store adapter, machine-readable output | public control-plane client |
 
 The same repository produces two distributions while keeping the “one server
-binary” product promise. Deployers install only `tiny`; the clean VPS installs
-only `tinyhost`. Shared code is limited to contracts and the control-plane
+binary” product promise. Deployers install only `tinker`; the clean VPS installs
+only `tinkercloud`. Shared code is limited to contracts and the control-plane
 client, not server internals.
 
 ## Public gateway

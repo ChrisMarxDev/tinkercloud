@@ -3,16 +3,16 @@
 All operations commands are local composition calls; none creates a remote
 recovery surface. Doctor results are typed, bounded, and redact secrets.
 
-- `tinyhost status` is an offline-safe local status surface: private paths and
+- `tinkercloud status` is an offline-safe local status surface: private paths and
   permissions, init state, SQLite `quick_check`, disk watermark, local clock,
   system service and listeners, installed version, and update rollback state.
   It does not resolve DNS, open a public TLS connection, read provider
   credentials, or send email.
-- `tinyhost doctor` includes every `status` check and makes bounded (five
+- `tinkercloud doctor` includes every `status` check and makes bounded (five
   second) outbound checks for platform DNS, the configured wildcard DNS record,
   platform TLS hostname/chain/expiry, and a read-only authenticated Resend
   domains request. It requires local root before reading provider credentials.
-  By default it reads `/etc/tinyhost/credentials/tinyhost.env`; an explicit
+  By default it reads `/etc/tinkercloud/credentials/tinkercloud.env`; an explicit
   absolute credential-file path is allowed only when it has no symlinked path
   component, is a root-owned regular file with mode `0600`, and has exactly the
   configured Resend and HMAC environment assignments once each. It passes the
@@ -30,7 +30,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 - Init advances idempotent named steps only after each adapter reports durable
   success; an interrupted step remains retryable.
 - An existing host enables the LLM encryption root only through local-root
-  `tinyhost llm enable`. It creates or verifies the root-owned credential entry
+  `tinkercloud llm enable`. It creates or verifies the root-owned credential entry
   without revealing it, writes only the environment reference to config, then
   requires a service restart. A subsequent root-only `doctor` validates the
   credential shape without provider use beyond its existing read-only Resend
@@ -47,20 +47,20 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   validated config and contains exactly the data and ACME cache directories.
   Root, non-canonical, control-character, whitespace, duplicate, and symlinked
   paths deny service installation before `systemctl` runs.
-- The gateway service runs as the unprivileged `tinyhost` user with
+- The gateway service runs as the unprivileged `tinkercloud` user with
   `NoNewPrivileges=yes`. Its capability bounding and ambient sets contain
   exactly `CAP_NET_BIND_SERVICE`, solely so the gateway can bind ports 80 and
   443; no root execution or broader filesystem/network privilege is granted.
   The systemd cgroup bind policy denies every other TCP or UDP bind and allows
   only TCP ports 80 and 443. The production configuration must name port 80 for
   HTTP and port 443 for HTTPS.
-- TinyHost does not install, enable, disable, or rewrite the host firewall,
+- Tinkercloud does not install, enable, disable, or rewrite the host firewall,
   cloud firewall, SSH service, or any pre-existing listener. Those remain
-  operator-owned. TinyHost's network-exposure delta is exactly its TCP 80 and
+  operator-owned. Tinkercloud's network-exposure delta is exactly its TCP 80 and
   443 gateway listeners.
 - VPS acceptance must reject an additional non-loopback listener owned by the
-  `tinyhost` process, even when the required 80/443 listeners are healthy.
-  Pre-existing listeners owned by other services are outside TinyHost's
+  `tinkercloud` process, even when the required 80/443 listeners are healthy.
+  Pre-existing listeners owned by other services are outside Tinkercloud's
   exposure delta and do not fail this check.
 - The canonical V1 topology requires public DNS plus Internet reachability of
   TCP 80/443 for per-host HTTP-01 certificates and public gateway evidence.
@@ -75,10 +75,10 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   the VPN acceptance suite pass.
 - The first VPN-only mode retains email OTP authentication and current per-app
   authorization. VPN membership alone never creates or substitutes for a
-  TinyHost session.
-- `tinyhost deployers authorize|suspend|revoke` authenticates its local caller
+  Tinkercloud session.
+- `tinkercloud deployers authorize|suspend|revoke` authenticates its local caller
   as root before parsing configuration, then runs its one fixed SQLite mutation
-  in a child that permanently drops to the installed `tinyhost` service
+  in a child that permanently drops to the installed `tinkercloud` service
   identity before opening SQLite. The database, WAL, and SHM files are
   therefore created and written only by that service identity; the command
   never widens their modes. Before the child starts, root may hand off only an
@@ -108,9 +108,9 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   to a same-email operator being reactivated.
 - At the critical disk watermark, writes deny while safe existing reads remain.
 - The authenticated operator dashboard includes a small host-resource read
-  model for CPU utilization, RAM utilization, and TinyHost data-volume usage.
+  model for CPU utilization, RAM utilization, and Tinkercloud data-volume usage.
   It is not returned to deployers or anonymous callers.
-- Resource sampling runs inside the existing `tinyhost` process through an
+- Resource sampling runs inside the existing `tinkercloud` process through an
   injected host-metrics source. It retains at most 60 one-minute samples in a
   rolling in-memory window, does not sample in response to dashboard requests,
   does not persist time-series data, and resets cleanly on restart. It creates
@@ -150,7 +150,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   and composed-gateway
   anonymous-denial probe pass. When an active app exists, the updater
   deterministically selects the lexicographically first locally verified active
-  app and targets `/_tiny/api/v1/capabilities` on its derived host. It accepts
+  app and targets `/_tinker/api/v1/capabilities` on its derived host. It accepts
   only the protected-route gateway response: `401`,
   `application/json`, `Cache-Control: no-store`,
   `X-Content-Type-Options: nosniff`, and the stable `not_authorized` error
@@ -163,7 +163,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 - Manual updates use either the local air-gapped server artifact triplet plus
   the signed release-manifest triplet, or one operator-configured/explicit
   HTTPS release origin. Remote retrieval accepts
-  only the V1 `tinyhost-linux-amd64` filename, follows no redirects, rejects
+  only the V1 `tinkercloud-linux-amd64` filename, follows no redirects, rejects
   credentials, query strings, private/link-local/loopback origins, cross-origin
   components, and bodies over the per-component limits. The public health URL
   is derived as `admin.<domain>`; the anonymous-denial URL is derived from
@@ -177,7 +177,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   labels satisfy the current compatibility contract. The complete signed
   release manifest binds the CLI and SDK ranges used by runtime HTTP and
   WebSocket negotiation.
-- The workstation `tiny host install|status|doctor|update` surface is only a
+- The workstation `tinker host install|status|doctor|update` surface is only a
   fixed SSH adapter to these root-local operations. It opens no listener,
   stores no root credential, preserves normal host-key verification, and
   accepts no arbitrary remote command.
@@ -203,7 +203,7 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
 
 ## Update candidate-health deny charter
 
-- A normal `tinyhost status` or `tinyhost doctor` with a rollback snapshot
+- A normal `tinkercloud status` or `tinkercloud doctor` with a rollback snapshot
   remains degraded; candidate-health handling does not change operator
   diagnostics.
 - Candidate health accepts a rollback snapshot only at the configured private
@@ -227,15 +227,15 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
   TCP allow, or the restricted address-family set denies validation.
 - UDP bind permission, a port range, an additional TCP port, or a broader
   address family denies service-unit validation.
-- VPS evidence containing a `tinyhost`-owned non-loopback listener outside TCP
-  80/443 fails, while an operator-owned listener does not become TinyHost's
+- VPS evidence containing a `tinkercloud`-owned non-loopback listener outside TCP
+  80/443 fails, while an operator-owned listener does not become Tinkercloud's
   responsibility.
 
 ## VPN-only topology deny charter
 
 - Unreachable public HTTP-01 leaves certificate readiness incomplete.
 - An unavailable public HTTPS version proof leaves initialization incomplete.
-- VPN membership never creates a TinyHost viewer, deployer, or operator
+- VPN membership never creates a Tinkercloud viewer, deployer, or operator
   identity and never bypasses current app policy.
 - A self-signed, hostname-mismatched, expired, or unverified certificate never
   becomes healthy evidence.

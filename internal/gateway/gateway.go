@@ -10,12 +10,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/appnamespace"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/staticruntime"
-	webui "github.com/tinyhost/tiny/web"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/staticruntime"
+	webui "github.com/ChrisMarxDev/tinkercloud/web"
 )
 
 type HostKind uint8
@@ -83,29 +83,29 @@ const (
 )
 
 func ClassifyRoute(method, p string) Endpoint {
-	if strings.HasPrefix(p, "/_tiny/") {
+	if strings.HasPrefix(p, "/_tinker/") {
 		switch {
-		case method == "GET" && p == "/_tiny/auth/login":
+		case method == "GET" && p == "/_tinker/auth/login":
 			return AppLogin
-		case method == "POST" && p == "/_tiny/auth/logout":
+		case method == "POST" && p == "/_tinker/auth/logout":
 			return AppLogout
-		case method == "GET" && p == "/_tiny/auth/callback":
+		case method == "GET" && p == "/_tinker/auth/callback":
 			return AppIdentityCallback
-		case method == "GET" && p == "/_tiny/api/v1/me":
+		case method == "GET" && p == "/_tinker/api/v1/me":
 			return CurrentUser
-		case method == "GET" && p == "/_tiny/api/v1/app":
+		case method == "GET" && p == "/_tinker/api/v1/app":
 			return AppInfo
-		case method == "GET" && p == "/_tiny/api/v1/capabilities":
+		case method == "GET" && p == "/_tinker/api/v1/capabilities":
 			return Capabilities
-		case strings.HasPrefix(p, "/_tiny/api/v1/kv"):
+		case strings.HasPrefix(p, "/_tinker/api/v1/kv"):
 			return KV
-		case p == "/_tiny/api/v1/db" || strings.HasPrefix(p, "/_tiny/api/v1/db/"):
+		case p == "/_tinker/api/v1/db" || strings.HasPrefix(p, "/_tinker/api/v1/db/"):
 			return Collections
-		case p == "/_tiny/api/v1/blobs" || strings.HasPrefix(p, "/_tiny/api/v1/blobs/"):
+		case p == "/_tinker/api/v1/blobs" || strings.HasPrefix(p, "/_tinker/api/v1/blobs/"):
 			return Blobs
-		case method == "POST" && p == "/_tiny/api/v1/llm/chat":
+		case method == "POST" && p == "/_tinker/api/v1/llm/chat":
 			return LLMChat
-		case method == "GET" && p == "/_tiny/ws/v1":
+		case method == "GET" && p == "/_tinker/ws/v1":
 			return Live
 		}
 		return Reserved
@@ -180,7 +180,7 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if ClassifyRoute(r.Method, r.URL.Path) == ProtectedStatic && IsDocumentNavigation(r) {
 			if ret, valid := ValidReturnPath(r.URL.RequestURI()); valid {
-				http.Redirect(w, r, "/_tiny/auth/login?return="+url.QueryEscape(ret), http.StatusSeeOther)
+				http.Redirect(w, r, "/_tinker/auth/login?return="+url.QueryEscape(ret), http.StatusSeeOther)
 				return
 			}
 		}
@@ -244,7 +244,7 @@ func securityHeaders(w http.ResponseWriter, id string) {
 	// a scheme source such as `wss:` here: every app is untrusted JavaScript and
 	// a scheme source would let it exfiltrate ambient app data to any WebSocket
 	// host. Browsers permit a same-origin WebSocket under this policy.
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; style-src 'self' "+webui.TinyStyleCSPSource()+"; script-src 'self' "+webui.TinyScriptCSPSource()+"; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; style-src 'self' "+webui.TinkerStyleCSPSource()+"; script-src 'self' "+webui.TinkerScriptCSPSource()+"; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 }
 func denyJSON(w http.ResponseWriter, status int, code, id string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": "This request is not authorized.", "request_id": id}})

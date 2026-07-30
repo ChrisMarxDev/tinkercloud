@@ -4,14 +4,14 @@
 
 ## Context
 
-TinyHost already preserves the last known-good deployment when staging or
+Tinkercloud already preserves the last known-good deployment when staging or
 activation fails. Exposing selection of an older release to deployers adds a
 second deployment mutation, policy transition, audit surface, and dashboard
 interaction before V1 needs it.
 
 ## Decision
 
-Deployer-initiated application rollback is deferred beyond V1. The `tiny`
+Deployer-initiated application rollback is deferred beyond V1. The `tinker`
 CLI, control bearer API, dashboard form/action, event catalog, and current V1
 documentation expose no rollback operation. Unknown former paths deny as
 ordinary absent routes. The internal immutable release and activation

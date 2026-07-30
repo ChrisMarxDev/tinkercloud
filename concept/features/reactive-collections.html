@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Reactive Collections</title>
+  <title>Tinkercloud — Reactive Collections</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -22,7 +22,7 @@
       <section class="two-thirds" id="value">
         <p class="eyebrow">Reason and value</p>
         <h2>Make the correct realtime pattern the easiest pattern</h2>
-        <p>TinyHost already combined durable versioned KV with ephemeral
+        <p>Tinkercloud already combined durable versioned KV with ephemeral
           app-scoped WebSocket hints, but app authors had to compose reads,
           prefixes, reconnect recovery, and rendering themselves. The
           implemented collection API makes polls, checklists, comments,
@@ -62,8 +62,8 @@
 
     <section id="experience">
       <p class="eyebrow">Creator experience</p>
-      <h2>Quick-like intent, TinyHost recovery semantics</h2>
-      <pre>const tasks = tiny.db.collection("tasks");
+      <h2>Quick-like intent, Tinkercloud recovery semantics</h2>
+      <pre>const tasks = tinker.db.collection("tasks");
 
 await tasks.create({ title: "Ship it", done: false });
 
@@ -121,7 +121,7 @@ const stop = tasks.subscribe({
           <li>Contract, limits, app-local schema, repository, and negative tests implemented.</li>
           <li>Authorized CRUD and committed-change sink implemented.</li>
           <li>Collection subscriptions and reconnect reconciliation implemented.</li>
-          <li>Typed SDK, example, skills, and loopback <code>tiny dev</code> subset implemented.</li>
+          <li>Typed SDK, example, skills, and loopback <code>tinker dev</code> subset implemented.</li>
           <li>The exact signed build passed the two-app live VPS matrix, including restart persistence, cross-app denial, deletion, and global identity/session transitions.</li>
           <li>Only then consider richer filters or query shapes.</li>
         </ol>
@@ -143,7 +143,7 @@ const stop = tasks.subscribe({
         synchronization an SDK responsibility over committed SQLite state and
         the existing app-scoped WebSocket hub.</p>
       <p><strong>Don’t:</strong> Move to Turso or another database merely for a
-        change listener. Reconsider CDC or replication only if TinyHost later
+        change listener. Reconsider CDC or replication only if Tinkercloud later
         gains multiple writers, multiple server processes, or remote replicas.</p>
     </section>
   </main>

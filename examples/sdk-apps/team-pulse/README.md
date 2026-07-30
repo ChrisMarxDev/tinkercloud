@@ -10,4 +10,4 @@ A lightweight current-status board showing:
 
 Pulse records are current shared app state, not reliable online presence.
 Build from the parent directory with `npm run build`, then deploy here with
-`tiny deploy .`.
+`tinker deploy .`.

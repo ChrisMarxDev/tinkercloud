@@ -1,9 +1,9 @@
 ---
 name: task-workflow
-description: Coordinate TinyHost repository work through GitHub Issues. Use when Hermes starts, continues, plans, refines, blocks, or implements issue work.
+description: Coordinate Tinkercloud repository work through GitHub Issues. Use when Hermes starts, continues, plans, refines, blocks, or implements issue work.
 ---
 
-# TinyHost GitHub Issue Workflow
+# Tinkercloud GitHub Issue Workflow
 
 GitHub Issues are the durable task source of truth. This skill governs issue
 state; `PRINCIPLES.md`, `PRD.md`, `AGENTS.md`, contracts, and accepted ADRs
@@ -148,7 +148,7 @@ leave ambiguous partial changes in the shared checkout. Move the issue to
 `pending` and comment with the blocker, branch/commit state, validation, and
 next decision.
 
-## TinyHost validation
+## Tinkercloud validation
 
 Choose the smallest sufficient ladder, expanding for affected risk:
 
@@ -175,16 +175,16 @@ contract requires them. Never weaken or skip a failed protection check.
 
 ## GitHub command pattern
 
-Always pass `--repo "${REPO_SLUG:-ChrisMarxDev/tiny}"` and prefer JSON output.
+Always pass `--repo "${REPO_SLUG:-ChrisMarxDev/tinker}"` and prefer JSON output.
 Useful operations include:
 
 ```sh
-gh issue view 123 --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --comments --json number,title,body,labels,comments,url
-gh issue list --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --state all --search "phrase" --json number,title,state,url
-gh pr list --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --state all --search "123" --json number,title,state,url,headRefName
-gh issue edit 123 --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --remove-label inbox --add-label open
-gh issue comment 123 --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --body-file /tmp/tiny-issue-comment.md
-gh pr create --repo "${REPO_SLUG:-ChrisMarxDev/tiny}" --draft --title "..." --body-file /tmp/tiny-pr.md
+gh issue view 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --comments --json number,title,body,labels,comments,url
+gh issue list --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --state all --search "phrase" --json number,title,state,url
+gh pr list --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --state all --search "123" --json number,title,state,url,headRefName
+gh issue edit 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --remove-label inbox --add-label open
+gh issue comment 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --body-file /tmp/tinker-issue-comment.md
+gh pr create --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --draft --title "..." --body-file /tmp/tinker-pr.md
 ```
 
 If required labels are missing, use `loop/setup-github-labels.sh` only when the

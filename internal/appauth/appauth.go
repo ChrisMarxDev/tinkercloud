@@ -5,11 +5,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/releases"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // AuthorizationContext is sealed: protected packages can consume it but cannot manufacture one.

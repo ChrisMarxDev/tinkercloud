@@ -13,7 +13,7 @@ gateway denial and unnecessarily rolled back the candidate.
 
 When at least one active app exists, the updater deterministically selects the
 lexicographically first locally verified active app from installed server
-state. It probes `GET /_tiny/api/v1/capabilities` on that app host. The route is
+state. It probes `GET /_tinker/api/v1/capabilities` on that app host. The route is
 a stable, gateway-protected API endpoint and must return the existing exact
 `401 not_authorized` JSON evidence for an anonymous request. The updater derives
 the app host from the selected active slug and configured root domain; it

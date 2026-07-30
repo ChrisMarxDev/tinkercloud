@@ -23,18 +23,18 @@ func permissiveFetcher(d HTTPDoer) Fetcher {
 
 func TestReleaseURLsRejectsNonHTTPSAndUnexpectedArtifact(t *testing.T) {
 	for _, raw := range []string{"http://example.com/r/", "https://example.com/r", "https://example.com/r/?q=1"} {
-		if _, err := ReleaseURLsFor(raw, "", "tinyhost-linux-amd64"); !errors.Is(err, ErrFetch) {
+		if _, err := ReleaseURLsFor(raw, "", "tinkercloud-linux-amd64"); !errors.Is(err, ErrFetch) {
 			t.Fatalf("%q accepted: %v", raw, err)
 		}
 	}
-	if _, err := ReleaseURLsFor("https://example.com/r/", "", "../tinyhost"); !errors.Is(err, ErrFetch) {
+	if _, err := ReleaseURLsFor("https://example.com/r/", "", "../tinkercloud"); !errors.Is(err, ErrFetch) {
 		t.Fatal("unsafe artifact accepted")
 	}
 }
 
 func TestReleaseURLsFromMetadataKeepsOrigin(t *testing.T) {
-	u, err := ReleaseURLsFor("", "https://releases.example/r/tinyhost-linux-amd64.metadata.json", "tinyhost-linux-amd64")
-	if err != nil || u.Binary != "https://releases.example/r/tinyhost-linux-amd64" || u.Signature != u.Binary+".signature" {
+	u, err := ReleaseURLsFor("", "https://releases.example/r/tinkercloud-linux-amd64.metadata.json", "tinkercloud-linux-amd64")
+	if err != nil || u.Binary != "https://releases.example/r/tinkercloud-linux-amd64" || u.Signature != u.Binary+".signature" {
 		t.Fatal(u, err)
 	}
 }
@@ -44,7 +44,7 @@ func TestManifestURLsRemainOnReleaseOrigin(t *testing.T) {
 	if err != nil || urls.Binary != "https://releases.example/r/release-manifest.json" {
 		t.Fatalf("base manifest URLs = %#v, %v", urls, err)
 	}
-	urls, err = ManifestURLsFor("", "https://releases.example/r/tinyhost-linux-amd64.metadata.json")
+	urls, err = ManifestURLsFor("", "https://releases.example/r/tinkercloud-linux-amd64.metadata.json")
 	if err != nil || urls.Metadata != "https://releases.example/r/release-manifest.json.metadata.json" {
 		t.Fatalf("metadata-derived manifest URLs = %#v, %v", urls, err)
 	}
@@ -56,7 +56,7 @@ func TestManifestURLsRemainOnReleaseOrigin(t *testing.T) {
 }
 
 func TestFetcherRejectsOversizeRedirectAndNetworkFailure(t *testing.T) {
-	url := "https://releases.example/r/tinyhost-linux-amd64"
+	url := "https://releases.example/r/tinkercloud-linux-amd64"
 	for name, do := range map[string]HTTPDoer{
 		"oversize": fetchDoer(func(r *http.Request) (*http.Response, error) { return response(r, 200, "12345"), nil }),
 		"redirect": fetchDoer(func(r *http.Request) (*http.Response, error) {
@@ -74,7 +74,7 @@ func TestFetcherRejectsOversizeRedirectAndNetworkFailure(t *testing.T) {
 
 func TestFetcherReleaseRejectsMixedOrigin(t *testing.T) {
 	f := permissiveFetcher(fetchDoer(func(r *http.Request) (*http.Response, error) { return response(r, 200, "x"), nil }))
-	_, _, _, err := f.Release(context.Background(), ReleaseURLs{Binary: "https://a.example/tinyhost-linux-amd64", Metadata: "https://b.example/tinyhost-linux-amd64.metadata.json", Signature: "https://a.example/tinyhost-linux-amd64.signature"})
+	_, _, _, err := f.Release(context.Background(), ReleaseURLs{Binary: "https://a.example/tinkercloud-linux-amd64", Metadata: "https://b.example/tinkercloud-linux-amd64.metadata.json", Signature: "https://a.example/tinkercloud-linux-amd64.signature"})
 	if !errors.Is(err, ErrFetch) {
 		t.Fatal(err)
 	}

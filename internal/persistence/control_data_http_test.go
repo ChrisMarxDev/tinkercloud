@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 )
 
 func TestDeployerDataHTTPVerticalPathAndDenials(t *testing.T) {

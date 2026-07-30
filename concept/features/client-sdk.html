@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Client SDK</title>
+  <title>Tinkercloud — Client SDK</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
     <p class="eyebrow">Implemented pre-release foundation · Publication remains</p>
     <h1>The SDK is the app platform.</h1>
     <p class="lede">Give staff, non-technical deployers, and coding agents one
-      small typed interface to identity, data, and every future TinyHost
+      small typed interface to identity, data, and every future Tinkercloud
       capability.</p>
     <p class="promise">Low ceremony without weakening the server-side boundary.</p>
   </header>
@@ -24,7 +24,7 @@
         <p>Raw HTTP is useful as a contract but costly as an app-development
           interface. The Shopify Quick north star gives creators obvious operations,
           discoverable capabilities, strong types, and actionable errors while
-          TinyHost continues deriving app and identity from the request.</p>
+          Tinkercloud continues deriving app and identity from the request.</p>
         <p><a href="../../docs/product/north-star-quick.md">Quick north-star
           comparison</a></p>
       </section>
@@ -58,19 +58,19 @@
     <section id="implementation">
       <p class="eyebrow">Implementation sketch</p>
       <h2>Same-origin methods over versioned capabilities</h2>
-      <pre>import { tiny } from "@tinyhost/sdk";
+      <pre>import { tinker } from "@tinkercloud/sdk";
 
-const user = await tiny.user.current();
-const item = await tiny.kv.get("reviews/42");
-await tiny.kv.set("reviews/42", next, {
+const user = await tinker.user.current();
+const item = await tinker.kv.get("reviews/42");
+await tinker.kv.set("reviews/42", next, {
   expectedVersion: item?.version,
 });
-const attachment = await tiny.blobs.upload(file);
+const attachment = await tinker.blobs.upload(file);
 
-tiny.live.onKvChange({ prefix: "reviews/" }, refresh);
-const enabled = await tiny.capabilities.list();</pre>
+tinker.live.onKvChange({ prefix: "reviews/" }, refresh);
+const enabled = await tinker.capabilities.list();</pre>
       <p>The SDK sends the app session cookie to reserved same-origin endpoints.
-        TinyHost derives tenancy, authorizes, applies quotas, and returns typed
+        Tinkercloud derives tenancy, authorizes, applies quotas, and returns typed
         safe errors.</p>
       <p><a href="../../docs/architecture/client-sdk.md">Detailed SDK design</a></p>
     </section>
@@ -82,7 +82,7 @@ const enabled = await tiny.capabilities.list();</pre>
         <li>Handwritten types or generated transport types with a handwritten
           ergonomic facade?</li>
         <li>Which WebSocket client library, if any, earns its dependency cost?</li>
-        <li>What compatibility range should the working package label expose?</li>
+        <li>What compatibility range should the `@tinkercloud/sdk` package expose?</li>
       </ul>
     </section>
     <section id="decision" class="decision">

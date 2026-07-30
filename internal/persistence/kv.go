@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 	"time"
 )
 

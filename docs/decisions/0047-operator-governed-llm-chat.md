@@ -4,13 +4,13 @@ Status: Accepted for post-V1 L1/L2 implementation
 
 ## Context
 
-TinyHost needs a narrow way for an authorized private app to use an external
+Tinkercloud needs a narrow way for an authorized private app to use an external
 LLM without giving a deployer or viewer an organization API key. This changes
 the secret, persistence, spending, and external-network trust boundaries.
 
 ## Decision
 
-TinyHost stores each provider key only as an authenticated encrypted envelope in
+Tinkercloud stores each provider key only as an authenticated encrypted envelope in
 the control SQLite database. The encryption root is injected from the existing
 root-owned service credential boundary, is not persisted in SQLite, and has no
 public read endpoint. Connection entry and rotation are write-only. The LLM
@@ -36,7 +36,7 @@ nor root configuration detail.
 
 The initial host setup generates the capability root in the root-owned service
 credential file. An existing host enables the same boundary with root-only
-`tinyhost llm enable`; it generates the root locally, records only its
+`tinkercloud llm enable`; it generates the root locally, records only its
 environment reference in config, prints no value, and requires a service
 restart before LLM controls appear. A manifest requesting `llm.chat` cannot
 activate without a currently approved active grant/profile/connection, so a
@@ -54,7 +54,7 @@ future lifecycle rather than silently re-approved by a stale page. Browser
 discovery exposes only active safe limits and a fixed external-content notice,
 never the selected provider or model. A provider or persistence ambiguity can conservatively retain reserved
 tokens, reducing availability instead of undercounting spend. Prompts and
-completions are intentionally absent from persistence and audit, so TinyHost
+completions are intentionally absent from persistence and audit, so Tinkercloud
 does not offer provider replay or server-owned conversation history.
 
 This is deliberately post-V1: it adds an external provider dependency and

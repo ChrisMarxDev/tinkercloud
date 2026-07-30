@@ -1,17 +1,17 @@
-# TinyHost role-skill contract
+# Tinkercloud role-skill contract
 
 ## Outcome
 
-TinyHost ships two self-contained role-facing coding-agent skills:
+Tinkercloud ships two self-contained role-facing coding-agent skills:
 
-- `tiny-deployer` for understanding, building, configuring, deploying, and
+- `tinkercloud-deployer` for understanding, building, configuring, deploying, and
   verifying a deployer's private static app; and
-- `tiny-operator` for installing, configuring, diagnosing, updating, and
-  recovering a TinyHost server.
+- `tinkercloud-operator` for installing, configuring, diagnosing, updating, and
+  recovering a Tinkercloud server.
 
-`tiny-platform` remains the canonical authoring source for copied role guidance.
+`tinkercloud-platform` remains the canonical authoring source for copied role guidance.
 It is not a runtime dependency and does not create a third human role workflow.
-Internal acceptance-test, TinyHost-owned UI, and opt-in local
+Internal acceptance-test, Tinkercloud-owned UI, and opt-in local
 deployer-workstation test skills may remain separate. The latter may drive the
 normal CLI OTP flow only with an exact deployer's controlled local Resend test
 mailbox; it is not production CI/noninteractive deployment-agent
@@ -24,15 +24,15 @@ workflows.
 
 ## Standalone distribution
 
-Each role skill MUST remain useful when its `SKILL.md` is the only TinyHost
+Each role skill MUST remain useful when its `SKILL.md` is the only Tinkercloud
 document an agent receives. It MUST NOT require a sibling skill, repository
-checkout, hidden prompt, or remembered TinyHost knowledge.
+checkout, hidden prompt, or remembered Tinkercloud knowledge.
 
 Each role skill MUST:
 
 - identify its actor and refuse to transfer authority from another role;
 - state the V1 private-only and utility-grade persistence boundaries;
-- route work through the supported `tiny` or `tinyhost` command surface;
+- route work through the supported `tinker` or `tinkercloud` command surface;
 - keep secrets out of chat, argv, app code, manifests, logs, and browser state;
 - fail closed on missing, malformed, redirected, or ambiguous security state;
 - report completion only after the role's required verification succeeds; and
@@ -46,30 +46,30 @@ that is required, unknown, undiscoverable, and unsafe to default.
 
 The skill MUST:
 
-1. discover or ask for the normalized HTTPS TinyHost platform URL;
+1. discover or ask for the normalized HTTPS Tinkercloud platform URL;
 2. distinguish app-building work from deployment-only work;
 3. propose a concrete access policy and explain owner-only, exact-email, and
    exact-domain choices without inferring broader access;
 4. combine unresolved optional description, access, capability, and SPA choices
    into one review step;
-5. use `@tinyhost/sdk` as the app platform for current viewer/app information,
+5. use `@tinkercloud/sdk` as the app platform for current viewer/app information,
    capability discovery, KV, blobs, and realtime;
-6. generate or validate a strict `tiny.yaml` receipt;
-7. use the existing project-owned build action without making `tiny deploy`
+6. generate or validate a strict `tinker.yaml` receipt;
+7. use the existing project-owned build action without making `tinker deploy`
    execute arbitrary builds;
 8. authenticate through the CLI without requesting a bearer or OTP in chat;
-9. run `tiny deploy [DIR]`; and
+9. run `tinker deploy [DIR]`; and
 10. accept success only when the CLI's fresh anonymous gateway-denial proof
     succeeds.
 
 When an authenticated deployer asks to inspect or repair an owned app's managed
-KV/documents, the skill MUST use the bounded `tiny data` command family and
+KV/documents, the skill MUST use the bounded `tinker data` command family and
 reuse the saved CLI login. It MUST explain the optional KV and required
 destructive/document optimistic version checks plus exact destructive
 confirmation, preserve deterministic `--json` behavior, and refuse
 database URLs/files, raw SQL, schema/migration commands, exports/imports,
 viewer impersonation, or another deployer's app. The app slug is an owned
-control target only; TinyHost derives the private data scope.
+control target only; Tinkercloud derives the private data scope.
 
 The skill MAY continue safe local inspection or implementation while waiting
 for a non-secret answer. It MUST stop before a deployment or access broadening
@@ -80,8 +80,8 @@ that still needs the deployer's decision.
 The deployer skill MUST document the current public SDK surface accurately
 enough to build an app without repository documentation:
 
-- same-origin, configuration-free `tiny`;
-- `tiny.user.current`, `tiny.app.info`, and `tiny.capabilities.list`;
+- same-origin, configuration-free `tinker`;
+- `tinker.user.current`, `tinker.app.info`, and `tinker.capabilities.list`;
 - versioned JSON KV get/set/delete/prefix-list;
 - opaque app-shared blob upload/get/list/delete;
 - app-scoped live channels and KV change hints;
@@ -108,8 +108,8 @@ introduced.
 The canonical file MUST expose separately marked common, deployer, and operator
 blocks. The drift check MUST compare:
 
-- common + deployer blocks with `tiny-deployer`;
-- common + operator blocks with `tiny-operator`; and
+- common + deployer blocks with `tinkercloud-deployer`;
+- common + operator blocks with `tinkercloud-operator`; and
 - the common block with internal full-stack acceptance guidance.
 
 Role skills SHOULD include Codex-compatible `agents/openai.yaml` metadata, but

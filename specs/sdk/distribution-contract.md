@@ -60,6 +60,6 @@ tag, reserve a name, create a scope, or mutate registry state.
 ## Publication gate
 
 Publication remains blocked until maintainers confirm the canonical repository
-and control the `@tinyhost` scope on each registry. The first real publication
+and control the `@tinkercloud` scope on each registry. The first real publication
 must come from a reviewed release tag using short-lived trusted publishing,
 with no registry token stored in this repository.

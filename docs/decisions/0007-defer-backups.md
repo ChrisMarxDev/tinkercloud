@@ -4,7 +4,7 @@
 
 ## Context
 
-Initial TinyHost deployments host replaceable toy and utility apps. A complete
+Initial Tinkercloud deployments host replaceable toy and utility apps. A complete
 backup product requires retention policy, encryption, remote destinations,
 credential management, consistency, compatibility, and restore drills. That
 work does not prove the private deployment promise.

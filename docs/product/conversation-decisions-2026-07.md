@@ -1,4 +1,4 @@
-# TinyHost conversation decision compact
+# Tinkercloud conversation decision compact
 
 **Cutoff:** 2026-07-29
 **Purpose:** Preserve product decisions made during the first complete local and
@@ -10,9 +10,9 @@ concept or topic document conflicts with a decision below, the reconciled
 
 ## Product and topology
 
-- TinyHost remains a self-hosted, private-only static application platform for
+- Tinkercloud remains a self-hosted, private-only static application platform for
   one dedicated small VPS.
-- One `tinyhost` gateway owns public TCP 80/443, TLS, hostname routing,
+- One `tinkercloud` gateway owns public TCP 80/443, TLS, hostname routing,
   authentication, authorization, static delivery, KV, blobs, and realtime.
 - The operator should not need Docker, a reverse proxy, a separate database,
   or a second app-facing storage service.
@@ -31,30 +31,30 @@ concept or topic document conflicts with a decision below, the reconciled
   confirmation; removing immediately revokes deployer CLI/control credentials
   while preserving the immutable deployer ID and owned apps.
 - A deployer logs in by email OTP once per still-valid CLI token. The client
-  stores the server-bound bearer in a protected per-user Tiny file, not a
+  stores the server-bound bearer in a protected per-user Tinker file, not a
   project file and not an external credential-store command.
-- `tiny login` reuses a valid bearer after `whoami`; `tiny login --force`
-  deliberately changes account; `tiny logout` revokes the exact server-side
+- `tinker login` reuses a valid bearer after `whoami`; `tinker login --force`
+  deliberately changes account; `tinker logout` revokes the exact server-side
   bearer before deleting the local credential.
 - The CLI remembers one verified default platform URL. Human commands with no
   explicit or cached server ask once, verify it without redirects, save it,
   and continue. JSON/automation never prompts.
-- Viewer email identity is global to one TinyHost browser profile, not repeated
+- Viewer email identity is global to one Tinkercloud browser profile, not repeated
   independently for every app. App access is still evaluated separately from
   the current app policy, then converted through an app-bound one-time handoff
   into a host-only app session. The global identity cookie is never sent to an
   app origin.
-- App denial and login screens are TinyHost-native HTML, not raw JSON. They
+- App denial and login screens are Tinkercloud-native HTML, not raw JSON. They
   explain denial, provide a safe sign-in/account-change route, and never expose
   policy membership.
 
 ## Deployer experience
 
-- The intended first command is `tiny deploy .` from an already built static
+- The intended first command is `tinker deploy .` from an already built static
   project.
-- TinyHost does not run arbitrary application build scripts. The project’s own
+- Tinkercloud does not run arbitrary application build scripts. The project’s own
   toolchain or coding agent builds first.
-- A missing `tiny.yaml` starts bounded human onboarding. The CLI derives safe
+- A missing `tinker.yaml` starts bounded human onboarding. The CLI derives safe
   slug/output defaults, asks only for missing or ambiguous required state,
   shows a review/edit summary for optional description/access/capabilities/SPA
   fallback, and uses one final deploy action whose label names access
@@ -85,7 +85,7 @@ concept or topic document conflicts with a decision below, the reconciled
 
 ## Operator and release experience
 
-- A human operator should run a guided, resumable `tinyhost setup`; the command
+- A human operator should run a guided, resumable `tinkercloud setup`; the command
   generates non-secret config instead of requiring the operator to author it.
 - Setup asks only for necessary non-discoverable information. It discovers the
   host and safe defaults, explains exact external DNS/email actions, and resumes
@@ -93,7 +93,7 @@ concept or topic document conflicts with a decision below, the reconciled
 - Secrets remain root-owned and never appear in argv, normal config, logs,
   browser code, or deployed apps. The wizard can consume a root-readable file
   or write one from a no-echo prompt.
-- TinyHost and Resend DNS records are collected before one combined
+- Tinkercloud and Resend DNS records are collected before one combined
   DNS-provider checkpoint rather than causing two visits.
 - Manual server update derives its health and anonymous-denial probe targets
   from installed state; the operator does not supply a config path, app slug,

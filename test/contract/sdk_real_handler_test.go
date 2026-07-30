@@ -16,16 +16,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/compose"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/persistence"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 type contractBlob struct {
@@ -200,7 +200,7 @@ func TestBuiltSDKAgainstComposedGateway(t *testing.T) {
 	cmd := exec.Command("node", "test/real-handler.mjs")
 	cmd.Dir = filepath.Join(root, "sdk", "typescript")
 	port := listener.Addr().(*net.TCPAddr).Port
-	cmd.Env = append(os.Environ(), "TINY_SDK_CONTRACT_ORIGIN=http://[::1]:"+strconv.Itoa(port), "TINY_SDK_CONTRACT_HOST=alpha.localhost:"+strconv.Itoa(port), "TINY_SDK_CONTRACT_COOKIE="+sessions.AppCookieName+"="+token)
+	cmd.Env = append(os.Environ(), "TINKER_SDK_CONTRACT_ORIGIN=http://[::1]:"+strconv.Itoa(port), "TINKER_SDK_CONTRACT_HOST=alpha.localhost:"+strconv.Itoa(port), "TINKER_SDK_CONTRACT_COOKIE="+sessions.AppCookieName+"="+token)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("built SDK contract: %v\n%s", err, out)
 	}

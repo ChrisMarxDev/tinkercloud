@@ -2,12 +2,12 @@
 
 ## Product outcome
 
-An operator can install TinyHost on one Linux VPS, add a deployer email to the
+An operator can install Tinkercloud on one Linux VPS, add a deployer email to the
 exact active allowlist, and give that deployer a workflow that ends with a
 protected app URL:
 
 ```text
-tiny deploy .
+tinker deploy .
 ```
 
 An allowlisted viewer can authenticate by email and use the app. An anonymous,
@@ -28,7 +28,7 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 The first production-capable cut should not implement every initially proposed
 primitive at once.
 
-- **Ship tiny KV, lightweight local blobs, and ephemeral realtime together.**
+- **Ship tinker KV, lightweight local blobs, and ephemeral realtime together.**
   KV remains current JSON state, blobs hold bounded app-shared attachments, and
   sockets provide the immediate collaborative feeling without promising
   history, replay, multi-node fan-out, public files, or remote durability.
@@ -50,7 +50,7 @@ primitive at once.
 - Static archive deployment and SPA fallback.
 - Current-user, bounded JSON KV, app-shared local blob, and app-scoped
   WebSocket APIs.
-- Browser-first `@tinyhost/sdk` and app capability discovery.
+- Browser-first `@tinkercloud/sdk` and app capability discovery.
 - Local audit events, structured operational logs, and bounded retention.
 - Signed self-update with health verification and local update rollback state.
 

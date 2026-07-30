@@ -7,7 +7,7 @@ Activation gates inspect server-derived immutable candidate deployment records
 before the current pointer changes. Client-supplied paths are forbidden; gate
 denial preserves the previous active release.
 
-The candidate's strict, server-canonical `tiny.yaml` private allowlist is part
+The candidate's strict, server-canonical `tinker.yaml` private allowlist is part
 of the immutable deployment metadata. It is not valid to approve a candidate
 because a different, older app policy happens to exist.
 

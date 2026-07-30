@@ -1,4 +1,4 @@
-// Package collections defines TinyHost's bounded app-scoped JSON document
+// Package collections defines Tinkercloud's bounded app-scoped JSON document
 // primitive. It is intentionally not a general query or relational API.
 package collections
 
@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/capabilities"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/capabilities"
 )
 
 var (

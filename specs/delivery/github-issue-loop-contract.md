@@ -28,7 +28,7 @@ implementation. In-app feedback intake and autonomous repair of failing
 
 The runner must use a dedicated checkout and least-privilege GitHub credential.
 That host must not contain production credentials, release-signing material,
-operator recovery material, or TinyHost provider secrets.
+operator recovery material, or Tinkercloud provider secrets.
 
 ## Workflow labels
 

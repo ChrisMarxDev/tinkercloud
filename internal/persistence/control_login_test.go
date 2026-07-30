@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
 )
 
 type captureOutbox struct{ m otp.Message }

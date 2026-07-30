@@ -1,4 +1,4 @@
-# Tiny Client SDK
+# Tinkercloud Client SDK
 
 ## Product role
 
@@ -16,25 +16,25 @@ what to do next.
 Package:
 
 ```text
-@tinyhost/sdk
+@tinkercloud/sdk
 ```
 
 Browser-first TypeScript with ESM output, strong types, no framework dependency,
 and a deliberately small runtime.
 
 ```ts
-import { tiny } from "@tinyhost/sdk";
+import { tinker } from "@tinkercloud/sdk";
 
-const viewer = await tiny.user.current();
-const current = await tiny.kv.get("reviews/invoice-42");
-await tiny.kv.set("reviews/invoice-42", {
+const viewer = await tinker.user.current();
+const current = await tinker.kv.get("reviews/invoice-42");
+await tinker.kv.set("reviews/invoice-42", {
   status: "approved",
   by: viewer.identity.email,
 }, {
   expectedVersion: current?.version,
 });
 
-const stop = tiny.live.onKvChange(
+const stop = tinker.live.onKvChange(
   { prefix: "reviews/" },
   ({ key }) => refresh(key),
 );
@@ -43,27 +43,27 @@ const stop = tiny.live.onKvChange(
 ## Initial modules
 
 ```ts
-tiny.user.current()
+tinker.user.current()
 
-tiny.kv.get(key)
-tiny.kv.set(key, value, options?)
-tiny.kv.delete(key, options?)
-tiny.kv.list({ prefix, limit, cursor })
+tinker.kv.get(key)
+tinker.kv.set(key, value, options?)
+tinker.kv.delete(key, options?)
+tinker.kv.list({ prefix, limit, cursor })
 
-tiny.blobs.upload(file, options?)
-tiny.blobs.get(id, options?)
-tiny.blobs.list({ limit, cursor })
-tiny.blobs.delete(id, options?)
+tinker.blobs.upload(file, options?)
+tinker.blobs.get(id, options?)
+tinker.blobs.list({ limit, cursor })
+tinker.blobs.delete(id, options?)
 
-tiny.live.channel(name).subscribe()
-tiny.live.channel(name).connect()
-tiny.live.channel(name).unsubscribe()
-tiny.live.channel(name).on(event, handler)
-tiny.live.channel(name).publish(event, payload)
-tiny.live.onKvChange({ prefix }, handler)
+tinker.live.channel(name).subscribe()
+tinker.live.channel(name).connect()
+tinker.live.channel(name).unsubscribe()
+tinker.live.channel(name).on(event, handler)
+tinker.live.channel(name).publish(event, payload)
+tinker.live.onKvChange({ prefix }, handler)
 
-tiny.capabilities.list()
-tiny.app.info()
+tinker.capabilities.list()
+tinker.app.info()
 ```
 
 `capabilities.list()` lets an app and coding agent discover what the operator
@@ -81,11 +81,11 @@ After reconnect, read current KV or collection state again before rendering.
 The SDK calls same-origin reserved endpoints:
 
 ```text
-/_tiny/api/v1/me
-/_tiny/api/v1/kv/*
-/_tiny/api/v1/blobs/*
-/_tiny/api/v1/capabilities
-/_tiny/ws/v1
+/_tinker/api/v1/me
+/_tinker/api/v1/kv/*
+/_tinker/api/v1/blobs/*
+/_tinker/api/v1/capabilities
+/_tinker/ws/v1
 ```
 
 The browser automatically sends the host-only app session cookie. The SDK does
@@ -95,9 +95,9 @@ not store or accept:
 - database credentials;
 - viewer tokens;
 - provider/API secrets;
-- TinyHost operator or deployer tokens.
+- Tinkercloud operator or deployer tokens.
 
-TinyHost derives the app from the hostname and the viewer from the session.
+Tinkercloud derives the app from the hostname and the viewer from the session.
 
 ## Error model
 
@@ -105,9 +105,9 @@ Methods throw typed, actionable errors:
 
 ```ts
 try {
-  await tiny.kv.set("settings/default", next, { expectedVersion });
+  await tinker.kv.set("settings/default", next, { expectedVersion });
 } catch (error) {
-  if (error instanceof TinyVersionConflictError) {
+  if (error instanceof TinkerVersionConflictError) {
     // reload or merge
   }
 }
@@ -128,8 +128,8 @@ VersionIncompatible
 ```
 
 Errors include a safe request ID for operator diagnosis, never secret details.
-`TinyVersionIncompatibleError` means the installed SDK major cannot safely use
-the server API; upgrade `@tinyhost/sdk` and retry. Raw callers that omit the
+`TinkerVersionIncompatibleError` means the installed SDK major cannot safely use
+the server API; upgrade `@tinkercloud/sdk` and retry. Raw callers that omit the
 version header remain compatible during V1, while a supplied unsupported or
 malformed major receives the same actionable `426` error.
 
@@ -150,18 +150,18 @@ malformed major receives the same actionable `426` error.
 Future modules should feel native:
 
 ```ts
-const response = await tiny.llm.generate({
+const response = await tinker.llm.generate({
   model: "operator-default",
   prompt: "Summarize this review",
 });
 
-const issue = await tiny.jira.createIssue({
+const issue = await tinker.jira.createIssue({
   project: "OPS",
   summary: "Follow up",
 });
 ```
 
-These calls go to TinyHost. TinyHost resolves the app grant and operator-managed
+These calls go to Tinkercloud. Tinkercloud resolves the app grant and operator-managed
 connection, injects credentials server-side, calls the provider, applies quotas
 and redaction, and returns a bounded result.
 
@@ -178,7 +178,7 @@ and redaction, and returns a bounded result.
 
 ## Testing
 
-- Contract tests run the SDK against a real TinyHost HTTP test server.
+- Contract tests run the SDK against a real Tinkercloud HTTP test server.
 - WebSocket contract tests cover upgrade authentication, app binding,
   revocation, quotas, slow consumers, and reconnect recovery.
 - Browser tests cover cookies, redirects, CSP, network cancellation, and errors.
@@ -201,7 +201,7 @@ the compiled npm-registry package; JSR publishes the same API from reviewed
 TypeScript source. Neither format has runtime dependencies or install scripts.
 
 Package preparation is complete, but publication remains blocked until the
-canonical repository and `@tinyhost` registry scopes are confirmed. See the
+canonical repository and `@tinkercloud` registry scopes are confirmed. See the
 [SDK distribution guide](../operations/sdk-distribution.md) and
 [distribution contract](../../specs/sdk/distribution-contract.md).
 
@@ -221,11 +221,11 @@ apps that use the package surface in realistic flows:
   attachment download, cursor listing, deletion, cancellation, typed quota
   handling, and the local-VPS durability disclaimer.
 
-The attachment example obtains bytes with `tiny.blobs.get(id)`, creates a
+The attachment example obtains bytes with `tinker.blobs.get(id)`, creates a
 browser download locally, and uses the returned display name only for that
 download. It never receives a raw storage URL or path. The gateway delivers
 the bytes as `attachment` with `nosniff` and `private, no-store`; uploaded
-HTML, SVG, or JavaScript is not an inline TinyHost document surface.
+HTML, SVG, or JavaScript is not an inline Tinkercloud document surface.
 
 Their build copies the already-built ESM SDK into each release and converts the
 package import to a same-release module path. No runtime CDN, API origin, app

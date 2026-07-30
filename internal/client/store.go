@@ -16,7 +16,7 @@ var ErrStore = errors.New("credential store unavailable")
 // logged-out CLI. Corrupt, unsafe, or unavailable storage remains ErrStore.
 var ErrCredentialNotFound = errors.New("credential not found")
 
-// ErrNoDefaultServer means this OS user has not selected a TinyHost platform
+// ErrNoDefaultServer means this OS user has not selected a Tinkercloud platform
 // yet. It is deliberately distinct from ErrStore so the CLI can offer an
 // actionable first-run instruction without treating malformed local state as
 // absent configuration.
@@ -24,7 +24,7 @@ var ErrNoDefaultServer = errors.New("default server not configured")
 
 const (
 	credentialVersion  = 1
-	credentialDirName  = "tiny"
+	credentialDirName  = "tinker"
 	maxCredentialFile  = 32 << 10
 	maxCredentialToken = 16 << 10
 	defaultServerFile  = "default-server.json"
@@ -33,7 +33,7 @@ const (
 
 type MemoryStore map[string]string
 
-const memoryDefaultServerKey = "\x00tiny-default-server"
+const memoryDefaultServerKey = "\x00tinker-default-server"
 
 func (m MemoryStore) Get(k string) (string, error) {
 	v, ok := m[k]
@@ -63,9 +63,9 @@ func (m MemoryStore) SetDefaultServer(server string) error {
 	return nil
 }
 
-// FileStore stores one deployer token per normalized TinyHost server.  Dir is
+// FileStore stores one deployer token per normalized Tinkercloud server.  Dir is
 // provided for deterministic tests; when empty, the platform config directory
-// is used with Tiny's private subdirectory.
+// is used with Tinker's private subdirectory.
 type FileStore struct {
 	Dir string
 }

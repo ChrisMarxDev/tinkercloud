@@ -13,19 +13,19 @@ domain topology.
 ADR 0002 correctly rejected a shared parent-domain app cookie: deployed apps
 are untrusted independent origins and one app must not receive another app’s
 credential. Its original app-by-app OTP consequence, however, makes an email
-identity feel logged out when moving between allowed TinyHost apps. The
+identity feel logged out when moving between allowed Tinkercloud apps. The
 platform needs to authenticate an email once per browser profile while retaining
 app-specific authorization and browser cookie isolation.
 
 ## Decision
 
-TinyHost introduces one opaque, server-persisted global viewer identity session
-on the exact admin host. The host-only `__Host-tiny_identity` cookie proves
+Tinkercloud introduces one opaque, server-persisted global viewer identity session
+on the exact admin host. The host-only `__Host-tinker_identity` cookie proves
 only a browser email identity; the dashboard separately rechecks current role,
 it grants no app access by itself, and it is never sent to app hosts. CLI
 bearers remain separate.
 
-The platform additionally sets `__Host-tiny_browser`, an opaque 30-day,
+The platform additionally sets `__Host-tinker_browser`, an opaque 30-day,
 host-only `Secure`/`HttpOnly`/`SameSite=Lax` browser-profile binding. It is not
 an identity, control, app, or CLI credential and has no authorization effect.
 It never reaches deployed app hosts or browser-visible URL, form, template,

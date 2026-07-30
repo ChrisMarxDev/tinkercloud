@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"errors"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"io"
 	"io/fs"
 	"os"
@@ -31,17 +31,17 @@ func ArchiveProject(project string, manifest []byte, w io.Writer) error {
 	g := gzip.NewWriter(w)
 	g.Header.ModTime = time.Unix(0, 0)
 	tw := tar.NewWriter(g)
-	h := &tar.Header{Name: "tiny.yaml", Mode: 0644, Size: int64(len(manifest)), ModTime: time.Unix(0, 0), Format: tar.FormatPAX}
+	h := &tar.Header{Name: "tinker.yaml", Mode: 0644, Size: int64(len(manifest)), ModTime: time.Unix(0, 0), Format: tar.FormatPAX}
 	if e = tw.WriteHeader(h); e == nil {
 		_, e = tw.Write(manifest)
 	}
 	if e != nil {
 		return e
 	}
-	// When build.output is ".", tiny.yaml is inside the output directory. It
+	// When build.output is ".", tinker.yaml is inside the output directory. It
 	// was already written as the canonical manifest entry above, so exclude it
 	// from the bundle rather than creating a duplicate archive path.
-	if e = archiveDirectoryTarExcept(out, tw, map[string]bool{"tiny.yaml": true}); e != nil {
+	if e = archiveDirectoryTarExcept(out, tw, map[string]bool{"tinker.yaml": true}); e != nil {
 		return e
 	}
 	if e = tw.Close(); e != nil {
@@ -73,7 +73,7 @@ func ArchiveDirectory(root string, w io.Writer) error {
 }
 
 // archiveDirectoryTar writes sorted regular files directly to an existing tar
-// stream. Keeping this separate lets ArchiveProject add tiny.yaml without ever
+// stream. Keeping this separate lets ArchiveProject add tinker.yaml without ever
 // materializing a second compressed archive in memory.
 func archiveDirectoryTar(root string, t *tar.Writer) error {
 	return archiveDirectoryTarExcept(root, t, nil)

@@ -13,7 +13,7 @@ const sourceVersion = source.match(
   /export const SDK_VERSION = "([^"]+)";/,
 )?.[1];
 
-assert.equal(packageManifest.name, "@tinyhost/sdk");
+assert.equal(packageManifest.name, "@tinkercloud/sdk");
 assert.equal(jsrManifest.name, packageManifest.name);
 assert.equal(jsrManifest.version, packageManifest.version);
 assert.equal(sourceVersion, packageManifest.version);

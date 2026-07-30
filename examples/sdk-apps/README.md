@@ -1,4 +1,4 @@
-# TinyHost SDK example apps
+# Tinkercloud SDK example apps
 
 These three dependency-free static apps collectively exercise the V1 browser
 SDK:
@@ -11,7 +11,7 @@ SDK:
 | [`attachment-shelf`](attachment-shelf/) | Blob capability discovery, bounded upload/download, cursor listing, deletion, cancellation, typed quota errors, and the local-VPS durability boundary |
 
 All manifests are private and owner-only by default. Add viewer emails or
-domains to the selected app's `tiny.yaml` before sharing it.
+domains to the selected app's `tinker.yaml` before sharing it.
 
 ## Build
 
@@ -22,14 +22,14 @@ npm run build
 ```
 
 The build compiles the repository SDK, then creates a `dist/` directory inside
-each app. Every release receives a local `tiny-sdk.js`; no CDN or runtime
+each app. Every release receives a local `tinker-sdk.js`; no CDN or runtime
 package resolution is required.
 
 Deploy one app from its project directory:
 
 ```sh
 cd shared-checklist
-tiny deploy .
+tinker deploy .
 ```
 
 KV is utility-grade current state. Live events are best-effort hints: the

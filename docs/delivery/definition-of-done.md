@@ -61,7 +61,7 @@
 - Wrong-app, revoked, partial-write, quota/disk, cancellation, missing/corrupt
   bytes, orphan, and metadata/storage disagreement cases fail closed.
 - Download headers prevent the supported API from treating uploaded active
-  content as an inline TinyHost app-origin document.
+  content as an inline Tinkercloud app-origin document.
 - Local storage remains inside the configured private data directory; any
   future remote adapter is direct and server-side, not a FUSE mount or browser
   credential.
@@ -83,9 +83,9 @@
   excluded without hiding locks, examples, or the committed release public
   key.
 - Fresh Hetzner install and failed-update rollback drills pass.
-- TinyHost owns only its TCP 80/443 public listeners; an additional
-  TinyHost-owned listener fails without attributing operator-owned services to
-  TinyHost.
+- Tinkercloud owns only its TCP 80/443 public listeners; an additional
+  Tinkercloud-owned listener fails without attributing operator-owned services to
+  Tinkercloud.
 - Anonymous probes cover every registered protected surface.
 - Binary/artifacts have checksums, signatures, and provenance.
 - Release metadata, a changed binary, and a changed signature are each proven

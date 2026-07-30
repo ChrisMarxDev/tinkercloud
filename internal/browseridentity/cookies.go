@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	IdentityCookieName = "__Host-tiny_identity"
-	BindingCookieName  = "__Host-tiny_browser"
-	CSRFCookieName     = "__Host-tiny_identity_csrf"
+	IdentityCookieName = "__Host-tinker_identity"
+	BindingCookieName  = "__Host-tinker_browser"
+	CSRFCookieName     = "__Host-tinker_identity_csrf"
 )
 
 func IdentityCookie(raw string, expires time.Time) *http.Cookie {

@@ -13,7 +13,7 @@ import (
 
 func TestEnsureAppCreatesMissingOwnedSlug(t *testing.T) {
 	requests := 0
-	c := New("https://tiny.test", "secret")
+	c := New("https://tinker.test", "secret")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		requests++
 		switch requests {
@@ -41,9 +41,9 @@ func TestReleasedClientSendsCompatibilityHeaders(t *testing.T) {
 	old := BuildVersion
 	BuildVersion = "0.1.0"
 	t.Cleanup(func() { BuildVersion = old })
-	c := New("https://tiny.test", "secret")
+	c := New("https://tinker.test", "secret")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
-		if r.Header.Get("X-Tiny-CLI-Version") != "0.1.0" || r.Header.Get("X-Tiny-Control-API-Version") != "1" {
+		if r.Header.Get("X-Tinker-CLI-Version") != "0.1.0" || r.Header.Get("X-Tinker-Control-API-Version") != "1" {
 			t.Fatalf("compatibility headers = %#v", r.Header)
 		}
 		return &http.Response{StatusCode: http.StatusNoContent, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: r}, nil
@@ -55,7 +55,7 @@ func TestReleasedClientSendsCompatibilityHeaders(t *testing.T) {
 
 func TestEnsureAppForeignSlugConflictRemainsDenied(t *testing.T) {
 	requests := 0
-	c := New("https://tiny.test", "secret")
+	c := New("https://tinker.test", "secret")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		requests++
 		switch requests {
@@ -109,7 +109,7 @@ func TestLoginVersionMismatch(t *testing.T) {
 }
 
 func TestDoRateLimitDoesNotExposeResponseBody(t *testing.T) {
-	c := New("https://tiny.test", "control-token")
+	c := New("https://tinker.test", "control-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(`{"error":{"message":"a@example.test control-token"}}`)), Header: make(http.Header), Request: r}, nil
 	})}
@@ -123,7 +123,7 @@ func TestDoRateLimitDoesNotExposeResponseBody(t *testing.T) {
 }
 
 func TestVerifyLoginSessionDependencyFailureIsNotUnauthorized(t *testing.T) {
-	c := New("https://tiny.test", "saved-token")
+	c := New("https://tinker.test", "saved-token")
 	c.HTTP = &http.Client{Transport: rt(func(*http.Request) (*http.Response, error) {
 		return nil, context.DeadlineExceeded
 	})}
@@ -147,7 +147,7 @@ func TestVerifyServerCompatibilityFailsClosed(t *testing.T) {
 		{"dependency", 0, ``, context.DeadlineExceeded},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			c := New("https://tiny.test", "")
+			c := New("https://tinker.test", "")
 			c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 				if r.Method != http.MethodGet || r.URL.Path != "/api/v1/version" || r.Header.Get("Authorization") != "" {
 					t.Fatalf("unexpected proof request %s %s", r.Method, r.URL.Path)
@@ -181,14 +181,14 @@ func TestCrossOriginRedirectDenied(t *testing.T) {
 
 func TestTokenLifecycleUsesBoundPathsAndNeverDecodesSecretFromList(t *testing.T) {
 	var requests []*http.Request
-	c := New("https://tiny.test", "control-token")
+	c := New("https://tinker.test", "control-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		requests = append(requests, r)
 		switch r.Method {
 		case "GET":
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`[{"id":"tok_1","scopes":["app:read"],"expires_at":"2030-01-01T00:00:00Z","last_used_at":null,"revoked":false}]`)), Header: make(http.Header), Request: r}, nil
 		case "POST":
-			return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"id":"tok_2","token":"tiny_once","scopes":["app:read"],"expires_at":"2030-01-01T00:00:00Z"}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"id":"tok_2","token":"tinker_once","scopes":["app:read"],"expires_at":"2030-01-01T00:00:00Z"}`)), Header: make(http.Header), Request: r}, nil
 		case "DELETE":
 			return &http.Response{StatusCode: 204, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: r}, nil
 		default:
@@ -201,7 +201,7 @@ func TestTokenLifecycleUsesBoundPathsAndNeverDecodesSecretFromList(t *testing.T)
 		t.Fatal(items, err)
 	}
 	created, err := c.CreateToken(context.Background(), "demo/name", TokenInput{Scopes: []string{"app:read"}, ExpiresInSeconds: 3600}, "key")
-	if err != nil || created.Token != "tiny_once" {
+	if err != nil || created.Token != "tinker_once" {
 		t.Fatal(created, err)
 	}
 	if err = c.RevokeToken(context.Background(), "demo/name", "tok_2", "key2"); err != nil {
@@ -214,7 +214,7 @@ func TestTokenLifecycleUsesBoundPathsAndNeverDecodesSecretFromList(t *testing.T)
 
 func TestDataClientUsesBoundedControlPathsAndVersions(t *testing.T) {
 	var requests []*http.Request
-	c := New("https://tiny.test", "control-token")
+	c := New("https://tinker.test", "control-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		requests = append(requests, r)
 		switch r.Method {
@@ -252,7 +252,7 @@ func TestControlClientKeepsQuotaDistinctFromRequestRateLimit(t *testing.T) {
 		{`{"error":{"code":"rate_limited","message":"safe"}}`, ErrRateLimited},
 		{`not-json`, ErrRateLimited},
 	} {
-		c := New("https://tiny.test", "control-token")
+		c := New("https://tinker.test", "control-token")
 		c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(test.body)), Header: make(http.Header), Request: r}, nil
 		})}

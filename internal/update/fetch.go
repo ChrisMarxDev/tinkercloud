@@ -1,6 +1,6 @@
 package update
 
-// Remote update retrieval is deliberately a tiny, separate boundary.  The
+// Remote update retrieval is deliberately a tinker, separate boundary.  The
 // updater never treats a URL as a filesystem path and it never follows a
 // redirect: an operator-selected release origin must be the origin that sends
 // every signed release component.
@@ -44,7 +44,7 @@ func ManifestURLsFor(releaseBase, metadataURL string) (ReleaseURLs, error) {
 		base = u.String()
 	} else {
 		u, err := parseReleaseURL(metadataURL)
-		const suffix = "tinyhost-linux-amd64.metadata.json"
+		const suffix = "tinkercloud-linux-amd64.metadata.json"
 		if err != nil || !strings.HasSuffix(u.Path, suffix) {
 			return ReleaseURLs{}, ErrFetch
 		}
@@ -63,9 +63,9 @@ func ManifestURLsFor(releaseBase, metadataURL string) (ReleaseURLs, error) {
 // root command into an SSRF/redirect primitive.
 func ReleaseURLsFor(releaseBase, metadataURL, artifact string) (ReleaseURLs, error) {
 	if artifact == "" {
-		artifact = "tinyhost-linux-amd64"
+		artifact = "tinkercloud-linux-amd64"
 	}
-	if artifact != "tinyhost-linux-amd64" || strings.ContainsAny(artifact, "/\\?#") {
+	if artifact != "tinkercloud-linux-amd64" || strings.ContainsAny(artifact, "/\\?#") {
 		return ReleaseURLs{}, ErrFetch
 	}
 	if (releaseBase == "") == (metadataURL == "") {

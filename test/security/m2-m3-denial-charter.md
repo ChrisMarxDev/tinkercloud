@@ -36,7 +36,7 @@ domain entries, unsafe SPA fallbacks, malformed indentation/scalars, and
 capabilities unavailable under the effective server policy.
 
 For deploy orchestration, prove a newly authorized deployer can create and
-deploy their manifest-named app with one `tiny deploy` invocation. A conflicting
+deploy their manifest-named app with one `tinker deploy` invocation. A conflicting
 slug owned by another deployer must remain a denial: a client-side create
 conflict is never treated as evidence that the caller owns that app.
 

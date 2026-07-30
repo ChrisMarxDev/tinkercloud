@@ -21,7 +21,7 @@ Critical journey:
 ```text
 acquire domain + supported dedicated VPS + root SSH
 → install one verified signed server binary
-→ tinyhost setup discovers the host
+→ tinkercloud setup discovers the host
 → ask root domain + operator email
 → derive admin.<domain>, <slug>.<domain>, and sender
 → pause with one wildcard DNS + Resend actions
@@ -46,20 +46,20 @@ Critical journey:
 
 ```text
 operator activates deployer email
-→ install signed tiny client as normal OS user
-→ tiny deploy .
+→ install signed tinker client as normal OS user
+→ tinker deploy .
 → reuse existing output, or run one exact project-owned build action when absent
 → ask/verify/cache platform only when missing
 → reuse verified bearer or complete OTP only after definite unauthorized state
 → derive project/manifest defaults
 → ask only about ambiguity or deliberate customization
-→ write tiny.yaml as a deterministic receipt
+→ write tinker.yaml as a deterministic receipt
 → upload, validate, seal, activate, and prove anonymous denial
 → receive stable protected URL
 → manage viewer policy/tokens and deploy later builds
 ```
 
-`tiny login --force` is deliberate account switching. `tiny logout` revokes the
+`tinker login --force` is deliberate account switching. `tinker logout` revokes the
 exact server-side CLI bearer before local removal. The dashboard searches owned
 apps by slug/current description, filters status, and links only to stable
 protected app origins. Deployment history is read-only in V1. Confirmed app
@@ -83,7 +83,7 @@ The global identity proves only the email. A current role check separately
 controls dashboard access, and each app independently decides whether that
 identity is allowed. No deployed app receives the admin cookie, and an app
 logout revokes only its app session. Account switching and `Sign out of
-TinyHost` are explicit admin-host flows that revoke the prior identity family
+Tinkercloud` are explicit admin-host flows that revoke the prior identity family
 and child app sessions without revoking CLI bearers.
 
 ## Deployment agent

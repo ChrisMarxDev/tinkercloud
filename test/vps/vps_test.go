@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/client"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/client"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 func env(values map[string]string) func(string) string {
@@ -36,7 +36,7 @@ func configEnv(t *testing.T) map[string]string {
 	if err := os.WriteFile(key, []byte("re_test\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINYHOST_VPS_DOMAIN": "example.test", "TINYHOST_VPS_OPERATOR_EMAIL": "operator@example.test", "TINYHOST_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINYHOST_VPS_VIEWER_EMAIL": "viewer@example.test", "TINYHOST_VPS_EMAIL_FROM": "tiny@example.test", "TINYHOST_VPS_ACME_EMAIL": "admin@example.test", "TINYHOST_VPS_RESEND_API_KEY_FILE": key}
+	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINKERCLOUD_VPS_DOMAIN": "example.test", "TINKERCLOUD_VPS_OPERATOR_EMAIL": "operator@example.test", "TINKERCLOUD_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINKERCLOUD_VPS_VIEWER_EMAIL": "viewer@example.test", "TINKERCLOUD_VPS_EMAIL_FROM": "tinker@example.test", "TINKERCLOUD_VPS_ACME_EMAIL": "admin@example.test", "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": key}
 }
 func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 	v := configEnv(t)
@@ -61,7 +61,7 @@ func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 
 func TestReuseConfigRequiresRealLocalReleaseDirectory(t *testing.T) {
 	v := configEnv(t)
-	v["TINYHOST_VPS_REUSE"] = "1"
+	v["TINKERCLOUD_VPS_REUSE"] = "1"
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("reuse accepted without a release directory")
 	}
@@ -69,7 +69,7 @@ func TestReuseConfigRequiresRealLocalReleaseDirectory(t *testing.T) {
 	if err := os.Mkdir(release, 0755); err != nil {
 		t.Fatal(err)
 	}
-	v["TINYHOST_VPS_RELEASE_DIR"] = release
+	v["TINKERCLOUD_VPS_RELEASE_DIR"] = release
 	if _, err := LoadConfig(env(v)); err != nil {
 		t.Fatalf("reuse rejected real release directory: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestReuseConfigRequiresRealLocalReleaseDirectory(t *testing.T) {
 	if err := os.Symlink(release, link); err != nil {
 		t.Fatal(err)
 	}
-	v["TINYHOST_VPS_RELEASE_DIR"] = link
+	v["TINKERCLOUD_VPS_RELEASE_DIR"] = link
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("reuse accepted symlinked release directory")
 	}
@@ -96,7 +96,7 @@ func TestSSHAndSCPUseStrictHostKeyArguments(t *testing.T) {
 func TestRemoteArgumentsAreQuotedBeforeOpenSSHRemoteShell(t *testing.T) {
 	f := &calls{}
 	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: f}
-	if err := s.remote(context.Background(), "tinyhost", "deployers", "authorize", "a'; touch /pwned; echo 'b"); err != nil {
+	if err := s.remote(context.Background(), "tinkercloud", "deployers", "authorize", "a'; touch /pwned; echo 'b"); err != nil {
 		t.Fatal(err)
 	}
 	if len(f.got) != 1 {
@@ -106,7 +106,7 @@ func TestRemoteArgumentsAreQuotedBeforeOpenSSHRemoteShell(t *testing.T) {
 	if strings.Contains(got, "; touch /pwned;") && !strings.Contains(got, "'\\''") {
 		t.Fatalf("unquoted remote source: %s", got)
 	}
-	if !strings.HasPrefix(got, "'tinyhost' 'deployers' 'authorize' ") {
+	if !strings.HasPrefix(got, "'tinkercloud' 'deployers' 'authorize' ") {
 		t.Fatalf("unexpected remote argv: %s", got)
 	}
 }
@@ -118,7 +118,7 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 		t.Fatal("non-root target accepted")
 	}
 	v[EnvTarget], v[EnvAcknowledge] = "root@203.0.113.10", "root@203.0.113.10"
-	v["TINYHOST_VPS_VIEWER_EMAIL"] = v["TINYHOST_VPS_DEPLOYER_EMAIL"]
+	v["TINKERCLOUD_VPS_VIEWER_EMAIL"] = v["TINKERCLOUD_VPS_DEPLOYER_EMAIL"]
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("same deployer and viewer accepted")
 	}
@@ -126,11 +126,11 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 
 func TestConfigRequiresOneCanonicalRootDomain(t *testing.T) {
 	v := configEnv(t)
-	v["TINYHOST_VPS_DOMAIN"] = "Admin.Example.Test"
+	v["TINKERCLOUD_VPS_DOMAIN"] = "Admin.Example.Test"
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("non-canonical root domain accepted")
 	}
-	v["TINYHOST_VPS_DOMAIN"] = "admin.example.test"
+	v["TINKERCLOUD_VPS_DOMAIN"] = "admin.example.test"
 	if _, err := LoadConfig(env(v)); err != nil {
 		t.Fatalf("canonical root domain rejected: %v", err)
 	}
@@ -138,26 +138,26 @@ func TestConfigRequiresOneCanonicalRootDomain(t *testing.T) {
 
 func TestGlobalIdentityHandoffCallbackIsExact(t *testing.T) {
 	const handoff = "handoff_opaque"
-	if !isAppHandoffCallback("https://alpha.example.test/_tiny/auth/callback?handoff="+handoff, handoff) {
+	if !isAppHandoffCallback("https://alpha.example.test/_tinker/auth/callback?handoff="+handoff, handoff) {
 		t.Fatal("valid opaque callback rejected")
 	}
 	for _, raw := range []string{
-		"/_tiny/auth/callback?handoff=" + handoff,
-		"https://alpha.example.test/_tiny/auth/callback?handoff=" + handoff + "&return=https://evil.example",
-		"https://alpha.example.test/_tiny/auth/callback?handoff=other",
-		"https://alpha.example.test/_tiny/auth/login?handoff=" + handoff,
+		"/_tinker/auth/callback?handoff=" + handoff,
+		"https://alpha.example.test/_tinker/auth/callback?handoff=" + handoff + "&return=https://evil.example",
+		"https://alpha.example.test/_tinker/auth/callback?handoff=other",
+		"https://alpha.example.test/_tinker/auth/login?handoff=" + handoff,
 	} {
 		if isAppHandoffCallback(raw, handoff) {
 			t.Fatalf("accepted unsafe generic callback %q", raw)
 		}
 	}
-	if !isExactHandoffCallback("https://alpha.example.test/_tiny/auth/callback?handoff="+handoff, "alpha.example.test", handoff) {
+	if !isExactHandoffCallback("https://alpha.example.test/_tinker/auth/callback?handoff="+handoff, "alpha.example.test", handoff) {
 		t.Fatal("exact callback rejected")
 	}
 	for _, raw := range []string{
-		"https://beta.example.test/_tiny/auth/callback?handoff=" + handoff,
-		"https://alpha.example.test/_tiny/auth/callback?handoff=" + handoff + "&x=1",
-		"https://alpha.example.test/_tiny/auth/callback?handoff=other",
+		"https://beta.example.test/_tinker/auth/callback?handoff=" + handoff,
+		"https://alpha.example.test/_tinker/auth/callback?handoff=" + handoff + "&x=1",
+		"https://alpha.example.test/_tinker/auth/callback?handoff=other",
 	} {
 		if isExactHandoffCallback(raw, "alpha.example.test", handoff) {
 			t.Fatalf("accepted wrong-app or malformed callback %q", raw)
@@ -174,14 +174,14 @@ func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
 	first, _ := url.Parse("https://first.example.test/")
 	second, _ := url.Parse("https://second.example.test/")
 	jar.SetCookies(platform, []*http.Cookie{
-		{Name: "__Host-tiny_identity", Value: "identity", Path: "/", Secure: true},
-		{Name: "__Host-tiny_browser", Value: "browser-profile", Path: "/", Secure: true},
+		{Name: "__Host-tinker_identity", Value: "identity", Path: "/", Secure: true},
+		{Name: "__Host-tinker_browser", Value: "browser-profile", Path: "/", Secure: true},
 	})
 	jar.SetCookies(first, []*http.Cookie{
-		{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true},
-		{Name: "__Host-tiny_identity_state", Value: "state", Path: "/", Secure: true},
+		{Name: "__Host-tinker_app", Value: "first", Path: "/", Secure: true},
+		{Name: "__Host-tinker_identity_state", Value: "state", Path: "/", Secure: true},
 	})
-	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "second", Path: "/", Secure: true}})
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tinker_app", Value: "second", Path: "/", Secure: true}})
 	h := &http.Client{Jar: jar}
 	s := Suite{Config: Config{Domain: "example.test"}}
 	if err := s.assertCookieScopes(h, "first.example.test", ""); err != nil {
@@ -193,10 +193,10 @@ func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
 	if state, ok := identityStateCookie(h, "first.example.test"); !ok || state != "state" {
 		t.Fatal("app-host handoff state was not retained for replay evidence")
 	}
-	if !hasCookie(jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(jar.Cookies(first), "__Host-tiny_browser") || hasCookie(jar.Cookies(second), "__Host-tiny_browser") {
+	if !hasCookie(jar.Cookies(platform), "__Host-tinker_browser") || hasCookie(jar.Cookies(first), "__Host-tinker_browser") || hasCookie(jar.Cookies(second), "__Host-tinker_browser") {
 		t.Fatal("platform browser binding was not retained as an exact-host cookie")
 	}
-	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true}})
+	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tinker_app", Value: "first", Path: "/", Secure: true}})
 	if err := assertDistinctAppCookies(h, "first.example.test", "second.example.test"); err == nil {
 		t.Fatal("accepted shared app token across app hosts")
 	}
@@ -204,7 +204,7 @@ func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
 
 func TestConfigRejectsOutOfRangeSSHPort(t *testing.T) {
 	v := configEnv(t)
-	v["TINYHOST_VPS_SSH_PORT"] = "65536"
+	v["TINKERCLOUD_VPS_SSH_PORT"] = "65536"
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("out-of-range SSH port accepted")
 	}
@@ -227,7 +227,7 @@ func TestPrepareReleaseVerifiesCompleteEvidenceBeforeStagingE2EKey(t *testing.T)
 	if err := os.WriteFile(filepath.Join(prepared.dir, "release-public-key.pem"), []byte("unsigned auxiliary key\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := commandEnv(context.Background(), []string{"TINYHOST_RELEASE_PUBLIC_KEY=" + prepared.publicKey}, repoPath("scripts", "release-verify.sh"), prepared.dir); err == nil {
+	if err := commandEnv(context.Background(), []string{"TINKERCLOUD_RELEASE_PUBLIC_KEY=" + prepared.publicKey}, repoPath("scripts", "release-verify.sh"), prepared.dir); err == nil {
 		t.Fatal("release verifier accepted incomplete release evidence")
 	}
 }
@@ -250,16 +250,16 @@ func (r *initRetryRunner) Run(_ context.Context, name string, args ...string) ([
 	r.calls = append(r.calls, append([]string{name}, args...))
 	remote := args[len(args)-1]
 	switch {
-	case strings.Contains(remote, "'/usr/local/bin/tinyhost' 'init'"):
+	case strings.Contains(remote, "'/usr/local/bin/tinkercloud' 'init'"):
 		r.initCalls++
 		if r.terminalOut != nil {
 			return r.terminalOut, errors.New("exit status 1")
 		}
 		if r.initCalls <= r.initFailures {
-			return []byte("tinyhost: public_health_failed\n"), errors.New("exit status 1")
+			return []byte("tinkercloud: public_health_failed\n"), errors.New("exit status 1")
 		}
 		return nil, nil
-	case strings.Contains(remote, "'cat' '/etc/tinyhost/init-state.json'"):
+	case strings.Contains(remote, "'cat' '/etc/tinkercloud/init-state.json'"):
 		return r.state, nil
 	default:
 		return nil, errors.New("unexpected remote command")
@@ -281,7 +281,7 @@ func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
 		waits++
 		return nil
 	}}
-	argv := []string{"/usr/local/bin/tinyhost", "init", "--non-interactive", "--domain", "example.test"}
+	argv := []string{"/usr/local/bin/tinkercloud", "init", "--non-interactive", "--domain", "example.test"}
 	if err := s.initWithReadinessRetry(context.Background(), argv...); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +291,7 @@ func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
 	var initRemote string
 	for _, call := range r.calls {
 		remote := call[len(call)-1]
-		if strings.Contains(remote, "'/usr/local/bin/tinyhost' 'init'") {
+		if strings.Contains(remote, "'/usr/local/bin/tinkercloud' 'init'") {
 			if initRemote == "" {
 				initRemote = remote
 			} else if remote != initRemote {
@@ -299,7 +299,7 @@ func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
 			}
 			continue
 		}
-		if !strings.Contains(remote, "'cat' '/etc/tinyhost/init-state.json'") {
+		if !strings.Contains(remote, "'cat' '/etc/tinkercloud/init-state.json'") {
 			t.Fatalf("retry performed unrelated mutation: %q", remote)
 		}
 	}
@@ -307,10 +307,10 @@ func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
 
 func TestInitReadinessDoesNotRetryTerminalOrUnconfirmedFailures(t *testing.T) {
 	t.Run("terminal init result", func(t *testing.T) {
-		r := &initRetryRunner{terminalOut: []byte("tinyhost: config_invalid\n")}
+		r := &initRetryRunner{terminalOut: []byte("tinkercloud: config_invalid\n")}
 		waited := false
 		s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: r, RetryWait: func(context.Context, time.Duration) error { waited = true; return nil }}
-		if err := s.initWithReadinessRetry(context.Background(), "/usr/local/bin/tinyhost", "init"); err == nil {
+		if err := s.initWithReadinessRetry(context.Background(), "/usr/local/bin/tinkercloud", "init"); err == nil {
 			t.Fatal("terminal config failure retried")
 		}
 		if r.initCalls != 1 || waited || len(r.calls) != 1 {
@@ -320,7 +320,7 @@ func TestInitReadinessDoesNotRetryTerminalOrUnconfirmedFailures(t *testing.T) {
 	t.Run("state is not final verification", func(t *testing.T) {
 		r := &initRetryRunner{initFailures: 1, state: []byte(`{"completed":{"preflight":true}}`)}
 		s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: r, RetryWait: func(context.Context, time.Duration) error { t.Fatal("unexpected retry"); return nil }}
-		if err := s.initWithReadinessRetry(context.Background(), "/usr/local/bin/tinyhost", "init"); err == nil {
+		if err := s.initWithReadinessRetry(context.Background(), "/usr/local/bin/tinkercloud", "init"); err == nil {
 			t.Fatal("unconfirmed public health failure retried")
 		}
 		if r.initCalls != 1 || len(r.calls) != 2 {
@@ -342,7 +342,7 @@ func TestInitReadinessRetryHonorsContextCancellation(t *testing.T) {
 		}
 		return got.Err()
 	}}
-	if err := s.initWithReadinessRetry(ctx, "/usr/local/bin/tinyhost", "init"); !errors.Is(err, context.Canceled) {
+	if err := s.initWithReadinessRetry(ctx, "/usr/local/bin/tinkercloud", "init"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v, want context cancellation", err)
 	}
 	if r.initCalls != 1 {
@@ -381,7 +381,7 @@ func TestCleanGuardPreservesACMECacheAcrossFreshApplicationState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, call := range f.got {
-		if strings.Contains(strings.Join(call, " "), "/var/lib/tinyhost-acme") {
+		if strings.Contains(strings.Join(call, " "), "/var/lib/tinkercloud-acme") {
 			t.Fatal("clean application-state guard rejected reusable ACME cache")
 		}
 	}
@@ -463,7 +463,7 @@ func TestReuseUpdateEnablesLLMRootThenRestartsAndDoctors(t *testing.T) {
 		"'update'",
 		"'doctor'",
 		"'llm' 'enable'",
-		"'systemctl' 'restart' 'tinyhost.service'",
+		"'systemctl' 'restart' 'tinkercloud.service'",
 		"'doctor'",
 	} {
 		if !strings.Contains(joined[i], want) {
@@ -479,7 +479,7 @@ func TestReuseUpdateEnablesLLMRootThenRestartsAndDoctors(t *testing.T) {
 	// remote wraps the root-local argv in the fixed SSH transport. Assert the
 	// final remote command rather than falsely requiring the transport wrapper
 	// to disappear from the runner trace.
-	if got, want := f.got[3][len(f.got[3])-1], "'/usr/local/bin/tinyhost' 'llm' 'enable' '--config' '/etc/tinyhost/config.yaml'"; got != want {
+	if got, want := f.got[3][len(f.got[3])-1], "'/usr/local/bin/tinkercloud' 'llm' 'enable' '--config' '/etc/tinkercloud/config.yaml'"; got != want {
 		t.Fatalf("LLM enable remote argv = %q, want exact root-local argv %q", got, want)
 	}
 }
@@ -495,14 +495,14 @@ func (r *updateCompatibilityRunner) Run(_ context.Context, name string, args ...
 	remote := args[len(args)-1]
 	if strings.Contains(remote, "'update'") && strings.Contains(remote, "'--release-manifest'") {
 		if r.genericReject {
-			return []byte("tinyhost: verification_failed\n"), errors.New("exit status 2")
+			return []byte("tinkercloud: verification_failed\n"), errors.New("exit status 2")
 		}
 		if r.rejectNew {
 			return []byte("flag provided but not defined: -release-manifest\n"), errors.New("exit status 2")
 		}
 	}
 	if strings.Contains(remote, "'update'") && !strings.Contains(remote, "'--release-manifest'") && r.failLegacy {
-		return []byte("tinyhost: verification_failed\n"), errors.New("exit status 2")
+		return []byte("tinkercloud: verification_failed\n"), errors.New("exit status 2")
 	}
 	return nil, nil
 }
@@ -606,7 +606,7 @@ func TestAnonymousDeniedRequiresEverySurfaceToDenyWithoutMarker(t *testing.T) {
 		{"gateway_failure", denialSuite(func(string) int { return http.StatusInternalServerError }, func(string) string { return "safe" })},
 		{"marker", denialSuite(func(string) int { return http.StatusUnauthorized }, func(string) string { return "MARKER" })},
 		{"websocket", denialSuite(func(path string) int {
-			if path == "/_tiny/ws/v1" {
+			if path == "/_tinker/ws/v1" {
 				return http.StatusSwitchingProtocols
 			}
 			return http.StatusUnauthorized
@@ -724,24 +724,24 @@ func TestRestartBlobReadinessWaitHonorsCancellation(t *testing.T) {
 }
 
 func TestSocketInventoryMatchesExactPublicPorts(t *testing.T) {
-	f := &calls{out: []byte("LISTEN 0 4096 *:8080 *:* users:((\"tinyhost\",pid=9,fd=1))\n")}
+	f := &calls{out: []byte("LISTEN 0 4096 *:8080 *:* users:((\"tinkercloud\",pid=9,fd=1))\n")}
 	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: f}
 	if err := s.socketInventory(context.Background()); err == nil {
 		t.Fatal("8080 was confused with port 80")
 	}
-	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"tinyhost\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinyhost\",pid=9,fd=1))\n")
+	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"tinkercloud\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinkercloud\",pid=9,fd=1))\n")
 	if err := s.socketInventory(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	f.out = append(f.out, []byte("LISTEN 0 4096 *:8080 *:* users:((\"tinyhost\",pid=9,fd=2))\n")...)
+	f.out = append(f.out, []byte("LISTEN 0 4096 *:8080 *:* users:((\"tinkercloud\",pid=9,fd=2))\n")...)
 	if err := s.socketInventory(context.Background()); err == nil {
-		t.Fatal("additional tinyhost public listener was accepted")
+		t.Fatal("additional tinkercloud public listener was accepted")
 	}
-	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"tinyhost\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinyhost\",pid=9,fd=1))\nLISTEN 0 4096 *:8080 *:* users:((\"operator-service\",pid=10,fd=1))\n")
+	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"tinkercloud\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinkercloud\",pid=9,fd=1))\nLISTEN 0 4096 *:8080 *:* users:((\"operator-service\",pid=10,fd=1))\n")
 	if err := s.socketInventory(context.Background()); err != nil {
-		t.Fatal("operator-owned listener was attributed to tinyhost:", err)
+		t.Fatal("operator-owned listener was attributed to tinkercloud:", err)
 	}
-	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"not-tinyhost\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinyhost\",pid=9,fd=1))\n")
+	f.out = []byte("LISTEN 0 4096 *:80 *:* users:((\"not-tinkercloud\",pid=9,fd=1))\nLISTEN 0 4096 [::]:443 [::]:* users:((\"tinkercloud\",pid=9,fd=1))\n")
 	if err := s.socketInventory(context.Background()); err == nil {
 		t.Fatal("process-name substring was accepted")
 	}
@@ -772,7 +772,7 @@ func smokeManifest(t *testing.T, archive []byte) releases.Manifest {
 	defer gz.Close()
 	tr := tar.NewReader(gz)
 	h, err := tr.Next()
-	if err != nil || h.Name != "tiny.yaml" {
+	if err != nil || h.Name != "tinker.yaml" {
 		t.Fatalf("first archive entry = %#v, %v", h, err)
 	}
 	b, err := io.ReadAll(tr)

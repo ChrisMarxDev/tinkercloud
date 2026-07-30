@@ -2,7 +2,7 @@
 
 This is intentionally technology-neutral and incomplete enough to evolve before
 implementation. All JSON endpoints use versioned `/v1` routes on the platform
-host or reserved `/_tiny/api/v1` routes on an app host.
+host or reserved `/_tinker/api/v1` routes on an app host.
 
 ## Common rules
 
@@ -23,15 +23,15 @@ host or reserved `/_tiny/api/v1` routes on an app host.
   or stack traces.
 - Mutating control-plane requests accept an idempotency key.
 - Body, header, duration, and response limits are explicit per endpoint.
-- Browser SDKs send `X-Tiny-SDK-Version: <semver>`. Omission remains compatible
+- Browser SDKs send `X-Tinker-SDK-Version: <semver>`. Omission remains compatible
   for raw HTTP and already shipped clients. A supplied malformed or unsupported
   major returns `426 sdk_version_incompatible` with a safe request ID and an
   actionable upgrade message after the normal app authorization boundary.
-- SDK HTTP calls also send `X-Tiny-App-API-Version: 1`; live sockets offer
-  `tiny.sdk.<semver>.api.1` as their single subprotocol. A supplied malformed or
+- SDK HTTP calls also send `X-Tinker-App-API-Version: 1`; live sockets offer
+  `tinker.sdk.<semver>.api.1` as their single subprotocol. A supplied malformed or
   unsupported value is denied before capability dispatch or live hub attach.
-- Released workstation clients send `X-Tiny-CLI-Version: <semver>` and
-  `X-Tiny-Control-API-Version: 1` on protected control requests. Missing
+- Released workstation clients send `X-Tinker-CLI-Version: <semver>` and
+  `X-Tinker-Control-API-Version: 1` on protected control requests. Missing
   headers retain the V1 migration allowance; a supplied incomplete or
   unsupported pair receives `426 cli_version_incompatible`.
 - `GET /api/v1/compatibility` returns only the static build compatibility
@@ -41,14 +41,14 @@ host or reserved `/_tiny/api/v1` routes on an app host.
 ## App host: pre-authentication
 
 ```text
-GET  /_tiny/auth/login
-POST /_tiny/auth/logout
-GET  /_tiny/auth/callback
+GET  /_tinker/auth/login
+POST /_tinker/auth/logout
+GET  /_tinker/auth/callback
 ```
 
-`GET /_tiny/auth/login` creates a bounded, server-owned handoff and the
+`GET /_tinker/auth/login` creates a bounded, server-owned handoff and the
 platform identity broker is the **only** browser viewer-session issuance route.
-`POST /_tiny/auth/otp` and `POST /_tiny/auth/verify` do not exist on app hosts;
+`POST /_tinker/auth/otp` and `POST /_tinker/auth/verify` do not exist on app hosts;
 they are reserved gateway paths and deny before app content or identity/session
 issuance. There is no brokerless compatibility harness.
 
@@ -83,18 +83,18 @@ policy rechecks; it is not an API, SDK, or app-content route.
 ## App host: protected capabilities
 
 ```text
-GET    /_tiny/api/v1/me
-GET    /_tiny/api/v1/app
-GET    /_tiny/api/v1/capabilities
-GET    /_tiny/api/v1/kv/{key}
-PUT    /_tiny/api/v1/kv/{key}
-DELETE /_tiny/api/v1/kv/{key}
-GET    /_tiny/api/v1/kv?prefix=&limit=&cursor=
-POST   /_tiny/api/v1/blobs
-GET    /_tiny/api/v1/blobs?limit=&cursor=
-GET    /_tiny/api/v1/blobs/{id}
-DELETE /_tiny/api/v1/blobs/{id}
-GET    /_tiny/ws/v1
+GET    /_tinker/api/v1/me
+GET    /_tinker/api/v1/app
+GET    /_tinker/api/v1/capabilities
+GET    /_tinker/api/v1/kv/{key}
+PUT    /_tinker/api/v1/kv/{key}
+DELETE /_tinker/api/v1/kv/{key}
+GET    /_tinker/api/v1/kv?prefix=&limit=&cursor=
+POST   /_tinker/api/v1/blobs
+GET    /_tinker/api/v1/blobs?limit=&cursor=
+GET    /_tinker/api/v1/blobs/{id}
+DELETE /_tinker/api/v1/blobs/{id}
+GET    /_tinker/ws/v1
 ```
 
 Current viewer:
@@ -222,7 +222,7 @@ provider connection IDs or secret-bearing configuration.
 
 ### WebSocket protocol
 
-`GET /_tiny/ws/v1` authenticates and authorizes before upgrade. The server
+`GET /_tinker/ws/v1` authenticates and authorizes before upgrade. The server
 binds the connection to its derived app, identity, and session; the client
 cannot select any of them. Frames use a versioned JSON envelope:
 
@@ -274,7 +274,7 @@ PUT    /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}
 DELETE /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}
 ```
 
-The CLI may combine create/upload/activate into `tiny deploy`, but the server
+The CLI may combine create/upload/activate into `tinker deploy`, but the server
 states remain observable. An async deployment response returns IDs and a status
 URL; “ready” is returned only after security probes and TLS readiness. The
 client's successful activation response is authoritative for the committed
@@ -298,7 +298,7 @@ Neither result claims `active` or weakens the required anonymous public probe.
 
 The deployer-data routes are bearer-control API routes, never app-host SDK
 routes. They require an active deployer, current token scope, optional token
-app binding, and current ownership of `{slug}` before TinyHost resolves the
+app binding, and current ownership of `{slug}` before Tinkercloud resolves the
 private immutable app ID. `data:read` permits bounded KV/document reads;
 `data:write` permits one optimistic-versioned KV/document mutation at a time.
 The route slug is not a database selector, and neither an operator browser
@@ -308,7 +308,7 @@ responses, limits, audit behavior, and denials are defined in
 
 ## Credential split
 
-- Global browser identity: host-only `__Host-tiny_identity` cookie on the
+- Global browser identity: host-only `__Host-tinker_identity` cookie on the
   exact admin host. It proves email identity only; dashboard role is a separate
   current server-side check.
 - App plane: host-only app session cookie; never a parent-domain cookie.

@@ -4,7 +4,7 @@
 
 ## Purpose and topology
 
-The operator supplies one canonical root domain. TinyHost derives:
+The operator supplies one canonical root domain. Tinkercloud derives:
 
 - `admin.<domain>` as the exact dashboard, browser OTP, identity switch, and
   global-logout host; and
@@ -23,7 +23,7 @@ transfer authority between them.
 
 ## Browser credentials
 
-`admin.<domain>` issues one opaque `__Host-tiny_identity` cookie after the
+`admin.<domain>` issues one opaque `__Host-tinker_identity` cookie after the
 generic OTP flow. It is `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
 host-only, and has no `Domain` attribute. It is the only browser credential
 accepted by the dashboard and the identity broker. Dashboard authentication
@@ -31,13 +31,13 @@ maps its server-derived identity to the current `users` row on every request:
 an active operator or deployer may receive the corresponding dashboard; a
 viewer with no active role receives no dashboard data.
 
-The old dashboard-specific OTP channel, `__Host-tiny_control` cookie, CSRF
+The old dashboard-specific OTP channel, `__Host-tinker_control` cookie, CSRF
 cookie tied to that control credential, and `sessions.scope='control'`
 credential class do not exist in this architecture. CLI and deployment-agent
 bearers remain separate credentials and are never accepted from browser
 cookies.
 
-The platform may retain one opaque `__Host-tiny_browser` binding cookie solely
+The platform may retain one opaque `__Host-tinker_browser` binding cookie solely
 to serialize concurrent OTP completions in a browser profile. It is host-only,
 HTTP-only, non-authorizing, absent from URLs/forms/JavaScript/logs/app requests,
 and rejected as an identity, app session, dashboard credential, or bearer.
@@ -69,7 +69,7 @@ server-side, opaque, short-lived handoff. The gateway stores the canonical
 server-resolved app, one-time state hash, exact callback host, and validated
 safe relative request URI. The request URI preserves the path and raw query.
 Absolute URLs, protocol-relative paths, control characters, backslashes,
-cross-host targets, malformed encodings, and `/_tiny/*` return targets deny or
+cross-host targets, malformed encodings, and `/_tinker/*` return targets deny or
 fall back to `/`. URL fragments are browser-only and are not guaranteed across
 authentication.
 
@@ -78,7 +78,7 @@ global identity can authorize the handoff without another OTP. Otherwise the
 admin host completes the same global OTP flow used by dashboard login. The
 current app policy is checked before authorization and again when the exact app
 callback atomically consumes the handoff. The app then issues one opaque
-host-only `__Host-tiny_app` child session for that server-derived app and
+host-only `__Host-tinker_app` child session for that server-derived app and
 redirects to the stored safe path and query.
 
 The admin identity cookie is never sent to or accepted by an app origin. An app
@@ -88,10 +88,10 @@ recheck the current app and policy.
 
 ## Logout and account switching
 
-`POST /_tiny/auth/logout` on an app host revokes only that app's current child
+`POST /_tinker/auth/logout` on an app host revokes only that app's current child
 session and visibly means “Sign out of this app.”
 
-`POST /logout` on `admin.<domain>` is “Sign out of TinyHost.” After exact
+`POST /logout` on `admin.<domain>` is “Sign out of Tinkercloud.” After exact
 Origin/CSRF validation it revokes the presented global identity family and
 every derived child app session in one durable operation, closes affected live
 connections after commit, clears the admin identity and CSRF cookies, and
@@ -107,7 +107,7 @@ the global identity or sibling app sessions.
 
 Setup asks only for the root domain and derives the admin and app hosts. The
 operator creates one wildcard DNS record `*.<domain>` pointing at the VPS.
-Wildcard DNS and TLS are independent: TinyHost must prove a trusted certificate
+Wildcard DNS and TLS are independent: Tinkercloud must prove a trusted certificate
 for the exact admin host and every activated app host, or prove equivalent
 wildcard certificate coverage. DNS readiness alone is not certificate
 readiness.

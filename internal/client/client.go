@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/compatibility"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
 )
 
 var ErrUnauthorized = errors.New("not authorized")
@@ -25,7 +25,7 @@ var ErrConflict = errors.New("conflict")
 var ErrValidation = errors.New("validation failed")
 var ErrQuotaExceeded = errors.New("quota exceeded")
 
-// BuildVersion is injected into released tiny binaries. Development builds
+// BuildVersion is injected into released tinker binaries. Development builds
 // omit compatibility headers so older V1 servers retain the documented
 // migration behavior.
 var BuildVersion = "dev"
@@ -114,7 +114,7 @@ func (c Client) CreateApp(ctx context.Context, slug, key string) error {
 	return c.Do(ctx, "POST", "/api/v1/apps", key, map[string]string{"slug": slug}, nil)
 }
 
-// EnsureApp makes `tiny deploy` self-contained without turning a conflicting
+// EnsureApp makes `tinker deploy` self-contained without turning a conflicting
 // foreign slug into success. A create conflict is accepted only after a fresh,
 // server-scoped list proves the authenticated deployer owns that exact slug.
 func (c Client) EnsureApp(ctx context.Context, slug string) error {
@@ -919,6 +919,6 @@ func setCompatibilityHeaders(r *http.Request) {
 	if _, err := compatibility.Parse(BuildVersion); err != nil {
 		return
 	}
-	r.Header.Set("X-Tiny-CLI-Version", BuildVersion)
-	r.Header.Set("X-Tiny-Control-API-Version", compatibility.ControlAPIVersion)
+	r.Header.Set("X-Tinker-CLI-Version", BuildVersion)
+	r.Header.Set("X-Tinker-Control-API-Version", compatibility.ControlAPIVersion)
 }

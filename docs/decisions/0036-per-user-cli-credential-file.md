@@ -2,7 +2,7 @@
 
 ## Context
 
-The interactive `tiny` deployer client must retain a scoped bearer after OTP
+The interactive `tinker` deployer client must retain a scoped bearer after OTP
 login so a deployer can run later commands without repeating authentication.
 The original design delegated persistence to macOS Keychain or Linux
 `secret-tool`. Those command dependencies are brittle across headless machines,
@@ -16,9 +16,9 @@ identity credential and app-bound viewer sessions.
 
 ## Decision
 
-The interactive CLI stores its bearer in one Tiny-owned per-user credential file
+The interactive CLI stores its bearer in one Tinkercloud-owned per-user credential file
 per normalized HTTPS platform URL, at
-`os.UserConfigDir()/tiny/<sha256(normalized-server)>.json`. It uses the
+`os.UserConfigDir()/tinker/<sha256(normalized-server)>.json`. It uses the
 platform's user configuration location, not a project directory or a
 release/install location.
 
@@ -49,12 +49,12 @@ The storage boundary is deliberately strict:
 - a raw bearer never appears in argv, environment variables, logs, human or
   JSON CLI output, or a project file.
 
-`tiny login` completes OTP once and saves a still-valid token. Subsequent CLI
+`tinker login` completes OTP once and saves a still-valid token. Subsequent CLI
 commands silently reuse the file selected by their normalized platform URL. The
 server continues to enforce exact scope, deployer status, expiry, app binding
 where app-scoped, and revocation on every use.
 
-`tiny logout` is a real self-revocation operation, not local cache clearing.
+`tinker logout` is a real self-revocation operation, not local cache clearing.
 It calls the authenticated `POST /api/v1/auth/logout` route, whose server-side
 authorization derives the exact global bearer row from the request and revokes
 only that row transactionally. It cannot select a token, app, browser session,
@@ -62,7 +62,7 @@ or viewer session. Only after successful revocation—or an unauthorized respons
 proving the bearer is already unusable—does the CLI remove the matching local
 credential. A network, server, persistence, or local removal failure retains
 the local credential. The default platform URL remains, allowing the deployer
-to run `tiny login` without repeating `--server`. The route uses the existing
+to run `tinker login` without repeating `--server`. The route uses the existing
 global `app:read` bearer boundary and requires an unbound token row, so an
 app-scoped deployment-agent bearer cannot perform this CLI action.
 
@@ -74,7 +74,7 @@ credential-store command. It preserves the normal expectation that login is a
 one-time action until the token expires or is revoked.
 
 The tradeoff is explicit: unlike a native OS credential store, the bearer is
-readable by the same OS account that runs `tiny`. Mode checks, no-symlink
+readable by the same OS account that runs `tinker`. Mode checks, no-symlink
 handling, bounded exact JSON, and atomic replacement reduce accidental
 exposure and corruption, but do not protect against a compromised same-user
 process. Therefore tokens remain narrowly scoped, time-bounded, and promptly

@@ -12,8 +12,8 @@ A technical operator often already holds useful organization credentials:
 - document/search APIs;
 - messaging or automation credentials.
 
-TinyHost could let non-technical deployers build apps on those services without
-ever receiving the underlying credentials. This turns TinyHost from private app
+Tinkercloud could let non-technical deployers build apps on those services without
+ever receiving the underlying credentials. This turns Tinkercloud from private app
 hosting into a small, operator-governed capability platform.
 
 This extends the [Shopify Quick north star](north-star-quick.md), where database,
@@ -30,7 +30,7 @@ The safe model is invocation, not secret delivery:
 
 ```text
 deployed app
-  → tiny SDK
+  → Tinkercloud SDK
   → authenticated app capability endpoint
   → app grant + viewer/policy + quota check
   → server-side adapter
@@ -51,7 +51,7 @@ Operator:
 
 Deployer:
 
-1. Requests a capability binding by alias in `tiny.yaml`.
+1. Requests a capability binding by alias in `tinker.yaml`.
 2. Sees permissions and external data implications.
 3. Uses the typed SDK module.
 4. Cannot read, export, replace, or arbitrarily forward the credential.
@@ -126,8 +126,8 @@ Directional requirements:
 - arbitrary outbound HTTP proxying;
 - raw secret/environment-variable delivery to static apps;
 - deployer-created global credentials;
-- unreviewed third-party adapter code in the TinyHost process;
-- pretending LLM or SaaS provider calls are private to TinyHost.
+- unreviewed third-party adapter code in the Tinkercloud process;
+- pretending LLM or SaaS provider calls are private to Tinkercloud.
 
 ## Open questions
 

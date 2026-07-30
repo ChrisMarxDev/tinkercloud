@@ -6,16 +6,16 @@ import (
 	"strings"
 )
 
-const TinyhostServiceUnit = `[Unit]
-Description=TinyHost gateway
+const TinkercloudServiceUnit = `[Unit]
+Description=Tinkercloud gateway
 After=network-online.target
 Wants=network-online.target
 [Service]
 Type=simple
-User=tinyhost
-Group=tinyhost
-EnvironmentFile=/etc/tinyhost/credentials/tinyhost.env
-ExecStart=/usr/local/bin/tinyhost serve --config /etc/tinyhost/config.yaml
+User=tinkercloud
+Group=tinkercloud
+EnvironmentFile=/etc/tinkercloud/credentials/tinkercloud.env
+ExecStart=/usr/local/bin/tinkercloud serve --config /etc/tinkercloud/config.yaml
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
@@ -28,8 +28,8 @@ SocketBindAllow=tcp:443
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/tinyhost
-ReadWritePaths=/var/lib/tinyhost-acme
+ReadWritePaths=/var/lib/tinkercloud
+ReadWritePaths=/var/lib/tinkercloud-acme
 UMask=0077
 [Install]
 WantedBy=multi-user.target
@@ -44,10 +44,10 @@ func ServiceUnit(configPath, credentialPath, dataPath, acmePath string) (string,
 	if dataPath == acmePath {
 		return "", errors.New("systemd writable paths must be distinct")
 	}
-	u := strings.Replace(TinyhostServiceUnit, "/etc/tinyhost/credentials/tinyhost.env", credentialPath, 1)
-	u = strings.Replace(u, "/etc/tinyhost/config.yaml", configPath, 1)
-	u = strings.Replace(u, "ReadWritePaths=/var/lib/tinyhost\n", "ReadWritePaths="+dataPath+"\n", 1)
-	u = strings.Replace(u, "ReadWritePaths=/var/lib/tinyhost-acme\n", "ReadWritePaths="+acmePath+"\n", 1)
+	u := strings.Replace(TinkercloudServiceUnit, "/etc/tinkercloud/credentials/tinkercloud.env", credentialPath, 1)
+	u = strings.Replace(u, "/etc/tinkercloud/config.yaml", configPath, 1)
+	u = strings.Replace(u, "ReadWritePaths=/var/lib/tinkercloud\n", "ReadWritePaths="+dataPath+"\n", 1)
+	u = strings.Replace(u, "ReadWritePaths=/var/lib/tinkercloud-acme\n", "ReadWritePaths="+acmePath+"\n", 1)
 	if err := ValidateServiceUnit(u, dataPath, acmePath); err != nil {
 		return "", err
 	}
@@ -71,8 +71,8 @@ func ValidateServiceUnit(unit, dataPath, acmePath string) error {
 		}
 	}
 	want := map[string]string{
-		"User":                    "tinyhost",
-		"Group":                   "tinyhost",
+		"User":                    "tinkercloud",
+		"Group":                   "tinkercloud",
 		"NoNewPrivileges":         "yes",
 		"CapabilityBoundingSet":   "CAP_NET_BIND_SERVICE",
 		"AmbientCapabilities":     "CAP_NET_BIND_SERVICE",

@@ -2,7 +2,7 @@ package deployments
 
 import (
 	"errors"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 var ErrReleaseValidation = errors.New("release validation failed")
 
 func ValidateRelease(root, slug string) (releases.Manifest, error) {
-	f, e := os.Open(filepath.Join(root, "tiny.yaml"))
+	f, e := os.Open(filepath.Join(root, "tinker.yaml"))
 	if e != nil {
 		return releases.Manifest{}, ErrReleaseValidation
 	}

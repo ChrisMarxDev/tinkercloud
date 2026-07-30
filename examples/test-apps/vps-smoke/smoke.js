@@ -1,11 +1,11 @@
-const marker = "TINYHOST_VPS_SMOKE_ASSET_MARKER";
+const marker = "TINKERCLOUD_VPS_SMOKE_ASSET_MARKER";
 document.querySelector("#asset").textContent = marker;
 
 // The live VPS suite deploys a randomized equivalent of this fixture. It uses
-// the same-origin SDK blob wire contract after TinyHost has authenticated the
+// the same-origin SDK blob wire contract after Tinkercloud has authenticated the
 // viewer; neither app identity nor any credential is configured here.
 export async function exerciseBlobs(file) {
-  const api = "/_tiny/api/v1";
+  const api = "/_tinker/api/v1";
   const capabilities = await fetch(`${api}/capabilities`, { credentials: "same-origin" }).then((r) => r.json());
   if (!capabilities.capabilities.some((capability) => capability.name === "blobs")) throw new Error("Blob capability unavailable.");
   const form = new FormData();

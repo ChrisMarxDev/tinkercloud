@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 // Serve is intentionally unreachable without the sealed authorization context.
@@ -35,7 +35,7 @@ func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Req
 		return
 	}
 	f, info, err := openBeneath(auth.ReleaseRoot(), rel)
-	if errors.Is(err, fs.ErrNotExist) && auth.SPAFallback() && !strings.HasPrefix(r.URL.Path, "/_tiny/") {
+	if errors.Is(err, fs.ErrNotExist) && auth.SPAFallback() && !strings.HasPrefix(r.URL.Path, "/_tinker/") {
 		f, info, err = openBeneath(auth.ReleaseRoot(), "index.html")
 	}
 	if err != nil {

@@ -59,7 +59,7 @@ PY
   fi
 
   cat >"${PROMPT_FILE}" <<PROMPT
-Run the GitHub issue work loop for the TinyHost repository.
+Run the GitHub issue work loop for the Tinkercloud repository.
 
 First read and follow the local workflow skill at:
 ${TASK_SKILL_FILE}

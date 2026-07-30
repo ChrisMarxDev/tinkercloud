@@ -4,7 +4,7 @@ const dateKey = [
   String(date.getMonth() + 1).padStart(2, "0"),
   String(date.getDate()).padStart(2, "0"),
 ].join("-");
-const storageKey = `tiny-ritual:${dateKey}`;
+const storageKey = `tinker-ritual:${dateKey}`;
 
 const today = document.querySelector("#today");
 const progress = document.querySelector("#progress");

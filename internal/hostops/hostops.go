@@ -1,5 +1,5 @@
 // Package hostops provides the fixed, workstation-side SSH grammar used by
-// `tiny host`. It does not own credentials, a listener, or a remote shell.
+// `tinker host`. It does not own credentials, a listener, or a remote shell.
 package hostops
 
 import (
@@ -33,7 +33,7 @@ func Build(operation, target, releaseBase string) (Plan, error) {
 		if releaseBase != "" {
 			return Plan{}, ErrInvalid
 		}
-		return Plan{Args: append(baseArgs, "tinyhost", operation)}, nil
+		return Plan{Args: append(baseArgs, "tinkercloud", operation)}, nil
 	case "install":
 		if !validReleaseBase(releaseBase) {
 			return Plan{}, ErrInvalid
@@ -43,7 +43,7 @@ func Build(operation, target, releaseBase string) (Plan, error) {
 		if !validReleaseBase(releaseBase) {
 			return Plan{}, ErrInvalid
 		}
-		return Plan{Args: append(baseArgs, "tinyhost", "update", "--release-base", shellQuote(releaseBase))}, nil
+		return Plan{Args: append(baseArgs, "tinkercloud", "update", "--release-base", shellQuote(releaseBase))}, nil
 	default:
 		return Plan{}, ErrInvalid
 	}

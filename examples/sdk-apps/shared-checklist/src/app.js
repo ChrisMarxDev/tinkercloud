@@ -1,16 +1,16 @@
 // @ts-check
 import {
-  TinyCapabilityUnavailableError,
-  TinyVersionConflictError,
-  tiny,
-} from "@tinyhost/sdk";
-import { describeTinyError } from "../../shared/errors.js";
+  TinkerCapabilityUnavailableError,
+  TinkerVersionConflictError,
+  tinker,
+} from "@tinkercloud/sdk";
+import { describeTinkerError } from "../../shared/errors.js";
 
 const prefix = "checklist/tasks/";
 const pageLifetime = new AbortController();
 let refreshRequest;
 let stopLive = () => {};
-/** @type {import("@tinyhost/sdk").KVEntry[]} */
+/** @type {import("@tinkercloud/sdk").KVEntry[]} */
 let tasks = [];
 
 const taskForm = /** @type {HTMLFormElement} */ (
@@ -64,7 +64,7 @@ function clearNotice() {
 
 /** @param {unknown} error */
 function showError(error) {
-  const detail = describeTinyError(error);
+  const detail = describeTinkerError(error);
   noticeTitle.textContent = detail.title;
   noticeMessage.textContent = detail.message;
   noticeRequest.textContent = detail.requestId
@@ -126,11 +126,11 @@ function render() {
 }
 
 async function readAllTasks() {
-  /** @type {import("@tinyhost/sdk").KVEntry[]} */
+  /** @type {import("@tinkercloud/sdk").KVEntry[]} */
   const entries = [];
   let cursor;
   do {
-    const page = await tiny.kv.list({
+    const page = await tinker.kv.list({
       prefix,
       limit: 50,
       cursor,
@@ -162,35 +162,35 @@ async function refreshTasks() {
   }
 }
 
-/** @param {import("@tinyhost/sdk").KVEntry} entry @param {boolean} complete */
+/** @param {import("@tinkercloud/sdk").KVEntry} entry @param {boolean} complete */
 async function updateTask(entry, complete) {
   clearNotice();
   try {
-    const current = /** @type {{[key: string]: import("@tinyhost/sdk").JSONValue}} */ (
+    const current = /** @type {{[key: string]: import("@tinkercloud/sdk").JSONValue}} */ (
       entry.value
     );
-    await tiny.kv.set(
+    await tinker.kv.set(
       entry.key,
       { ...current, complete },
       { expectedVersion: entry.version, signal: pageLifetime.signal },
     );
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshTasks();
+    if (error instanceof TinkerVersionConflictError) await refreshTasks();
   }
 }
 
-/** @param {import("@tinyhost/sdk").KVEntry} entry */
+/** @param {import("@tinkercloud/sdk").KVEntry} entry */
 async function deleteTask(entry) {
   clearNotice();
   try {
-    await tiny.kv.delete(entry.key, {
+    await tinker.kv.delete(entry.key, {
       expectedVersion: entry.version,
       signal: pageLifetime.signal,
     });
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshTasks();
+    if (error instanceof TinkerVersionConflictError) await refreshTasks();
   }
 }
 
@@ -201,11 +201,11 @@ taskForm.addEventListener("submit", async (event) => {
   addButton.disabled = true;
   clearNotice();
   try {
-    const viewer = await tiny.user.current({ signal: pageLifetime.signal });
+    const viewer = await tinker.user.current({ signal: pageLifetime.signal });
     const random = new Uint32Array(4);
     crypto.getRandomValues(random);
     const id = Array.from(random, (part) => part.toString(16)).join("-");
-    await tiny.kv.set(
+    await tinker.kv.set(
       `${prefix}${id}`,
       {
         title,
@@ -231,7 +231,7 @@ clearButton.addEventListener("click", async () => {
     for (const entry of tasks.filter((task) =>
       /** @type {{complete?: unknown}} */ (task.value).complete === true
     )) {
-      await tiny.kv.delete(entry.key, {
+      await tinker.kv.delete(entry.key, {
         expectedVersion: entry.version,
         signal: pageLifetime.signal,
       });
@@ -252,9 +252,9 @@ document.addEventListener("visibilitychange", () => {
 async function start() {
   try {
     const [viewer, app, result] = await Promise.all([
-      tiny.user.current({ signal: pageLifetime.signal }),
-      tiny.app.info({ signal: pageLifetime.signal }),
-      tiny.capabilities.list({ signal: pageLifetime.signal }),
+      tinker.user.current({ signal: pageLifetime.signal }),
+      tinker.app.info({ signal: pageLifetime.signal }),
+      tinker.capabilities.list({ signal: pageLifetime.signal }),
     ]);
     document.querySelector("#viewer-email").textContent = viewer.identity.email;
     document.querySelector("#viewer-avatar").textContent =
@@ -263,7 +263,7 @@ async function start() {
 
     const capabilities = new Set(result.capabilities.map((item) => item.name));
     if (!capabilities.has("kv")) {
-      throw new TinyCapabilityUnavailableError(
+      throw new TinkerCapabilityUnavailableError(
         "This example requires KV.",
         "capability_unavailable",
       );
@@ -271,7 +271,7 @@ async function start() {
 
     await refreshTasks();
     if (capabilities.has("live")) {
-      stopLive = tiny.live.onKvChange({ prefix }, () => void refreshTasks());
+      stopLive = tinker.live.onKvChange({ prefix }, () => void refreshTasks());
     } else {
       setSync("Manual refresh · live unavailable");
     }

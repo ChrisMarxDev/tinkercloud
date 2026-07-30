@@ -30,7 +30,7 @@ func TestBuiltSDKParity(t *testing.T) {
 	}
 	run := exec.CommandContext(context.Background(), "node", "test/emulator-parity.mjs")
 	run.Dir = filepath.Join(root, "sdk", "typescript")
-	run.Env = append(run.Environ(), "TINY_EMULATOR_PARITY_ORIGIN="+ts.URL)
+	run.Env = append(run.Environ(), "TINKER_EMULATOR_PARITY_ORIGIN="+ts.URL)
 	if out, err := run.CombinedOutput(); err != nil {
 		t.Fatalf("built SDK/emulator parity: %v: %s", err, out)
 	}

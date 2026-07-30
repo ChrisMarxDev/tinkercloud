@@ -1,13 +1,13 @@
-# TinyHost Product Requirements Document
+# Tinkercloud Product Requirements Document
 
 **Status:** Locked for manual implementation handoff
 
 **Target:** First production-capable release (“V1”)
 
-**Product:** TinyHost server, Tiny deployer CLI, Tiny browser SDK, and agent skills
+**Product:** Tinkercloud server, Tinker deployer CLI, Tinkercloud browser SDK, and agent skills
 
-**Naming:** “TinyHost”, `tinyhost`, `tiny`, and `@tinyhost/sdk` are replaceable
-working labels, not architectural identifiers
+**Naming:** Tinkercloud product and distribution identities are locked by
+[ADR 0052](docs/decisions/0052-tinkercloud-product-identity.md).
 
 **North star:** [Shopify Quick](docs/product/north-star-quick.md)
 
@@ -16,7 +16,7 @@ working labels, not architectural identifiers
 ## 0. How to use this document
 
 This PRD is the canonical product and implementation handoff for the first
-TinyHost repository.
+Tinkercloud repository.
 
 Source-of-truth order:
 
@@ -39,18 +39,18 @@ features.
 
 ## 1. Product summary
 
-TinyHost is a self-hosted platform for deploying small private web applications.
+Tinkercloud is a self-hosted platform for deploying small private web applications.
 
 A technical operator installs one self-contained server binary on a dedicated
 Hetzner VPS. Authorized deployers use a separate small CLI to upload static
 applications. Each app receives a stable HTTPS URL and is private by default.
 
 ```text
-tiny login
-tiny deploy ./dist --allow alice@example.com
+tinker login
+tinker deploy ./dist --allow alice@example.com
 ```
 
-TinyHost—not the deployed app—owns:
+Tinkercloud—not the deployed app—owns:
 
 - public ports 80 and 443;
 - TLS termination and hostname routing;
@@ -66,7 +66,7 @@ the gateway has approved it.
 ## 2. Core promise
 
 > No private application file, API route, capability request, WebSocket
-> connection, blob, or future backend request is reachable until TinyHost has
+> connection, blob, or future backend request is reachable until Tinkercloud has
 > authenticated and authorized the request.
 
 This guarantee must be structural. It must not depend on generated middleware,
@@ -87,7 +87,7 @@ AI makes small applications cheap to create. Safely sharing them remains
 expensive because every app otherwise needs hosting, authentication, deployment,
 storage, secrets, and operational judgment.
 
-TinyHost moves the repeated security and infrastructure work into one small
+Tinkercloud moves the repeated security and infrastructure work into one small
 platform. Its users can focus on dashboards, prototypes, review tools, forms,
 games, and staff utilities.
 
@@ -100,7 +100,7 @@ folder of files
 → coding agents already know how to use the platform
 ```
 
-TinyHost adopts that simplicity for self-hosted and smaller organizations while
+Tinkercloud adopts that simplicity for self-hosted and smaller organizations while
 using stricter app ownership and per-app access rules.
 
 ## 4. Product goals and success measures
@@ -151,7 +151,7 @@ can be established through local test and release evidence.
 
 #### Server and operations
 
-- One `tinyhost` Go server/operator binary.
+- One `tinkercloud` Go server/operator binary.
 - Hetzner-first systemd installation on a clean dedicated Ubuntu 24.04 LTS or
   Ubuntu 26.04 LTS x86-64 VPS.
 - One embedded SQLite engine in WAL mode, with one control database and one
@@ -164,7 +164,7 @@ can be established through local test and release evidence.
 - Signed manual self-update with health-gated automatic rollback.
 - Status, doctor, logs, audit, quotas, cleanup, and disk-watermark controls.
 - A small operator-only host resource chart for bounded recent CPU, RAM, and
-  TinyHost data-volume storage usage, collected by the existing server.
+  Tinkercloud data-volume storage usage, collected by the existing server.
 
 #### Authentication and authorization
 
@@ -184,7 +184,7 @@ can be established through local test and release evidence.
 
 - Static HTML/CSS/JavaScript/assets only.
 - Stable app hostname under one configured wildcard suffix.
-- A generated `tiny.yaml` receipt plus secure defaults and CLI flags for
+- A generated `tinker.yaml` receipt plus secure defaults and CLI flags for
   repeatable automation.
 - Streaming, quota-limited archive upload.
 - Hostile archive inspection and staged extraction.
@@ -195,7 +195,7 @@ can be established through local test and release evidence.
 
 #### App SDK and built-in capabilities
 
-- Browser-first TypeScript/ESM package: `@tinyhost/sdk`.
+- Browser-first TypeScript/ESM package: `@tinkercloud/sdk`.
 - Current app information and capability discovery.
 - Current viewer identity.
 - Rudimentary app-scoped JSON key-value storage.
@@ -209,7 +209,7 @@ can be established through local test and release evidence.
 
 #### Interfaces for creators and agents
 
-- Separate `tiny` Go client for macOS and Linux.
+- Separate `tinker` Go client for macOS and Linux.
 - Interactive OTP login and protected per-user credential-file token storage.
 - Scoped non-interactive agent/CI tokens.
 - Deterministic human and JSON CLI output.
@@ -220,7 +220,7 @@ can be established through local test and release evidence.
 
 - Arbitrary backend processes, containers, serverless functions, cron, or jobs.
 - LLM, Jira, data warehouse, or internal-service adapters.
-- Operator/provider secret management beyond TinyHost’s own required secrets.
+- Operator/provider secret management beyond Tinkercloud’s own required secrets.
 - Generic authenticated HTTP proxy or raw secret injection.
 - Custom domains per app.
 - Teams, organizations, advanced roles, billing, marketplace, or discovery.
@@ -247,15 +247,15 @@ Role names describe authority, not necessarily distinct people. One person may
 act in more than one role, but authority, credentials, and permissions never
 carry from one role to another.
 
-- **Operator:** a person responsible for hosting and operating TinyHost.
+- **Operator:** a person responsible for hosting and operating Tinkercloud.
   Operators install, configure, update, diagnose, and recover the server and
   manage deployer authorization.
-- **Deployer:** a person authorized to create, deploy, and manage their own Tiny
-  apps. TinyHost is designed so deployers do not need infrastructure knowledge,
+- **Deployer:** a person authorized to create, deploy, and manage their own
+  Tinkercloud apps. Tinkercloud is designed so deployers do not need infrastructure knowledge,
   although a deployer may still be technically skilled.
 - **Viewer:** a person who accesses and interacts with a deployed app. Viewer
   access grants no deployment or operator authority.
-- **User:** a neutral umbrella term for any person interacting with TinyHost.
+- **User:** a neutral umbrella term for any person interacting with Tinkercloud.
   It implies no role, permission, ownership, or credential type.
 - **Deployment agent:** non-human automation acting through a scoped token on
   behalf of a deployer. A deployment agent is not included by the term
@@ -270,11 +270,11 @@ specific role or actor type rather than granting meaning to the generic term
 
 ### 6.1 Operator
 
-The operator controls the VPS and TinyHost trust root.
+The operator controls the VPS and Tinkercloud trust root.
 
 May:
 
-- initialize and update TinyHost;
+- initialize and update Tinkercloud;
 - reconcile the exact active deployer allowlist by normalized email;
 - inspect and suspend every app;
 - configure global resource and security limits;
@@ -362,9 +362,9 @@ Journey:
 ```text
 curl thin installer | sudo sh
 → detect OS/architecture
-→ download tinyhost
+→ download tinkercloud
 → verify checksum and signature
-→ tinyhost setup
+→ tinkercloud setup
 → discover host, ports, time, disk, and supported OS
 → ask only for the base domain, operator email, and Resend credential source
   that cannot be derived
@@ -396,7 +396,7 @@ operator signs in
 → reviews all currently active normalized emails in one multiline field
 → adds or removes addresses
 → confirms only when the edit broadens deployment authority
-→ TinyHost revision-checks and atomically reconciles users, credentials, and
+→ Tinkercloud revision-checks and atomically reconciles users, credentials, and
   one audit event
 ```
 
@@ -411,15 +411,15 @@ mutate access policy.
 ### 7.3 Deployer CLI login
 
 ```text
-tiny login --server https://admin.example.com
+tinker login --server https://admin.example.com
 → load the server-bound credential file
 → authenticated whoami reuses a valid bearer and confirms identity
 → otherwise, only an unauthorized/expired bearer falls back to OTP
 → prompt for email, generic OTP request response, and prompt for code
 → server verifies current deployer authorization and issues a server-bound token
 → authenticated whoami confirms the new identity
-→ atomically save the new bearer in the protected per-user Tiny credential file
-→ save the normalized HTTPS platform URL as the Tiny default server
+→ atomically save the new bearer in the protected per-user Tinker credential file
+→ save the normalized HTTPS platform URL as the Tinker default server
 ```
 
 The token is displayed only when explicitly using a non-interactive token
@@ -428,19 +428,19 @@ token to the admin host; the server re-evaluates deployer status, token
 scope, expiry, and target ownership before acting.
 
 Interactive login persists the bearer by normalized HTTPS platform URL in one
-Tiny-owned per-user file at `os.UserConfigDir()/tiny/<sha256(server)>.json`.
+Tinkercloud-owned per-user file at `os.UserConfigDir()/tinker/<sha256(server)>.json`.
 The credential directory is mode `0700`, its regular non-symlinked file is
 mode `0600`, and updates use atomic replacement in that directory. Its bounded,
 versioned JSON format has the exact `version`, `server`, and `token` members;
 unknown or duplicate JSON members and a server mismatch deny. The raw bearer
 never appears in argv, environment variables, human/JSON output, logs, or a
 project file.
-`tiny login` is consequently a one-time interactive action for a still-valid
+`tinker login` is consequently a one-time interactive action for a still-valid
 token; later invocations first reuse it silently after `whoami`. An
 unauthorized or expired token falls back to a normal CLI OTP login. Transport,
 dependency, malformed-response, unexpected-status, or ambiguous authorization
 failures fail closed without sending OTP or altering the existing credential.
-`tiny login --force` is the explicit account-switch flow: it skips reuse,
+`tinker login --force` is the explicit account-switch flow: it skips reuse,
 requires fresh OTP, and replaces the old credential only after the new bearer
 passes `whoami`; failure retains the old credential. A `429` tells the deployer
 to wait and retry but never reveals email eligibility, token state, or whether
@@ -448,12 +448,12 @@ an OTP was created. The file is readable by the same OS user, unlike an OS
 credential store, so server-side scopes, expiry, and prompt revocation remain
 mandatory safeguards.
 
-The same protected Tiny configuration directory keeps one separate non-secret
+The same protected Tinker configuration directory keeps one separate non-secret
 default server record (`default-server.json`) with exact versioned normalized
 HTTPS URL data. After successful login, later deployer CLI commands may omit
 `--server`; an explicit `--server` wins only for that invocation and cannot
 change the default. For a recognized human command, exactly missing default
-state offers one bounded server-setup prompt. Tiny verifies the proposed
+state offers one bounded server-setup prompt. Tinker verifies the proposed
 normalized HTTPS URL through a direct no-redirect API-version proof before
 saving it, then continues the original command; authentication remains
 separate, so that command may next report `Login required`. JSON commands
@@ -461,14 +461,14 @@ never prompt or cache. Malformed, unsafe, non-HTTPS, incompatible, redirected,
 transport-failed, or ambiguous default/setup state fails closed rather than
 selecting a host or running the target command.
 
-`tiny logout` sends the current CLI bearer to an authenticated
+`tinker logout` sends the current CLI bearer to an authenticated
 self-revocation route. The server derives and revokes exactly that bearer row;
 it never revokes the browser identity, app sessions, app-scoped tokens, or
 another CLI bearer. The CLI removes only the matching local credential after
 confirmed revocation, or after a `401` proves it is already unusable. Ambiguous
 network/server/persistence/local-storage failures retain the credential; a
 missing local credential is idempotently logged out and leaves the default URL
-available for the next `tiny login`.
+available for the next `tinker login`.
 
 ### 7.4 Deploy an app
 
@@ -476,7 +476,7 @@ Recommended V1 behavior:
 
 ```text
 creator/deployer has a static project
-→ tiny deploy [project directory]
+→ tinker deploy [project directory]
 → reuse valid existing output, or stop once with the exact project-owned build
   action when output is absent
 → use the verified saved platform and bearer when available
@@ -487,10 +487,10 @@ creator/deployer has a static project
 → show one deployment summary with an edit path for optional description,
   viewer rules, capabilities, or SPA fallback
 → one final action names any access broadening and starts deployment
-→ if tiny.yaml is missing, atomically write the generated receipt without a
+→ if tinker.yaml is missing, atomically write the generated receipt without a
   second manifest confirmation
 → prove saved deployer bearer with whoami; only unauthorized state uses OTP
-→ load tiny.yaml and flags
+→ load tinker.yaml and flags
 → validate directory and create deterministic archive
 → stream upload with idempotency key
 → server validates policy before activation
@@ -506,17 +506,17 @@ creator/deployer has a static project
 The CLI does not execute arbitrary build scripts in V1. Coding agents or the
 developer’s existing toolchain produce the deploy directory.
 
-`tiny init [DIR]` is the explicit equivalent of the missing-manifest setup and
+`tinker init [DIR]` is the explicit equivalent of the missing-manifest setup and
 never overwrites an existing file. The human path does not ask the deployer to
 author YAML or repeat a server URL, email, slug, output directory, or policy
-already verified or safely inferred. `tiny deploy` defaults to the current project
+already verified or safely inferred. `tinker deploy` defaults to the current project
 directory; `--json` never prompts, creates a manifest, starts OTP, or changes
 credentials. A generated manifest is strict and deterministic, and all build
 output/fallback paths are checked to remain inside the local project without
 symlinks before archiving.
 
 First certificate issuance may take longer than one probe. Before activation,
-TinyHost therefore retries only the exact app-origin certificate-readiness
+Tinkercloud therefore retries only the exact app-origin certificate-readiness
 check within one cancellable, finite 45-second budget. Redirects, wrong hosts,
 unverified chains, cancellation, or exhaustion still deny activation and retain
 the prior release; policy and post-activation evidence never inherit this retry.
@@ -539,7 +539,7 @@ No app asset is read while presenting or processing login.
 ### 7.6 App SDK request
 
 ```text
-app JavaScript calls @tinyhost/sdk
+app JavaScript calls @tinkercloud/sdk
 → same-origin reserved endpoint
 → gateway resolves app from host
 → validate app-scoped session
@@ -553,8 +553,8 @@ app JavaScript calls @tinyhost/sdk
 ### 7.7 App realtime connection
 
 ```text
-app calls tiny.live.channel("updates").subscribe(...)
-→ open same-origin WebSocket at /_tiny/ws/v1
+app calls tinker.live.channel("updates").subscribe(...)
+→ open same-origin WebSocket at /_tinker/ws/v1
 → gateway resolves active app from host
 → validate app-scoped session and current policy before upgrade
 → bind connection to AppID + IdentityID + SessionID
@@ -570,7 +570,7 @@ reconnecting; realtime is a notification layer, not the source of truth.
 ### 7.8 Server update
 
 ```text
-sudo tinyhost update
+sudo tinkercloud update
 → check release compatibility
 → download and verify signed artifact
 → create bounded local update-rollback state
@@ -589,13 +589,13 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.1 Installation and operations
 
-- **FR-OPS-001:** `tinyhost` MUST be a self-contained server executable.
+- **FR-OPS-001:** `tinkercloud` MUST be a self-contained server executable.
 - **FR-OPS-002:** Installation MUST support Hetzner Ubuntu 24.04 LTS and 26.04
   LTS on x86-64 and create a dedicated unprivileged service user. Other,
   interim, end-of-life, and unverified Ubuntu releases MUST fail preflight.
-- **FR-OPS-003:** Only TinyHost MUST listen publicly on ports 80 and 443.
-- **FR-OPS-004:** `tinyhost init` MUST be safely resumable after interruption.
-- **FR-OPS-005:** `tinyhost doctor` MUST diagnose DNS, TLS, Resend, database,
+- **FR-OPS-003:** Only Tinkercloud MUST listen publicly on ports 80 and 443.
+- **FR-OPS-004:** `tinkercloud init` MUST be safely resumable after interruption.
+- **FR-OPS-005:** `tinkercloud doctor` MUST diagnose DNS, TLS, Resend, database,
   disk, permissions, clock, ports, version, and update health without exposing
   secrets.
 - **FR-OPS-006:** Root recovery MUST allow replacing the operator email and
@@ -616,7 +616,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   dot, encoding, and trusted-proxy behavior.
 - **FR-ROUTE-004:** Unknown, malformed, missing, suspended, deleting, and failed
   apps MUST NOT dispatch app content.
-- **FR-ROUTE-005:** Reserved `/_tiny/*` routes MUST never fall through to app
+- **FR-ROUTE-005:** Reserved `/_tinker/*` routes MUST never fall through to app
   static files or SPA fallback.
 
 ### 8.3 OTP authentication
@@ -669,7 +669,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-POLICY-003:** V1 rules MUST support owner, exact normalized email, and
   normalized email domain.
 - **FR-POLICY-004:** An active deployer owner MUST be an implicit viewer of
-  their app. `tiny deploy .` with no viewer rules creates an owner-only private
+  their app. `tinker deploy .` with no viewer rules creates an owner-only private
   app.
 - **FR-POLICY-005:** Policy mutations MUST be revisioned, transactional, audited,
   and effective on the next request.
@@ -733,7 +733,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.9 Client SDK
 
-- **FR-SDK-001:** `@tinyhost/sdk` MUST be the documented default app interface.
+- **FR-SDK-001:** `@tinkercloud/sdk` MUST be the documented default app interface.
 - **FR-SDK-002:** The core SDK MUST be browser-first TypeScript, ESM,
   framework-neutral, tree-shakeable, and dependency-light.
 - **FR-SDK-003:** The SDK MUST expose current user, app information, capability
@@ -753,7 +753,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.10 Key-value capability
 
-- **FR-KV-001:** The SDK MUST expose `tiny.kv.get`, `set`, `delete`, and bounded
+- **FR-KV-001:** The SDK MUST expose `tinker.kv.get`, `set`, `delete`, and bounded
   prefix `list`.
 - **FR-KV-002:** Keys MUST be UTF-8 strings with explicit length and character
   constraints. Values MUST be JSON.
@@ -774,7 +774,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.10a Document collection capability
 
-- **FR-DB-001:** The SDK MUST expose `tiny.db.collection(name)` with bounded
+- **FR-DB-001:** The SDK MUST expose `tinker.db.collection(name)` with bounded
   create, get, update, delete, list, snapshot, and subscription behavior.
 - **FR-DB-002:** Collection names, document IDs, JSON object bytes, documents
   per collection, active collections, total app bytes, list pages, and
@@ -875,7 +875,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   narrow internal blob-store interface. FUSE mounts, a second storage server,
   remote object stores, provider credentials, and cloud durability claims are
   excluded from V1. Blob support MUST preserve the production shape of one
-  `tinyhost` process, one embedded SQLite engine, one control database plus
+  `tinkercloud` process, one embedded SQLite engine, one control database plus
   isolated app-local data files, one private data directory, and one systemd
   service.
 
@@ -889,7 +889,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   limits, email/TLS diagnostics, disk health, version/update state, and a
   bounded recent host CPU/RAM/data-volume resource chart.
 - **FR-UI-004:** Deployer UI MUST provide a compact, owned-app-only overview
-  and actionable failures. The scoped Tiny CLI supports deployment, policies,
+  and actionable failures. The scoped Tinker CLI supports deployment, policies,
   tokens, usage, suspension, and deletion; the overview does not duplicate
   those management controls.
 - **FR-UI-005:** Sensitive values MUST be write-only or display-once.
@@ -898,7 +898,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.14 Agent skills
 
-- **FR-SKILL-001:** The repository MUST first create one generic Tiny platform
+- **FR-SKILL-001:** The repository MUST first create one generic Tinkercloud platform
   skill containing the canonical shared principles, SDK/capability model,
   authentication, deployment, and verification workflow.
 - **FR-SKILL-002:** The repository MUST ship one self-contained deployer skill
@@ -923,7 +923,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 ```text
 Internet
   ↓ ports 80/443
-tinyhost modular Go monolith
+tinkercloud modular Go monolith
   ├── control-plane router
   ├── app-plane gateway
   ├── auth/policy/session services
@@ -956,14 +956,14 @@ packages.
 ### 9.3 Future repository structure
 
 ```text
-tiny/
+tinker/
 ├── AGENTS.md
 ├── PRINCIPLES.md
 ├── PRD.md
 ├── go.mod
 ├── cmd/
-│   ├── tinyhost/
-│   └── tiny/
+│   ├── tinkercloud/
+│   └── tinker/
 ├── internal/
 │   ├── gateway/
 │   ├── appauth/
@@ -993,9 +993,9 @@ tiny/
 ├── sdk/
 │   └── typescript/
 ├── skills/
-│   ├── tiny-platform/
-│   ├── tiny-deployer/
-│   └── tiny-operator/
+│   ├── tinkercloud-platform/
+│   ├── tinkercloud-deployer/
+│   └── tinkercloud-operator/
 ├── specs/
 ├── docs/
 └── test/
@@ -1229,7 +1229,7 @@ The UI never reveals whether the email is allowlisted.
 
 ### 13.3 App and deployment states
 
-- Empty: explain `tiny deploy` and show no misleading health state.
+- Empty: explain `tinker deploy` and show no misleading health state.
 - Uploading/validating: show current stage and cancellation limitations.
 - Failed/rejected: stable reason code, safe message, retry as new attempt.
 - Active: URL, policy summary, release, TLS, protection-probe status.
@@ -1265,12 +1265,12 @@ listen_http: 0.0.0.0:80
 listen_https: 0.0.0.0:443
 
 data:
-  directory: /var/lib/tinyhost
+  directory: /var/lib/tinkercloud
 
 email:
   provider: resend
   api_key_secret: resend_api_key
-  from: TinyHost <access@example.com>
+  from: Tinkercloud <access@example.com>
 
 auth:
   otp_expiry: 10m
@@ -1278,7 +1278,7 @@ auth:
   max_attempts: 5
 ```
 
-TinyHost’s own secrets:
+Tinkercloud’s own secrets:
 
 - Resend API key;
 - session/challenge hashing keys;
@@ -1391,12 +1391,12 @@ Platform host:
 App host:
 
 ```text
-/_tiny/auth/*
-/_tiny/api/v1/me
-/_tiny/api/v1/app
-/_tiny/api/v1/capabilities
-/_tiny/api/v1/kv/*
-/_tiny/ws/v1
+/_tinker/auth/*
+/_tinker/api/v1/me
+/_tinker/api/v1/app
+/_tinker/api/v1/capabilities
+/_tinker/api/v1/kv/*
+/_tinker/ws/v1
 ```
 
 Reserved namespaces cannot be shadowed by app files.
@@ -1449,8 +1449,7 @@ logs/audit.
 - Standard `fetch` and `AbortSignal`.
 - Standards-compliant browser WebSocket client with bounded reconnect behavior.
 - Minimal dependencies and bundle-size gate.
-- Working package label `@tinyhost/sdk`; branding may replace it without changing
-  module boundaries or behavior.
+- Canonical npm and JSR package identity `@tinkercloud/sdk`.
 
 ### 18.3 Web UI
 
@@ -1461,8 +1460,8 @@ logs/audit.
 
 ### 18.4 Release artifacts
 
-- `tinyhost` for supported Linux architectures.
-- `tiny` for supported developer/CI platforms.
+- `tinkercloud` for supported Linux architectures.
+- `tinker` for supported developer/CI platforms.
 - Checksums, signatures, provenance, and reproducible-build evidence.
 - Thin installation scripts that verify before installing.
 
@@ -1543,7 +1542,7 @@ Deliver:
 - release state machine;
 - activation, TLS readiness, public probes, failure recovery, and cleanup.
 
-Exit: `tiny deploy` returns a working protected URL; attack corpus and
+Exit: `tinker deploy` returns a working protected URL; attack corpus and
 interruption recovery pass.
 
 ### M4 — SDK, per-app data, lightweight blobs, and realtime
@@ -1592,9 +1591,9 @@ presenting remote object storage as a mounted POSIX filesystem, and it must not
 make a provider bucket, object URL, endpoint, or credential browser-visible.
 
 FUSE mounts and standalone object-store servers remain outside the supported
-TinyHost topology. They add a service/mount lifecycle and weaker filesystem
+Tinkercloud topology. They add a service/mount lifecycle and weaker filesystem
 semantics without changing the gateway authorization, SQLite metadata, quota,
-or reconciliation work TinyHost must perform itself.
+or reconciliation work Tinkercloud must perform itself.
 
 ### 21.2 Implemented post-V1 extension
 
@@ -1650,12 +1649,12 @@ runtimes.
 Expose deliberately small KV, document-collection, and blob APIs:
 
 ```ts
-await tiny.kv.set("poll/options", options);
-const current = await tiny.kv.get("poll/options");
-const page = await tiny.kv.list({ prefix: "poll/", limit: 100 });
-await tiny.kv.delete("poll/options", { expectedVersion: current.version });
+await tinker.kv.set("poll/options", options);
+const current = await tinker.kv.get("poll/options");
+const page = await tinker.kv.list({ prefix: "poll/", limit: 100 });
+await tinker.kv.delete("poll/options", { expectedVersion: current.version });
 
-const tasks = tiny.db.collection("tasks");
+const tasks = tinker.db.collection("tasks");
 const task = await tasks.create({ title: "Review", done: false });
 await tasks.update(
   task.id,
@@ -1664,10 +1663,10 @@ await tasks.update(
 );
 const currentTasks = await tasks.list();
 
-const stored = await tiny.blobs.upload(file);
-const downloaded = await tiny.blobs.get(stored.id);
-const blobs = await tiny.blobs.list({ limit: 100 });
-await tiny.blobs.delete(stored.id);
+const stored = await tinker.blobs.upload(file);
+const downloaded = await tinker.blobs.get(stored.id);
+const blobs = await tinker.blobs.list({ limit: 100 });
+await tinker.blobs.delete(stored.id);
 ```
 
 KV values are JSON and document values are bounded JSON objects. Mutations are
@@ -1687,9 +1686,9 @@ always denies.
 ### D4 — Deployer authentication and owner access
 
 The operator reconciles one exact active-deployer email list. A deployer runs
-`tiny login` directly or reaches the same bounded login inside
-`tiny deploy .`, completes email OTP when no valid bearer exists, and receives
-a server-bound scoped CLI token stored in the protected per-user Tiny
+`tinker login` directly or reaches the same bounded login inside
+`tinker deploy .`, completes email OTP when no valid bearer exists, and receives
+a server-bound scoped CLI token stored in the protected per-user Tinker
 credential file. Every request rechecks deployer status, token scope, expiry,
 and target ownership.
 
@@ -1713,14 +1712,14 @@ image identifiers are pinned during repository bootstrap.
 
 ### D7 — Agent skills
 
-Create one generic `tiny-platform` agent skill first. It is the canonical shared
-workflow and vocabulary. Then create self-contained `tiny-deployer` and
-`tiny-operator` skills by copying the relevant shared content into each
-role-facing skill. `tiny-deployer` owns app understanding, SDK use, build,
+Create one generic `tinkercloud-platform` agent skill first. It is the canonical shared
+workflow and vocabulary. Then create self-contained `tinkercloud-deployer` and
+`tinkercloud-operator` skills by copying the relevant shared content into each
+role-facing skill. `tinkercloud-deployer` owns app understanding, SDK use, build,
 access-policy review, deployment, and independent protection verification.
 
-Create separate maintainer-facing `distribute-tiny-cli` and
-`distribute-tiny-sdk` skills. They reuse the signed release and compatibility
+Create separate maintainer-facing `distribute-tinker-cli` and
+`distribute-tinkercloud-sdk` skills. They reuse the signed release and compatibility
 contracts but never inherit deployer or operator authority. Inspection and
 local preparation are the default; publication requires explicit authorization
 for finalized identities, version, destinations, and channel.
@@ -1730,23 +1729,27 @@ or generation/check scripts make CI fail when shared sections drift. Content is
 generic Markdown and executable scripts; Codex-compatible `SKILL.md` packaging
 is the first distribution.
 
-### D8 — Working names
+### D8 — Product and distribution identity
 
-“TinyHost”, `tinyhost`, `tiny`, and `@tinyhost/sdk` are working labels only. The
-product may be renamed without changing architecture, authorization semantics,
-protocol behavior, package boundaries, or the PRD’s actor/capability model.
+The product is Tinkercloud. The operator server is `tinkercloud`, the deployer
+CLI and command namespace are `tinker`, the npm CLI wrapper is
+`@tinkercloud/cli`, and the npm and JSR SDK package is `@tinkercloud/sdk`.
+Homebrew uses formula `tinker`, class `Tinker`, in tap
+`ChrisMarxDev/homebrew-tinkercloud`. Canonical source, release, issue, install,
+and documentation URLs use `github.com/ChrisMarxDev/tinkercloud` until a
+separate official-domain decision is accepted.
 
-Avoid scattering literal branding through domain packages. Keep names at
-composition roots, distribution metadata, user-facing copy, and SDK package
-configuration.
+Keep literal branding at composition roots, distribution metadata, public
+protocol boundaries, user-facing copy, and SDK package configuration rather
+than coupling domain behavior to presentation.
 
 ### D9 — Minimum-necessary guided flows
 
-Human commands begin with the intended outcome (`tinyhost setup`,
-`tiny deploy`, `tiny login`, `tiny logout`) and ask only for information that
+Human commands begin with the intended outcome (`tinkercloud setup`,
+`tinker deploy`, `tinker login`, `tinker logout`) and ask only for information that
 is required, not already verified, and not safely derivable. They persist
 verified reusable state in the correct boundary. A generated config or
-`tiny.yaml` is a transparent receipt and automation surface; it is not a
+`tinker.yaml` is a transparent receipt and automation surface; it is not a
 prerequisite document the human must create.
 
 The assistant may show derived defaults and an explicit edit path without
@@ -1757,17 +1760,17 @@ Missing required external state such as DNS or a verified sending domain
 produces one exact action and a resumable continuation rather than a wall of
 flags.
 
-### D10 — Pre-rename beta distribution
+### D10 — GitHub beta distribution
 
-Before the final public rename, one manually approved GitHub prerelease channel
-MAY distribute the complete signed release directly from an exact
+Before the first stable release, one manually approved GitHub prerelease
+channel MAY distribute the complete signed release directly from an exact
 `vMAJOR.MINOR.PATCH` tag reachable from `main`. The workflow MUST test before
 signing, use a protected beta-only signing environment, verify local and
 uploaded draft bytes, and publish only a prerelease. CLI, host, and SDK tarball
 consumers use the same exact versioned GitHub release.
 
 This beta path MUST NOT publish npm, JSR, Homebrew, stable/latest channels,
-reserve final identities, change DNS, or enable silent updates. The committed
+claim registry availability, change DNS, or enable silent updates. The committed
 beta authority MUST be replaced across every embedded trust anchor by a new
 operator-controlled production authority before the first stable release.
 
@@ -1777,13 +1780,13 @@ operator-controlled production authority before the first stable release.
 - Resend only in V1 behind an adapter interface.
 - Per-host HTTP-challenge ACME first.
 - Server-rendered admin/deployer UI.
-- No automatic build command inside `tiny deploy`.
+- No automatic build command inside `tinker deploy`.
 - Human setup/deploy commands are inference-first, resumable wizards; generated
   configuration and manifests remain explicit, reviewable automation receipts.
 - No Docker initially.
 - No backup feature initially.
 - No outbound telemetry by default.
-- Manual signed `tinyhost update`; optional scheduled updates later.
+- Manual signed `tinkercloud update`; optional scheduled updates later.
 - Stable app hostnames reused across releases.
 - Global viewer identity with app-scoped local sessions and app-bound handoffs;
   never a parent-domain app cookie.
@@ -1798,7 +1801,7 @@ operator-controlled production authority before the first stable release.
 - [ ] Supported clean Hetzner VPS initializes with documented prerequisites.
 - [ ] Human setup asks only for non-discoverable required values and can resume
       after an external DNS or email prerequisite is fixed.
-- [ ] Only TinyHost owns expected public sockets.
+- [ ] Only Tinkercloud owns expected public sockets.
 - [ ] DNS, TLS, Resend, SQLite, permissions, disk, and version diagnostics work.
 - [ ] Root operator recovery works with email unavailable.
 - [ ] Failed update returns to the prior healthy version.
@@ -1807,7 +1810,7 @@ operator-controlled production authority before the first stable release.
 
 - [ ] Operator can atomically reconcile the exact active-deployer email list.
 - [ ] Deployer can authenticate without VPS access.
-- [ ] `tiny deploy <dir>` returns a protected stable HTTPS URL.
+- [ ] `tinker deploy <dir>` returns a protected stable HTTPS URL.
 - [ ] A first human deploy can generate its manifest and platform selection
       without requiring hand-authored config or repeated known values.
 - [ ] Deployer can manage access, releases, tokens, and deletion only

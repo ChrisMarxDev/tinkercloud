@@ -31,16 +31,16 @@ bytes. The SHA-256 value is over `NAME` bytes. Verification fails closed for a
 missing/unknown field, noncanonical digest, extra bytes, a digest mismatch, an
 invalid signature, or a key other than the embedded pinned public key.
 
-The only V1 update target is `tinyhost-linux-amd64`. Every V1 release contains
-that server plus `tiny-linux-amd64`, `tiny-linux-arm64`,
-`tiny-darwin-amd64`, `tiny-darwin-arm64`, and one versioned SDK tarball. Each
+The only V1 update target is `tinkercloud-linux-amd64`. Every V1 release contains
+that server plus `tinker-linux-amd64`, `tinker-linux-arm64`,
+`tinker-darwin-amd64`, `tinker-darwin-arm64`, and one versioned SDK tarball. Each
 of those distributable payloads has its own metadata and signature; a release
-also contains the reviewed `tinyhost.service` unit, `install-host.sh`, and
+also contains the reviewed `tinkercloud.service` unit, `install-host.sh`, and
 `install-client.sh` with their own metadata and signatures and is invalid if an
 installation input or supported client platform is absent. The release public
 key is public and committed at
 `packaging/release-public-key.pem`. A signing private key is supplied only to
-the release environment through `TINYHOST_RELEASE_SIGNING_KEY`; it is never
+the release environment through `TINKERCLOUD_RELEASE_SIGNING_KEY`; it is never
 written to the repository, artifacts, logs, metadata, SDK, or browser bundle.
 
 The release version must exactly match the semantic version inside the SDK
@@ -66,7 +66,7 @@ outside that directory. Adding it to the release evidence without re-signing
 the complete evidence set is a verification failure.
 
 The unprivileged client installer accepts only an HTTPS release directory,
-selects exactly one of the four `tiny-OS-ARCH` payloads, validates its three
+selects exactly one of the four `tinker-OS-ARCH` payloads, validates its three
 checksum-manifest entries, then validates its metadata and signature with the
-embedded public key. It refuses root, never installs `tinyhost`, and replaces
-`tiny` only after verification succeeds.
+embedded public key. It refuses root, never installs `tinkercloud`, and replaces
+`tinker` only after verification succeeds.

@@ -1,19 +1,19 @@
 {
-  "name": "@tinyhost/sdk",
+  "name": "@tinkercloud/sdk",
   "version": "0.1.0",
-  "description": "Typed browser SDK for TinyHost app identity, KV, and realtime capabilities",
+  "description": "Typed browser SDK for Tinkercloud app identity, KV, and realtime capabilities",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ChrisMarxDev/tiny.git",
+    "url": "git+https://github.com/ChrisMarxDev/tinkercloud.git",
     "directory": "sdk/typescript"
   },
   "bugs": {
-    "url": "https://github.com/ChrisMarxDev/tiny/issues"
+    "url": "https://github.com/ChrisMarxDev/tinkercloud/issues"
   },
-  "homepage": "https://github.com/ChrisMarxDev/tiny#readme",
+  "homepage": "https://github.com/ChrisMarxDev/tinkercloud#readme",
   "keywords": [
-    "tinyhost",
+    "tinkercloud",
     "browser",
     "sdk",
     "self-hosted"

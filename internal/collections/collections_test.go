@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
 )
 
 func TestCollectionAndDocumentValidationGrammar(t *testing.T) {

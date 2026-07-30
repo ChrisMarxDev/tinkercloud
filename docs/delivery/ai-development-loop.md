@@ -177,12 +177,12 @@ It does not merge, bypass protected `main`, publish, release, or access
 production/signing credentials. See the executable state and deny contract in
 [`specs/delivery/github-issue-loop-contract.md`](../../specs/delivery/github-issue-loop-contract.md).
 
-## Development deployment loop for apps hosted on TinyHost
+## Development deployment loop for apps hosted on Tinkercloud
 
-The later TinyHost agent skill should use:
+The later Tinkercloud agent skill should use:
 
 ```text
-inspect → build → validate tiny.yaml → deploy with scoped token
+inspect → build → validate tinker.yaml → deploy with scoped token
 → poll terminal deployment state → independently probe anonymous denial
 → authenticate test viewer → probe expected content → report URL + release ID
 ```

@@ -6,7 +6,7 @@
 
 The signed updater preserves `data_directory/update-rollback/previous` until
 the replacement binary has restarted and all health gates pass. Ordinary
-`tinyhost doctor` correctly reports any remaining snapshot as degraded so an
+`tinkercloud doctor` correctly reports any remaining snapshot as degraded so an
 operator can recover an interrupted update. Using that unchanged doctor as the
 candidate's local health gate created a deadlock: every candidate necessarily
 saw its own rollback snapshot and rolled itself back.

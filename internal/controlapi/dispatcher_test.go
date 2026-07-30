@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/compatibility"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/otp"
-	"github.com/tinyhost/tiny/internal/ratelimit"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/ratelimit"
 )
 
 type authFake struct {
@@ -228,8 +228,8 @@ func TestCompatibilityDocumentAndClientDenial(t *testing.T) {
 	s := &svcFake{}
 	d = Dispatcher{Auth: a, Service: s}
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
-	r.Header.Set("X-Tiny-CLI-Version", "1.0.0")
-	r.Header.Set("X-Tiny-Control-API-Version", "1")
+	r.Header.Set("X-Tinker-CLI-Version", "1.0.0")
+	r.Header.Set("X-Tinker-Control-API-Version", "1")
 	w = httptest.NewRecorder()
 	d.ServeHTTP(w, r)
 	if w.Code != http.StatusUpgradeRequired || !strings.Contains(w.Body.String(), "cli_version_incompatible") {

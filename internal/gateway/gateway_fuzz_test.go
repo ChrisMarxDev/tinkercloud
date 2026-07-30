@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
 )
 
 func FuzzClassifyHostNeverPanics(f *testing.F) {

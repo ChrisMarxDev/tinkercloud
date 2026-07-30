@@ -1,6 +1,6 @@
-# Contributing to TinyHost
+# Contributing to Tinkercloud
 
-Thanks for helping improve TinyHost. The project welcomes bug reports,
+Thanks for helping improve Tinkercloud. The project welcomes bug reports,
 documentation fixes, tests, and focused implementation changes.
 
 ## Before opening an issue
@@ -17,7 +17,7 @@ is authorized. Only a trusted maintainer may apply `implement`; `pending`
 always blocks work. Approved agent work is proposed through a draft pull
 request and remains subject to normal review and CI.
 
-TinyHost is pre-release and V1 scope is intentionally narrow. A proposal that
+Tinkercloud is pre-release and V1 scope is intentionally narrow. A proposal that
 adds public apps, backend runtimes, a second public listener, a second storage
 authority, generic secret injection, or a backup product is outside the current
 roadmap.
@@ -67,7 +67,7 @@ For each implementation slice:
 3. Update or add the technology-neutral contract in `specs/`.
 4. Write the deny-path test charter before the happy path.
 5. Add an ADR when deployment, trust, persistence, or a public interface changes.
-6. Update affected docs and TinyHost coding-agent skills.
+6. Update affected docs and Tinkercloud coding-agent skills.
 7. Implement one vertical path and exercise dependency failures.
 
 Protected paths must deny anonymous, wrong-app, revoked, suspended, malformed,

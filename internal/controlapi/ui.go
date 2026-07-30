@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/browseridentity"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/releases"
-	webui "github.com/tinyhost/tiny/web"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
+	webui "github.com/ChrisMarxDev/tinkercloud/web"
 )
 
 //go:embed templates/*.html
@@ -79,7 +79,7 @@ func (p Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && p.formAction(w, r) {
 			return
 		}
-		p.errorPage(w, http.StatusNotFound, "Page not found", "This TinyHost page is unavailable or has moved.", "/login", "Go to sign in")
+		p.errorPage(w, http.StatusNotFound, "Page not found", "This Tinkercloud page is unavailable or has moved.", "/login", "Go to sign in")
 	}
 }
 
@@ -98,7 +98,7 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 	}
 	key := newUIRequestKey()
 	if key == "" {
-		p.errorPage(w, http.StatusServiceUnavailable, "Action unavailable", "TinyHost could not prepare this action. Retry from the dashboard.", "/dashboard", "Return to dashboard")
+		p.errorPage(w, http.StatusServiceUnavailable, "Action unavailable", "Tinkercloud could not prepare this action. Retry from the dashboard.", "/dashboard", "Return to dashboard")
 		return true
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUIFormBytes)
@@ -294,7 +294,7 @@ func (p Platform) actionResult(w http.ResponseWriter, r *http.Request, err error
 			p.errorPage(w, http.StatusConflict, "LLM settings changed", "Refresh the dashboard and review the current profile or app grant before trying again.", "/dashboard", "Refresh dashboard")
 			return true
 		}
-		p.errorPage(w, http.StatusForbidden, "Action unavailable", "TinyHost could not complete this action. Return to the dashboard and review the current state.", "/dashboard", "Return to dashboard")
+		p.errorPage(w, http.StatusForbidden, "Action unavailable", "Tinkercloud could not complete this action. Return to the dashboard and review the current state.", "/dashboard", "Return to dashboard")
 		return true
 	}
 	location := "/dashboard"
@@ -322,7 +322,7 @@ func splitFormList(s string) []string {
 	return items
 }
 
-// safeLLMID admits only opaque IDs issued by TinyHost. Browser forms never
+// safeLLMID admits only opaque IDs issued by Tinkercloud. Browser forms never
 // create IDs and routes cannot be used to select arbitrary database rows.
 func safeLLMID(value string) bool {
 	if len(value) != 32 {
@@ -391,13 +391,13 @@ func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	csrf := p.csrf(w, r, a)
-	v := DashboardView{Health: []DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinyhost doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
+	v := DashboardView{Health: []DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinkercloud doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
 	unavailable := false
 	if p.Views != nil {
 		var err error
 		v, err = p.Views.Dashboard(r.Context(), a)
 		if err != nil {
-			v = DashboardView{Health: []DashboardHealth{{Name: "dashboard read model", State: "unavailable", Detail: "Retry or run tinyhost doctor locally."}}}
+			v = DashboardView{Health: []DashboardHealth{{Name: "dashboard read model", State: "unavailable", Detail: "Retry or run tinkercloud doctor locally."}}}
 			unavailable = true
 		}
 	}

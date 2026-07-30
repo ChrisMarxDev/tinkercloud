@@ -6,7 +6,7 @@ import (
 	"net/url"
 )
 
-// DataEntry and DataDocument intentionally describe Tiny's bounded data
+// DataEntry and DataDocument intentionally describe Tinker's bounded data
 // primitives, rather than SQLite rows. The control API never exposes a
 // database path, schema, or query language.
 type DataEntry struct {

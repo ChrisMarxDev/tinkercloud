@@ -2,7 +2,7 @@ package anthropic
 
 import (
 	"context"
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 	"net/http"
 	"net/http/httptest"
 	"strings"

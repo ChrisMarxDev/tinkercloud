@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createTiny } from "../dist/index.js";
+import { createTinker } from "../dist/index.js";
 
 class FakeSocket {
   constructor() { this.readyState = 0; this.sent = []; this.closeCalls = 0; this.onopen = this.onclose = this.onerror = this.onmessage = null; }
@@ -12,7 +12,7 @@ class FakeSocket {
 const sockets = [];
 const timers = [];
 const flush = async () => { for (let index = 0; index < 4; index += 1) await Promise.resolve(); };
-const tiny = createTiny({
+const tinker = createTinker({
   origin: "https://app.test",
   fetch: async () => new Response(JSON.stringify({ documents: [], revision: 0 }), { headers: { "Content-Type": "application/json" } }),
   webSocket: () => { const socket = new FakeSocket(); sockets.push(socket); return socket; },
@@ -24,12 +24,12 @@ const tiny = createTiny({
 const calls = [];
 let taskSnapshots = 0;
 const stops = [
-  tiny.live.onKvChange({ prefix: "a/" }, () => calls.push("a")),
-  tiny.live.onKvChange({ prefix: "b/" }, () => calls.push("b")),
-  tiny.live.onKvChange({ prefix: "c/" }, () => calls.push("c")),
-  tiny.db.collection("tasks").subscribe({ onSnapshot: () => { taskSnapshots += 1; } }),
-  tiny.db.collection("notes").subscribe({ onSnapshot() {}, onCreate: () => calls.push("notes") }),
-  tiny.db.collection("events").subscribe({ onSnapshot() {}, onCreate: () => calls.push("events") }),
+  tinker.live.onKvChange({ prefix: "a/" }, () => calls.push("a")),
+  tinker.live.onKvChange({ prefix: "b/" }, () => calls.push("b")),
+  tinker.live.onKvChange({ prefix: "c/" }, () => calls.push("c")),
+  tinker.db.collection("tasks").subscribe({ onSnapshot: () => { taskSnapshots += 1; } }),
+  tinker.db.collection("notes").subscribe({ onSnapshot() {}, onCreate: () => calls.push("notes") }),
+  tinker.db.collection("events").subscribe({ onSnapshot() {}, onCreate: () => calls.push("events") }),
 ];
 
 assert.equal(sockets.length, 1, "all managed capability listeners share one socket");
@@ -76,7 +76,7 @@ for (const index of [1, 2, 3, 5]) stops[index]();
 assert.equal(sockets[1].readyState, 3, "the final managed unsubscribe closes the shared socket");
 assert.equal(sockets[1].closeCalls, 1, "the final managed unsubscribe closes its socket exactly once");
 
-const explicit = tiny.live.channel("direct");
+const explicit = tinker.live.channel("direct");
 const connecting = explicit.connect();
 assert.equal(sockets.length, 3, "explicit channels keep a dedicated socket");
 sockets[2].open();

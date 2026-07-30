@@ -1,10 +1,10 @@
 // @ts-check
 import {
-  TinyCapabilityUnavailableError,
-  TinyVersionConflictError,
-  tiny,
-} from "@tinyhost/sdk";
-import { describeTinyError } from "../../shared/errors.js";
+  TinkerCapabilityUnavailableError,
+  TinkerVersionConflictError,
+  tinker,
+} from "@tinkercloud/sdk";
+import { describeTinkerError } from "../../shared/errors.js";
 
 const configKey = "quick-poll/config";
 const votePrefix = "quick-poll/votes/";
@@ -21,7 +21,7 @@ let viewer;
 let poll = defaultPoll;
 let myVote;
 let stopLive = () => {};
-/** @type {import("@tinyhost/sdk").KVEntry[]} */
+/** @type {import("@tinkercloud/sdk").KVEntry[]} */
 let votes = [];
 
 const choices = /** @type {HTMLElement} */ (
@@ -57,7 +57,7 @@ function hideError() {
 
 /** @param {unknown} error */
 function showError(error) {
-  const detail = describeTinyError(error);
+  const detail = describeTinkerError(error);
   document.querySelector("#notice-title").textContent = detail.title;
   document.querySelector("#notice-message").textContent = detail.message;
   document.querySelector("#notice-request").textContent = detail.requestId
@@ -127,11 +127,11 @@ function render() {
 }
 
 async function ensurePoll() {
-  const current = await tiny.kv.get(configKey, {
+  const current = await tinker.kv.get(configKey, {
     signal: pageLifetime.signal,
   });
   if (!current) {
-    const created = await tiny.kv.set(configKey, defaultPoll, {
+    const created = await tinker.kv.set(configKey, defaultPoll, {
       signal: pageLifetime.signal,
     });
     poll = /** @type {typeof defaultPoll} */ (created.value);
@@ -151,11 +151,11 @@ async function ensurePoll() {
 }
 
 async function readVotes() {
-  /** @type {import("@tinyhost/sdk").KVEntry[]} */
+  /** @type {import("@tinkercloud/sdk").KVEntry[]} */
   const entries = [];
   let cursor;
   do {
-    const page = await tiny.kv.list({
+    const page = await tinker.kv.list({
       prefix: votePrefix,
       limit: 50,
       cursor,
@@ -188,7 +188,7 @@ async function castVote(option) {
   if (!poll.options.some((item) => item.id === option)) return;
   hideError();
   try {
-    await tiny.kv.set(
+    await tinker.kv.set(
       `${votePrefix}${viewer.identity.id}`,
       { option, updatedAt: new Date().toISOString() },
       {
@@ -199,7 +199,7 @@ async function castVote(option) {
     await refreshPoll();
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshPoll();
+    if (error instanceof TinkerVersionConflictError) await refreshPoll();
   }
 }
 
@@ -208,14 +208,14 @@ withdraw.addEventListener("click", async () => {
   withdraw.disabled = true;
   hideError();
   try {
-    await tiny.kv.delete(myVote.key, {
+    await tinker.kv.delete(myVote.key, {
       expectedVersion: myVote.version,
       signal: pageLifetime.signal,
     });
     await refreshPoll();
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshPoll();
+    if (error instanceof TinkerVersionConflictError) await refreshPoll();
   } finally {
     withdraw.disabled = false;
   }
@@ -229,7 +229,7 @@ document.addEventListener("visibilitychange", () => {
 function startLive() {
   // A KV mutation already publishes this bounded, best-effort hint. Reading
   // current KV keeps results correct if an event is missed during reconnect.
-  stopLive = tiny.live.onKvChange(
+  stopLive = tinker.live.onKvChange(
     { prefix: "quick-poll/" },
     () => void refreshPoll(),
   );
@@ -239,9 +239,9 @@ function startLive() {
 async function start() {
   try {
     const [currentViewer, app, result] = await Promise.all([
-      tiny.user.current({ signal: pageLifetime.signal }),
-      tiny.app.info({ signal: pageLifetime.signal }),
-      tiny.capabilities.list({ signal: pageLifetime.signal }),
+      tinker.user.current({ signal: pageLifetime.signal }),
+      tinker.app.info({ signal: pageLifetime.signal }),
+      tinker.capabilities.list({ signal: pageLifetime.signal }),
     ]);
     viewer = currentViewer;
     document.querySelector("#viewer-email").textContent = viewer.identity.email;
@@ -251,7 +251,7 @@ async function start() {
 
     const capabilities = new Set(result.capabilities.map((item) => item.name));
     if (!capabilities.has("kv")) {
-      throw new TinyCapabilityUnavailableError(
+      throw new TinkerCapabilityUnavailableError(
         "This example requires KV.",
         "capability_unavailable",
       );

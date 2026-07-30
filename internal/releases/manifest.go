@@ -3,8 +3,8 @@ package releases
 import (
 	"bytes"
 	"errors"
-	"github.com/tinyhost/tiny/internal/appnamespace"
-	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 	"io"
 	"path"
 	"slices"
@@ -179,7 +179,7 @@ func validDomain(d string) bool {
 	return true
 }
 
-// GenerateManifest emits the deterministic strict V1 form used by `tiny init`.
+// GenerateManifest emits the deterministic strict V1 form used by `tinker init`.
 // It round-trips ParseManifest before returning, so local generation and server
 // deployment share the same contract rather than maintaining a second parser.
 func GenerateManifest(m Manifest) ([]byte, error) {

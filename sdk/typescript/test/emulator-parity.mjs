@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { createTiny } from "../dist/index.js";
+import { createTinker } from "../dist/index.js";
 
-const origin = process.env.TINY_EMULATOR_PARITY_ORIGIN;
-assert.ok(origin, "TINY_EMULATOR_PARITY_ORIGIN is required");
+const origin = process.env.TINKER_EMULATOR_PARITY_ORIGIN;
+assert.ok(origin, "TINKER_EMULATOR_PARITY_ORIGIN is required");
 assert.equal(typeof WebSocket, "function", "this parity test requires Node's built-in WebSocket");
 
 const sockets = [];
@@ -42,18 +42,18 @@ async function within(promise, label) {
   }
 }
 
-const tiny = createTiny({
+const tinker = createTinker({
   origin,
   webSocket: browserSocket,
-  // Browser fetch resolves TinyHost's same-origin relative paths. Node does
+  // Browser fetch resolves Tinkercloud's same-origin relative paths. Node does
   // not, so this narrow adapter preserves the browser request shape.
   fetch: (path, init) => fetch(new URL(path, origin), init),
 });
-const first = await tiny.kv.set("parity-one", { value: 1 });
+const first = await tinker.kv.set("parity-one", { value: 1 });
 assert.equal(first.version, 1);
-assert.deepEqual((await tiny.kv.get("parity-one")).value, { value: 1 });
+assert.deepEqual((await tinker.kv.get("parity-one")).value, { value: 1 });
 
-const tasks = tiny.db.collection("tasks");
+const tasks = tinker.db.collection("tasks");
 const created = await tasks.create({ title: "first", done: false });
 assert.deepEqual((await tasks.get(created.id)).data, { title: "first", done: false });
 const updated = await tasks.update(created.id, { title: "first", done: true }, { expectedVersion: created.version });

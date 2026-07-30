@@ -29,7 +29,7 @@
   and must not block a healthy subscriber or leak a writer goroutine.
 - Focused socket tests cover anonymous denial before upgrade, silent-peer
   timeout, normal pong liveness, slow-consumer isolation, and prompt
-  revocation. `GOCACHE=/private/tmp/tiny-live-go-cache go test -race
+  revocation. `GOCACHE=/private/tmp/tinker-live-go-cache go test -race
   ./internal/live ./internal/gateway` passed with loopback-listener permission
   on 2026-07-27.
 

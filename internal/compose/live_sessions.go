@@ -2,8 +2,8 @@ package compose
 
 import (
 	"context"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 	"time"
 )
 

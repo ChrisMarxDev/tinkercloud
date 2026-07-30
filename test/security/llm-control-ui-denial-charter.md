@@ -19,6 +19,6 @@ path is accepted:
   contain an API key, envelope/ciphertext, encryption-root value/reference,
   raw provider response, or raw validation error.
 - When the repository, envelope root, or validator is unavailable, the
-  operator sees only a safe unavailable state with root-only `tinyhost llm
+  operator sees only a safe unavailable state with root-only `tinkercloud llm
   enable` plus restart guidance; no create, rotate, or disable form renders.
 - Deployer dashboards omit API keys and LLM chat capability controls entirely.

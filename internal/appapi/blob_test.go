@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 func blobAuth(t *testing.T, app string, enabled bool) appauth.AuthorizationContext {
@@ -68,7 +68,7 @@ func multipartBlob(t *testing.T, extra bool) *http.Request {
 		_ = w.WriteField("evil", "1")
 	}
 	_ = w.Close()
-	r := httptest.NewRequest(http.MethodPost, "/_tiny/api/v1/blobs", &b)
+	r := httptest.NewRequest(http.MethodPost, "/_tinker/api/v1/blobs", &b)
 	r.Header.Set("Content-Type", w.FormDataContentType())
 	r.Header.Set("Origin", "http://example.com")
 	r.Host = "example.com"
@@ -95,7 +95,7 @@ func TestBlobUploadStreamsFirstPartAndRejectsExtraPartsBeforeReady(t *testing.T)
 func TestDisabledBlobNeverTouchesRepository(t *testing.T) {
 	s := &blobSpy{}
 	w := httptest.NewRecorder()
-	Dispatcher{Blobs: s}.Dispatch(blobAuth(t, "a", false), w, httptest.NewRequest(http.MethodGet, "/_tiny/api/v1/blobs", nil))
+	Dispatcher{Blobs: s}.Dispatch(blobAuth(t, "a", false), w, httptest.NewRequest(http.MethodGet, "/_tinker/api/v1/blobs", nil))
 	if w.Code != 403 || s.calls != 0 {
 		t.Fatalf("status=%d calls=%d", w.Code, s.calls)
 	}

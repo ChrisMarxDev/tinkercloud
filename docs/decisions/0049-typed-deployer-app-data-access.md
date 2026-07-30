@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost deployers can manage an owned app but could not inspect or repair the
+Tinkercloud deployers can manage an owned app but could not inspect or repair the
 bounded KV and document state that the app stores through the SDK. Giving a
 deployer a database URL, SQLite file, SQL console, or a second network listener
 would bypass the gateway's server-derived tenancy model and create a remote
@@ -40,17 +40,17 @@ receive only the already-derived immutable app ID. The caller never obtains a
 database path, connection string, SQLite handle, schema, SQL operation, or a
 public data listener.
 
-The first product surface is the saved-credential `tiny data` CLI plus its
+The first product surface is the saved-credential `tinker data` CLI plus its
 matching bearer HTTP API. It supports bounded reads and deliberate individual
 writes against the existing KV/document semantics: KV set may carry an optional
 expected version, while destructive KV/document updates/deletes require one.
 It does not support a SQL
 REPL, joins/filter language, migrations, raw database download, bulk delete,
 transaction scripts, export/import, or a backup product. Writes use the
-existing optimistic versions. Before a write begins, TinyHost stores a
+existing optimistic versions. Before a write begins, Tinkercloud stores a
 metadata-only audit intent in the control database. The separate control/app
 SQLite files cannot form one cross-database transaction. After an app-data
-commit, TinyHost marks the matching intent succeeded. An exact retry can return
+commit, Tinkercloud marks the matching intent succeeded. An exact retry can return
 the existing receipt, and an interrupted outcome update is reconciled only
 when current versioned app state proves the same result. This is deliberately
 not a rollback or general cross-database recovery claim.
@@ -73,7 +73,7 @@ and
 
 - A deployer can inspect and safely repair app-managed state through the same
   server/process/database-manager boundary used by the app capability.
-- Per-app SQLite files stay private operational implementation details; TinyHost
+- Per-app SQLite files stay private operational implementation details; Tinkercloud
   remains one server process, one embedded SQLite engine, one private data
   root, and no database daemon/listener.
 - Authorization stays current on every request. Deployer, token, ownership,

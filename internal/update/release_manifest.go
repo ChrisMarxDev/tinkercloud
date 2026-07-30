@@ -8,7 +8,7 @@ import (
 	"io"
 	"regexp"
 
-	"github.com/tinyhost/tiny/internal/compatibility"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
 )
 
 type ReleaseManifest struct {
@@ -46,7 +46,7 @@ func VerifyReleaseManifest(pub ed25519.PublicKey, raw, metadata, signature []byt
 			return compatibility.Matrix{}, ErrMetadata
 		}
 	}
-	if manifest.Files["tinyhost-linux-amd64"] != hex.EncodeToString(server.Digest[:]) {
+	if manifest.Files["tinkercloud-linux-amd64"] != hex.EncodeToString(server.Digest[:]) {
 		return compatibility.Matrix{}, ErrMetadata
 	}
 	return manifest.Compatibility, nil

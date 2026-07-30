@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/browseridentity"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/otp"
-	"github.com/tinyhost/tiny/internal/persistence"
-	"github.com/tinyhost/tiny/internal/ratelimit"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/ratelimit"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // TestIdentityBrokerReusesOneGlobalOTPAcrossApps exercises the browser-facing
@@ -29,7 +29,7 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	store := newBrokerStore(now)
 	var closed []persistence.AppSessionRef
 	b := &IdentityBroker{
-		Store: store, Domain: "apps.tiny.test",
+		Store: store, Domain: "apps.tinker.test",
 		Now: func() time.Time { return now }, AppSessionTTL: time.Hour,
 		RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) },
 	}
@@ -42,10 +42,10 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 
 	start := func(app apps.App, ret string) (*http.Cookie, string) {
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/_tiny/auth/login?return="+url.QueryEscape(ret), nil)
-		r.Host = app.Slug + ".apps.tiny.test"
+		r := httptest.NewRequest(http.MethodGet, "/_tinker/auth/login?return="+url.QueryEscape(ret), nil)
+		r.Host = app.Slug + ".apps.tinker.test"
 		login.DispatchPreAuth(app, gateway.AppLogin, w, r)
-		if w.Code != http.StatusSeeOther || !strings.HasPrefix(w.Header().Get("Location"), "https://tiny.test/_tiny/identity?handoff=") {
+		if w.Code != http.StatusSeeOther || !strings.HasPrefix(w.Header().Get("Location"), "https://tinker.test/_tinker/identity?handoff=") {
 			t.Fatalf("%s start status=%d location=%q", app.Slug, w.Code, w.Header().Get("Location"))
 		}
 		cookies := w.Result().Cookies()
@@ -57,8 +57,8 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	}
 	callback := func(app apps.App, state *http.Cookie, handoff string) *http.Cookie {
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/_tiny/auth/callback?handoff="+url.QueryEscape(handoff), nil)
-		r.Host = app.Slug + ".apps.tiny.test"
+		r := httptest.NewRequest(http.MethodGet, "/_tinker/auth/callback?handoff="+url.QueryEscape(handoff), nil)
+		r.Host = app.Slug + ".apps.tinker.test"
 		r.AddCookie(state)
 		login.DispatchPreAuth(app, gateway.AppIdentityCallback, w, r)
 		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != preservedReturn {
@@ -78,17 +78,17 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	// intentionally not server-guaranteed.
 	alphaState, alphaHandoff := start(alpha, preservedReturn+"#browser-only")
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(alphaHandoff), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(alphaHandoff), nil)
+	r.Host = "tinker.test"
 	platform.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `name="email"`) || strings.Contains(w.Body.String(), "app-alpha") {
 		t.Fatalf("identity email page status=%d body=%q", w.Code, w.Body.String())
 	}
 	binding := browserBindingCookieFrom(t, w.Result().Cookies())
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/otp", strings.NewReader("handoff="+url.QueryEscape(alphaHandoff)+"&email=viewer%40example.com"))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/otp", strings.NewReader("handoff="+url.QueryEscape(alphaHandoff)+"&email=viewer%40example.com"))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
@@ -96,13 +96,13 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 		t.Fatalf("OTP form status=%d requests=%d body=%q", w.Code, store.requests, w.Body.String())
 	}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/verify", strings.NewReader("handoff="+url.QueryEscape(alphaHandoff)+"&email=viewer%40example.com&transaction=otp_1&code=123456"))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/verify", strings.NewReader("handoff="+url.QueryEscape(alphaHandoff)+"&email=viewer%40example.com&transaction=otp_1&code=123456"))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
-	if w.Code != http.StatusSeeOther || !strings.Contains(w.Header().Get("Location"), "alpha.apps.tiny.test/_tiny/auth/callback") {
+	if w.Code != http.StatusSeeOther || !strings.Contains(w.Header().Get("Location"), "alpha.apps.tinker.test/_tinker/auth/callback") {
 		t.Fatalf("verify status=%d location=%q", w.Code, w.Header().Get("Location"))
 	}
 	var global *http.Cookie
@@ -120,11 +120,11 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 
 	betaState, betaHandoff := start(beta, preservedReturn)
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(betaHandoff), nil)
-	r.Host = "tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(betaHandoff), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(global)
 	platform.ServeHTTP(w, r)
-	if w.Code != http.StatusSeeOther || !strings.Contains(w.Header().Get("Location"), "beta.apps.tiny.test/_tiny/auth/callback") || store.requests != 1 {
+	if w.Code != http.StatusSeeOther || !strings.Contains(w.Header().Get("Location"), "beta.apps.tinker.test/_tinker/auth/callback") || store.requests != 1 {
 		t.Fatalf("second app status=%d location=%q provider requests=%d", w.Code, w.Header().Get("Location"), store.requests)
 	}
 	if app := callback(beta, betaState, betaHandoff); app == nil || app.Value == "" {
@@ -133,17 +133,17 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 
 	_, deniedHandoff := start(denied, "/report?tab=1")
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(deniedHandoff), nil)
-	r.Host = "tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(deniedHandoff), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(global)
 	platform.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "viewer@example.com") || !strings.Contains(w.Body.String(), "Use another email") || strings.Contains(w.Body.String(), "allowlist") {
 		t.Fatalf("denied page status=%d body=%q", w.Code, w.Body.String())
 	}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/use-another", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/use-another", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
@@ -151,9 +151,9 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 		t.Fatalf("switch page status=%d force=%v closed=%v body=%q", w.Code, store.handoffs[deniedHandoff].ForceLogin, closed, w.Body.String())
 	}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/otp", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)+"&email=other%40example.com"))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/otp", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)+"&email=other%40example.com"))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
@@ -163,9 +163,9 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	// The old global identity is replaced only after a successful OTP. The
 	// persistence result's child refs are then forwarded to live revocation.
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/verify", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)+"&email=other%40example.com&transaction=otp_2&code=123456"))
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/verify", strings.NewReader("handoff="+url.QueryEscape(deniedHandoff)+"&email=other%40example.com&transaction=otp_2&code=123456"))
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(global)
 	r.AddCookie(binding)
@@ -178,21 +178,21 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 func TestIdentityBrokerPlatformLoginIssuesTheSameIdentityUsedForAppHandoffs(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := IdentityBroker{Store: store, PlatformHost: "admin.apps.tiny.test", AppSuffix: "apps.tiny.test", HMACKey: []byte("test"), Now: func() time.Time { return now }}
+	b := IdentityBroker{Store: store, PlatformHost: "admin.apps.tinker.test", AppSuffix: "apps.tinker.test", HMACKey: []byte("test"), Now: func() time.Time { return now }}
 	h := b.PlatformHandler(http.NotFoundHandler())
 
 	page := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/login", nil)
-	r.Host = "admin.apps.tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
+	r.Host = "admin.apps.tinker.test"
 	h.ServeHTTP(page, r)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Sign in to TinyHost") {
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Sign in to Tinkercloud") {
 		t.Fatalf("platform login page status=%d body=%q", page.Code, page.Body.String())
 	}
 	binding := browserBindingCookieFrom(t, page.Result().Cookies())
 	request := httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/login", strings.NewReader("email=viewer%40example.test"))
-	r.Host = "admin.apps.tiny.test"
-	r.Header.Set("Origin", "https://admin.apps.tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/login", strings.NewReader("email=viewer%40example.test"))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	h.ServeHTTP(request, r)
@@ -200,9 +200,9 @@ func TestIdentityBrokerPlatformLoginIssuesTheSameIdentityUsedForAppHandoffs(t *t
 		t.Fatalf("platform OTP request status=%d body=%q", request.Code, request.Body.String())
 	}
 	verify := httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/login/verify", strings.NewReader("email=viewer%40example.test&transaction=pid_1&code=123456"))
-	r.Host = "admin.apps.tiny.test"
-	r.Header.Set("Origin", "https://admin.apps.tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/login/verify", strings.NewReader("email=viewer%40example.test&transaction=pid_1&code=123456"))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.AddCookie(binding)
 	h.ServeHTTP(verify, r)
@@ -217,17 +217,17 @@ func TestIdentityBrokerPlatformLoginIssuesTheSameIdentityUsedForAppHandoffs(t *t
 	app := apps.App{ID: "app-alpha", Slug: "alpha"}
 	login := Login{IdentityBroker: &b}
 	start := httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "https://alpha.apps.tiny.test/_tiny/auth/login?return=/projects/42%3Ftag%3Da%26tag%3Db%26next%3D%252Ffoo%253Fx%253D1", nil)
-	r.Host = "alpha.apps.tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "https://alpha.apps.tinker.test/_tinker/auth/login?return=/projects/42%3Ftag%3Da%26tag%3Db%26next%3D%252Ffoo%253Fx%253D1", nil)
+	r.Host = "alpha.apps.tinker.test"
 	login.DispatchPreAuth(app, gateway.AppLogin, start, r)
 	u, _ := url.Parse(start.Header().Get("Location"))
 	handoff := u.Query().Get("handoff")
 	appIdentity := httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
-	r.Host = "admin.apps.tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
+	r.Host = "admin.apps.tinker.test"
 	r.AddCookie(global)
 	h.ServeHTTP(appIdentity, r)
-	if appIdentity.Code != http.StatusSeeOther || !strings.Contains(appIdentity.Header().Get("Location"), "alpha.apps.tiny.test/_tiny/auth/callback") || store.requests != 0 {
+	if appIdentity.Code != http.StatusSeeOther || !strings.Contains(appIdentity.Header().Get("Location"), "alpha.apps.tinker.test/_tinker/auth/callback") || store.requests != 0 {
 		t.Fatalf("global app handoff status=%d location=%q appOTPs=%d", appIdentity.Code, appIdentity.Header().Get("Location"), store.requests)
 	}
 }
@@ -246,12 +246,12 @@ func TestIdentityBrokerDashboardLogoutRequiresOriginAndCSRFThenRevokesGlobalIden
 	}{
 		{"missing-origin", "", http.StatusForbidden},
 		{"cross-origin", "https://evil.test", http.StatusForbidden},
-		{"same-origin", "https://admin.apps.tiny.test", http.StatusSeeOther},
+		{"same-origin", "https://admin.apps.tinker.test", http.StatusSeeOther},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			r := httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/logout", strings.NewReader("csrf=gis_test.csrf-value"))
-			r.Host = "admin.apps.tiny.test"
+			r := httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/logout", strings.NewReader("csrf=gis_test.csrf-value"))
+			r.Host = "admin.apps.tinker.test"
 			if tc.origin != "" {
 				r.Header.Set("Origin", tc.origin)
 			}
@@ -274,15 +274,15 @@ func TestIdentityBrokerDashboardLogoutRequiresOriginAndCSRFThenRevokesGlobalIden
 func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	platform := b.PlatformHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }))
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	platform.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `name="email"`) {
 		t.Fatalf("initial identity page status=%d body=%q", w.Code, w.Body.String())
@@ -296,8 +296,8 @@ func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testin
 	// host. The identity page remains the generic email form rather than
 	// authorizing this handoff.
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `name="email"`) || w.Header().Get("Location") != "" || store.handoffs[h.ID].AuthorizedAt != nil {
@@ -308,7 +308,7 @@ func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testin
 	// routes outside the fixed broker namespace still delegate unchanged.
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/dashboard", nil)
-	r.Host = "tiny.test"
+	r.Host = "tinker.test"
 	r.AddCookie(binding)
 	platform.ServeHTTP(w, r)
 	if w.Code != http.StatusTeapot {
@@ -316,8 +316,8 @@ func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testin
 	}
 	login := Login{IdentityBroker: b}
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodGet, "/_tiny/auth/callback?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "alpha.apps.tiny.test"
+	r = httptest.NewRequest(http.MethodGet, "/_tinker/auth/callback?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "alpha.apps.tinker.test"
 	r.AddCookie(binding)
 	login.DispatchPreAuth(apps.App{ID: "app-alpha", Slug: "alpha"}, gateway.AppIdentityCallback, w, r)
 	if w.Code/100 == 3 || strings.Contains(w.Header().Get("Set-Cookie"), sessions.AppCookieName) {
@@ -328,7 +328,7 @@ func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testin
 func TestIdentityBrokerOTPRejectsMissingOrMismatchedBrowserBinding(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -337,8 +337,8 @@ func TestIdentityBrokerOTPRejectsMissingOrMismatchedBrowserBinding(t *testing.T)
 	post := func(path, body string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
-		r.Host = "tiny.test"
-		r.Header.Set("Origin", "https://tiny.test")
+		r.Host = "tinker.test"
+		r.Header.Set("Origin", "https://tinker.test")
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		for _, c := range cookies {
 			r.AddCookie(c)
@@ -347,21 +347,21 @@ func TestIdentityBrokerOTPRejectsMissingOrMismatchedBrowserBinding(t *testing.T)
 		return w
 	}
 	body := "handoff=" + url.QueryEscape(h.ID) + "&email=viewer%40example.com"
-	if w := post("/_tiny/identity/otp", body); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sign-in needs another try") || store.requests != 0 {
+	if w := post("/_tinker/identity/otp", body); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sign-in needs another try") || store.requests != 0 {
 		t.Fatalf("missing binding request status=%d requests=%d body=%q", w.Code, store.requests, w.Body.String())
 	}
 
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	platform.ServeHTTP(w, r)
 	binding := browserBindingCookieFrom(t, w.Result().Cookies())
-	if w = post("/_tiny/identity/otp", body, binding); w.Code != http.StatusOK || store.requests != 1 {
+	if w = post("/_tinker/identity/otp", body, binding); w.Code != http.StatusOK || store.requests != 1 {
 		t.Fatalf("bound request status=%d requests=%d", w.Code, store.requests)
 	}
 	wrong := &http.Cookie{Name: BrowserBindingCookieName, Value: "bb_wrong"}
 	verify := body + "&transaction=otp_1&code=123456"
-	if w = post("/_tiny/identity/verify", verify, wrong); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sign-in needs another try") || hasCookie(w.Result().Cookies(), GlobalIdentityCookieName) || store.handoffs[h.ID].AuthorizedAt != nil {
+	if w = post("/_tinker/identity/verify", verify, wrong); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Sign-in needs another try") || hasCookie(w.Result().Cookies(), GlobalIdentityCookieName) || store.handoffs[h.ID].AuthorizedAt != nil {
 		t.Fatalf("mismatched binding verify status=%d cookies=%v handoff=%+v body=%q", w.Code, w.Result().Cookies(), store.handoffs[h.ID], w.Body.String())
 	}
 }
@@ -409,10 +409,10 @@ func TestBrokerStoreBindingGroupsConcurrentDifferentEmails(t *testing.T) {
 }
 
 func TestConfiguredIdentityBrokerFailsClosedInsteadOfLegacyAppLogin(t *testing.T) {
-	l := Login{IdentityBroker: &IdentityBroker{Domain: "apps.tiny.test"}}
+	l := Login{IdentityBroker: &IdentityBroker{Domain: "apps.tinker.test"}}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/auth/login?return=%2F", nil)
-	r.Host = "alpha.apps.tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/auth/login?return=%2F", nil)
+	r.Host = "alpha.apps.tinker.test"
 	l.DispatchPreAuth(apps.App{ID: "app-alpha", Slug: "alpha"}, gateway.AppLogin, w, r)
 	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), `name="email"`) {
 		t.Fatalf("configured broker fallback status=%d body=%q", w.Code, w.Body.String())
@@ -424,8 +424,8 @@ func TestPlatformLoginWithViewerIdentityAndNoDashboardRoleDoesNotLoop(t *testing
 	store := dashboardDeniedBrokerStore{brokerStore: *newBrokerStore(now)}
 	b := IdentityBroker{Store: &store, Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/login", nil)
-	r.Host = "admin.apps.tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
+	r.Host = "admin.apps.tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
 	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), "This account cannot use the dashboard.") || !strings.Contains(w.Body.String(), "viewer@example.com") {
@@ -445,14 +445,14 @@ func TestPlatformLoginWithViewerIdentityAndNoDashboardRoleDoesNotLoop(t *testing
 func TestIdentityBrokerRotationSetsReplacementPlatformCookie(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "rotate"})
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
 	if w.Code != http.StatusSeeOther {
@@ -474,10 +474,10 @@ func TestIdentityBrokerClosesChildrenAfterRotatedTokenReplayRevocation(t *testin
 		t.Fatal(err)
 	}
 	var closed []persistence.AppSessionRef
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }, RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }, RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) }}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "replay"})
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `name="email"`) || len(closed) != 1 || closed[0].AppID != "app-alpha" || w.Header().Get("Location") != "" || !expiredIdentityCookie(w.Result().Cookies()) {
@@ -492,10 +492,10 @@ func TestIdentityBrokerInvalidIdentityCookieClearsBeforeGenericReauth(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "invalid"})
 	r.AddCookie(&http.Cookie{Name: BrowserBindingCookieName, Value: "bb_existing_profile"})
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
@@ -512,10 +512,10 @@ func TestIdentityBrokerIdentityPersistenceFailurePreservesCookieAndDeniesOTP(t *
 		t.Fatal(err)
 	}
 	store := failingValidateBrokerStore{brokerStore: base}
-	b := &IdentityBroker{Store: &store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: &store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
-	r.Host = "tiny.test"
+	r := httptest.NewRequest(http.MethodGet, "/_tinker/identity?handoff="+url.QueryEscape(h.ID), nil)
+	r.Host = "tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
 	if w.Code != http.StatusServiceUnavailable || w.Header().Get("Set-Cookie") != "" || !strings.Contains(w.Body.String(), "Your access has not changed") || strings.Contains(w.Body.String(), `name="email"`) || base.requests != 0 {
@@ -526,7 +526,7 @@ func TestIdentityBrokerIdentityPersistenceFailurePreservesCookieAndDeniesOTP(t *
 func TestIdentityBrokerOTPPostRequiresExactPlatformOrigin(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -535,13 +535,13 @@ func TestIdentityBrokerOTPPostRequiresExactPlatformOrigin(t *testing.T) {
 	for _, test := range []struct {
 		name, path, body string
 	}{
-		{name: "request-missing-origin", path: "/_tiny/identity/otp", body: "handoff=" + url.QueryEscape(h.ID) + "&email=viewer%40example.com"},
-		{name: "verify-cross-origin", path: "/_tiny/identity/verify", body: "handoff=" + url.QueryEscape(h.ID) + "&email=viewer%40example.com&transaction=otp_1&code=123456"},
+		{name: "request-missing-origin", path: "/_tinker/identity/otp", body: "handoff=" + url.QueryEscape(h.ID) + "&email=viewer%40example.com"},
+		{name: "verify-cross-origin", path: "/_tinker/identity/verify", body: "handoff=" + url.QueryEscape(h.ID) + "&email=viewer%40example.com&transaction=otp_1&code=123456"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
-			r.Host = "tiny.test"
+			r.Host = "tinker.test"
 			if test.name == "verify-cross-origin" {
 				r.Header.Set("Origin", "https://evil.test")
 			}
@@ -566,12 +566,12 @@ func TestIdentityBrokerHandoffCreationIsSeparatelyRateLimited(t *testing.T) {
 	})
 	limits.SetClock(func() time.Time { return now })
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", RateLimits: limits, Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tinker.test", RateLimits: limits, Now: func() time.Time { return now }}
 	login := Login{IdentityBroker: b}
 	for attempt := 0; attempt < 2; attempt++ {
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/_tiny/auth/login?return=%2F", nil)
-		r.Host = "alpha.apps.tiny.test"
+		r := httptest.NewRequest(http.MethodGet, "/_tinker/auth/login?return=%2F", nil)
+		r.Host = "alpha.apps.tinker.test"
 		r.RemoteAddr = "203.0.113.11:1234"
 		login.DispatchPreAuth(apps.App{ID: "app-alpha", Slug: "alpha"}, gateway.AppLogin, w, r)
 		if attempt == 0 && w.Code != http.StatusSeeOther {
@@ -594,9 +594,9 @@ func TestIdentityBrokerGlobalLogoutFailsClosedOnPersistenceFailure(t *testing.T)
 	b := &IdentityBroker{Store: &store, Now: func() time.Time { return now }, RevokeChildren: func([]persistence.AppSessionRef) { closed++ }}
 	binding := &http.Cookie{Name: BrowserBindingCookieName, Value: "bb_stable_profile"}
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodPost, "/_tiny/identity/logout", nil)
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r := httptest.NewRequest(http.MethodPost, "/_tinker/identity/logout", nil)
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
 	r.AddCookie(binding)
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
@@ -606,9 +606,9 @@ func TestIdentityBrokerGlobalLogoutFailsClosedOnPersistenceFailure(t *testing.T)
 
 	store.err = nil
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/logout", nil)
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/logout", nil)
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
 	r.AddCookie(binding)
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
@@ -618,9 +618,9 @@ func TestIdentityBrokerGlobalLogoutFailsClosedOnPersistenceFailure(t *testing.T)
 
 	store.err = persistence.ErrIdentity
 	w = httptest.NewRecorder()
-	r = httptest.NewRequest(http.MethodPost, "/_tiny/identity/logout", nil)
-	r.Host = "tiny.test"
-	r.Header.Set("Origin", "https://tiny.test")
+	r = httptest.NewRequest(http.MethodPost, "/_tinker/identity/logout", nil)
+	r.Host = "tinker.test"
+	r.Header.Set("Origin", "https://tinker.test")
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "stale"})
 	r.AddCookie(binding)
 	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
@@ -642,9 +642,9 @@ func TestIdentityBrokerGlobalLogoutFallsBackToBrowserBinding(t *testing.T) {
 		closed := 0
 		b := &IdentityBroker{Store: store, Now: func() time.Time { return now }, RevokeChildren: func([]persistence.AppSessionRef) { closed++ }}
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/_tiny/identity/logout", nil)
-		r.Host = "tiny.test"
-		r.Header.Set("Origin", "https://tiny.test")
+		r := httptest.NewRequest(http.MethodPost, "/_tinker/identity/logout", nil)
+		r.Host = "tinker.test"
+		r.Header.Set("Origin", "https://tinker.test")
 		for _, c := range cookies {
 			r.AddCookie(c)
 		}

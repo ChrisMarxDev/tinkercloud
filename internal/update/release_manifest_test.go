@@ -28,7 +28,7 @@ func TestVerifyReleaseManifestBindsCompatibilityAndServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	server, _, _ := signedBytes(t, private, "0.1.0", []byte("server"))
-	raw := []byte(fmt.Sprintf(`{"schema":"2","version":"0.1.0","compatibility":{"server_version":"0.1.0","control_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"app_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"schema_version":"1","release_manifest_schema":"2"},"files":{"tinyhost-linux-amd64":"%s"}}`, hex.EncodeToString(server.Digest[:])))
+	raw := []byte(fmt.Sprintf(`{"schema":"2","version":"0.1.0","compatibility":{"server_version":"0.1.0","control_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"app_api":{"version":"1","client":{"min_inclusive":"0.1.0","max_exclusive":"1.0.0"}},"schema_version":"1","release_manifest_schema":"2"},"files":{"tinkercloud-linux-amd64":"%s"}}`, hex.EncodeToString(server.Digest[:])))
 	_, metadata, signature := signedBytes(t, private, "0.1.0", raw)
 	if _, err = VerifyReleaseManifest(public, raw, metadata, signature, server); err != nil {
 		t.Fatal(err)

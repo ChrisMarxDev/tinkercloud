@@ -1,6 +1,6 @@
 # Governance
 
-TinyHost currently uses a maintainer-led governance model.
+Tinkercloud currently uses a maintainer-led governance model.
 
 ## Roles
 

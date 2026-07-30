@@ -1,38 +1,38 @@
 # Local app development
 
-`tiny dev` is a development-only loopback server for static Tiny apps. It
+`tinker dev` is a development-only loopback server for static Tinkercloud apps. It
 uses normal local SQLite state and provides current viewer/app information, KV,
 basic document collections, and live KV/collection freshness notifications. It does not implement
 login, deployment, blobs, LLM/provider capabilities, or any production access
-policy. It is intentionally not a substitute for TinyHost verification.
+policy. It is intentionally not a substitute for Tinkercloud verification.
 
 Run it from an app project directory:
 
 ```sh
-tiny dev
+tinker dev
 ```
 
-When `tiny.yaml` exists, `tiny dev` serves its `build.output`; otherwise it
+When `tinker.yaml` exists, `tinker dev` serves its `build.output`; otherwise it
 serves the supplied directory (or the current directory). It prints an obvious
-development identity and URL. State is project-local at `.tiny/local/` and is
-already ignored by the repository's `.tiny/` rule. The command accepts only
+development identity and URL. State is project-local at `.tinker/local/` and is
+already ignored by the repository's `.tinker/` rule. The command accepts only
 `localhost` or numeric loopback listeners. For a second app use a different
 port:
 
 ```sh
-tiny dev ./my-app --listen 127.0.0.1:8788
+tinker dev ./my-app --listen 127.0.0.1:8788
 ```
 
-The existing SDK's `tiny.user`, `tiny.app`, `tiny.capabilities`, `tiny.kv`, and
-`tiny.live.onKvChange` work unchanged. The preview document routes are
-`tiny.db.collection("tasks")` uses the same `/_tiny/api/v1/db/{collection}`
-route shape as TinyHost: `POST` creates a server-generated document ID, while
+The existing SDK's `tinker.user`, `tinker.app`, `tinker.capabilities`, `tinker.kv`, and
+`tinker.live.onKvChange` work unchanged. The preview document routes are
+`tinker.db.collection("tasks")` uses the same `/_tinker/api/v1/db/{collection}`
+route shape as Tinkercloud: `POST` creates a server-generated document ID, while
 `GET`, `PUT`, `DELETE`, bounded listing, snapshot revisions, and
 `subscribe_collection`/`collection.changed` are available for local SDK work.
 Every KV/document mutation and its collection revision is one local SQLite
 transaction. Collection events are published only after that transaction
 commits; failed optimistic-version writes never publish an event. Treat events
-as refresh hints and let the SDK reconcile snapshots, exactly as on TinyHost.
+as refresh hints and let the SDK reconcile snapshots, exactly as on Tinkercloud.
 
 The emulator accepts one strict JSON value per mutation request and uses the
 same opaque `doc_` ID grammar as the hosted capability. It remains a local

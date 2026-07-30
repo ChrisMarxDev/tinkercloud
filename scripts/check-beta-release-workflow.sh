@@ -1,9 +1,9 @@
 #!/bin/sh
-# Static denial gates for the only pre-rename hosted-release mutation path.
+# Static denial gates for the only pre-stable hosted-release mutation path.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-workflow=${TINYHOST_BETA_WORKFLOW_FILE:-"$root/.github/workflows/beta-release.yml"}
+workflow=${TINKERCLOUD_BETA_WORKFLOW_FILE:-"$root/.github/workflows/beta-release.yml"}
 test -f "$workflow" || {
   echo "beta release workflow is unavailable" >&2
   exit 1
@@ -43,12 +43,12 @@ require 'git merge-base --is-ancestor "$source_commit" origin/main' \
   "reviewed main ancestry gate is missing"
 require 'gh release view "$tag"' "existing-release denial gate is missing"
 require 'visibility" != "PUBLIC"' "public repository gate is missing"
-require "TINYHOST_BETA_RELEASE_SIGNING_KEY_B64" "beta signing secret is missing"
-test "$(grep -c -F -- 'TINYHOST_BETA_RELEASE_SIGNING_KEY_B64' "$workflow")" = 1 || {
+require "TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64" "beta signing secret is missing"
+test "$(grep -c -F -- 'TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64' "$workflow")" = 1 || {
   echo "beta signing secret has more than one workflow exposure" >&2
   exit 1
 }
-require 'mktemp "$RUNNER_TEMP/.tinyhost-beta-release-key.XXXXXX"' \
+require 'mktemp "$RUNNER_TEMP/.tinkercloud-beta-release-key.XXXXXX"' \
   "random temporary beta-key path is missing"
 require "unset SIGNING_KEY_B64" \
   "decoded beta-key environment cleanup is missing"
@@ -64,9 +64,9 @@ require 'gh release download "$tag"' "remote draft download is missing"
 require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' \
   "remote draft asset-set comparison is missing"
 require "--latest=false" "beta latest-channel denial is missing"
-require 'TINYHOST_CLIENT_RELEASE_BASE="$release_base"' \
+require 'TINKER_RELEASE_BASE="$release_base"' \
   "public installer smoke test is missing"
-require '"$release_base/tinyhost-sdk-$VERSION.tgz"' \
+require '"$release_base/tinkercloud-sdk-$VERSION.tgz"' \
   "public SDK tarball smoke test is missing"
 
 reject '(^|[[:space:]])(npm[[:space:]]+publish|jsr[[:space:]]+publish|brew([[:space:]]|$))' \

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Hetzner One-Command Install</title>
+  <title>Tinkercloud — Hetzner One-Command Install</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
     <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
     <p class="eyebrow">Highest-priority remaining human-flow slice</p>
     <h1>Hetzner-first native deployment</h1>
-    <p class="lede">Turn a clean, dedicated Hetzner VPS into a working TinyHost
+    <p class="lede">Turn a clean, dedicated Hetzner VPS into a working Tinkercloud
       server with a thin install script and one signed server binary.</p>
     <p class="promise">The script downloads; the binary discovers, asks only
       what is necessary, generates config, validates, installs, diagnoses,
@@ -38,13 +38,13 @@
         <p class="eyebrow">Scope</p>
         <ul>
           <li>Clean Hetzner Cloud Linux VPS with systemd.</li>
-          <li>Signed <code>tinyhost</code> server binary and systemd unit.</li>
-          <li>Interactive, resumable <code>tinyhost setup</code> that derives
+          <li>Signed <code>tinkercloud</code> server binary and systemd unit.</li>
+          <li>Interactive, resumable <code>tinkercloud setup</code> that derives
             conventional hosts and generates non-secret config.</li>
           <li>Dedicated unprivileged service user and private data directory.</li>
           <li>Root-only operator recovery independent of email.</li>
           <li>Signed self-update with health-gated automatic rollback.</li>
-          <li>Separate small <code>tiny</code> client distribution.</li>
+          <li>Separate small <code>tinker</code> client distribution.</li>
         </ul>
       </section>
       <section class="half refuse">
@@ -63,14 +63,14 @@
       <h2>Small script, authoritative binary</h2>
       <pre>install.sh:
   detect architecture
-  download tinyhost
+  download tinkercloud
   verify checksum and signature
-  exec "tinyhost install-service"
+  exec "tinkercloud install-service"
 
-tinyhost init:
+tinkercloud init:
   retained explicit automation contract
 
-tinyhost setup:
+tinkercloud setup:
   discover clean host
   ask root domain + operator email
   derive admin host + app host pattern + sender

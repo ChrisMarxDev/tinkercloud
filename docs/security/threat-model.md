@@ -30,12 +30,12 @@ Protected dispatchers
   ▼
 SQLite and private filesystem
 
-TinyHost ── outbound-only HTTPS ──▶ Resend
+Tinkercloud ── outbound-only HTTPS ──▶ Resend
 Operator ── root/service boundary ─▶ host and recovery commands
 ```
 
 App JavaScript, deployed files, deployers, viewers, archives, and all network
-input are untrusted. The VPS operator and TinyHost binary/signing process are
+input are untrusted. The VPS operator and Tinkercloud binary/signing process are
 trusted in V1.
 
 ## Threat inventory
@@ -59,7 +59,7 @@ trusted in V1.
 | Secret leakage | logs contain token/OTP | structured allowlisted logging | log scanning tests |
 | Disk exhaustion | deployments/KV/blobs fill disk | quotas and watermarks | health alert; reject growth writes |
 | Malicious/broken update | compromised or incompatible binary | signature, compatibility gate, local rollback state | post-restart health gate |
-| Direct origin bypass | alternate TinyHost process/port | process-level TCP 80/443 bind confinement plus operator-owned firewall | TinyHost-owned socket inventory check |
+| Direct origin bypass | alternate Tinkercloud process/port | process-level TCP 80/443 bind confinement plus operator-owned firewall | Tinkercloud-owned socket inventory check |
 | Supply-chain compromise | unsafe dependency/update | pin, scan, sign, reproduce | release provenance |
 | Secret disclosure | provider key reaches app bundle/browser/log | server-only connection store; no read-secret API | secret scanning and audited rotations |
 | Confused deputy | app uses shared Jira/LLM credential too broadly | explicit app grant and operation/resource scopes | per-connection/app audit |
@@ -92,7 +92,7 @@ as private attachment responses with MIME sniffing disabled.
 
 ### Future operator-managed capabilities
 
-Provider credentials never cross into browser code. TinyHost resolves an
+Provider credentials never cross into browser code. Tinkercloud resolves an
 operator connection only after app/viewer authorization, effective grant,
 operation/resource scope, quota, and destination checks. Early capability
 adapters are narrow and typed; a generic secret-injecting HTTP proxy is outside

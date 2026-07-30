@@ -308,7 +308,7 @@ func (c Config) Validate() error {
 	if !validDomain(c.Domain) || c.SessionCookie == "" {
 		return fmt.Errorf("domain and session cookie are required")
 	}
-	if c.SessionCookie != "__Host-tiny_app" {
+	if c.SessionCookie != "__Host-tinker_app" {
 		return fmt.Errorf("app session cookie must use the __Host- contract")
 	}
 	if c.UpdateReleaseBase != "" {

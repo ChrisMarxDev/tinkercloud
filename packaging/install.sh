@@ -38,8 +38,8 @@ PY
 base64 -d <"$signature" >"$work/signature" || { echo "artifact signature invalid" >&2; exit 1; }
 test "$(wc -c <"$work/signature" | tr -d ' ')" = 64 || { echo "artifact signature invalid" >&2; exit 1; }
 openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$work/signed" -sigfile "$work/signature" >/dev/null 2>&1 || { echo "artifact signature invalid" >&2; exit 1; }
-install -m 0755 "$1" /usr/local/bin/tinyhost
+install -m 0755 "$1" /usr/local/bin/tinkercloud
 base=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-install -m 0644 "$base/systemd/tinyhost.service" /etc/systemd/system/tinyhost.service
+install -m 0644 "$base/systemd/tinkercloud.service" /etc/systemd/system/tinkercloud.service
 systemctl daemon-reload
-echo "Run: tinyhost init"
+echo "Run: tinkercloud init"

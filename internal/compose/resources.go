@@ -5,12 +5,12 @@ package compose
 // none of its write gate.
 
 import (
-	"github.com/tinyhost/tiny/internal/archive"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/operations"
-	"github.com/tinyhost/tiny/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/archive"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
 )
 
 type ResourceControls struct {

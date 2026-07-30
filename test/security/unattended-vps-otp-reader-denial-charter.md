@@ -1,6 +1,6 @@
 # Unattended VPS OTP reader denial charter
 
-The local Resend reader is test infrastructure outside the TinyHost production
+The local Resend reader is test infrastructure outside the Tinkercloud production
 trust boundary. Before reporting unattended VPS acceptance ready, prove that:
 
 - the reader is invoked only with `deployer|viewer EMAIL HOSTNAME`, validates
@@ -13,7 +13,7 @@ trust boundary. Before reporting unattended VPS acceptance ready, prove that:
 - empty, malformed, non-2xx, oversized, or structurally ambiguous provider
   responses fail closed without emitting an OTP;
 - a message must match exactly the requested recipient, configured sender,
-  exact TinyHost subject, bounded recent window, and exact text form
+  exact Tinkercloud subject, bounded recent window, and exact text form
   `Your code: NNNN...`; unrelated, stale, malformed, HTML-only, or multi-code
   messages are rejected;
 - more than one eligible unconsumed message denies rather than guessing; a
@@ -23,5 +23,5 @@ trust boundary. Before reporting unattended VPS acceptance ready, prove that:
   stdout, stderr, test reports, Git, or the VPS; and
 - the VPS acceptance gate, exact target acknowledgement, strict pinned SSH
   trust, and reuse marker remain mandatory. The reader is never an OTP bypass:
-  TinyHost still sends, verifies, and consumes a real OTP through its normal
+  Tinkercloud still sends, verifies, and consumes a real OTP through its normal
   gateway flow.

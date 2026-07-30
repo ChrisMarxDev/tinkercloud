@@ -10,7 +10,7 @@ import (
 )
 
 // Envelope keeps the host root outside SQLite. Production composition injects
-// it from TinyHost's root-owned credential boundary; tests inject a fixed root.
+// it from Tinkercloud's root-owned credential boundary; tests inject a fixed root.
 type Envelope interface {
 	Seal(context.Context, []byte) ([]byte, error)
 	Open(context.Context, []byte) ([]byte, error)

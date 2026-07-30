@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // Login implements the only app-host pre-authentication routes left in the
@@ -98,7 +98,7 @@ func (l Login) appLogout(app apps.App, w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessions.AppCookieName, Value: "", Path: "/", MaxAge: -1, Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	if form {
-		http.Redirect(w, r, "/_tiny/auth/login?return="+url.QueryEscape(ret), http.StatusSeeOther)
+		http.Redirect(w, r, "/_tinker/auth/login?return="+url.QueryEscape(ret), http.StatusSeeOther)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

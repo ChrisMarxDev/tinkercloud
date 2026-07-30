@@ -30,15 +30,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/client"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/client"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
 const (
-	EnvEnabled     = "TINYHOST_VPS_E2E"
-	EnvTarget      = "TINYHOST_VPS_SSH_TARGET"
-	EnvAcknowledge = "TINYHOST_VPS_ACKNOWLEDGE"
-	EnvKnownHosts  = "TINYHOST_VPS_KNOWN_HOSTS_FILE"
+	EnvEnabled     = "TINKERCLOUD_VPS_E2E"
+	EnvTarget      = "TINKERCLOUD_VPS_SSH_TARGET"
+	EnvAcknowledge = "TINKERCLOUD_VPS_ACKNOWLEDGE"
+	EnvKnownHosts  = "TINKERCLOUD_VPS_KNOWN_HOSTS_FILE"
 
 	initReadinessAttempts = 8
 	initReadinessDelay    = 15 * time.Second
@@ -91,15 +91,15 @@ type Config struct {
 // would defeat the purpose of an SSH acceptance check.
 func LoadConfig(getenv func(string) string) (Config, error) {
 	if getenv(EnvEnabled) != "1" {
-		return Config{}, errors.New("VPS E2E is disabled; set TINYHOST_VPS_E2E=1")
+		return Config{}, errors.New("VPS E2E is disabled; set TINKERCLOUD_VPS_E2E=1")
 	}
 	c := Config{
-		Target: strings.TrimSpace(getenv(EnvTarget)), Port: strings.TrimSpace(getenv("TINYHOST_VPS_SSH_PORT")), IdentityFile: strings.TrimSpace(getenv("TINYHOST_VPS_SSH_IDENTITY_FILE")), KnownHosts: strings.TrimSpace(getenv(EnvKnownHosts)),
-		Domain:        strings.TrimSpace(getenv("TINYHOST_VPS_DOMAIN")),
-		OperatorEmail: strings.TrimSpace(getenv("TINYHOST_VPS_OPERATOR_EMAIL")), DeployerEmail: strings.TrimSpace(getenv("TINYHOST_VPS_DEPLOYER_EMAIL")), ViewerEmail: strings.TrimSpace(getenv("TINYHOST_VPS_VIEWER_EMAIL")),
-		EmailFrom: strings.TrimSpace(getenv("TINYHOST_VPS_EMAIL_FROM")), ACMEEmail: strings.TrimSpace(getenv("TINYHOST_VPS_ACME_EMAIL")), ResendKeyFile: strings.TrimSpace(getenv("TINYHOST_VPS_RESEND_API_KEY_FILE")), OTPCommand: strings.TrimSpace(getenv("TINYHOST_VPS_OTP_COMMAND")), ReleaseDir: strings.TrimSpace(getenv("TINYHOST_VPS_RELEASE_DIR")), Reuse: getenv("TINYHOST_VPS_REUSE") == "1",
+		Target: strings.TrimSpace(getenv(EnvTarget)), Port: strings.TrimSpace(getenv("TINKERCLOUD_VPS_SSH_PORT")), IdentityFile: strings.TrimSpace(getenv("TINKERCLOUD_VPS_SSH_IDENTITY_FILE")), KnownHosts: strings.TrimSpace(getenv(EnvKnownHosts)),
+		Domain:        strings.TrimSpace(getenv("TINKERCLOUD_VPS_DOMAIN")),
+		OperatorEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_OPERATOR_EMAIL")), DeployerEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_DEPLOYER_EMAIL")), ViewerEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_VIEWER_EMAIL")),
+		EmailFrom: strings.TrimSpace(getenv("TINKERCLOUD_VPS_EMAIL_FROM")), ACMEEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_ACME_EMAIL")), ResendKeyFile: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RESEND_API_KEY_FILE")), OTPCommand: strings.TrimSpace(getenv("TINKERCLOUD_VPS_OTP_COMMAND")), ReleaseDir: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RELEASE_DIR")), Reuse: getenv("TINKERCLOUD_VPS_REUSE") == "1",
 	}
-	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINYHOST_VPS_DOMAIN": c.Domain, "TINYHOST_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINYHOST_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINYHOST_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINYHOST_VPS_EMAIL_FROM": c.EmailFrom, "TINYHOST_VPS_ACME_EMAIL": c.ACMEEmail, "TINYHOST_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
+	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINKERCLOUD_VPS_DOMAIN": c.Domain, "TINKERCLOUD_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINKERCLOUD_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINKERCLOUD_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINKERCLOUD_VPS_EMAIL_FROM": c.EmailFrom, "TINKERCLOUD_VPS_ACME_EMAIL": c.ACMEEmail, "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
 		if value == "" || strings.ContainsAny(value, "\r\n\x00") {
 			return Config{}, fmt.Errorf("%s is required and must be a single line", name)
 		}
@@ -238,7 +238,7 @@ func (s *Suite) remoteOutput(ctx context.Context, argv ...string) ([]byte, error
 }
 
 func (s *Suite) initState(ctx context.Context) (operations.InitState, error) {
-	out, err := s.remoteOutput(ctx, "cat", "/etc/tinyhost/init-state.json")
+	out, err := s.remoteOutput(ctx, "cat", "/etc/tinkercloud/init-state.json")
 	if err != nil {
 		return operations.InitState{}, fmt.Errorf("read init state: %w", err)
 	}
@@ -298,7 +298,7 @@ func (s *Suite) initWithReadinessRetry(ctx context.Context, argv ...string) erro
 		if err == nil {
 			return nil
 		}
-		if strings.TrimSpace(string(out)) != "tinyhost: public_health_failed" {
+		if strings.TrimSpace(string(out)) != "tinkercloud: public_health_failed" {
 			return remoteError(err, out)
 		}
 		state, stateErr := s.initState(ctx)
@@ -344,20 +344,20 @@ func (s *Suite) copy(ctx context.Context, local, remote string) error {
 
 func (s *Suite) cleanGuard(ctx context.Context) error {
 	if s.Config.Reuse {
-		out, err := s.remoteOutput(ctx, "cat", "/var/lib/tinyhost-vps-e2e/marker")
+		out, err := s.remoteOutput(ctx, "cat", "/var/lib/tinkercloud-vps-e2e/marker")
 		if err != nil || string(out) != s.reuseMarker() {
-			return errors.New("reuse refused: matching TinyHost VPS E2E marker is required")
+			return errors.New("reuse refused: matching Tinkercloud VPS E2E marker is required")
 		}
 		return nil
 	}
 	// The ACME cache is deliberately not application state. A previous
 	// disposable run may leave its account and still-valid certificates at the
 	// fixed cache path so another clean install for the same domain does not
-	// needlessly consume public CA issuance capacity. `tinyhost init` still
+	// needlessly consume public CA issuance capacity. `tinkercloud init` still
 	// applies the normal no-symlink/path checks before trusting that directory.
-	for _, p := range []string{"/etc/tinyhost", "/var/lib/tinyhost", "/usr/local/bin/tinyhost", "/etc/systemd/system/tinyhost.service"} {
+	for _, p := range []string{"/etc/tinkercloud", "/var/lib/tinkercloud", "/usr/local/bin/tinkercloud", "/etc/systemd/system/tinkercloud.service"} {
 		if err := s.remote(ctx, "test", "!", "-e", p); err != nil {
-			return fmt.Errorf("host is not clean (%s exists); set TINYHOST_VPS_REUSE=1 only for a disposable existing TinyHost host: %w", p, err)
+			return fmt.Errorf("host is not clean (%s exists); set TINKERCLOUD_VPS_REUSE=1 only for a disposable existing Tinkercloud host: %w", p, err)
 		}
 	}
 	return nil
@@ -371,7 +371,7 @@ func tempSecret(dir string) (string, error) {
 	if _, e := rand.Read(b); e != nil {
 		return "", e
 	}
-	p := filepath.Join(dir, "tinyhost-hmac.key")
+	p := filepath.Join(dir, "tinkercloud-hmac.key")
 	return p, os.WriteFile(p, []byte(hex.EncodeToString(b)+"\n"), 0600)
 }
 func randomID() (string, error) {
@@ -390,12 +390,12 @@ func (s *Suite) Run(ctx context.Context) error {
 		return errors.New("VPS E2E build host must provide Go cross compilation")
 	}
 	if s.Config.Reuse && s.Config.ReleaseDir == "" {
-		return errors.New("reuse requires TINYHOST_VPS_RELEASE_DIR so the current build can be verified and health-gated")
+		return errors.New("reuse requires TINKERCLOUD_VPS_RELEASE_DIR so the current build can be verified and health-gated")
 	}
 	dir := s.Temp
 	if dir == "" {
 		var e error
-		dir, e = os.MkdirTemp("", "tinyhost-vps-e2e-")
+		dir, e = os.MkdirTemp("", "tinkercloud-vps-e2e-")
 		if e != nil {
 			return e
 		}
@@ -423,7 +423,7 @@ func (s *Suite) Run(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	remoteDir := "/root/tinyhost-vps-e2e-" + id
+	remoteDir := "/root/tinkercloud-vps-e2e-" + id
 	// This directory is generated from crypto/rand and is the only remote path
 	// the suite removes. Clean it on both success and failure so copied provider
 	// and HMAC secrets never become debugging residue.
@@ -439,15 +439,15 @@ func (s *Suite) Run(ctx context.Context) error {
 		return err
 	}
 	files := []stagedFile{
-		{filepath.Join(release, "tinyhost-linux-amd64"), remoteDir + "/tinyhost-linux-amd64"},
-		{filepath.Join(release, "tinyhost-linux-amd64.metadata.json"), remoteDir + "/tinyhost-linux-amd64.metadata.json"},
-		{filepath.Join(release, "tinyhost-linux-amd64.signature"), remoteDir + "/tinyhost-linux-amd64.signature"},
+		{filepath.Join(release, "tinkercloud-linux-amd64"), remoteDir + "/tinkercloud-linux-amd64"},
+		{filepath.Join(release, "tinkercloud-linux-amd64.metadata.json"), remoteDir + "/tinkercloud-linux-amd64.metadata.json"},
+		{filepath.Join(release, "tinkercloud-linux-amd64.signature"), remoteDir + "/tinkercloud-linux-amd64.signature"},
 	}
 	if !s.Config.Reuse {
 		files = append(files,
 			stagedFile{prepared.publicKey, remoteDir + "/packaging/release-public-key.pem"},
 			stagedFile{repoPath("packaging", "install.sh"), remoteDir + "/packaging/install.sh"},
-			stagedFile{repoPath("packaging", "systemd", "tinyhost.service"), remoteDir + "/packaging/systemd/tinyhost.service"},
+			stagedFile{repoPath("packaging", "systemd", "tinkercloud.service"), remoteDir + "/packaging/systemd/tinkercloud.service"},
 			stagedFile{s.Config.ResendKeyFile, remoteDir + "/resend.key"},
 			stagedFile{hmac, remoteDir + "/hmac.key"},
 			stagedFile{markerPath, remoteDir + "/marker"},
@@ -468,26 +468,26 @@ func (s *Suite) Run(ctx context.Context) error {
 		}
 	}
 	if !s.Config.Reuse {
-		if err = s.remote(ctx, "/bin/sh", remoteDir+"/packaging/install.sh", remoteDir+"/tinyhost-linux-amd64", remoteDir+"/tinyhost-linux-amd64.metadata.json", remoteDir+"/tinyhost-linux-amd64.signature"); err != nil {
+		if err = s.remote(ctx, "/bin/sh", remoteDir+"/packaging/install.sh", remoteDir+"/tinkercloud-linux-amd64", remoteDir+"/tinkercloud-linux-amd64.metadata.json", remoteDir+"/tinkercloud-linux-amd64.signature"); err != nil {
 			return err
 		}
-		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinyhost", "init", "--non-interactive", "--domain", s.Config.Domain, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--acme-email", s.Config.ACMEEmail, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
+		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinkercloud", "init", "--non-interactive", "--domain", s.Config.Domain, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--acme-email", s.Config.ACMEEmail, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
 			return err
 		}
-		if err = s.remote(ctx, "mkdir", "-m", "0700", "/var/lib/tinyhost-vps-e2e"); err != nil {
+		if err = s.remote(ctx, "mkdir", "-m", "0700", "/var/lib/tinkercloud-vps-e2e"); err != nil {
 			return err
 		}
-		if err = s.remote(ctx, "install", "-m", "0600", remoteDir+"/marker", "/var/lib/tinyhost-vps-e2e/marker"); err != nil {
+		if err = s.remote(ctx, "install", "-m", "0600", remoteDir+"/marker", "/var/lib/tinkercloud-vps-e2e/marker"); err != nil {
 			return err
 		}
 	}
-	if err = s.remote(ctx, "/usr/local/bin/tinyhost", "doctor", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+	if err = s.remote(ctx, "/usr/local/bin/tinkercloud", "doctor", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
 		return err
 	}
 	if err = s.socketInventory(ctx); err != nil {
 		return err
 	}
-	if err = s.remote(ctx, "/usr/local/bin/tinyhost", "deployers", "authorize", s.Config.DeployerEmail); err != nil {
+	if err = s.remote(ctx, "/usr/local/bin/tinkercloud", "deployers", "authorize", s.Config.DeployerEmail); err != nil {
 		return err
 	}
 	return s.exercise(ctx, remoteDir)
@@ -554,10 +554,10 @@ func prepareRelease(ctx context.Context, dir, supplied string) (preparedRelease,
 	if e != nil {
 		return preparedRelease{}, e
 	}
-	if e := commandEnv(ctx, []string{"TINYHOST_RELEASE_SIGNING_KEY=" + key, "TINYHOST_RELEASE_PUBLIC_KEY=" + pub}, repoPath("scripts", "release-build.sh"), version, out); e != nil {
+	if e := commandEnv(ctx, []string{"TINKERCLOUD_RELEASE_SIGNING_KEY=" + key, "TINKERCLOUD_RELEASE_PUBLIC_KEY=" + pub}, repoPath("scripts", "release-build.sh"), version, out); e != nil {
 		return preparedRelease{}, e
 	}
-	if e := commandEnv(ctx, []string{"TINYHOST_RELEASE_PUBLIC_KEY=" + pub}, repoPath("scripts", "release-verify.sh"), out); e != nil {
+	if e := commandEnv(ctx, []string{"TINKERCLOUD_RELEASE_PUBLIC_KEY=" + pub}, repoPath("scripts", "release-verify.sh"), out); e != nil {
 		return preparedRelease{}, e
 	}
 	return preparedRelease{dir: out, publicKey: pub}, nil
@@ -618,7 +618,7 @@ func readOTP(ctx context.Context, c Config, purpose, email, host string) (string
 			return code, nil
 		}
 	}
-	return "", errors.New("TINYHOST_VPS_OTP_COMMAND is required without an interactive terminal")
+	return "", errors.New("TINKERCLOUD_VPS_OTP_COMMAND is required without an interactive terminal")
 }
 
 // setTerminalEcho binds stty to the actual terminal. os/exec otherwise gives
@@ -694,7 +694,7 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err := s.anonymousBlobDenied(ctx, appHost, blobID); err != nil {
 		return err
 	}
-	if err := s.remote(ctx, "systemctl", "restart", "tinyhost.service"); err != nil {
+	if err := s.remote(ctx, "systemctl", "restart", "tinkercloud.service"); err != nil {
 		return fmt.Errorf("restart service for app-data durability check: %w", err)
 	}
 	if err := s.verifyBlobPersistsAfterRestart(ctx, viewer, appHost, blobID); err != nil {
@@ -764,7 +764,7 @@ func resetFixtureApps(ctx context.Context, c client.Client) error {
 func (s *Suite) warmCertificate(ctx context.Context, host string) error {
 	deadline := time.Now().Add(3 * time.Minute)
 	for {
-		r, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/_tiny/auth/login", nil)
+		r, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/_tinker/auth/login", nil)
 		if e == nil {
 			x, e := s.httpClient().Do(r)
 			if e == nil {
@@ -790,16 +790,16 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 	// compiled public key, stages a bounded rollback snapshot, restarts the
 	// unprivileged service, and performs its own platform plus anonymous app
 	// health checks. This is the only reuse upgrade path.
-	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "verify-artifact",
-		"--binary", remoteDir+"/tinyhost-linux-amd64",
-		"--metadata", remoteDir+"/tinyhost-linux-amd64.metadata.json",
-		"--signature", remoteDir+"/tinyhost-linux-amd64.signature"); err != nil {
+	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "verify-artifact",
+		"--binary", remoteDir+"/tinkercloud-linux-amd64",
+		"--metadata", remoteDir+"/tinkercloud-linux-amd64.metadata.json",
+		"--signature", remoteDir+"/tinkercloud-linux-amd64.signature"); err != nil {
 		return fmt.Errorf("reuse release is not trusted by installed server: %w", err)
 	}
-	newArgs := []string{"/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
-		"--binary", remoteDir + "/tinyhost-linux-amd64",
-		"--metadata", remoteDir + "/tinyhost-linux-amd64.metadata.json",
-		"--signature", remoteDir + "/tinyhost-linux-amd64.signature",
+	newArgs := []string{"/usr/local/bin/tinkercloud", "update", "--config", "/etc/tinkercloud/config.yaml",
+		"--binary", remoteDir + "/tinkercloud-linux-amd64",
+		"--metadata", remoteDir + "/tinkercloud-linux-amd64.metadata.json",
+		"--signature", remoteDir + "/tinkercloud-linux-amd64.signature",
 		"--release-manifest", remoteDir + "/release-manifest.json",
 		"--release-manifest-metadata", remoteDir + "/release-manifest.json.metadata.json",
 		"--release-manifest-signature", remoteDir + "/release-manifest.json.signature",
@@ -810,10 +810,10 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 		if !legacyUpdateManifestFlag.Match(bytes.TrimSpace(out)) {
 			return remoteError(err, out)
 		}
-		legacyArgs := []string{"/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
-			"--binary", remoteDir + "/tinyhost-linux-amd64",
-			"--metadata", remoteDir + "/tinyhost-linux-amd64.metadata.json",
-			"--signature", remoteDir + "/tinyhost-linux-amd64.signature",
+		legacyArgs := []string{"/usr/local/bin/tinkercloud", "update", "--config", "/etc/tinkercloud/config.yaml",
+			"--binary", remoteDir + "/tinkercloud-linux-amd64",
+			"--metadata", remoteDir + "/tinkercloud-linux-amd64.metadata.json",
+			"--signature", remoteDir + "/tinkercloud-linux-amd64.signature",
 			"--app-slug", probeSlug}
 		if legacyOut, legacyErr := s.remoteRun(ctx, legacyArgs...); legacyErr != nil {
 			return remoteError(legacyErr, legacyOut)
@@ -822,7 +822,7 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 	// Update itself restarts and health-gates its candidate. Confirm the
 	// installed current binary's doctor/version check before creating the LLM
 	// root; this prevents a compatibility fallback from masking a bad replace.
-	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "doctor", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "doctor", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
 		return fmt.Errorf("doctor after reuse update: %w", err)
 	}
 	// Reuse exercises the explicit migration path for hosts initialized before
@@ -830,13 +830,13 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 	// the suite never reads the root or credentials, and the command never
 	// prints them. A restart and normal doctor prove the updated service can use
 	// the newly provisioned root without making a provider call.
-	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "llm", "enable", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "llm", "enable", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
 		return fmt.Errorf("enable LLM root after trusted reuse update: %w", err)
 	}
-	if err := s.remote(ctx, "systemctl", "restart", "tinyhost.service"); err != nil {
+	if err := s.remote(ctx, "systemctl", "restart", "tinkercloud.service"); err != nil {
 		return fmt.Errorf("restart after LLM root enable: %w", err)
 	}
-	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "doctor", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "doctor", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
 		return fmt.Errorf("doctor after LLM root enable: %w", err)
 	}
 	return nil
@@ -858,7 +858,7 @@ func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSl
 	if err := assertDistinctAppCookies(viewer, firstHost, host); err != nil {
 		return "", err
 	}
-	r, err := blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+blobID, nil, "")
+	r, err := blobRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/blobs/"+blobID, nil, "")
 	if err != nil {
 		return "", err
 	}
@@ -894,7 +894,7 @@ func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, vi
 		return "", err
 	}
 	platform := "https://" + s.Config.PlatformHost()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
 	if err != nil {
 		return "", err
 	}
@@ -913,7 +913,7 @@ func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, vi
 	// A switch is a same-origin POST. Its successful OTP verification revokes
 	// every child session before the broker issues the replacement identity.
 	form := url.Values{"handoff": {handoff}}
-	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/use-another", strings.NewReader(form.Encode()))
+	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/use-another", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -929,7 +929,7 @@ func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, vi
 		return "", errors.New("account switch form unavailable")
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}}
-	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/otp", strings.NewReader(form.Encode()))
+	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/otp", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -950,7 +950,7 @@ func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, vi
 		return "", err
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}, "transaction": {tx}, "code": {code}}
-	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/verify", strings.NewReader(form.Encode()))
+	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/verify", strings.NewReader(form.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -979,7 +979,7 @@ func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, vi
 	return host, nil
 }
 
-// dashboardGlobalLogout proves the one visible TinyHost sign-out action is
+// dashboardGlobalLogout proves the one visible Tinkercloud sign-out action is
 // global: it destroys the admin identity and every independently scoped app
 // child session, rather than merely clearing the dashboard cookie.
 func (s *Suite) dashboardGlobalLogout(ctx context.Context, h *http.Client, hosts ...string) error {
@@ -1017,7 +1017,7 @@ func (s *Suite) dashboardGlobalLogout(ctx context.Context, h *http.Client, hosts
 		return fmt.Errorf("dashboard global logout did not redirect to sign-in: status=%d", response.StatusCode)
 	}
 	admin, _ := url.Parse(platform + "/")
-	if hasCookie(h.Jar.Cookies(admin), "__Host-tiny_identity") {
+	if hasCookie(h.Jar.Cookies(admin), "__Host-tinker_identity") {
 		return errors.New("dashboard global logout retained the global identity cookie")
 	}
 	for _, host := range hosts {
@@ -1037,7 +1037,7 @@ func (s *Suite) replayedAndWrongAppHandoffsDeny(ctx context.Context, h *http.Cli
 	if err != nil {
 		return err
 	}
-	request.AddCookie(&http.Cookie{Name: "__Host-tiny_identity_state", Value: consumedState})
+	request.AddCookie(&http.Cookie{Name: "__Host-tinker_identity_state", Value: consumedState})
 	response, err := h.Do(request)
 	if err != nil {
 		return err
@@ -1062,7 +1062,7 @@ func (s *Suite) replayedAndWrongAppHandoffsDeny(ctx context.Context, h *http.Cli
 	}
 	// Supplying the original state on the sibling host proves exact app binding,
 	// rather than merely exercising the missing-state branch.
-	request.AddCookie(&http.Cookie{Name: "__Host-tiny_identity_state", Value: consumedState})
+	request.AddCookie(&http.Cookie{Name: "__Host-tinker_identity_state", Value: consumedState})
 	response, err = h.Do(request)
 	if err != nil {
 		return err
@@ -1080,7 +1080,7 @@ func (s *Suite) replayedAndWrongAppHandoffsDeny(ctx context.Context, h *http.Cli
 
 func (s *Suite) appLocalLogoutAndBrokerReopen(ctx context.Context, h *http.Client, firstHost, secondHost, marker string) error {
 	form := url.Values{"return": {"/"}}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL(firstHost, "/_tiny/auth/logout"), strings.NewReader(form.Encode()))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, appURL(firstHost, "/_tinker/auth/logout"), strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
@@ -1107,7 +1107,7 @@ func (s *Suite) appLocalLogoutAndBrokerReopen(ctx context.Context, h *http.Clien
 }
 
 func (s *Suite) assertAppDenied(ctx context.Context, h *http.Client, host, marker string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/me"), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/me"), nil)
 	if err != nil {
 		return err
 	}
@@ -1128,7 +1128,7 @@ func appCookie(h *http.Client, host string) (string, bool) {
 		return "", false
 	}
 	u, _ := url.Parse("https://" + host + "/")
-	return cookieValue(h.Jar.Cookies(u), "__Host-tiny_app")
+	return cookieValue(h.Jar.Cookies(u), "__Host-tinker_app")
 }
 
 // identityStateCookie is used only to retain a handoff's original app-host
@@ -1139,7 +1139,7 @@ func identityStateCookie(h *http.Client, host string) (string, bool) {
 		return "", false
 	}
 	u, _ := url.Parse("https://" + host + "/")
-	return cookieValue(h.Jar.Cookies(u), "__Host-tiny_identity_state")
+	return cookieValue(h.Jar.Cookies(u), "__Host-tinker_identity_state")
 }
 
 func (s *Suite) deploySmokeApp(ctx context.Context, c client.Client, slug string, blobs bool) (string, string, error) {
@@ -1217,7 +1217,7 @@ func smokeArchive(slug, viewerEmail string) ([]byte, int64, string, error) {
 }
 
 func smokeArchiveWithBlobs(slug, viewerEmail string, blobs bool) ([]byte, int64, string, error) {
-	d, e := os.MkdirTemp("", "tinyhost-vps-app-")
+	d, e := os.MkdirTemp("", "tinkercloud-vps-app-")
 	if e != nil {
 		return nil, 0, "", e
 	}
@@ -1229,18 +1229,18 @@ func smokeArchiveWithBlobs(slug, viewerEmail string, blobs bool) ([]byte, int64,
 	if e != nil {
 		return nil, 0, "", e
 	}
-	marker := "TINYHOST_VPS_MARKER_" + id
-	if e = os.WriteFile(filepath.Join(d, "dist", "index.html"), []byte("<!doctype html><title>tiny</title>"+marker), 0644); e != nil {
+	marker := "TINKERCLOUD_VPS_MARKER_" + id
+	if e = os.WriteFile(filepath.Join(d, "dist", "index.html"), []byte("<!doctype html><title>tinker</title>"+marker), 0644); e != nil {
 		return nil, 0, "", e
 	}
 	if e = os.WriteFile(filepath.Join(d, "dist", "private.js"), []byte("window.privateMarker='"+marker+"'"), 0644); e != nil {
 		return nil, 0, "", e
 	}
-	// This tiny browser fixture is intentionally SDK-equivalent: it discovers
+	// This tinker browser fixture is intentionally SDK-equivalent: it discovers
 	// capability state, then uses same-origin multipart upload/list/download/
 	// delete requests with no app selector or credential. The black-box suite
 	// below performs the exact operations after real viewer OTP authentication.
-	fixture := `const api = "/_tiny/api/v1";
+	fixture := `const api = "/_tinker/api/v1";
 const request = (path, init = {}) => fetch(api + path, { credentials: "same-origin", ...init });
 export async function blobSmoke(file) {
   const capabilities = await request("/capabilities").then(r => r.json());
@@ -1264,7 +1264,7 @@ export async function blobSmoke(file) {
 		features += "  blobs: true\n"
 	}
 	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\n" + features + "access:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
-	if e = os.WriteFile(filepath.Join(d, "tiny.yaml"), manifest, 0644); e != nil {
+	if e = os.WriteFile(filepath.Join(d, "tinker.yaml"), manifest, 0644); e != nil {
 		return nil, 0, "", e
 	}
 	var b bytes.Buffer
@@ -1278,12 +1278,12 @@ func (s *Suite) httpClient() *http.Client {
 	return &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 func (s *Suite) anonymousDenied(ctx context.Context, host, marker string) error {
-	for _, path := range []string{"/", "/private.js", "/_tiny/api/v1/me", "/_tiny/ws/v1"} {
+	for _, path := range []string{"/", "/private.js", "/_tinker/api/v1/me", "/_tinker/ws/v1"} {
 		r, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+path, nil)
 		if e != nil {
 			return e
 		}
-		if path == "/_tiny/ws/v1" {
+		if path == "/_tinker/ws/v1" {
 			r.Header.Set("Connection", "Upgrade")
 			r.Header.Set("Upgrade", "websocket")
 			r.Header.Set("Sec-WebSocket-Version", "13")
@@ -1322,7 +1322,7 @@ func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http
 	if e != nil {
 		return nil, "", "", "", e
 	}
-	platformRequest, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+	platformRequest, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
 	if e != nil {
 		return nil, "", "", "", e
 	}
@@ -1351,7 +1351,7 @@ func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http
 	if err := rejectExtraBlobPartWithoutMutation(ctx, &hc, host); err != nil {
 		return nil, "", "", "", err
 	}
-	blobID, err := uploadBlob(ctx, &hc, host, []byte("tinyhost-vps-blob-exact-bytes\x00\xff"))
+	blobID, err := uploadBlob(ctx, &hc, host, []byte("tinkercloud-vps-blob-exact-bytes\x00\xff"))
 	if err != nil {
 		return nil, "", "", "", err
 	}
@@ -1373,7 +1373,7 @@ func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Cl
 	if err != nil {
 		return err
 	}
-	platformRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+	platformRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
 	if err != nil {
 		return err
 	}
@@ -1416,7 +1416,7 @@ func (s *Suite) beginAppHandoffAt(ctx context.Context, h *http.Client, host, ret
 		return "", err
 	}
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || !strings.HasPrefix(response.Header.Get("Location"), "/_tiny/auth/login") {
+	if response.StatusCode != http.StatusSeeOther || !strings.HasPrefix(response.Header.Get("Location"), "/_tinker/auth/login") {
 		return "", fmt.Errorf("anonymous document did not enter app login: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
 	}
 	login, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+response.Header.Get("Location"), nil)
@@ -1433,7 +1433,7 @@ func (s *Suite) beginAppHandoffAt(ctx context.Context, h *http.Client, host, ret
 	}
 	location := response.Header.Get("Location")
 	parsed, err := url.Parse(location)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, s.Config.PlatformHost()) || parsed.Path != "/_tiny/identity" {
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, s.Config.PlatformHost()) || parsed.Path != "/_tinker/identity" {
 		return "", fmt.Errorf("app login returned unsafe platform handoff location %q", location)
 	}
 	handoff := parsed.Query().Get("handoff")
@@ -1512,7 +1512,7 @@ func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client
 		return errors.New("dashboard browser did not retain cookies")
 	}
 	admin, _ := url.Parse(platform + "/")
-	if !hasCookie(h.Jar.Cookies(admin), "__Host-tiny_identity") || !hasCookie(h.Jar.Cookies(admin), "__Host-tiny_browser") {
+	if !hasCookie(h.Jar.Cookies(admin), "__Host-tinker_identity") || !hasCookie(h.Jar.Cookies(admin), "__Host-tinker_browser") {
 		return errors.New("dashboard login did not issue scoped global identity")
 	}
 	return nil
@@ -1570,7 +1570,7 @@ func (s *Suite) assertServerDerivedViewer(ctx context.Context, h *http.Client, h
 }
 
 func (s *Suite) assertServerDerivedEmail(ctx context.Context, h *http.Client, host, email string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/me"), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/me"), nil)
 	if err != nil {
 		return err
 	}
@@ -1592,12 +1592,12 @@ func (s *Suite) assertServerDerivedEmail(ctx context.Context, h *http.Client, ho
 
 func isAppHandoffCallback(raw, handoff string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "https" && u.Path == "/_tiny/auth/callback" && u.Query().Get("handoff") == handoff && len(u.Query()) == 1
+	return err == nil && u.Scheme == "https" && u.Path == "/_tinker/auth/callback" && u.Query().Get("handoff") == handoff && len(u.Query()) == 1
 }
 
 func isExactHandoffCallback(raw, host, handoff string) bool {
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, host) || u.Path != "/_tiny/auth/callback" || u.User != nil {
+	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, host) || u.Path != "/_tinker/auth/callback" || u.User != nil {
 		return false
 	}
 	got := u.Query().Get("handoff")
@@ -1610,10 +1610,10 @@ func (s *Suite) assertCookieScopes(h *http.Client, appHost, _ string) error {
 	}
 	platform, _ := url.Parse("https://" + s.Config.PlatformHost() + "/")
 	app, _ := url.Parse("https://" + appHost + "/")
-	if !hasCookie(h.Jar.Cookies(platform), "__Host-tiny_identity") || !hasCookie(h.Jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(h.Jar.Cookies(platform), "__Host-tiny_app") {
+	if !hasCookie(h.Jar.Cookies(platform), "__Host-tinker_identity") || !hasCookie(h.Jar.Cookies(platform), "__Host-tinker_browser") || hasCookie(h.Jar.Cookies(platform), "__Host-tinker_app") {
 		return errors.New("platform global identity or browser-binding cookie scope is unsafe")
 	}
-	if !hasCookie(h.Jar.Cookies(app), "__Host-tiny_app") || hasCookie(h.Jar.Cookies(app), "__Host-tiny_identity") || hasCookie(h.Jar.Cookies(app), "__Host-tiny_browser") {
+	if !hasCookie(h.Jar.Cookies(app), "__Host-tinker_app") || hasCookie(h.Jar.Cookies(app), "__Host-tinker_identity") || hasCookie(h.Jar.Cookies(app), "__Host-tinker_browser") {
 		return errors.New("app viewer cookie scope is unsafe")
 	}
 	return nil
@@ -1625,8 +1625,8 @@ func assertDistinctAppCookies(h *http.Client, firstHost, secondHost string) erro
 	}
 	first, _ := url.Parse("https://" + firstHost + "/")
 	second, _ := url.Parse("https://" + secondHost + "/")
-	firstValue, firstOK := cookieValue(h.Jar.Cookies(first), "__Host-tiny_app")
-	secondValue, secondOK := cookieValue(h.Jar.Cookies(second), "__Host-tiny_app")
+	firstValue, firstOK := cookieValue(h.Jar.Cookies(first), "__Host-tinker_app")
+	secondValue, secondOK := cookieValue(h.Jar.Cookies(second), "__Host-tinker_app")
 	if !firstOK || !secondOK || firstValue == secondValue {
 		return errors.New("app sessions were not independently host scoped")
 	}
@@ -1650,7 +1650,7 @@ func cookieValue(cookies []*http.Cookie, name string) (string, bool) {
 func appURL(host, path string) string { return "https://" + host + path }
 
 func expectBlobCapability(ctx context.Context, h *http.Client, host string) error {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/capabilities"), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/capabilities"), nil)
 	if err != nil {
 		return err
 	}
@@ -1679,7 +1679,7 @@ func expectBlobCapability(ctx context.Context, h *http.Client, host string) erro
 // particular, the caller cannot select an app, SQLite file, or namespace: the
 // gateway derives all three from the verified app hostname and viewer session.
 func expectCollectionCapability(ctx context.Context, h *http.Client, host string) error {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/capabilities"), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/capabilities"), nil)
 	if err != nil {
 		return err
 	}
@@ -1723,7 +1723,7 @@ func (s *Suite) anonymousLLMChatDenied(ctx context.Context, host string) error {
 }
 
 func assertLLMChatDenied(ctx context.Context, h *http.Client, host string, wantStatus int) error {
-	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/llm/chat", strings.NewReader(`{"messages":[{"role":"user","content":"no grant"}]}`))
+	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tinker/api/v1/llm/chat", strings.NewReader(`{"messages":[{"role":"user","content":"no grant"}]}`))
 	if err != nil {
 		return err
 	}
@@ -1771,7 +1771,7 @@ func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host st
 	if err := expectCollectionCapability(ctx, h, host); err != nil {
 		return "", err
 	}
-	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/db/tasks", strings.NewReader(`{"data":{"title":"persist across restart","done":false}}`))
+	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tinker/api/v1/db/tasks", strings.NewReader(`{"data":{"title":"persist across restart","done":false}}`))
 	if err != nil {
 		return "", err
 	}
@@ -1785,7 +1785,7 @@ func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host st
 	if x.StatusCode != http.StatusCreated || decodeErr != nil || created.ID == "" || created.Version != 1 || !bytes.Contains(created.Data, []byte("persist across restart")) {
 		return "", errors.New("collection create did not return an authoritative document")
 	}
-	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(created.ID), nil)
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(created.ID), nil)
 	if err != nil {
 		return "", err
 	}
@@ -1799,7 +1799,7 @@ func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host st
 	if x.StatusCode != http.StatusOK || decodeErr != nil || fetched.ID != created.ID || fetched.Version != 1 {
 		return "", errors.New("collection get did not return the created document")
 	}
-	r, err = collectionRequest(ctx, http.MethodPut, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(created.ID), strings.NewReader(`{"data":{"title":"persist across restart","done":true},"expected_version":1}`))
+	r, err = collectionRequest(ctx, http.MethodPut, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(created.ID), strings.NewReader(`{"data":{"title":"persist across restart","done":true},"expected_version":1}`))
 	if err != nil {
 		return "", err
 	}
@@ -1813,7 +1813,7 @@ func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host st
 	if x.StatusCode != http.StatusOK || decodeErr != nil || updated.ID != created.ID || updated.Version != 2 || !bytes.Contains(updated.Data, []byte(`"done":true`)) {
 		return "", errors.New("collection optimistic update did not succeed")
 	}
-	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks?snapshot=1", nil)
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks?snapshot=1", nil)
 	if err != nil {
 		return "", err
 	}
@@ -1834,7 +1834,7 @@ func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host st
 }
 
 func (s *Suite) anonymousCollectionDenied(ctx context.Context, host, id string) error {
-	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}
@@ -1854,7 +1854,7 @@ func (s *Suite) anonymousCollectionDenied(ctx context.Context, host, id string) 
 }
 
 func (s *Suite) verifyCollectionPersistsAfterRestart(ctx context.Context, h *http.Client, host, id string) error {
-	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}
@@ -1872,7 +1872,7 @@ func (s *Suite) verifyCollectionPersistsAfterRestart(ctx context.Context, h *htt
 }
 
 func (s *Suite) crossAppCollectionDenied(ctx context.Context, h *http.Client, host, id string) error {
-	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}
@@ -1892,7 +1892,7 @@ func (s *Suite) crossAppCollectionDenied(ctx context.Context, h *http.Client, ho
 }
 
 func (s *Suite) deleteCollectionAndVerify(ctx context.Context, h *http.Client, host, id string) error {
-	r, err := collectionRequest(ctx, http.MethodDelete, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), strings.NewReader(`{"expected_version":2}`))
+	r, err := collectionRequest(ctx, http.MethodDelete, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(id), strings.NewReader(`{"expected_version":2}`))
 	if err != nil {
 		return err
 	}
@@ -1908,7 +1908,7 @@ func (s *Suite) deleteCollectionAndVerify(ctx context.Context, h *http.Client, h
 	if x.StatusCode != http.StatusOK || decodeErr != nil || !deleted.Deleted {
 		return errors.New("collection delete did not succeed")
 	}
-	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/db/tasks/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}
@@ -1927,7 +1927,7 @@ func (s *Suite) deleteCollectionAndVerify(ctx context.Context, h *http.Client, h
 func blobList(ctx context.Context, h *http.Client, host string) ([]struct {
 	ID string `json:"id"`
 }, error) {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/blobs"), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/blobs"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1981,7 +1981,7 @@ func rejectExtraBlobPartWithoutMutation(ctx context.Context, h *http.Client, hos
 	if err = w.Close(); err != nil {
 		return err
 	}
-	r, err := blobRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/blobs", &body, w.FormDataContentType())
+	r, err := blobRequest(ctx, http.MethodPost, host, "/_tinker/api/v1/blobs", &body, w.FormDataContentType())
 	if err != nil {
 		return err
 	}
@@ -2017,7 +2017,7 @@ func uploadBlob(ctx context.Context, h *http.Client, host string, want []byte) (
 	if err = w.Close(); err != nil {
 		return "", err
 	}
-	r, err := blobRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/blobs", &body, w.FormDataContentType())
+	r, err := blobRequest(ctx, http.MethodPost, host, "/_tinker/api/v1/blobs", &body, w.FormDataContentType())
 	if err != nil {
 		return "", err
 	}
@@ -2037,10 +2037,10 @@ func uploadBlob(ctx context.Context, h *http.Client, host string, want []byte) (
 	return out.ID, nil
 }
 
-var vpsBlobBytes = []byte("tinyhost-vps-blob-exact-bytes\x00\xff")
+var vpsBlobBytes = []byte("tinkercloud-vps-blob-exact-bytes\x00\xff")
 
 func (s *Suite) anonymousBlobDenied(ctx context.Context, host, id string) error {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/blobs/"+id), nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tinker/api/v1/blobs/"+id), nil)
 	if err != nil {
 		return err
 	}
@@ -2073,7 +2073,7 @@ func (s *Suite) verifyBlobPersistsAfterRestart(ctx context.Context, h *http.Clie
 		if err := retryCtx.Err(); err != nil {
 			return fmt.Errorf("blob restart readiness exhausted: %w", err)
 		}
-		r, err := blobRequest(retryCtx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+		r, err := blobRequest(retryCtx, http.MethodGet, host, "/_tinker/api/v1/blobs/"+id, nil, "")
 		if err != nil {
 			return err
 		}
@@ -2123,7 +2123,7 @@ func transientRestartTransportError(err error) bool {
 }
 
 func (s *Suite) deleteBlobAndVerify(ctx context.Context, h *http.Client, host, id string) error {
-	r, err := blobRequest(ctx, http.MethodDelete, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+	r, err := blobRequest(ctx, http.MethodDelete, host, "/_tinker/api/v1/blobs/"+id, nil, "")
 	if err != nil {
 		return err
 	}
@@ -2136,7 +2136,7 @@ func (s *Suite) deleteBlobAndVerify(ctx context.Context, h *http.Client, host, i
 	if x.StatusCode != http.StatusOK {
 		return fmt.Errorf("blob delete failed: status=%d", x.StatusCode)
 	}
-	r, err = blobRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/blobs/"+id, nil, "")
+	r, err = blobRequest(ctx, http.MethodGet, host, "/_tinker/api/v1/blobs/"+id, nil, "")
 	if err != nil {
 		return err
 	}
@@ -2164,12 +2164,12 @@ func (s *Suite) socketInventory(ctx context.Context) error {
 			continue
 		}
 		local := fields[3]
-		if local == "" || loopbackSocket(local) || !strings.Contains(line, `"tinyhost"`) {
+		if local == "" || loopbackSocket(local) || !strings.Contains(line, `"tinkercloud"`) {
 			continue
 		}
 		port := socketPort(local)
 		if port != "80" && port != "443" {
-			return fmt.Errorf("unexpected tinyhost public listener: %s", line)
+			return fmt.Errorf("unexpected tinkercloud public listener: %s", line)
 		}
 	}
 	for _, port := range []string{"80", "443"} {
@@ -2186,14 +2186,14 @@ func (s *Suite) socketInventory(ctx context.Context) error {
 				if !strings.HasSuffix(local, ":"+port) {
 					continue
 				}
-				if !strings.Contains(line, `"tinyhost"`) {
-					return fmt.Errorf("public port %s is not owned by tinyhost: %s", port, line)
+				if !strings.Contains(line, `"tinkercloud"`) {
+					return fmt.Errorf("public port %s is not owned by tinkercloud: %s", port, line)
 				}
 				found = true
 			}
 		}
 		if !found {
-			return fmt.Errorf("tinyhost does not own public port %s", port)
+			return fmt.Errorf("tinkercloud does not own public port %s", port)
 		}
 	}
 	return nil

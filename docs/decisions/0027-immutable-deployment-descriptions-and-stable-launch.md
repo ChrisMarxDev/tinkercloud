@@ -11,7 +11,7 @@ application metadata, expose release storage, or bypass the gateway.
 
 ## Decision
 
-`tiny.yaml` accepts an optional bounded single-line `description`. Validation
+`tinker.yaml` accepts an optional bounded single-line `description`. Validation
 trims edge whitespace, permits empty text, and rejects invalid UTF-8, controls,
 Unicode line separators, and values longer than 280 Unicode code points. The
 canonical value is persisted only in the existing immutable deployment

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible TinyHost defect
+description: Report a reproducible Tinkercloud defect
 title: "bug: "
 labels: ["bug", "inbox"]
 body:

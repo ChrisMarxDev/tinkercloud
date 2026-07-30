@@ -8,7 +8,7 @@
   before SSH starts.
 - Host-key failure, unknown host, authentication failure, unavailable OpenSSH,
   interrupted stdin transport, or non-zero remote exit never reports success.
-- `tiny host` cannot execute an arbitrary command, change SSH policy, edit
+- `tinker host` cannot execute an arbitrary command, change SSH policy, edit
   `known_hosts`, or transfer deployer credentials.
 - The bootstrap rejects non-root, non-Linux, non-amd64, missing verification
   tools, redirect, oversized response, checksum mismatch, metadata drift,

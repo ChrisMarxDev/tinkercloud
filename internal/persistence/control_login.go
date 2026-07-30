@@ -8,8 +8,8 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/otp"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
 	"math/big"
 	"time"
 )
@@ -163,7 +163,7 @@ func (c ControlLogin) VerifyOTP(ctx context.Context, id, code string) (string, e
 		if _, e = rand.Read(b); e != nil {
 			return e
 		}
-		token = "tiny_" + base64.RawURLEncoding.EncodeToString(b)
+		token = "tinker_" + base64.RawURLEncoding.EncodeToString(b)
 		th := sha256.Sum256([]byte(token))
 		_, e = tx.ExecContext(ctx, "INSERT INTO api_tokens(id,user_id,secret_hash,scopes,expires_at) VALUES(?,?,?,?,?)", base64.RawURLEncoding.EncodeToString(th[:12]), user, th[:], "app:read,app:create,app:delete,deploy:create,deploy:activate,access:read,access:write,token:create,token:revoke,data:read,data:write", now.Add(30*24*time.Hour).UTC().Format(time.RFC3339Nano))
 		if e != nil {

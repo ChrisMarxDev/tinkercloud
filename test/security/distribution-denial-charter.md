@@ -4,7 +4,7 @@
   fails before a candidate package is written.
 - Missing platforms, unsigned bytes, checksum drift, manifest drift, unknown
   files, symlinks, path traversal, lifecycle scripts, runtime package
-  dependencies, or an executable other than `tiny` fail preparation.
+  dependencies, or an executable other than `tinker` fail preparation.
 - Package preparation cannot run `npm publish`, `jsr publish`, `brew tap`,
   `brew push`, `gh release`, GitHub mutation, or a network upload.
 - The npm launcher denies unsupported OS/architecture combinations and never

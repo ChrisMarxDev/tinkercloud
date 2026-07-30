@@ -17,15 +17,15 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/compatibility"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
-const apiPrefix = "/_tiny/api/v1"
+const apiPrefix = "/_tinker/api/v1"
 
 type KV interface {
 	Get(rctx context.Context, auth appauth.AuthorizationContext, key string) (*kv.Entry, error)
@@ -75,9 +75,9 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json")
-	if !compatibleSDKVersion(r.Header.Get("X-Tiny-SDK-Version")) ||
-		!compatibleAPIVersion(r.Header.Get("X-Tiny-App-API-Version")) {
-		writeError(w, http.StatusUpgradeRequired, "sdk_version_incompatible", "Update @tinyhost/sdk to a supported version and retry.", auth.RequestID())
+	if !compatibleSDKVersion(r.Header.Get("X-Tinker-SDK-Version")) ||
+		!compatibleAPIVersion(r.Header.Get("X-Tinker-App-API-Version")) {
+		writeError(w, http.StatusUpgradeRequired, "sdk_version_incompatible", "Update @tinkercloud/sdk to a supported version and retry.", auth.RequestID())
 		return
 	}
 	path := r.URL.EscapedPath()
@@ -148,7 +148,7 @@ func compatibleAPIVersion(version string) bool {
 }
 func (d Dispatcher) app(auth appauth.AuthorizationContext, w http.ResponseWriter) {
 	if d.AppSlug == nil || d.AppSlug(auth) == "" {
-		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", auth.RequestID())
+		writeError(w, 503, "temporarily_unavailable", "Tinkercloud is temporarily unavailable.", auth.RequestID())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"slug": d.AppSlug(auth), "features": map[string]bool{"kv": auth.KVEnabled(), "db": auth.KVEnabled() && d.Collections != nil, "blobs": auth.BlobsEnabled() && d.Blobs != nil, "realtime": auth.RealtimeEnabled(), "llm_chat": d.LLM != nil && auth.LLMChatRequested()}})
@@ -589,7 +589,7 @@ func (d Dispatcher) blobObject(auth appauth.AuthorizationContext, w http.Respons
 }
 func (d Dispatcher) me(auth appauth.AuthorizationContext, w http.ResponseWriter) {
 	if d.AppSlug == nil || d.AppSlug(auth) == "" {
-		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", auth.RequestID())
+		writeError(w, 503, "temporarily_unavailable", "Tinkercloud is temporarily unavailable.", auth.RequestID())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"identity": auth.Identity(), "app": map[string]string{"slug": d.AppSlug(auth)}})
@@ -601,7 +601,7 @@ func (d Dispatcher) key(auth appauth.AuthorizationContext, w http.ResponseWriter
 		return
 	}
 	if d.KV == nil {
-		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", auth.RequestID())
+		writeError(w, 503, "temporarily_unavailable", "Tinkercloud is temporarily unavailable.", auth.RequestID())
 		return
 	}
 	raw := strings.TrimPrefix(r.URL.EscapedPath(), apiPrefix+"/kv/")
@@ -770,7 +770,7 @@ func (d Dispatcher) err(w http.ResponseWriter, a appauth.AuthorizationContext, e
 	case errors.Is(err, llm.ErrCancelled):
 		writeError(w, 499, "cancelled", "The request was cancelled.", a.RequestID())
 	default:
-		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", a.RequestID())
+		writeError(w, 503, "temporarily_unavailable", "Tinkercloud is temporarily unavailable.", a.RequestID())
 	}
 }
 func writeJSON(w http.ResponseWriter, status int, v any) {

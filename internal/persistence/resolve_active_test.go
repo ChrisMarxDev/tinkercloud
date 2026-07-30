@@ -3,8 +3,8 @@ package persistence
 import (
 	"context"
 	"encoding/json"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"os"
 	"path/filepath"
 	"testing"

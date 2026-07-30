@@ -16,6 +16,23 @@ command_name=$6
 release_base=$7
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
+test "$npm_package" = "@tinkercloud/cli" || {
+  echo "npm package must be @tinkercloud/cli" >&2
+  exit 1
+}
+test "$formula_class" = "Tinker" || {
+  echo "Homebrew formula class must be Tinker" >&2
+  exit 1
+}
+test "$command_name" = "tinker" || {
+  echo "CLI command must be tinker" >&2
+  exit 1
+}
+test "$release_base" = "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v$version/" || {
+  echo "release base must be the exact versioned Tinkercloud GitHub release URL" >&2
+  exit 1
+}
+
 test ! -e "$output_dir" || { echo "distribution output already exists" >&2; exit 1; }
 "$root/scripts/release-verify.sh" "$release_dir"
 mkdir -p "$output_dir"

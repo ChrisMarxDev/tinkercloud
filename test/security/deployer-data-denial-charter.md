@@ -2,7 +2,7 @@
 
 This charter covers the control-plane data-administration surface defined by
 [`specs/api/deployer-data-contract.md`](../../specs/api/deployer-data-contract.md).
-It is required before the `tiny data` happy path counts as evidence.
+It is required before the `tinker data` happy path counts as evidence.
 
 ## Credential and ownership matrix
 
@@ -69,7 +69,7 @@ It is required before the `tiny data` happy path counts as evidence.
 - Use two active deployers and two apps on the composed gateway. Establish
   authorized read and deliberate-write operations for the owner, then repeat
   every ownership/scope/revocation/malformed denial through the real CLI/API.
-- Verify `tiny data --json` never prompts, stores a credential, or emits
+- Verify `tinker data --json` never prompts, stores a credential, or emits
   progress mixed with JSON; destructive delete requires the exact target-bound
   `--confirm delete:...` value in both human and JSON modes.
 - Ensure no route, SDK call, manifest field, dashboard control, or browser app

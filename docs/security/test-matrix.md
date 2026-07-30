@@ -12,11 +12,11 @@ Every protected surface runs the same actor variants.
 | JS/CSS/image asset | deny, zero bytes | deny | deny | serve | deny |
 | SPA fallback | deny before fallback | deny | deny | serve fallback | deny |
 | source map / dotfile | deny or unavailable | deny | deny | policy + file rules | deny |
-| `/_tiny/api/me` | 401 | 403/401 | 403 | scoped identity | deny |
-| `/_tiny/api/kv/*` | 401 | deny | deny | scoped operation | deny |
-| `/_tiny/api/v1/blobs` upload/list | deny, no mutation | deny | deny | bounded operation | deny |
-| `/_tiny/api/v1/blobs/*` get/delete | deny, zero bytes/no mutation | deny | deny | bounded operation | deny |
-| `/_tiny/ws/v1` | reject upgrade | reject | disconnect/reject | app-scoped connect | reject/disconnect |
+| `/_tinker/api/me` | 401 | 403/401 | 403 | scoped identity | deny |
+| `/_tinker/api/kv/*` | 401 | deny | deny | scoped operation | deny |
+| `/_tinker/api/v1/blobs` upload/list | deny, no mutation | deny | deny | bounded operation | deny |
+| `/_tinker/api/v1/blobs/*` get/delete | deny, zero bytes/no mutation | deny | deny | bounded operation | deny |
+| `/_tinker/ws/v1` | reject upgrade | reject | disconnect/reject | app-scoped connect | reject/disconnect |
 
 ## Cross-tenant matrix
 

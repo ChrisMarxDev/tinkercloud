@@ -6,8 +6,8 @@ A small collaborative checklist showing the complete KV lifecycle:
 - bounded prefix listing with cursors;
 - create, versioned update, and versioned delete;
 - `AbortSignal` cancellation and typed errors; and
-- `tiny.live.onKvChange()` as a refresh hint.
+- `tinker.live.onKvChange()` as a refresh hint.
 
 Build all SDK examples from the parent directory with `npm run build`, then run
-`tiny deploy .` here. The manifest is owner-only until you add viewer emails or
+`tinker deploy .` here. The manifest is owner-only until you add viewer emails or
 domains.

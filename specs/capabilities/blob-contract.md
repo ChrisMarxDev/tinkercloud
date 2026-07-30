@@ -1,6 +1,6 @@
 # V1 Lightweight Blob Capability Contract
 
-This contract defines TinyHost's smallest useful file-storage capability. It is
+This contract defines Tinkercloud's smallest useful file-storage capability. It is
 an app-scoped utility store for replaceable internal apps, not a filesystem,
 public asset host, backup system, or durable object-storage service.
 
@@ -21,7 +21,7 @@ public asset host, backup system, or durable object-storage service.
 ## Public SDK surface
 
 ```ts
-interface TinyBlob {
+interface TinkerBlob {
   id: string;
   name: string;
   size: number;
@@ -29,13 +29,13 @@ interface TinyBlob {
   createdAt: string;
 }
 
-tiny.blobs.upload(file, { signal? }): Promise<TinyBlob>
-tiny.blobs.get(id, { signal? }): Promise<Blob | null>
-tiny.blobs.list({ cursor?, limit?, signal? }): Promise<{
-  blobs: TinyBlob[];
+tinker.blobs.upload(file, { signal? }): Promise<TinkerBlob>
+tinker.blobs.get(id, { signal? }): Promise<Blob | null>
+tinker.blobs.list({ cursor?, limit?, signal? }): Promise<{
+  blobs: TinkerBlob[];
   nextCursor?: string;
 }>
-tiny.blobs.delete(id, { signal? }): Promise<{ deleted: boolean }>
+tinker.blobs.delete(id, { signal? }): Promise<{ deleted: boolean }>
 ```
 
 The SDK uses same-origin relative endpoints and the current app's host-only
@@ -140,7 +140,7 @@ successful or already-absent delete is a safe bounded no-op.
 
 ## Storage adapter boundary
 
-V1 ships one private local-filesystem adapter inside the `tinyhost` service and
+V1 ships one private local-filesystem adapter inside the `tinkercloud` service and
 data directory. The domain depends on a narrow streaming interface equivalent
 to:
 
@@ -179,7 +179,7 @@ Before the positive path is complete, executable evidence must prove:
 - guessed cross-app IDs, metadata rows with absent/corrupt bytes, orphan bytes,
   and storage/metadata disagreement fail closed without path, key, provider,
   SQL, or policy disclosure;
-- download responses cannot execute uploaded HTML/SVG as a TinyHost app-origin
+- download responses cannot execute uploaded HTML/SVG as a Tinkercloud app-origin
   document through the supported API;
 - delete and cleanup never accept or follow a client path, symlink, hard link,
   special file, or storage key; and
@@ -193,5 +193,5 @@ objects without scanning or deleting outside the configured blob namespace.
 Uncertain state remains unavailable until reconciled.
 
 V1 blobs are utility-grade local VPS data. Losing the VPS or data volume can
-lose blobs. TinyHost V1 provides no backup, replication, remote object-store,
+lose blobs. Tinkercloud V1 provides no backup, replication, remote object-store,
 availability, or business-critical durability guarantee.

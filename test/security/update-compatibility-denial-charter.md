@@ -6,7 +6,7 @@
   bypassing gateway authentication or app authorization.
 - Compatibility endpoints contain no identity, hostname, app, credential,
   filesystem, provider, or persistence-derived field.
-- A WebSocket with an offered but malformed/unsupported Tiny subprotocol is
+- A WebSocket with an offered but malformed/unsupported Tinker subprotocol is
   denied before hub attachment. Authorization, origin, and revocation checks
   remain independent.
 - Unsigned or signature-valid-but-incompatible update artifacts never create a

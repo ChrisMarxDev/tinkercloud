@@ -26,10 +26,10 @@ await mkdir(join(outputDir, "bin"), { mode: 0o755 });
 await mkdir(join(outputDir, "vendor"), { mode: 0o755 });
 
 const artifacts = [
-  "tiny-linux-amd64",
-  "tiny-linux-arm64",
-  "tiny-darwin-amd64",
-  "tiny-darwin-arm64",
+  "tinker-linux-amd64",
+  "tinker-linux-arm64",
+  "tinker-darwin-amd64",
+  "tinker-darwin-arm64",
 ];
 for (const artifact of artifacts) {
   const source = join(releaseDir, artifact);
@@ -50,17 +50,17 @@ for (const artifact of artifacts) {
   await chmod(join(outputDir, "vendor", artifact), 0o755);
 }
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
-await copyFile(join(root, "packaging", "npm", "bin", "tiny.js"), join(outputDir, "bin", "tiny.js"));
+await copyFile(join(root, "packaging", "npm", "bin", "tinker.js"), join(outputDir, "bin", "tinker.js"));
 await copyFile(join(root, "LICENSE"), join(outputDir, "LICENSE"));
-await chmod(join(outputDir, "bin", "tiny.js"), 0o755);
+await chmod(join(outputDir, "bin", "tinker.js"), 0o755);
 const manifest = {
   name: packageName,
   version,
-  description: "Native Tiny workstation CLI",
+  description: "Native Tinker workstation CLI",
   license: "Apache-2.0",
   type: "module",
-  bin: { tiny: "./bin/tiny.js" },
-  files: ["bin/tiny.js", "vendor/tiny-*", "LICENSE"],
+  bin: { tinker: "./bin/tinker.js" },
+  files: ["bin/tinker.js", "vendor/tinker-*", "LICENSE"],
   os: ["darwin", "linux"],
   cpu: ["x64", "arm64"],
   engines: { node: ">=18" },

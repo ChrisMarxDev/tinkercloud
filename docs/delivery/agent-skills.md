@@ -12,27 +12,27 @@ to read and relay API documentation.
 
 ```text
 skills/
-├── tiny-platform/                 # authored first; shared canonical content
+├── tinkercloud-platform/                 # authored first; shared canonical content
 │   └── SKILL.md
-├── tiny-deployer/
+├── tinkercloud-deployer/
 │   └── SKILL.md
-├── tiny-operator/
+├── tinkercloud-operator/
 │   └── SKILL.md
-├── distribute-tiny-cli/           # maintainer CLI release workflow
+├── distribute-tinker-cli/           # maintainer CLI release workflow
 │   └── SKILL.md
-└── distribute-tiny-sdk/           # maintainer SDK registry workflow
+└── distribute-tinkercloud-sdk/           # maintainer SDK registry workflow
     └── SKILL.md
 ```
 
-## `tiny-deployer`
+## `tinkercloud-deployer`
 
 Teaches an agent to:
 
 1. inspect the app goal, current project, and verified CLI state before asking;
-2. use `@tinyhost/sdk` instead of inventing backend/auth/storage code;
+2. use `@tinkercloud/sdk` instead of inventing backend/auth/storage code;
 3. propose owner-only, exact-email, and exact-domain access choices;
 4. discover and deliberately enable capabilities;
-5. create or validate a secure `tiny.yaml`;
+5. create or validate a secure `tinker.yaml`;
 6. handle typed SDK errors, cancellation, quotas, and realtime recovery;
 7. build a static artifact with the project's existing toolchain;
 8. authenticate without moving credentials through chat;
@@ -47,12 +47,12 @@ buckets, public URLs, or browser credentials.
 The deployer receives one complete app lifecycle skill that can be pasted or
 referenced by raw URL. It must never turn a failed denial probe into a warning.
 
-## `tiny-operator`
+## `tinkercloud-operator`
 
 Teaches an agent to:
 
 - initialize the supported Hetzner host;
-- interpret `tinyhost doctor`;
+- interpret `tinkercloud doctor`;
 - authorize deployers and capability connections;
 - apply signed updates;
 - use root-only recovery;
@@ -62,24 +62,24 @@ Consequential operator actions remain human-confirmed.
 
 ## Maintainer distribution skills
 
-`distribute-tiny-cli` prepares and, only with explicit authorization, publishes
+`distribute-tinker-cli` prepares and, only with explicit authorization, publishes
 the signed native CLI through the reviewed installer, one npm-family package,
-and Homebrew. `distribute-tiny-sdk` keeps npm, JSR, exported versions,
+and Homebrew. `distribute-tinkercloud-sdk` keeps npm, JSR, exported versions,
 compatibility ranges, examples, and the signed SDK tarball aligned.
 
 Both distinguish read-only inspection, local preparation, and external
-publication. Working names and placeholder origins allow rehearsal but block
-stable or package-manager publication. One explicit exception permits a
-pre-rename GitHub beta through the protected `beta-release` workflow; it
-publishes the complete signed prerelease but never npm, JSR, Homebrew, or
-stable/latest state. Neither skill embeds an alternate signer or publisher;
-repository release tooling and contracts remain authoritative.
+publication. Locked names and placeholder release origins allow rehearsal but
+do not claim registry or tap availability. One explicit path permits a GitHub
+beta through the protected `beta-release` workflow; it publishes the complete
+signed prerelease but never npm, JSR, Homebrew, or stable/latest state. Neither
+skill embeds an alternate signer or publisher; repository release tooling and
+contracts remain authoritative.
 
 ## Generic-first, standalone rule
 
-`tiny-platform` is authored first. Each role skill then copies the relevant
+`tinkercloud-platform` is authored first. Each role skill then copies the relevant
 common and role-specific sections so it remains useful when its `SKILL.md` is
-the only TinyHost document available. Shared blocks carry stable markers, and a
+the only Tinkercloud document available. Shared blocks carry stable markers, and a
 check command makes CI fail on drift.
 
 All skills are generic Markdown plus scripts. Codex-compatible `SKILL.md`
@@ -88,7 +88,7 @@ packaging is delivered first, without coupling the content to one agent vendor.
 Copied content and generated references are checked against:
 
 - SDK exported types and examples;
-- `tiny.yaml` schema;
+- `tinker.yaml` schema;
 - HTTP/capability contracts;
 - CLI help and machine-readable output schema;
 - security test matrix;
@@ -99,7 +99,7 @@ manifest fields drift from their contracts.
 
 ## Skill release policy
 
-- Version skills with the compatible TinyHost API/SDK release.
+- Version skills with the compatible Tinkercloud API/SDK release.
 - Embed a compatible copy in server docs and publish installable copies.
 - Keep each role `SKILL.md` compact enough to paste while retaining all
   standalone safety and workflow knowledge.

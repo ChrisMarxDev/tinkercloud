@@ -90,7 +90,7 @@ func TestRequestFingerprintIsolationAndBoundedInputs(t *testing.T) {
 	now := time.Unix(100, 0)
 	l := New([]byte("test-key"), Config{Request: Policy{Window: time.Minute, PerIP: 10, PerFingerprint: 1, PerEmail: 10, PerApp: 10, Global: 20}, Verify: Policy{Window: time.Minute, PerIP: 10, PerFingerprint: 10, PerEmail: 10, PerApp: 10, Global: 20}, MaxKeys: 100})
 	l.SetClock(func() time.Time { return now })
-	a := httptest.NewRequest("POST", "https://tiny.test/login", nil)
+	a := httptest.NewRequest("POST", "https://tinker.test/login", nil)
 	a.RemoteAddr = "203.0.113.1:1"
 	a.Header.Set("User-Agent", "same-agent")
 	a.Header.Set("Accept-Language", "en")
@@ -110,7 +110,7 @@ func TestRequestFingerprintIsolationAndBoundedInputs(t *testing.T) {
 	if l.AllowRequest(OTPRequest, d, "four@example.com", "control") {
 		t.Fatal("same peer and browser fingerprint bypassed its budget")
 	}
-	oversized := httptest.NewRequest("POST", "https://tiny.test/login", nil)
+	oversized := httptest.NewRequest("POST", "https://tinker.test/login", nil)
 	oversized.RemoteAddr = "203.0.113.3:1"
 	oversized.Header.Set("User-Agent", string(make([]byte, 600))+"\x01")
 	if len(RequestFingerprint(oversized)) > 600 {
@@ -127,7 +127,7 @@ func TestHandoffBudgetIsDedicatedAndHasNoEmptyEmailChokePoint(t *testing.T) {
 		MaxKeys: 100,
 	})
 	l.SetClock(func() time.Time { return now })
-	r := httptest.NewRequest("GET", "https://alpha.apps.test/_tiny/auth/login", nil)
+	r := httptest.NewRequest("GET", "https://alpha.apps.test/_tinker/auth/login", nil)
 	r.RemoteAddr = "203.0.113.9:1"
 	if !l.AllowHandoffRequest(r, "app-alpha") {
 		t.Fatal("first handoff denied")

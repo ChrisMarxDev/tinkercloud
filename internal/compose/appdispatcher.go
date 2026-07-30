@@ -5,10 +5,10 @@ package compose
 import (
 	"net/http"
 
-	"github.com/tinyhost/tiny/internal/appapi"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/gateway"
-	"github.com/tinyhost/tiny/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
 )
 
 type AppDispatcher struct {

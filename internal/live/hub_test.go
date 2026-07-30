@@ -3,13 +3,13 @@ package live
 import (
 	"context"
 	"encoding/json"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 	"testing"
 	"time"
 )
@@ -79,7 +79,7 @@ func TestKVEventAndReservedChannelDenied(t *testing.T) {
 	if len(t1.sent) != 1 {
 		t.Fatal("unsubscribed KV listener still received an event")
 	}
-	if err := c.Subscribe("_tiny"); err == nil {
+	if err := c.Subscribe("_tinker"); err == nil {
 		t.Fatal("reserved accepted")
 	}
 }

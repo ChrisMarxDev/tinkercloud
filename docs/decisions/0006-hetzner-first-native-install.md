@@ -6,7 +6,7 @@
 
 ## Context
 
-The initial operator provisions a clean VPS whose only purpose is TinyHost.
+The initial operator provisions a clean VPS whose only purpose is Tinkercloud.
 Optimizing for every Linux environment, container platform, and reverse-proxy
 topology would make setup and diagnosis less deterministic.
 
@@ -24,20 +24,20 @@ of a numeric range. Interim, end-of-life, malformed, and future unverified
 Ubuntu releases fail preflight before mutation.
 
 Installation requires `sudo`, creates a dedicated unprivileged service account,
-installs one `tinyhost` binary and one systemd unit, and owns ports 80/443
+installs one `tinkercloud` binary and one systemd unit, and owns ports 80/443
 directly.
 
 Provide:
 
 ```text
-tinyhost init
-tinyhost status
-tinyhost doctor
-tinyhost update
-tinyhost recover operator
+tinkercloud init
+tinkercloud status
+tinkercloud doctor
+tinkercloud update
+tinkercloud recover operator
 ```
 
-`tinyhost update` downloads a signed compatible release, records bounded local
+`tinkercloud update` downloads a signed compatible release, records bounded local
 rollback state, restarts the service, runs a health gate, and restores the prior
 version when the gate fails. Automatic unattended update is deferred; the
 operator invokes or schedules the command.
@@ -57,5 +57,5 @@ for local operator recovery.
 - The service runs unprivileged after privileged installation/binding setup.
 - Other Linux distributions and Docker remain feasible because the runtime is a
   self-contained binary with explicit paths and signals.
-- Docker packaging later wraps `tinyhost`; it does not become an internal
+- Docker packaging later wraps `tinkercloud`; it does not become an internal
   dependency or the primary installation.

@@ -3,12 +3,12 @@
 **Status:** V1 contract
 
 **Applies to:** platform login, app login, operator/deployer dashboard, token
-reveal, diagnostics, and every other TinyHost-owned HTML surface.
+reveal, diagnostics, and every other Tinkercloud-owned HTML surface.
 
 ## Outcome
 
-TinyHost-owned pages share one small visual and interaction language extracted
-from the Tiny Cloud landing page. The system is embedded in the `tinyhost`
+Tinkercloud-owned pages share one small visual and interaction language extracted
+from the Tinkercloud landing page. The system is embedded in the `tinkercloud`
 binary, works with server-rendered HTML, and requires no remote asset, frontend
 runtime, or build step.
 
@@ -22,7 +22,7 @@ runtime, or build step.
   security meaning by themselves.
 - Display copy may be playful; labels, errors, confirmations, identifiers, and
   operational state remain plain and exact.
-- The Tiny cloud mark identifies a TinyHost-owned surface. App content never
+- The Tinkercloud mark identifies a Tinkercloud-owned surface. App content never
   inherits or impersonates the native control-plane chrome.
 
 ## Technology contract
@@ -39,7 +39,7 @@ runtime, or build step.
 - No remote fonts, images, styles, scripts, analytics, or CDN resources.
 - The base font stack uses local system rounded/sans faces. Monospace content
   uses the local system monospace stack.
-- The stylesheet exposes stable `--tiny-*` custom properties and `tiny-*`
+- The stylesheet exposes stable `--tinker-*` custom properties and `tinker-*`
   component classes. Application/domain packages do not embed color literals.
 
 ## Motion contract
@@ -47,7 +47,7 @@ runtime, or build step.
 - Every component with a visible state change defines a smooth transition for
   both entering and leaving that state. State changes must not jump merely
   because their final size is content-dependent.
-- Motion uses shared `--tiny-motion-*` duration and `--tiny-ease-*` easing
+- Motion uses shared `--tinker-motion-*` duration and `--tinker-ease-*` easing
   tokens. Small feedback is quick; spatial changes such as disclosure height
   use the slower disclosure token.
 - Transitions are interruptible. Reversing an expandable while it is moving
@@ -160,7 +160,7 @@ Before a styled happy path is accepted, tests must prove:
     exposes a release hash, release path, or raw immutable URL. A malformed
     final deployment manifest makes the dashboard read model unavailable;
    absent intermediate metadata is simply description-less.
-15. Global viewer identity is presented only on TinyHost-owned platform/app
+15. Global viewer identity is presented only on Tinkercloud-owned platform/app
    authentication pages. It must never be rendered as a control role, sent to
    deployed app content, selected by a query parameter, or stored in browser
    JavaScript. Handoff progress and a denied-app outcome use the existing auth
@@ -174,7 +174,7 @@ Before a styled happy path is accepted, tests must prove:
 17. App-host UI labels its existing POST action “Sign out of this app” (or an
    equivalently local phrase), never “Sign out everywhere.” Admin identity UI
    labels the separate POST action “Use another email” or “Sign out of
-   TinyHost,” and explains its global consequence. An allowed handoff may
+   Tinkercloud,” and explains its global consequence. An allowed handoff may
    show the verified email only as ordinary escaped text. An unauthorized app
    shows the generic denial notice; when a valid global identity is already
    established, it may show that verified email and “Use another email,” but
@@ -210,7 +210,7 @@ Before a styled happy path is accepted, tests must prove:
     connection labels still render. Credential rotation never accepts a
     provider selector: the server resolves the existing connection's provider
     before validating the replacement. A server-derived unavailable key state
-    gives only the root-only `tinyhost llm enable` plus restart next step and
+    gives only the root-only `tinkercloud llm enable` plus restart next step and
     renders no credential mutation form or encryption-root detail. Profile/grant
     writes carry the current revision; disabling a connection or
     disabling/revoking a grant requires a visible exact-target confirmation
@@ -225,7 +225,7 @@ Before a styled happy path is accepted, tests must prove:
     ordinary viewer authentication and current access policy.
 23. Every authenticated dashboard, including the deployer-only owned-app
     overview, renders a labelled ordinary `POST /logout` form named `Sign out
-    of TinyHost` in the persistent top bar. It carries the fresh
+    of Tinkercloud` in the persistent top bar. It carries the fresh
     server-rendered CSRF value and revokes the global browser identity family
     plus every derived app session before cookies are cleared or the browser is
     redirected to sign-in. Missing revocation capability, persistence failure,
@@ -238,7 +238,7 @@ Before a styled happy path is accepted, tests must prove:
     current durable summary metadata, but it omits policy, token, release,
     suspension, deletion, provider, audit, health-management, and deployer
     management controls rather than rendering disabled or unauthorized forms.
-    Those management operations remain available through the scoped Tiny CLI.
+    Those management operations remain available through the scoped Tinker CLI.
     A failed app read model renders a visible unavailable state and never
     substitutes an empty owned-app list.
 

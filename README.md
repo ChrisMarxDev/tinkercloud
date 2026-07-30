@@ -1,16 +1,16 @@
-# TinyHost
+# Tinkercloud
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-TinyHost is a self-hosted private micro-app platform: one operator runs one
+Tinkercloud is a self-hosted private micro-app platform: one operator runs one
 gateway, deployers publish small apps, and viewers authenticate by email.
 
 The defining guarantee is stronger than “apps include authentication”:
 
 > No private app file, platform API, WebSocket, blob, or backend request is
-> reachable until TinyHost has authenticated and authorized the request.
+> reachable until Tinkercloud has authenticated and authorized the request.
 
-TinyHost includes a Go gateway, deployer CLI, persistent SQLite-backed
+Tinkercloud includes a Go gateway, deployer CLI, persistent SQLite-backed
 capabilities, browser SDK, and local operational commands. The documents define
 the security boundaries and release evidence required for V1 operation.
 
@@ -18,7 +18,7 @@ the security boundaries and release evidence required for V1 operation.
 detail but must not silently expand or contradict it.
 
 > [!WARNING]
-> TinyHost is pre-release software. Interfaces and operational procedures may
+> Tinkercloud is pre-release software. Interfaces and operational procedures may
 > change, and V1 intentionally has no operator backup system. Use it only for
 > replaceable toy, prototype, and utility apps—not business-critical data.
 
@@ -29,8 +29,8 @@ POSIX shell, OpenSSL, and Python 3. On macOS, release scripts also require GNU
 `sha256sum`.
 
 ```sh
-git clone https://github.com/ChrisMarxDev/tiny.git
-cd tiny
+git clone https://github.com/ChrisMarxDev/tinkercloud.git
+cd tinkercloud
 
 task setup
 task -l
@@ -44,7 +44,7 @@ local CI-equivalent verification suite). Focused tasks such as `task test`,
 `task lint`, `task security`, and `task release:check` are also available.
 These are local evidence commands; none deploy, publish, or install production
 software. Signed artifact creation requires explicit `VERSION`, `OUTPUT`, and
-`TINYHOST_RELEASE_SIGNING_KEY` inputs:
+`TINKERCLOUD_RELEASE_SIGNING_KEY` inputs:
 
 ```sh
 task release:build VERSION=0.1.0 OUTPUT=./dist/0.1.0
@@ -78,33 +78,33 @@ The supported server workflow and its prerequisites are documented in
 17. [Complete deployer flow](concept/flows/deployer.html)
 18. [Conversation decision compact](docs/product/conversation-decisions-2026-07.md)
 19. [Flow necessity audit](docs/product/flow-necessity-audit-2026-07.md)
-20. [Local app development with `tiny dev`](docs/getting-started/local-emulator.md)
+20. [Local app development with `tinker dev`](docs/getting-started/local-emulator.md)
 21. [Implemented post-V1 LLM chat capability](docs/product/llm-chat-capability-plan.md)
 
 ## Deployer quick start
 
 From a static app project, deploy the project directory (not just its output
-folder). Tiny reuses valid existing output; when none exists it stops with the
+folder). Tinker reuses valid existing output; when none exists it stops with the
 project-owned build action rather than running it:
 
 ```sh
-tiny deploy .
+tinker deploy .
 ```
 
-On its first human run, Tiny asks for the HTTPS platform URL only when it has no
+On its first human run, Tinker asks for the HTTPS platform URL only when it has no
 verified default, reuses or establishes the deployer identity, inspects the
 project, asks only about ambiguous required state, and creates a missing
-`tiny.yaml` as a reviewed receipt. Use `tiny init .` to create the manifest
+`tinker.yaml` as a reviewed receipt. Use `tinker init .` to create the manifest
 ahead of time. Later commands reuse the saved default server and verified CLI
-bearer; `tiny logout` revokes and removes that local bearer.
+bearer; `tinker logout` revokes and removes that local bearer.
 
 ## Local app development
 
-Run `tiny dev` from a static app project for a loopback-only development
+Run `tinker dev` from a static app project for a loopback-only development
 server with project-local SQLite state:
 
 ```sh
-tiny dev
+tinker dev
 ```
 
 The supported local subset includes current viewer/app information, KV,
@@ -117,16 +117,16 @@ gateway, activation, and anonymous-denial gates.
 ## Repository shape
 
 The runtime is implemented as a Go gateway and local operator CLI. Runtime
-directories are created by `tinyhost init`; they are not committed to the
+directories are created by `tinkercloud init`; they are not committed to the
 repository.
 
 ```text
-tiny/
+tinker/
 ├── AGENTS.md
 ├── PRD.md
 ├── PRINCIPLES.md
 ├── README.md
-├── cmd/                    # tinyhost and tiny entry points
+├── cmd/                    # tinkercloud and tinker entry points
 ├── internal/               # private gateway and capability packages
 ├── sdk/                    # browser SDK
 ├── docs/
@@ -142,13 +142,13 @@ tiny/
 
 ## Local operator workflow
 
-The target human path is `sudo tinyhost setup`: discover the host, ask only for
+The target human path is `sudo tinkercloud setup`: discover the host, ask only for
 the controlled base domain, initial operator email, and necessary protected
 provider credential source, then generate the config and resume across external
-DNS/email checkpoints. Strict `tinyhost init --non-interactive` remains the
-automation contract. `tinyhost status` is safe for offline recovery and reports
+DNS/email checkpoints. Strict `tinkercloud init --non-interactive` remains the
+automation contract. `tinkercloud status` is safe for offline recovery and reports
 local, redacted health (SQLite integrity, disk, permissions, clock, service,
-listeners, version, and update rollback state). `sudo tinyhost doctor`
+listeners, version, and update rollback state). `sudo tinkercloud doctor`
 additionally performs bounded DNS, TLS, and read-only Resend credential checks
 using the root-only systemd credential file; it never sends mail or prints
 secrets, credential paths/references, or provider response bodies. Updates use
@@ -172,10 +172,10 @@ source is an explicit advanced override.
 ## Current decisions
 
 - [Shopify Quick](https://shopify.engineering/quick) is the usability and
-  capability-model north star, while TinyHost deliberately uses a stricter
+  capability-model north star, while Tinkercloud deliberately uses a stricter
   self-hosted, per-app authorization model.
-- V1 is a modular Go monolith distributed as one self-contained `tinyhost`
-  server binary plus a separate small `tiny` deployer CLI.
+- V1 is a modular Go monolith distributed as one self-contained `tinkercloud`
+  server binary plus a separate small `tinker` deployer CLI.
 - V1 supports static apps, current-user/capability APIs, a deliberately small
   JSON key-value store, bounded reactive JSON document collections, lightweight
   app-shared local blobs, and ephemeral app-scoped realtime channels.
@@ -196,7 +196,7 @@ source is an explicit advanced override.
   a narrow local rollback snapshot for upgrade recovery.
 - The first operator-governed LLM chat capability is an implemented post-V1
   extension: encrypted write-only Anthropic/Gemini connections, app grants,
-  bounded non-streaming `tiny.llm.chat.complete`, quotas, audit, and SDK
+  bounded non-streaming `tinker.llm.chat.complete`, quotas, audit, and SDK
   support. It does not expand locked V1; streaming and broader provider
   integrations remain deferred. Operator secrets never enter deployed browser
   code.

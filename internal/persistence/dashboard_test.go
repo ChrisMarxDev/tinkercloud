@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 func TestDashboardReadModelRoleBoundAndSafe(t *testing.T) {

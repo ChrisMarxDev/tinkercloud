@@ -4,8 +4,8 @@
 
 ## Context
 
-Strict VPN-only ingress prevents the public HTTP-01 validation used by TinyHost
-V1. TinyHost still requires HTTPS: the VPN is an additional network boundary,
+Strict VPN-only ingress prevents the public HTTP-01 validation used by Tinkercloud
+V1. Tinkercloud still requires HTTPS: the VPN is an additional network boundary,
 not a replacement for hostname authentication, secure browser sessions, or the
 gateway authorization boundary.
 
@@ -24,29 +24,29 @@ example, it may contain names for `admin.example.com` and `*.example.com`.
 
 The guided setup flow will accept only absolute root-readable file paths, never
 private-key bytes in command arguments or echoed prompts. Before installation,
-TinyHost will reject a malformed, expired, not-yet-valid, hostname-mismatched,
+Tinkercloud will reject a malformed, expired, not-yet-valid, hostname-mismatched,
 untrusted, over-permissive, symlinked, or certificate/key-mismatched input.
 
 The operator owns obtaining the certificate, keeping its trust chain valid for
-company devices, and renewing it before expiry. TinyHost owns protected
+company devices, and renewing it before expiry. Tinkercloud owns protected
 installation, TLS termination, expiry diagnostics, and refusing to report
 setup or deployment success when trusted-network HTTPS or anonymous-denial
 verification fails.
 
-VPN membership grants no TinyHost identity and bypasses no app authentication
-or current policy. The first VPN-only mode retains TinyHost email OTP login and
+VPN membership grants no Tinkercloud identity and bypasses no app authentication
+or current policy. The first VPN-only mode retains Tinkercloud email OTP login and
 per-app authorization exactly as the public topology does. Central SSO is a
 separate later decision, not a prerequisite for VPN support.
 
 ## Consequences
 
-- TinyHost needs no DNS-provider credential or private-CA implementation for
+- Tinkercloud needs no DNS-provider credential or private-CA implementation for
   its first VPN-only mode.
 - Private or split DNS must resolve the admin hostname and root-domain wildcard
   suffix to the VPN-reachable server.
 - Setup needs a VPN-reachable trusted-network probe; the existing public V1
   proof must not be disabled or silently reused.
-- Renewal is an explicit operator action. TinyHost must provide a narrow,
+- Renewal is an explicit operator action. Tinkercloud must provide a narrow,
   atomic certificate replacement path plus expiry diagnostics before claiming
   support.
 - One certificate/key pair is the intentionally narrow initial contract.

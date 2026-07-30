@@ -11,7 +11,7 @@
 Viewer browser ─── HTTPS ──────┤
                                ▼
                   ┌─────────────────────────┐
-Internet ────────▶│ TinyHost public gateway │
+Internet ────────▶│ Tinkercloud public gateway │
                   │ :80 / :443 only         │
                   └────────────┬────────────┘
                                │
@@ -33,7 +33,7 @@ host-only cookies. CLI and deployment-agent bearers remain separate.
 
 ## Public listener rule
 
-Only the gateway owns TinyHost's public sockets. Internal component APIs are Go
+Only the gateway owns Tinkercloud's public sockets. Internal component APIs are Go
 interfaces and function calls in V1, not local HTTP services. SSH, firewall
 policy, and pre-existing listeners remain operator-owned. This reduces
 alternate routes, distributed failure modes, and identity-header confusion.
@@ -102,7 +102,7 @@ active position directly. Activation is owned by the release manager.
 
 ```text
 data/
-├── tinyhost.db
+├── tinkercloud.db
 ├── releases/
 │   └── <app-id>/
 │       └── <deployment-id>/       # immutable after validation

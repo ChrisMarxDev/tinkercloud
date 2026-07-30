@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LiveChannel, createTiny } from "../dist/index.js";
+import { LiveChannel, createTinker } from "../dist/index.js";
 class FakeSocket { constructor(){this.readyState=0;this.sent=[];this.onopen=this.onclose=this.onerror=this.onmessage=null} send(x){this.sent.push(JSON.parse(x))} close(){this.readyState=3;this.onclose?.({})} open(){this.readyState=1;this.onopen?.({})} message(x){this.onmessage?.({data:x})} }
 const sockets=[]; const timers=[];
 const options={origin:"https://app.test",webSocket:()=>{const s=new FakeSocket();sockets.push(s);return s},schedule:(fn)=>{timers.push(fn);return fn},cancel:(id)=>{const i=timers.indexOf(id);if(i>=0)timers.splice(i,1)},random:()=>0};
@@ -22,8 +22,8 @@ explicit.close();
 // KV-only subscriptions must not join a reserved custom channel. They need to
 // subscribe using the requested prefix and repeat that subscription on reconnect.
 const kvSockets=[];
-const kvTiny=createTiny({...options,webSocket:()=>{const s=new FakeSocket();kvSockets.push(s);return s}});
-const stop=kvTiny.live.onKvChange({prefix:"tasks/"},()=>{});
+const kvTinker=createTinker({...options,webSocket:()=>{const s=new FakeSocket();kvSockets.push(s);return s}});
+const stop=kvTinker.live.onKvChange({prefix:"tasks/"},()=>{});
 kvSockets[0].open();
 assert.deepEqual(kvSockets[0].sent,[{v:1,type:"subscribe_kv",prefix:"tasks/"}]);
 kvSockets[0].close(); timers.shift()(); kvSockets[1].open();
@@ -41,5 +41,5 @@ dynamic.close();
 
 // Empty lists from an older server may serialize a nil Go slice as null. Apps
 // should consistently receive the documented iterable entries array.
-const listTiny=createTiny({fetch:async()=>new Response(JSON.stringify({entries:null}),{status:200,headers:{"Content-Type":"application/json"}})});
-assert.deepEqual((await listTiny.kv.list({prefix:"tasks/"})).entries,[]);
+const listTinker=createTinker({fetch:async()=>new Response(JSON.stringify({entries:null}),{status:200,headers:{"Content-Type":"application/json"}})});
+assert.deepEqual((await listTinker.kv.list({prefix:"tasks/"})).entries,[]);

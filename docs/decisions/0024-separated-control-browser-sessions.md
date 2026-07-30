@@ -9,7 +9,7 @@ The platform dashboard needs an ambient host-only browser session, while the
 deployer CLI needs a bearer token. Storing both values in `api_tokens` makes
 the cookie name the only distinction: a browser credential can then be sent as
 an API bearer and a CLI credential can become an ambient browser credential.
-That violates the control/viewer/CLI separation promised by TinyHost.
+That violates the control/viewer/CLI separation promised by Tinkercloud.
 
 ## Decision
 

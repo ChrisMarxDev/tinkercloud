@@ -1,6 +1,6 @@
 # External VPS smoke acceptance
 
-The opt-in VPS suite installs TinyHost on a dedicated Ubuntu 24.04 LTS/amd64 or
+The opt-in VPS suite installs Tinkercloud on a dedicated Ubuntu 24.04 LTS/amd64 or
 Ubuntu 26.04 LTS/amd64 VPS, authorizes a deployer, deploys a unique private
 smoke app, and signs in a separate viewer identity. It is intentionally outside
 `go test ./...`.
@@ -16,11 +16,11 @@ Prepare:
   26.04 LTS on x86-64;
 - a public IPv4 address, synchronized system clock, and unused ports 80/443;
 - inbound SSH restricted to the operator's source IP where practical, plus
-  inbound TCP 80/443 for TinyHost and ACME;
+  inbound TCP 80/443 for Tinkercloud and ACME;
 - root SSH access using a dedicated key (the suite installs and recovers the
-  host as root, while the gateway itself runs as the unprivileged `tinyhost`
+  host as root, while the gateway itself runs as the unprivileged `tinkercloud`
   service user);
-- one wildcard `A` record for `*.<domain>` pointing at the VPS. TinyHost
+- one wildcard `A` record for `*.<domain>` pointing at the VPS. Tinkercloud
   derives `admin.<domain>` for the dashboard and `<slug>.<domain>` for apps;
 - a verified Resend sending domain and API key;
 - distinct operator, deployer, and viewer email addresses, plus an ACME contact
@@ -30,17 +30,17 @@ Prepare:
 
 The host must not run Docker, a reverse proxy, or another public service on
 ports 80/443. The acceptance suite is destructive by design and refuses a host
-with existing TinyHost configuration, application data, binary, or service
+with existing Tinkercloud configuration, application data, binary, or service
 unit unless the explicit disposable-host reuse gate matches. A fixed
-`/var/lib/tinyhost-acme` directory from an earlier disposable run may remain:
+`/var/lib/tinkercloud-acme` directory from an earlier disposable run may remain:
 it is transport cache rather than app state, is revalidated by initialization,
 and avoids needless duplicate certificate issuance. Do not delete that cache
 between clean reruns for the same domain.
 
 ## Repo-local SSH connection files
 
-The repository ignores `.tiny/`, so keep the dedicated private key, public key,
-pinned host key, and SSH config in `.tiny/vps/`. Create them with:
+The repository ignores `.tinker/`, so keep the dedicated private key, public key,
+pinned host key, and SSH config in `.tinker/vps/`. Create them with:
 
 ```bash
 ./scripts/setup-vps-ssh.sh 203.0.113.10
@@ -48,55 +48,55 @@ pinned host key, and SSH config in `.tiny/vps/`. Create them with:
 
 The helper reuses a matching keypair already at that path, or invokes
 `ssh-keygen` for a new Ed25519 key and asks you to choose a passphrase. Add
-`.tiny/vps/id_ed25519.pub` as the root SSH key while creating the VPS. If the
+`.tinker/vps/id_ed25519.pub` as the root SSH key while creating the VPS. If the
 key must support unattended tests, load it into an SSH agent first:
 
 ```bash
-ssh-add "$PWD/.tiny/vps/id_ed25519"
+ssh-add "$PWD/.tinker/vps/id_ed25519"
 ```
 
 Fetch a candidate host key only after the VPS exists:
 
 ```bash
 ssh-keyscan -p 22 -t ed25519 203.0.113.10 \
-  > "$PWD/.tiny/vps/known_hosts.candidate"
-ssh-keygen -lf "$PWD/.tiny/vps/known_hosts.candidate"
+  > "$PWD/.tinker/vps/known_hosts.candidate"
+ssh-keygen -lf "$PWD/.tinker/vps/known_hosts.candidate"
 ```
 
 Compare that fingerprint with the server console or another out-of-band source.
 Only after it matches, promote it and test the pinned connection:
 
 ```bash
-mv "$PWD/.tiny/vps/known_hosts.candidate" "$PWD/.tiny/vps/known_hosts"
-ssh -F "$PWD/.tiny/vps/ssh_config" tinyhost-test
+mv "$PWD/.tinker/vps/known_hosts.candidate" "$PWD/.tinker/vps/known_hosts"
+ssh -F "$PWD/.tinker/vps/ssh_config" tinkercloud-test
 ```
 
 Do not disable SSH checking or trust `ssh-keyscan` without the independent
 fingerprint comparison.
 
 ```bash
-export TINYHOST_VPS_E2E=1
-export TINYHOST_VPS_SSH_TARGET='root@203.0.113.10'
-export TINYHOST_VPS_ACKNOWLEDGE="$TINYHOST_VPS_SSH_TARGET"
-export TINYHOST_VPS_KNOWN_HOSTS_FILE="$PWD/.tiny/vps/known_hosts"
-export TINYHOST_VPS_SSH_IDENTITY_FILE="$PWD/.tiny/vps/id_ed25519"
+export TINKERCLOUD_VPS_E2E=1
+export TINKERCLOUD_VPS_SSH_TARGET='root@203.0.113.10'
+export TINKERCLOUD_VPS_ACKNOWLEDGE="$TINKERCLOUD_VPS_SSH_TARGET"
+export TINKERCLOUD_VPS_KNOWN_HOSTS_FILE="$PWD/.tinker/vps/known_hosts"
+export TINKERCLOUD_VPS_SSH_IDENTITY_FILE="$PWD/.tinker/vps/id_ed25519"
 
-export TINYHOST_VPS_DOMAIN='example.com'
-export TINYHOST_VPS_OPERATOR_EMAIL='operator@example.com'
-export TINYHOST_VPS_DEPLOYER_EMAIL='deployer@example.com'
-export TINYHOST_VPS_VIEWER_EMAIL='viewer@example.com'
-export TINYHOST_VPS_EMAIL_FROM='tiny@example.com'
-export TINYHOST_VPS_ACME_EMAIL='operator@example.com'
-export TINYHOST_VPS_RESEND_API_KEY_FILE="$PWD/.tiny/vps/resend-api-key"
-export TINYHOST_RESEND_READER_API_KEY_FILE="$PWD/.tiny/vps/resend-reader-api-key"
-export TINYHOST_RESEND_OTP_LEDGER_FILE="$PWD/.tiny/vps/resend-otp-consumed.json"
-export TINYHOST_VPS_OTP_COMMAND="$PWD/skills/tiny-full-stack-test/scripts/read-resend-otp.py"
+export TINKERCLOUD_VPS_DOMAIN='example.com'
+export TINKERCLOUD_VPS_OPERATOR_EMAIL='operator@example.com'
+export TINKERCLOUD_VPS_DEPLOYER_EMAIL='deployer@example.com'
+export TINKERCLOUD_VPS_VIEWER_EMAIL='viewer@example.com'
+export TINKERCLOUD_VPS_EMAIL_FROM='tinker@example.com'
+export TINKERCLOUD_VPS_ACME_EMAIL='operator@example.com'
+export TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$PWD/.tinker/vps/resend-api-key"
+export TINKERCLOUD_RESEND_READER_API_KEY_FILE="$PWD/.tinker/vps/resend-reader-api-key"
+export TINKERCLOUD_RESEND_OTP_LEDGER_FILE="$PWD/.tinker/vps/resend-otp-consumed.json"
+export TINKERCLOUD_VPS_OTP_COMMAND="$PWD/skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py"
 ```
 
 The OTP helper is called directly as:
 
 ```text
-read-tinyhost-otp deployer|viewer EMAIL HOSTNAME
+read-tinkercloud-otp deployer|viewer EMAIL HOSTNAME
 ```
 
 It must emit only a 4--12 digit code. Without a helper, run from an interactive
@@ -112,7 +112,7 @@ go test ./test/vps -run TestVPSAcceptance -count=1 -v
 For one unattended overnight pass after exporting the same variables, use:
 
 ```bash
-skills/tiny-full-stack-test/scripts/run-unattended.sh
+skills/tinkercloud-full-stack-test/scripts/run-unattended.sh
 ```
 
 It runs the offline reader tests, skill-drift check, VPS package test with
@@ -121,15 +121,15 @@ live acceptance invocation. It will only use the
 shipped local Resend reader, refuses unsafe local secret/ledger files and any
 SSH acknowledgement mismatch, and never sources an env file. It prints the
 path of a private mode-`0600` redacted timestamped status artifact (default
-`.tiny/vps/unattended-reports/`) on either success or failure. Set an absolute,
-owner-only mode-`0700` `TINYHOST_VPS_UNATTENDED_REPORT_DIR` to choose another
+`.tinker/vps/unattended-reports/`) on either success or failure. Set an absolute,
+owner-only mode-`0700` `TINKERCLOUD_VPS_UNATTENDED_REPORT_DIR` to choose another
 local location. The report intentionally contains step outcomes only; it never
 contains credentials, OTPs, mail data, or provider responses.
-With `TINYHOST_VPS_REUSE=1`, it also refuses before offline gates unless
-`TINYHOST_VPS_RELEASE_DIR` is an absolute, existing, caller-owned,
+With `TINKERCLOUD_VPS_REUSE=1`, it also refuses before offline gates unless
+`TINKERCLOUD_VPS_RELEASE_DIR` is an absolute, existing, caller-owned,
 non-symlink directory; the live suite still verifies the release signature.
 
-The suite confirms the 80/443 listeners belong to TinyHost, then after deployer
+The suite confirms the 80/443 listeners belong to Tinkercloud, then after deployer
 login lists that deployer's apps and deletes only its four fixed fixture names
 when they are present: `vps-e2e-update-probe`, `vps-e2e-primary`,
 `vps-e2e-isolation`, and `vps-e2e-denied`. It uses a fresh idempotency key for
@@ -143,12 +143,12 @@ download/delete. It rejects an extra multipart part without catalog mutation,
 proves anonymous and cross-app guessed-ID reads contain no blob bytes, requires
 attachment/private-no-store/nosniff download headers, and checks the bytes
 survive a service restart. It leaves the VPS state available after a failure. For a disposable
-already-initialized host only, set `TINYHOST_VPS_REUSE=1`; the existing
+already-initialized host only, set `TINKERCLOUD_VPS_REUSE=1`; the existing
 root-owned suite marker must match the target and root domain.
 Reuse does not reset or clean up the host. It additionally requires
-`TINYHOST_VPS_RELEASE_DIR` to name a release verified by the installed
+`TINKERCLOUD_VPS_RELEASE_DIR` to name a release verified by the installed
 server's pinned release key. Once a fresh active probe app exists, the suite
-uses the normal signed `tinyhost update` command and its rollback health gate;
+uses the normal signed `tinkercloud update` command and its rollback health gate;
 it never re-runs initialization or replaces the binary directly.
 
 First ACME issuance and public DNS propagation can make the final platform
@@ -159,10 +159,10 @@ that every earlier durable step completed. Setup, credentials, install, local
 service, SSH, or state failures stop immediately; no installer or secret-copy
 step is repeated between readiness attempts.
 
-Clean application-state reruns preserve `/var/lib/tinyhost-acme`. Repeatedly
+Clean application-state reruns preserve `/var/lib/tinkercloud-acme`. Repeatedly
 deleting it and requesting the same certificate again can exhaust the public
 CA's duplicate-certificate allowance while proving nothing additional about
-TinyHost. Destroy it only when retiring the VPS/domain or deliberately rotating
+Tinkercloud. Destroy it only when retiring the VPS/domain or deliberately rotating
 that transport state outside the acceptance loop.
 
 [The checked-in VPS smoke app](../../examples/test-apps/vps-smoke/) is a
@@ -180,21 +180,21 @@ Create and lock down the file once:
 
 ```bash
 umask 077
-mkdir -p "$PWD/.tiny/vps"
-${EDITOR:-vi} "$PWD/.tiny/vps/resend-reader-api-key"
-chmod 600 "$PWD/.tiny/vps/resend-reader-api-key"
+mkdir -p "$PWD/.tinker/vps"
+${EDITOR:-vi} "$PWD/.tinker/vps/resend-reader-api-key"
+chmod 600 "$PWD/.tinker/vps/resend-reader-api-key"
 ```
 
 The shipped reader is dependency-free and uses only Resend's fixed HTTPS API.
-It polls for at most 60 seconds, accepts one exact recent TinyHost OTP for the
+It polls for at most 60 seconds, accepts one exact recent Tinkercloud OTP for the
 requested deployer/viewer and host, records an opaque consumed message ID in
 the local mode-`0600` ledger, then prints only the code to the existing test
-harness. It never reads TinyHost/VPS state or logs. A malformed, stale,
+harness. It never reads Tinkercloud/VPS state or logs. A malformed, stale,
 ambiguous, unrelated, already-consumed, or provider-error response stops the
 run without printing a code.
 
 For a disposable test-only setup, set
-`TINYHOST_RESEND_READER_API_KEY_FILE` to the existing local send-key file only
+`TINKERCLOUD_RESEND_READER_API_KEY_FILE` to the existing local send-key file only
 if that key has been deliberately granted sent-email read permission. Do not
 broaden a production VPS key solely for testing. Prefer separate least-
 privilege sending and local reader keys; for tonight's disposable test, the

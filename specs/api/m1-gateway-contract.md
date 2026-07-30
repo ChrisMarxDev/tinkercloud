@@ -17,7 +17,7 @@ stat, hash, or otherwise read the release tree. Before any release path is
 opened, the gateway must deny malformed or unknown hosts, inactive
 applications, login/OTP routes, reserved unknown routes, missing/wrong/revoked
 sessions, absent/corrupt policy, and policy-store failure. These responses
-contain no release bytes. `/_tiny/*` is reserved and cannot use SPA fallback.
+contain no release bytes. `/_tinker/*` is reserved and cannot use SPA fallback.
 
 After the gateway produces a sealed `AuthorizationContext`, protected static
 dispatch verifies the current immutable release tree against the active
@@ -63,14 +63,14 @@ app-host cookie only after success.
 
 For a genuine unauthenticated browser document navigation to a protected static
 path, the gateway may redirect only to that same app host's
-`/_tiny/auth/login?return={safe-relative-request-uri}`. The handoff preserves a
+`/_tinker/auth/login?return={safe-relative-request-uri}`. The handoff preserves a
 validated relative path and raw query, including repeated and percent-encoded
 query values. Fragments are browser-only and not guaranteed. The gateway does
 not use an admin cookie as app identity and does not read release content first. API,
 asset, WebSocket, range, non-document, and ambiguous requests continue to
 return the normal JSON `401 not_authorized` denial without a redirect.
 
-`POST /_tiny/auth/logout` is the only app-host *local* logout mutation.
+`POST /_tinker/auth/logout` is the only app-host *local* logout mutation.
 It requires an exact same-origin `Origin`, validates any form return value as a
 safe relative path, revokes only the current app's host-only session, expires
 that app cookie, and redirects a form submission to its app-host login page.

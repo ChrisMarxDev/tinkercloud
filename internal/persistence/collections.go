@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
 // CollectionRepository maps the app-scoped document primitive onto a private

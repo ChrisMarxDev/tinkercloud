@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost targets one small Linux VPS, one operator, a single public gateway, and
+Tinkercloud targets one small Linux VPS, one operator, a single public gateway, and
 minimal operational dependencies. Splitting security-critical request handling
 across services would add private-network authentication, deployment
 orchestration, and distributed failure modes before they provide user value.
@@ -41,7 +41,7 @@ Using an S3-compatible store for blobs and
 [SlateDB](https://slatedb.io/) for app KV is technically coherent for a future
 stateless or multi-reader platform, but it is rejected for V1:
 
-- TinyHost would still need SQLite for identities, policies, sessions,
+- Tinkercloud would still need SQLite for identities, policies, sessions,
   deployments, audit, jobs, and relational integrity, creating two persistence
   authorities and cross-store recovery work.
 - SlateDB's official Go binding requires cgo and a separately loaded Rust
@@ -52,7 +52,7 @@ stateless or multi-reader platform, but it is rejected for V1:
 - Self-hosting the S3-compatible store adds another service; using a managed
   store adds an external recovery authority and provider secret.
 
-V1 therefore keeps app KV in SQLite and blob bytes in TinyHost's native private
+V1 therefore keeps app KV in SQLite and blob bytes in Tinkercloud's native private
 local adapter. This alternative is reconsidered only if measured needs justify
 stateless compute or multiple readers and the runtime, object-store conditional
 write compatibility, outage behavior, quotas, recovery, and migration path all

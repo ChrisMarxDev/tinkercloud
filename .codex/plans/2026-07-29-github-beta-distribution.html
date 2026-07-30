@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost GitHub Beta Distribution Plan</title>
+  <title>Tinkercloud GitHub Beta Distribution Plan</title>
   <style>
     :root {
       color-scheme: light;
@@ -77,15 +77,15 @@
   </style>
 </head>
 <body>
-<main data-title="TinyHost GitHub Beta Distribution">
+<main data-title="Tinkercloud GitHub Beta Distribution">
   <header>
     <div class="meta">
       <span class="chip green">Implementation plan</span>
-      <span class="chip">TinyHost</span>
+      <span class="chip">Tinkercloud</span>
       <span class="chip">2026-07-29 · Europe/Berlin</span>
     </div>
     <h1>GitHub beta distribution before npm and Homebrew</h1>
-    <p class="muted">Create a manually approved, signed GitHub prerelease from an exact version tag. Users install the CLI or TinyHost directly from that release while registry publication remains disabled until the final rename.</p>
+    <p class="muted">Create a manually approved, signed GitHub prerelease from an exact version tag. Users install the CLI or Tinkercloud directly from that release while registry publication remains disabled until the final rename.</p>
   </header>
 
   <section class="decision" data-section="Open Decisions">
@@ -168,7 +168,7 @@
         <tr><td><input type="checkbox" checked data-item="Integrate beta checks into Taskfile and existing CI."></td><td><code>Taskfile.yml</code><br><code>.github/workflows/release-verify.yml</code></td><td>Add a local beta-workflow check and run it on every PR/main build.</td></tr>
         <tr><td><input type="checkbox" checked data-item="Document beta setup and operator flow."></td><td><code>docs/operations/release-pipeline.md</code><br><code>docs/delivery/roadmap.md</code></td><td>Explain environment creation, secret encoding, tag/release steps, installation URLs, beta warnings, rollback/forward-only recovery, and evidence.</td></tr>
         <tr><td><input type="checkbox" checked data-item="Record the beta distribution decision."></td><td><code>docs/decisions/0046-github-beta-release-channel.md</code><br><code>docs/decisions/README.md</code><br><code>PRD.md</code></td><td>Record GitHub prereleases as the temporary pre-rename channel and the mandatory production-key rotation seam.</td></tr>
-        <tr><td><input type="checkbox" checked data-item="Update distribution maintainer skills for beta routing."></td><td><code>skills/distribute-tiny-cli/SKILL.md</code><br><code>skills/distribute-tiny-sdk/SKILL.md</code><br><code>specs/agent/distribution-skill-contract.md</code></td><td>Teach maintainers that explicit beta publication routes only through the protected workflow; npm/JSR/Homebrew remain blocked.</td></tr>
+        <tr><td><input type="checkbox" checked data-item="Update distribution maintainer skills for beta routing."></td><td><code>skills/distribute-tinker-cli/SKILL.md</code><br><code>skills/distribute-tinkercloud-sdk/SKILL.md</code><br><code>specs/agent/distribution-skill-contract.md</code></td><td>Teach maintainers that explicit beta publication routes only through the protected workflow; npm/JSR/Homebrew remain blocked.</td></tr>
       </tbody>
     </table>
     <p class="muted">No production Go service, HTTP handler, database, SDK API, or app UI file is planned to change.</p>
@@ -191,7 +191,7 @@
       <li><label class="item"><input type="checkbox" checked data-item="The complete local release verifies before any GitHub release mutation."><span><code>release-verify.sh</code> proves the signed schema-2 manifest, platform matrix, artifact triplets, SDK version, compatibility, checksums, and evidence.</span></label></li>
       <li><label class="item"><input type="checkbox" checked data-item="Workflow creates a new draft prerelease and uploads every verified file without clobber."><span>A new GitHub draft named by the existing tag receives the exact verified directory. Existing releases/assets are never overwritten.</span></label></li>
       <li><label class="item"><input type="checkbox" checked data-item="Workflow downloads the draft assets and verifies them again before publication."><span>The workflow compares the asset set and runs the same verifier over bytes downloaded from the draft. Failure leaves a visible draft for diagnosis.</span></label></li>
-      <li><label class="item"><input type="checkbox" checked data-item="Verified draft becomes a GitHub prerelease; anonymous installer smoke test runs against the public URL."><span>Only then is the draft made public as a prerelease. The workflow exercises the public installer into a temporary directory and checks <code>tiny version</code>. A failure requires a new version, never asset replacement.</span></label></li>
+      <li><label class="item"><input type="checkbox" checked data-item="Verified draft becomes a GitHub prerelease; anonymous installer smoke test runs against the public URL."><span>Only then is the draft made public as a prerelease. The workflow exercises the public installer into a temporary directory and checks <code>tinker version</code>. A failure requires a new version, never asset replacement.</span></label></li>
     </ol>
     <pre>reviewed tag
   → no-secret validation/tests
@@ -232,7 +232,7 @@
         <select data-status="UI States and Transitions"><option selected>Approve</option><option>Revise</option><option>Partial</option><option>Reject</option></select>
       </label>
     </div>
-    <p><strong>No TinyHost-owned UI is planned.</strong> GitHub’s Actions and Releases pages are the operator UI.</p>
+    <p><strong>No Tinkercloud-owned UI is planned.</strong> GitHub’s Actions and Releases pages are the operator UI.</p>
     <table>
       <thead><tr><th>State</th><th>Operator-visible behavior</th><th>Transition</th></tr></thead>
       <tbody>
@@ -252,7 +252,7 @@
         <select data-status="Backend and Database Changes"><option selected>Approve none</option><option>Revise</option><option>Reject</option></select>
       </label>
     </div>
-    <p><strong>None planned.</strong> No TinyHost database, migrations, HTTP routes, gateway policy, persistence, VPS state, or cloud backend is changed. GitHub tags, workflow runs, environment secrets, and release assets are the only external state.</p>
+    <p><strong>None planned.</strong> No Tinkercloud database, migrations, HTTP routes, gateway policy, persistence, VPS state, or cloud backend is changed. GitHub tags, workflow runs, environment secrets, and release assets are the only external state.</p>
     <div class="notes"><span>Backend notes</span><textarea data-note="Backend/database notes"></textarea></div>
   </section>
 
@@ -304,7 +304,7 @@
   (function () {
     function clean(v) { return String(v || '').replace(/\s+/g, ' ').trim(); }
     function exportResponse() {
-      var out = ['Proceed with the implementation plan: TinyHost GitHub Beta Distribution.', '', 'Section statuses:'];
+      var out = ['Proceed with the implementation plan: Tinkercloud GitHub Beta Distribution.', '', 'Section statuses:'];
       document.querySelectorAll('[data-status]').forEach(function (el) {
         out.push('- ' + clean(el.dataset.status) + ': ' + clean(el.value));
       });

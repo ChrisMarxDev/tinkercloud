@@ -1,10 +1,10 @@
 // @ts-check
 import {
-  TinyCapabilityUnavailableError,
-  TinyVersionConflictError,
-  tiny,
-} from "@tinyhost/sdk";
-import { describeTinyError } from "../../shared/errors.js";
+  TinkerCapabilityUnavailableError,
+  TinkerVersionConflictError,
+  tinker,
+} from "@tinkercloud/sdk";
+import { describeTinkerError } from "../../shared/errors.js";
 
 const prefix = "team-pulse/viewers/";
 const pageLifetime = new AbortController();
@@ -21,7 +21,7 @@ let statusTimer;
 let lastLiveStatus = "offline";
 let selectedPulse = "focused";
 let myEntry;
-/** @type {import("@tinyhost/sdk").KVEntry[]} */
+/** @type {import("@tinkercloud/sdk").KVEntry[]} */
 let pulses = [];
 
 const form = /** @type {HTMLFormElement} */ (
@@ -63,7 +63,7 @@ function hideError() {
 
 /** @param {unknown} error */
 function showError(error) {
-  const detail = describeTinyError(error);
+  const detail = describeTinkerError(error);
   document.querySelector("#notice-title").textContent = detail.title;
   document.querySelector("#notice-message").textContent = detail.message;
   document.querySelector("#notice-request").textContent = detail.requestId
@@ -111,11 +111,11 @@ function render() {
 }
 
 async function readPulses() {
-  /** @type {import("@tinyhost/sdk").KVEntry[]} */
+  /** @type {import("@tinkercloud/sdk").KVEntry[]} */
   const entries = [];
   let cursor;
   do {
-    const page = await tiny.kv.list({
+    const page = await tinker.kv.list({
       prefix,
       limit: 50,
       cursor,
@@ -178,7 +178,7 @@ form.addEventListener("submit", async (event) => {
   save.disabled = true;
   hideError();
   try {
-    await tiny.kv.set(
+    await tinker.kv.set(
       `${prefix}${viewer.identity.id}`,
       {
         email: viewer.identity.email,
@@ -195,7 +195,7 @@ form.addEventListener("submit", async (event) => {
     publishRefreshHint();
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshPulses();
+    if (error instanceof TinkerVersionConflictError) await refreshPulses();
   } finally {
     save.disabled = false;
   }
@@ -205,7 +205,7 @@ clear.addEventListener("click", async () => {
   if (!myEntry) return;
   clear.disabled = true;
   try {
-    await tiny.kv.delete(myEntry.key, {
+    await tinker.kv.delete(myEntry.key, {
       expectedVersion: myEntry.version,
       signal: pageLifetime.signal,
     });
@@ -213,7 +213,7 @@ clear.addEventListener("click", async () => {
     publishRefreshHint();
   } catch (error) {
     showError(error);
-    if (error instanceof TinyVersionConflictError) await refreshPulses();
+    if (error instanceof TinkerVersionConflictError) await refreshPulses();
   } finally {
     clear.disabled = false;
   }
@@ -225,7 +225,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 async function startLive() {
-  channel = tiny.live.channel("team-pulse");
+  channel = tinker.live.channel("team-pulse");
   channel.subscribe();
   stopChannelEvents = channel.on(
     "pulse.changed",
@@ -256,9 +256,9 @@ async function startLive() {
 async function start() {
   try {
     const [currentViewer, app, result] = await Promise.all([
-      tiny.user.current({ signal: pageLifetime.signal }),
-      tiny.app.info({ signal: pageLifetime.signal }),
-      tiny.capabilities.list({ signal: pageLifetime.signal }),
+      tinker.user.current({ signal: pageLifetime.signal }),
+      tinker.app.info({ signal: pageLifetime.signal }),
+      tinker.capabilities.list({ signal: pageLifetime.signal }),
     ]);
     viewer = currentViewer;
     document.querySelector("#viewer-email").textContent = viewer.identity.email;
@@ -268,7 +268,7 @@ async function start() {
 
     const capabilities = new Set(result.capabilities.map((item) => item.name));
     if (!capabilities.has("kv")) {
-      throw new TinyCapabilityUnavailableError(
+      throw new TinkerCapabilityUnavailableError(
         "This example requires KV.",
         "capability_unavailable",
       );

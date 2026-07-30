@@ -124,7 +124,7 @@ run_fetch_case() {
   PATH="${TEST_DIR}/bin:${PATH}" \
     GH_BIN=gh \
     GH_TOKEN=test-token \
-    REPO_SLUG=example/tiny \
+    REPO_SLUG=example/tinker \
     APPROVER_LOGINS=TrustedMaintainer \
     FAKE_GH_SCENARIO="${scenario}" \
     STATE_DIR="${state_dir}" \
@@ -179,7 +179,7 @@ run_loop_case() {
   PATH="${TEST_DIR}/bin:${PATH}" \
     GH_BIN=gh \
     GH_TOKEN=test-token \
-    REPO_SLUG=example/tiny \
+    REPO_SLUG=example/tinker \
     APPROVER_LOGINS=TrustedMaintainer \
     FAKE_GH_SCENARIO="${scenario}" \
     HERMES_BIN=hermes \
@@ -207,7 +207,7 @@ label_calls="${TEST_DIR}/label-calls"
 PATH="${TEST_DIR}/bin:${PATH}" \
   GH_BIN=gh \
   GH_TOKEN=test-token \
-  REPO_SLUG=example/tiny \
+  REPO_SLUG=example/tinker \
   FAKE_LABEL_CALLS_FILE="${label_calls}" \
   bash "${SCRIPT_DIR}/setup-github-labels.sh"
 

@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/compose"
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/live"
-	"github.com/tinyhost/tiny/internal/llm"
-	"github.com/tinyhost/tiny/internal/persistence"
-	"github.com/tinyhost/tiny/internal/releases"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/live"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // TestLLMGatewaySQLiteTwoAppBoundary exercises the complete protected path:
@@ -29,7 +29,7 @@ import (
 // or caller-supplied tenancy can bypass the server-derived app scope.
 func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	ctx := context.Background()
-	store, err := persistence.OpenSQLite(ctx, filepath.Join(t.TempDir(), "tiny.db"))
+	store, err := persistence.OpenSQLite(ctx, filepath.Join(t.TempDir(), "tinker.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	adapter := &llmGatewayAdapter{}
 	service := llm.New(repo, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: adapter})
 	h := compose.AppPlaneWithPlatformAndBlobsCollectionsAndLLM(
-		config.Config{Domain: "apps.tiny.test", SessionCookie: sessions.AppCookieName, ListenHTTPS: ":443"},
+		config.Config{Domain: "apps.tinker.test", SessionCookie: sessions.AppCookieName, ListenHTTPS: ":443"},
 		store, store, store, nil, nil, nil, live.New(live.DefaultLimits()), compose.Login{}, nil, service,
 	)
 	server := httptest.NewServer(h)
@@ -98,13 +98,13 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 		return response.StatusCode, string(payload)
 	}
 
-	if status, body := request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/capabilities", "", ""); status != http.StatusUnauthorized || strings.Contains(body, "llm.chat") {
+	if status, body := request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/capabilities", "", ""); status != http.StatusUnauthorized || strings.Contains(body, "llm.chat") {
 		t.Fatalf("anonymous discovery status=%d body=%q", status, body)
 	}
-	if status, body := request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/capabilities", aToken, ""); status != http.StatusOK || !strings.Contains(body, `"llm.chat"`) || !strings.Contains(body, `"disclosure"`) || !strings.Contains(body, `"max_output_tokens":10`) || strings.Contains(body, "hidden-test-model") || strings.Contains(body, "provider-secret") || strings.Contains(body, "anthropic") {
+	if status, body := request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/capabilities", aToken, ""); status != http.StatusOK || !strings.Contains(body, `"llm.chat"`) || !strings.Contains(body, `"disclosure"`) || !strings.Contains(body, `"max_output_tokens":10`) || strings.Contains(body, "hidden-test-model") || strings.Contains(body, "provider-secret") || strings.Contains(body, "anthropic") {
 		t.Fatalf("unsafe app A discovery status=%d body=%q", status, body)
 	}
-	if status, body := request(http.MethodGet, "beta.apps.tiny.test", "/_tiny/api/v1/capabilities", bToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") || strings.Contains(body, "profile") || strings.Contains(body, "connection") {
+	if status, body := request(http.MethodGet, "beta.apps.tinker.test", "/_tinker/api/v1/capabilities", bToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") || strings.Contains(body, "profile") || strings.Contains(body, "connection") {
 		t.Fatalf("ungranted app B discovery status=%d body=%q", status, body)
 	}
 
@@ -114,10 +114,10 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status, body := request(http.MethodPost, "beta.apps.tiny.test", "/_tiny/api/v1/llm/chat", bToken, string(payload)); status != http.StatusForbidden || strings.Contains(body, "app-a") || strings.Contains(body, "grant") || adapter.Count() != 0 {
+	if status, body := request(http.MethodPost, "beta.apps.tinker.test", "/_tinker/api/v1/llm/chat", bToken, string(payload)); status != http.StatusForbidden || strings.Contains(body, "app-a") || strings.Contains(body, "grant") || adapter.Count() != 0 {
 		t.Fatalf("app B invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
-	if status, body := request(http.MethodPost, "alpha.apps.tiny.test", "/_tiny/api/v1/llm/chat", aToken, string(payload)); status != http.StatusOK || !strings.Contains(body, completion) || adapter.Count() != 1 {
+	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusOK || !strings.Contains(body, completion) || adapter.Count() != 1 {
 		t.Fatalf("app A invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
 	var used, reserved, inFlight int
@@ -136,10 +136,10 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	if err := repo.UpdateGrant(ctx, persistence.LLMGrantInput{AppID: "app-a", ProfileID: "profile", OperatorID: "owner-app-a", Status: "revoked"}, 1); err != nil {
 		t.Fatal(err)
 	}
-	if status, body := request(http.MethodGet, "alpha.apps.tiny.test", "/_tiny/api/v1/capabilities", aToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") {
+	if status, body := request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/capabilities", aToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") {
 		t.Fatalf("revoked discovery status=%d body=%q", status, body)
 	}
-	if status, body := request(http.MethodPost, "alpha.apps.tiny.test", "/_tiny/api/v1/llm/chat", aToken, string(payload)); status != http.StatusForbidden || adapter.Count() != 1 {
+	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusForbidden || adapter.Count() != 1 {
 		t.Fatalf("revoked invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
 }

@@ -1,14 +1,14 @@
 {{define "content"}}
-<main class="tiny-auth" id="main">
-  <section class="tiny-auth-card" aria-labelledby="error-title">
-    <a class="tiny-brand" href="{{.Href}}" aria-label="TinyHost">
-      <span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span>
-      <span>tinyhost</span>
+<main class="tinker-auth" id="main">
+  <section class="tinker-auth-card" aria-labelledby="error-title">
+    <a class="tinker-brand" href="{{.Href}}" aria-label="Tinkercloud">
+      <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+      <span>tinkercloud</span>
     </a>
-    <p class="tiny-eyebrow">Safe next step</p>
+    <p class="tinker-eyebrow">Safe next step</p>
     <h1 id="error-title">{{.Title}}</h1>
-    <div class="tiny-notice tiny-notice--warning" role="alert"><p>{{.Message}}</p></div>
-    <a class="tiny-button tiny-button--primary tiny-button--full" href="{{.Href}}">{{.Label}}</a>
+    <div class="tinker-notice tinker-notice--warning" role="alert"><p>{{.Message}}</p></div>
+    <a class="tinker-button tinker-button--primary tinker-button--full" href="{{.Href}}">{{.Label}}</a>
   </section>
 </main>
 {{end}}

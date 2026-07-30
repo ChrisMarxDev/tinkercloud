@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 func TestSDKExampleAppsRemainPrivateCapabilityProjects(t *testing.T) {
@@ -22,7 +22,7 @@ func TestSDKExampleAppsRemainPrivateCapabilityProjects(t *testing.T) {
 	for directory, expected := range examples {
 		t.Run(directory, func(t *testing.T) {
 			project := filepath.Join("..", "..", "examples", "sdk-apps", directory)
-			raw, err := os.ReadFile(filepath.Join(project, "tiny.yaml"))
+			raw, err := os.ReadFile(filepath.Join(project, "tinker.yaml"))
 			if err != nil {
 				t.Fatal(err)
 			}

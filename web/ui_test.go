@@ -12,33 +12,33 @@ import (
 func TestEmbeddedDesignSystemIsLocalAccessibleAndTokenized(t *testing.T) {
 	css := Stylesheet()
 	for _, required := range []string{
-		"--tiny-canvas:",
-		"--tiny-ink:",
-		"--tiny-primary:",
-		"--tiny-qr-ink:",
-		"--tiny-qr-surface:",
-		"--tiny-motion-fast:",
-		"--tiny-motion-disclosure:",
-		"--tiny-ease-out:",
-		".tiny-auth-card",
-		".tiny-status",
-		".tiny-button--danger",
-		".tiny-toast",
-		".tiny-dialog",
-		".tiny-dialog--compact",
-		".tiny-qr",
-		".tiny-qr-frame",
-		".tiny-disclosure-card",
-		".tiny-app-filter[hidden]",
-		".tiny-inset",
-		".tiny-state--loading",
-		".tiny-state--stale",
-		".tiny-state--unavailable",
-		".tiny-state--error",
-		".tiny-progress",
-		".tiny-stage-list",
-		".tiny-pagination",
-		".tiny-button[data-state=\"busy\"]",
+		"--tinker-canvas:",
+		"--tinker-ink:",
+		"--tinker-primary:",
+		"--tinker-qr-ink:",
+		"--tinker-qr-surface:",
+		"--tinker-motion-fast:",
+		"--tinker-motion-disclosure:",
+		"--tinker-ease-out:",
+		".tinker-auth-card",
+		".tinker-status",
+		".tinker-button--danger",
+		".tinker-toast",
+		".tinker-dialog",
+		".tinker-dialog--compact",
+		".tinker-qr",
+		".tinker-qr-frame",
+		".tinker-disclosure-card",
+		".tinker-app-filter[hidden]",
+		".tinker-inset",
+		".tinker-state--loading",
+		".tinker-state--stale",
+		".tinker-state--unavailable",
+		".tinker-state--error",
+		".tinker-progress",
+		".tinker-stage-list",
+		".tinker-pagination",
+		".tinker-button[data-state=\"busy\"]",
 		":focus-visible",
 		"prefers-reduced-motion",
 		"@media (max-width: 560px)",
@@ -60,20 +60,20 @@ func TestEmbeddedDesignSystemIsLocalAccessibleAndTokenized(t *testing.T) {
 func TestEmbeddedInteractionsStayLocalAndPresentationOnly(t *testing.T) {
 	js := strings.ToLower(Interactions())
 	for _, required := range []string{
-		"tinyui",
+		"tinkerui",
 		"showmodal",
-		"data-tiny-dialog-open",
-		"data-tiny-toast-message",
-		"data-tiny-disclosure-state",
+		"data-tinker-dialog-open",
+		"data-tinker-toast-message",
+		"data-tinker-disclosure-state",
 		"prefers-reduced-motion",
 		".animate(",
 		"toggledisclosure",
 		"textcontent",
-		"data-tiny-app-filter",
-		"data-tiny-app-slug",
-		"data-tiny-app-description",
-		"data-tiny-app-status",
-		"canvas[data-tiny-qr]",
+		"data-tinker-app-filter",
+		"data-tinker-app-slug",
+		"data-tinker-app-description",
+		"data-tinker-app-status",
+		"canvas[data-tinker-qr]",
 		"initializeqrcodes",
 		"window.atob",
 		"var quiet = 4",
@@ -108,8 +108,8 @@ func TestEmbeddedAssetsExposeExactCSPHashSources(t *testing.T) {
 		body   string
 		source string
 	}{
-		{name: "stylesheet", body: Stylesheet(), source: TinyStyleCSPSource()},
-		{name: "interactions", body: Interactions(), source: TinyScriptCSPSource()},
+		{name: "stylesheet", body: Stylesheet(), source: TinkerStyleCSPSource()},
+		{name: "interactions", body: Interactions(), source: TinkerScriptCSPSource()},
 	} {
 		digest := sha256.Sum256([]byte(asset.body))
 		want := "'sha256-" + base64.StdEncoding.EncodeToString(digest[:]) + "'"
@@ -138,7 +138,7 @@ func TestEmbeddedCloudMarkIsStaticAndScriptFree(t *testing.T) {
 
 func TestFuncMapKeepsUserValuesEscaped(t *testing.T) {
 	tpl := template.Must(template.New("page").Funcs(FuncMap()).Parse(
-		`<style>{{tinyCSS}}</style><script>{{tinyJS}}</script>{{tinyMark}}<p>{{.}}</p>`,
+		`<style>{{tinkerCSS}}</style><script>{{tinkerJS}}</script>{{tinkerMark}}<p>{{.}}</p>`,
 	))
 	var out strings.Builder
 	if err := tpl.Execute(&out, `<script>alert("x")</script>`); err != nil {
@@ -159,38 +159,38 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 	}
 	page := strings.ToLower(string(raw))
 	for _, required := range []string{
-		`href="assets/tinyhost.css?v=1"`,
-		`src="assets/tinyhost.js?v=1"`,
-		`src="assets/tiny-cloud-mark.svg"`,
-		`class="tiny-skip"`,
+		`href="assets/tinkercloud.css?v=1"`,
+		`src="assets/tinkercloud.js?v=1"`,
+		`src="assets/tinkercloud-mark.svg"`,
+		`class="tinker-skip"`,
 		`method="post" action="/logout"`,
 		`name="csrf"`,
-		`sign out of tinyhost`,
+		`sign out of tinkercloud`,
 		`data-state="active"`,
-		`class="tiny-dialog"`,
-		`data-tiny-dialog-open="showcase-qr-dialog"`,
-		`class="tiny-qr"`,
+		`class="tinker-dialog"`,
+		`data-tinker-dialog-open="showcase-qr-dialog"`,
+		`class="tinker-qr"`,
 		`scan with your phone`,
-		`class="tiny-disclosure-card"`,
-		`class="tiny-state tiny-state--loading"`,
-		`class="tiny-state tiny-state--stale"`,
-		`class="tiny-state tiny-state--unavailable"`,
-		`class="tiny-state tiny-state--error"`,
-		`class="tiny-progress"`,
-		`class="tiny-stage-list"`,
-		`class="tiny-pagination"`,
+		`class="tinker-disclosure-card"`,
+		`class="tinker-state tinker-state--loading"`,
+		`class="tinker-state tinker-state--stale"`,
+		`class="tinker-state tinker-state--unavailable"`,
+		`class="tinker-state tinker-state--error"`,
+		`class="tinker-progress"`,
+		`class="tinker-stage-list"`,
+		`class="tinker-pagination"`,
 		`aria-invalid="true"`,
 		`aria-busy="true"`,
 		`aria-current="page"`,
-		`data-tiny-toast-region`,
+		`data-tinker-toast-region`,
 		`role="alert"`,
 		`<th scope="col">`,
 		`delete:payroll-preview`,
-		`data-tiny-app-filter`,
-		`data-tiny-app-filter-query`,
-		`data-tiny-app-filter-status`,
-		`data-tiny-app-filter-count`,
-		`data-tiny-app-filter-empty`,
+		`data-tinker-app-filter`,
+		`data-tinker-app-filter-query`,
+		`data-tinker-app-filter-status`,
+		`data-tinker-app-filter-count`,
+		`data-tinker-app-filter-empty`,
 		`aria-controls="showcase-app-list"`,
 		`id="showcase-app-list"`,
 		`no matching apps.`,
@@ -201,7 +201,7 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`api keys`,
 		`llm chat`,
 		`api key management is unavailable`,
-		`tinyhost llm enable`,
+		`tinkercloud llm enable`,
 		`type="password"`,
 		`never displayed or recovered`,
 		`disable:0123456789abcdef0123456789abcdef`,
@@ -215,7 +215,7 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 			t.Fatalf("showcase contains remote or executable dependency %q", forbidden)
 		}
 	}
-	start := strings.Index(page, `<article class="tiny-state tiny-state--unavailable tiny-section__spaced" role="status"><h3>api key management is unavailable</h3>`)
+	start := strings.Index(page, `<article class="tinker-state tinker-state--unavailable tinker-section__spaced" role="status"><h3>api key management is unavailable</h3>`)
 	if start < 0 {
 		t.Fatal("showcase API-key unavailable state missing")
 	}
@@ -230,7 +230,7 @@ func TestOperationsUsesOnlyCanonicalEmbeddedAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := strings.ToLower(string(templateSource))
-	for _, required := range []string{"{{tinycss}}", "{{tinymark}}", "tiny-auth-card", "exact target"} {
+	for _, required := range []string{"{{tinkercss}}", "{{tinkermark}}", "tinker-auth-card", "exact target"} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("operations template missing %q", required)
 		}

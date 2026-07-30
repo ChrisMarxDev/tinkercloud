@@ -9,19 +9,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/appnamespace"
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/browseridentity"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/jobs"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/llm"
-	"github.com/tinyhost/tiny/internal/operations"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/jobs"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"net/http"
 	"net/url"
 	"sort"
@@ -710,7 +710,7 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 	if !a.Active || s.Store == nil {
 		return controlapi.DashboardView{}, ErrUnavailable
 	}
-	v := controlapi.DashboardView{Health: []controlapi.DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinyhost doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
+	v := controlapi.DashboardView{Health: []controlapi.DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinkercloud doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
 	query, args := "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.owner_user_id=? AND a.status <> 'deleted' ORDER BY a.slug LIMIT 100", []any{a.ID}
 	if a.Role == "operator" {
 		query, args = "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.status <> 'deleted' ORDER BY a.slug LIMIT 100", nil
@@ -1342,7 +1342,7 @@ func (s ControlService) CreateToken(ctx context.Context, a controlapi.Actor, slu
 		if _, e = rand.Read(b); e != nil {
 			return e
 		}
-		raw := "tiny_" + base64.RawURLEncoding.EncodeToString(b)
+		raw := "tinker_" + base64.RawURLEncoding.EncodeToString(b)
 		h := sha256.Sum256([]byte(raw))
 		id := "tok_" + base64.RawURLEncoding.EncodeToString(h[:12])
 		expiry := time.Now().Add(time.Duration(in.ExpiresInSeconds) * time.Second).UTC()

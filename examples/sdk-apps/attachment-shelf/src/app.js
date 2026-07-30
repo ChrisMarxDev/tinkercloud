@@ -1,11 +1,11 @@
 // @ts-check
-import { TinyCapabilityUnavailableError, tiny } from "@tinyhost/sdk";
-import { describeTinyError } from "../../shared/errors.js";
+import { TinkerCapabilityUnavailableError, tinker } from "@tinkercloud/sdk";
+import { describeTinkerError } from "../../shared/errors.js";
 
 const pageLifetime = new AbortController();
 let request;
 let nextCursor;
-/** @type {import("@tinyhost/sdk").TinyBlob[]} */
+/** @type {import("@tinkercloud/sdk").TinkerBlob[]} */
 let blobs = [];
 
 const form = /** @type {HTMLFormElement} */ (document.querySelector("#upload-form"));
@@ -35,7 +35,7 @@ function clearNotice() {
 }
 /** @param {unknown} error */
 function showError(error) {
-  const detail = describeTinyError(error);
+  const detail = describeTinkerError(error);
   noticeTitle.textContent = detail.title;
   noticeMessage.textContent = detail.message;
   noticeRequest.textContent = detail.requestId ? `Request ${detail.requestId}` : "";
@@ -85,7 +85,7 @@ async function load(reset) {
   more.disabled = true;
   setStatus("Reading current attachments");
   try {
-    const page = await tiny.blobs.list({
+    const page = await tinker.blobs.list({
       cursor: reset ? undefined : nextCursor,
       limit: 25,
       signal: request.signal,
@@ -105,10 +105,10 @@ async function load(reset) {
     more.disabled = false;
   }
 }
-/** @param {import("@tinyhost/sdk").TinyBlob} blob */
+/** @param {import("@tinkercloud/sdk").TinkerBlob} blob */
 async function downloadBlob(blob) {
   try {
-    const bytes = await tiny.blobs.get(blob.id, { signal: pageLifetime.signal });
+    const bytes = await tinker.blobs.get(blob.id, { signal: pageLifetime.signal });
     if (!bytes) {
       await load(true);
       return;
@@ -123,11 +123,11 @@ async function downloadBlob(blob) {
     showError(error);
   }
 }
-/** @param {import("@tinyhost/sdk").TinyBlob} blob */
+/** @param {import("@tinkercloud/sdk").TinkerBlob} blob */
 async function deleteBlob(blob) {
   clearNotice();
   try {
-    await tiny.blobs.delete(blob.id, { signal: pageLifetime.signal });
+    await tinker.blobs.delete(blob.id, { signal: pageLifetime.signal });
     await load(true);
   } catch (error) {
     showError(error);
@@ -145,7 +145,7 @@ form.addEventListener("submit", async (event) => {
   clearNotice();
   setStatus("Uploading attachment");
   try {
-    await tiny.blobs.upload(file, { signal: request.signal });
+    await tinker.blobs.upload(file, { signal: request.signal });
     fileInput.value = "";
     await load(true);
   } catch (error) {
@@ -163,15 +163,15 @@ more.addEventListener("click", () => void load(false));
 async function start() {
   try {
     const [viewer, app, result] = await Promise.all([
-      tiny.user.current({ signal: pageLifetime.signal }),
-      tiny.app.info({ signal: pageLifetime.signal }),
-      tiny.capabilities.list({ signal: pageLifetime.signal }),
+      tinker.user.current({ signal: pageLifetime.signal }),
+      tinker.app.info({ signal: pageLifetime.signal }),
+      tinker.capabilities.list({ signal: pageLifetime.signal }),
     ]);
     document.querySelector("#viewer-email").textContent = viewer.identity.email;
     document.querySelector("#viewer-avatar").textContent = viewer.identity.email.slice(0, 1).toUpperCase();
     document.querySelector("#app-name").textContent = `${app.slug} · private`;
     if (!result.capabilities.some((capability) => capability.name === "blobs")) {
-      throw new TinyCapabilityUnavailableError(
+      throw new TinkerCapabilityUnavailableError(
         "This example requires blob storage.",
         "capability_unavailable",
       );

@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost promises a single executable server, while deployers need only to
+Tinkercloud promises a single executable server, while deployers need only to
 authenticate and upload apps. A universal binary would make the commands look
 simple but would ship server-only concerns—SQLite, migrations, ACME, embedded
 admin UI, recovery, and service management—to every deployer machine.
@@ -17,9 +17,9 @@ scope, or the consequences of bundling unrelated privileged code.
 
 Build and distribute:
 
-- `tinyhost`: the single self-contained server/operator executable installed on
+- `tinkercloud`: the single self-contained server/operator executable installed on
   the dedicated VPS;
-- `tiny`: the small deployer and automation client installed on laptops and CI.
+- `tinker`: the small deployer and automation client installed on laptops and CI.
 
 Both live in one repository and share versioned contracts plus the generated or
 handwritten API client. Server internals are not shared into the client.
@@ -30,12 +30,12 @@ The split does not change the product workflow:
 
 ```text
 # clean VPS
-curl -fsSL https://tinyhost.example/install.sh | sudo sh
-sudo tinyhost init
+curl -fsSL https://tinkercloud.example/install.sh | sudo sh
+sudo tinkercloud init
 
 # deployer machine
-tiny login
-tiny deploy .
+tinker login
+tinker deploy .
 ```
 
 ## Consequences

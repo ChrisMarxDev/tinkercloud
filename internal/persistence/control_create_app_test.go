@@ -3,8 +3,8 @@ package persistence
 import (
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/controlapi"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 	"testing"
 )
 

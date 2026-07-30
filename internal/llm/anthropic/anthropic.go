@@ -1,4 +1,4 @@
-// Package anthropic maps TinyHost's common chat contract to Anthropic's fixed
+// Package anthropic maps Tinkercloud's common chat contract to Anthropic's fixed
 // Messages endpoint. It intentionally has no caller-provided URL or headers.
 package anthropic
 
@@ -12,7 +12,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
 const officialEndpoint = "https://api.anthropic.com/v1/messages"

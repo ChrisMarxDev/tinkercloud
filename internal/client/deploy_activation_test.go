@@ -17,7 +17,7 @@ type rt func(*http.Request) (*http.Response, error)
 func (f rt) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func TestDeployActivatesVerified(t *testing.T) {
 	n := 0
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++
 		if n <= 2 && r.Header.Get("Authorization") != "Bearer secret-token" {
@@ -30,9 +30,9 @@ func TestDeployActivatesVerified(t *testing.T) {
 			t.Fatal(r.URL, r.Header)
 		}
 		if n == 2 {
-			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		}
-		if n != 3 || r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+		if n != 3 || r.URL.String() != "https://demo.tinker.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 			t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
 		}
 		return anonymousDenied(r), nil
@@ -44,12 +44,12 @@ func TestDeployActivatesVerified(t *testing.T) {
 }
 
 func TestDeployRejectsRemovedAppSuffixActivationField(t *testing.T) {
-	c := New("https://admin.tiny.test", "secret-token")
+	c := New("https://admin.tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		if strings.HasSuffix(r.URL.Path, "/activate") {
 			// app_suffix was intentionally removed from the public receipt. A
 			// permissive decoder must not make a legacy response look verified.
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","app_suffix":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		}
 		return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
 	})}
@@ -61,7 +61,7 @@ func TestDeployRejectsRemovedAppSuffixActivationField(t *testing.T) {
 }
 
 func TestDeployReturnsSafeActivationFailureReceipt(t *testing.T) {
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		switch r.URL.Path {
 		case "/api/v1/apps/demo/deployments":
@@ -117,7 +117,7 @@ func TestDeployCollapsesUnsafeActivationFailures(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := New("https://tiny.test", "secret-token")
+			c := New("https://tinker.test", "secret-token")
 			c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 				if strings.HasSuffix(r.URL.Path, "/activate") {
 					return response(r), nil
@@ -135,7 +135,7 @@ func TestDeployCollapsesUnsafeActivationFailures(t *testing.T) {
 
 func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 	n := 0
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++
 		switch n {
@@ -143,9 +143,9 @@ func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps/demo/deployments" || r.Header.Get("Authorization") != "Bearer secret-token" {
 				t.Fatalf("unexpected upload request: %s %s headers=%v", r.Method, r.URL, r.Header)
 			}
-			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"staged","status_url":"https://tiny.test/api/v1/apps/demo/deployments/d"}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"staged","status_url":"https://tinker.test/api/v1/apps/demo/deployments/d"}`)), Header: make(http.Header), Request: r}, nil
 		case 2:
-			if r.Method != http.MethodGet || r.URL.String() != "https://tiny.test/api/v1/apps/demo/deployments/d" {
+			if r.Method != http.MethodGet || r.URL.String() != "https://tinker.test/api/v1/apps/demo/deployments/d" {
 				t.Fatalf("unexpected status request: %s %s", r.Method, r.URL)
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
@@ -153,9 +153,9 @@ func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps/demo/deployments/d/activate" || r.Header.Get("Authorization") != "Bearer secret-token" || r.Header.Get("Idempotency-Key") == "" {
 				t.Fatalf("unexpected activation request: %s %s headers=%v", r.Method, r.URL, r.Header)
 			}
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		case 4:
-			if r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			if r.URL.String() != "https://demo.tinker.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 				t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
 			}
 			return anonymousDenied(r), nil
@@ -185,14 +185,14 @@ func anonymousDenied(r *http.Request) *http.Response {
 
 func deployedClient(probe func(*http.Request) (*http.Response, error)) Client {
 	n := 0
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++
 		switch n {
 		case 1:
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
 		case 2:
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		default:
 			return probe(r)
 		}
@@ -310,7 +310,7 @@ func TestDeployReturnsActiveReceiptAfterPublicProbeExhaustion(t *testing.T) {
 		t.Fatalf("error = %#v, want active-but-unverified evidence", err)
 	}
 	if result.DeploymentID != "d" || active.Deployment.DeploymentID != "d" ||
-		active.Deployment.URL != "https://demo.tiny.test/" ||
+		active.Deployment.URL != "https://demo.tinker.test/" ||
 		active.Reason != EvidencePublicProbeTransport {
 		t.Fatalf("result=%+v active=%+v", result, active)
 	}
@@ -324,7 +324,7 @@ func TestDeployReturnsActiveReceiptAfterPublicProbeExhaustion(t *testing.T) {
 
 func TestDeployControlBudgetOutlivesGenericClientTimeout(t *testing.T) {
 	n := 0
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{
 		Timeout: 5 * time.Millisecond,
 		Transport: rt(func(r *http.Request) (*http.Response, error) {
@@ -338,7 +338,7 @@ func TestDeployControlBudgetOutlivesGenericClientTimeout(t *testing.T) {
 					return nil, r.Context().Err()
 				case <-time.After(20 * time.Millisecond):
 				}
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 			}
 			return anonymousDenied(r), nil
 		}),
@@ -352,7 +352,7 @@ func TestDeployControlBudgetOutlivesGenericClientTimeout(t *testing.T) {
 
 func TestDeployControlBudgetStillHonorsCallerCancellation(t *testing.T) {
 	n := 0
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++
 		if n == 1 {
@@ -386,7 +386,7 @@ func TestDeployPublicProbeUsesNoCookieJarOrBearer(t *testing.T) {
 	c.HTTP.Jar = jar
 	// The app-origin cookie proves this is stronger than merely avoiding a
 	// manually-added Cookie header on the request.
-	appURL, _ := http.NewRequest(http.MethodGet, "https://demo.tiny.test/", nil)
+	appURL, _ := http.NewRequest(http.MethodGet, "https://demo.tinker.test/", nil)
 	jar.SetCookies(appURL.URL, []*http.Cookie{{Name: "session", Value: "viewer"}})
 	if _, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload"); err != nil {
 		t.Fatal(err)
@@ -394,14 +394,14 @@ func TestDeployPublicProbeUsesNoCookieJarOrBearer(t *testing.T) {
 }
 
 func TestDeployRejectsUnexpectedPublicURL(t *testing.T) {
-	c := New("https://tiny.test", "secret-token")
+	c := New("https://tinker.test", "secret-token")
 	n := 0
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++
 		if n == 1 {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://other.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://other.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 	})}
 	if _, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload"); !errors.Is(err, ErrDeploymentEvidence) {
 		t.Fatalf("error = %v, want deployment evidence denial", err)
@@ -412,7 +412,7 @@ func TestDeployRejectsUnexpectedPublicURL(t *testing.T) {
 }
 
 func TestExpectedAppURLUsesServerDerivedSuffixNotControlHost(t *testing.T) {
-	// Production commonly exposes control at tiny.example.com while the
+	// Production commonly exposes control at tinker.example.com while the
 	// wildcard app gateway is *.apps.example.com. The activation response's
 	// server-derived suffix, rather than the control base URL, binds that host.
 	u, err := expectedAppURL("demo", "apps.example.com", "https://demo.apps.example.com/")
@@ -425,7 +425,7 @@ func TestExpectedAppURLUsesServerDerivedSuffixNotControlHost(t *testing.T) {
 }
 
 func TestDeployActivationEvidenceDenied(t *testing.T) {
-	c := New("https://tiny.test", "secret")
+	c := New("https://tinker.test", "secret")
 	n := 0
 	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
 		n++

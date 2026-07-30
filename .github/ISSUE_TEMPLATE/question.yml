@@ -1,12 +1,12 @@
 name: Question or support
-description: Ask for help using or understanding TinyHost
+description: Ask for help using or understanding Tinkercloud
 title: "question: "
 labels: ["question", "inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        TinyHost is pre-release and support is best effort. Never post credentials, OTPs, cookies, personal data, production configuration, or database contents.
+        Tinkercloud is pre-release and support is best effort. Never post credentials, OTPs, cookies, personal data, production configuration, or database contents.
   - type: input
     id: version
     attributes:

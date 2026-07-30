@@ -1,8 +1,0 @@
-version: 1
-name: reactive-collections
-description: A shared checklist using TinyHost document collections and best-effort live refresh hints.
-build:
-  output: dist
-features:
-  kv: true
-  realtime: true

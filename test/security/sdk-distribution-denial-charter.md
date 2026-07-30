@@ -7,7 +7,7 @@ changing its same-origin security boundary.
 
 ## Trust boundary and ownership
 
-The published SDK is untrusted browser code. TinyHost remains the sole owner of
+The published SDK is untrusted browser code. Tinkercloud remains the sole owner of
 app identity, viewer identity, authorization, and capability grants. Registry
 accounts and release credentials belong to maintainers and must never enter the
 package, repository, generated tarball, or browser runtime.
@@ -46,7 +46,7 @@ Distribution verification fails when:
 
 ## Non-goals
 
-- Claiming the `@tinyhost` namespace on npm or JSR.
+- Claiming the `@tinkercloud` namespace on npm or JSR.
 - Publishing a package or configuring registry credentials.
 - Adding CommonJS, Node-only, framework-specific, or CDN builds.
 - Treating a successful package build as application authorization evidence.

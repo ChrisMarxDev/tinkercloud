@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost — Capability Broker</title>
+  <title>Tinkercloud — Capability Broker</title>
   <link rel="stylesheet" href="../assets/concept.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
     <h1>Give private apps chat, not API keys.</h1>
     <p class="lede">Let an operator connect Anthropic or Gemini, approve one app
       binding, and give deployers a small provider-neutral chat API while every
-      credential stays behind TinyHost.</p>
+      credential stays behind Tinkercloud.</p>
     <p class="promise">Invoke an approved chat profile; never deliver a secret,
       provider URL, or unrestricted model selector to browser code.</p>
   </header>
@@ -39,7 +39,7 @@
         <ul>
           <li>Operator-only API keys section for write-only Anthropic and Gemini connections encrypted at rest; LLM profiles and app grants remain separate.</li>
           <li>One operator-approved model profile and grant per app.</li>
-          <li>Implemented bounded <code>tiny.llm.chat.complete</code>; streaming remains deferred L3.</li>
+          <li>Implemented bounded <code>tinker.llm.chat.complete</code>; streaming remains deferred L3.</li>
           <li>Fixed destinations, token reservations, rate limits, redaction, and safe usage audit.</li>
           <li>Immediate disable and secret rotation without redeploy.</li>
         </ul>
@@ -58,7 +58,7 @@
     <section id="implementation">
       <p class="eyebrow">Implemented L1/L2 pipeline</p>
       <h2>Server-side invocation pipeline</h2>
-      <pre>tiny.llm.chat.complete({ messages })
+      <pre>tinker.llm.chat.complete({ messages })
   → authenticate viewer + resolve app
   → load current operator-approved app grant
   → validate payload and atomically reserve token budget

@@ -3,7 +3,7 @@ package deployments
 import (
 	"context"
 	"errors"
-	"github.com/tinyhost/tiny/internal/releases"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	"sync"
 )
 

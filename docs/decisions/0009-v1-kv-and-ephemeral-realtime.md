@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost should make small staff apps feel alive without turning the first
+Tinkercloud should make small staff apps feel alive without turning the first
 release into a database or distributed messaging platform.
 
 ## Decision

@@ -1,7 +1,7 @@
 # Operator and deployer flow necessity audit
 
 **Audited:** 2026-07-29
-**Reviewer:** independent TinyHost concept-flow subagent
+**Reviewer:** independent Tinkercloud concept-flow subagent
 **Sources:** Principle 17, PRD D9, minimum-necessary input contract, complete
 operator and deployer flow files
 
@@ -38,7 +38,7 @@ The reviewed HTML flows already include the accepted edits below.
   internal secrets, config, database, probe hosts, and current allowlist are
   derived;
 - the trusted release source is default; alternate source is advanced;
-- the generic setup confirmation is removed because `tinyhost setup` already
+- the generic setup confirmation is removed because `tinkercloud setup` already
   expresses intent;
 - Resend records are collected before one combined DNS-provider visit;
 - saving dashboard/recovery output is optional operator runbook practice;
@@ -65,7 +65,7 @@ The reviewed HTML flows already include the accepted edits below.
   project path, safe slug/output, owner-only access, stable URL, app/owner IDs,
   archive details, TLS, release IDs, and probe targets are derived;
 - existing valid output is reused; absent output produces one exact
-  project-owned build action, and TinyHost never runs it;
+  project-owned build action, and Tinkercloud never runs it;
 - an existing valid manifest is reused without discovery prompts or rewriting;
 - capability detection may warn but never enables authority;
 - optional fields live behind one review/edit action;
@@ -89,7 +89,7 @@ The reviewed HTML flows already include the accepted edits below.
 
 ## Implementation gaps exposed by the audit
 
-1. Implement the resumable `tinyhost setup` human assistant.
+1. Implement the resumable `tinkercloud setup` human assistant.
 2. Complete inference-first project/output behavior and the single final deploy
    review/action.
 3. Remove normal update `--app-slug` input and select/prove installed state as

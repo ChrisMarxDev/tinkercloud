@@ -11,11 +11,11 @@ offline-verifiable trust root that is practical for a one-VPS operator.
 
 ## Decision
 
-TinyHost signs every V1 distributable artifact with Ed25519. The committed
+Tinkercloud signs every V1 distributable artifact with Ed25519. The committed
 `packaging/release-public-key.pem` is the release trust root. Release builders
-derive its raw public key and compile it into `tinyhost` with Go linker flags;
+derive its raw public key and compile it into `tinkercloud` with Go linker flags;
 the build refuses a mismatched signing key. The private key is an external
-release-environment input (`TINYHOST_RELEASE_SIGNING_KEY` points to a file) and
+release-environment input (`TINKERCLOUD_RELEASE_SIGNING_KEY` points to a file) and
 is neither stored in this repository nor copied to release output.
 
 The signed payload is the four-line canonical metadata payload defined by the
@@ -25,9 +25,9 @@ the artifact. `SHA256SUMS`, dependency evidence, and provenance make review and
 reproduction practical, but are not signature substitutes.
 
 The V1 production private key is retained only on the operator's local release
-machine under `~/.tinyhost/release/`, with directory mode `0700` and key mode
+machine under `~/.tinkercloud/release/`, with directory mode `0700` and key mode
 `0600`. It is never copied to the VPS. The build requires an explicit
-`TINYHOST_RELEASE_SIGNING_KEY` file path, preventing routine tests from using
+`TINKERCLOUD_RELEASE_SIGNING_KEY` file path, preventing routine tests from using
 the production authority implicitly.
 
 On 2026-07-27, the initial disposable rollout key was found to have been

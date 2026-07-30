@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Operator"
+  short_description: "Install and safely operate a Tinkercloud server"
+  default_prompt: "Use $tinkercloud-operator to diagnose or operate this Tinkercloud server safely."

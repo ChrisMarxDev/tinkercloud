@@ -13,7 +13,7 @@ candidate to fail, while an immediate retry by the deployer often succeeded.
 The server retries only the pre-activation certificate-readiness proof within
 one context-cancellable 45-second budget. It has eight finite attempts, each
 bounded to five seconds, with finite backoff between attempts. Every attempt
-uses the exact `https://{app-host}/_tiny/auth/login` origin, follows no
+uses the exact `https://{app-host}/_tinker/auth/login` origin, follows no
 redirect, requires a verified TLS chain, and rejects redirects and 5xx status.
 The HTTP client is copied for the probe so redirect policy is not mutated on a
 shared client.

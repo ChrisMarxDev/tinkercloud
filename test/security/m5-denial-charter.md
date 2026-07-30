@@ -6,8 +6,8 @@ digest mismatch, interruption before replacement, restart/health/probe failure,
 and rollback failure reporting. VPS-only evidence additionally proves systemd
 permissions, socket inventory, clean installation, and a real failed update.
 
-`tinyhost status` is strictly offline and must never read a provider credential
-file or invoke a Resend diagnostic. `tinyhost doctor` is a root-only provider
+`tinkercloud status` is strictly offline and must never read a provider credential
+file or invoke a Resend diagnostic. `tinkercloud doctor` is a root-only provider
 credential reader: non-root invocation denies before any credential-file read
 or provider request. Its default credential file and any explicit override must
 be absolute, clean, free of symlinked components, root-owned, a single regular
@@ -46,7 +46,7 @@ The port-80 boundary is a denial surface: only autocert HTTP-01 challenge
 requests may be delegated there. A valid configured platform or active app host
 otherwise redirects only to its canonical HTTPS origin. Unknown, malformed,
 IP-literal, userinfo, path-bearing, and non-HTTP-port Host headers fail closed
-without a redirect, and no TinyHost app, control, authentication, or static
+without a redirect, and no Tinkercloud app, control, authentication, or static
 handler is reachable over plaintext. HTTPS responses carry HSTS; HTTP-01 and
 plaintext denial/redirect responses do not.
 
@@ -80,11 +80,11 @@ The packaged and generated systemd units are a privilege boundary: tests reject
 root execution, missing `NoNewPrivileges`, any ambient or bounding capability
 other than `CAP_NET_BIND_SERVICE`, and writable paths beyond the configured
 data and ACME directories. The only retained privilege is binding the gateway's
-public ports while the process remains the `tinyhost` user.
+public ports while the process remains the `tinkercloud` user.
 
 The root-only deployer recovery command is also a persistence ownership
 boundary. It must reject a non-root caller before configuration or SQLite work,
-then drop permanently to the installed `tinyhost` identity before opening the
+then drop permanently to the installed `tinkercloud` identity before opening the
 database. Tests prove the database plus live WAL/SHM sidecars are owned by the
 service identity after an authorization mutation. Missing identity,
 privilege-drop, database-open, or mutation failures must not claim success,

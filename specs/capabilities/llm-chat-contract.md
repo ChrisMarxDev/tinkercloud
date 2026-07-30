@@ -2,7 +2,7 @@
 
 ## Authority and ownership
 
-`llm.chat` is a protected TinyHost capability. Every invocation receives the
+`llm.chat` is a protected Tinkercloud capability. Every invocation receives the
 sealed gateway `AuthorizationContext`; the app ID and viewer identity come only
 from that context. Request bodies, URLs, headers, SDK options, and provider
 responses cannot select an app, viewer, provider, connection, model, endpoint,
@@ -12,7 +12,7 @@ An operator owns provider credentials, profiles, grants, limits, and usage
 evidence. A deployer owns app code and may request only the logical capability.
 A viewer sends content through an already-authorized app and can spend only that
 app's active operator-approved grant. App content is sent to the selected
-external provider; TinyHost does not promise that content remains local.
+external provider; Tinkercloud does not promise that content remains local.
 
 ## Version 1 operation
 
@@ -38,7 +38,7 @@ are outside this version.
 ## Secret and destination boundary
 
 Connections are write-only. SQLite holds an authenticated encrypted envelope
-and safe connection metadata; a root-owned TinyHost credential supplies the
+and safe connection metadata; a root-owned Tinkercloud credential supplies the
 envelope root and never enters SQLite, APIs, logs, audit, diagnostics, the SDK,
 or deployed files. The only compiled destinations are Anthropic Messages and
 Gemini generateContent. Production clients reject redirects. Test adapters may
@@ -94,7 +94,7 @@ unchanged and multiple connections for one provider remain valid.
 
 The server alone derives whether key management is ready. If its LLM repository,
 envelope root, or credential validator is unavailable, the dashboard shows an
-unavailable state with the root-only `tinyhost llm enable` and restart next
+unavailable state with the root-only `tinkercloud llm enable` and restart next
 step. It renders no create, rotate, or disable form in that state and never
 reveals the root, its environment reference, envelope, or reason-specific
 configuration detail. Rotation derives the fixed provider from the stored

@@ -4,9 +4,9 @@
 
 ## Context
 
-TinyHost has server-rendered platform and app-login pages, plus operational
+Tinkercloud has server-rendered platform and app-login pages, plus operational
 forms that must remain understandable without JavaScript. Their original styles
-were isolated inline declarations and did not express the Tiny Cloud product
+were isolated inline declarations and did not express the Tinkercloud product
 character or a shared state language.
 
 The PRD requires local embedded assets, minimal JavaScript, no frontend build
@@ -17,7 +17,7 @@ source rather than a broad exception.
 
 ## Decision
 
-TinyHost uses one dependency-free native web design system in the root `web`
+Tinkercloud uses one dependency-free native web design system in the root `web`
 package. Its canonical CSS and cloud mark are embedded into the server binary
 and injected as trusted static template content.
 
@@ -28,7 +28,7 @@ are exported so every native renderer and the gateway use the same bytes and
 the same hashes. Neither directive permits `unsafe-inline`, remote hosts, or a
 new static-asset route.
 
-The system provides stable `--tiny-*` tokens and `tiny-*` HTML classes for
+The system provides stable `--tinker-*` tokens and `tinker-*` HTML classes for
 native pages. It uses local system font stacks and semantic HTML. It adds no
 asset route, public listener, remote request, client-side router, or browser
 authorization state.

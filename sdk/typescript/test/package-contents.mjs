@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const cache = mkdtempSync(join(tmpdir(), "tinyhost-sdk-pack-"));
+const cache = mkdtempSync(join(tmpdir(), "tinkercloud-sdk-pack-"));
 
 try {
   const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {

@@ -2,7 +2,7 @@
 
 **Status:** Prepared, not published
 
-`@tinyhost/sdk` is ready to be reviewed as an npm-registry package and a JSR
+`@tinkercloud/sdk` is ready to be reviewed as an npm-registry package and a JSR
 package. No command or workflow in this repository publishes it.
 
 ## Consumer formats
@@ -10,17 +10,17 @@ package. No command or workflow in this repository publishes it.
 One npm artifact supports npm, pnpm, Yarn, Bun, and Deno:
 
 ```sh
-npm install @tinyhost/sdk
-pnpm add @tinyhost/sdk
-yarn add @tinyhost/sdk
-bun add @tinyhost/sdk
-deno add npm:@tinyhost/sdk
+npm install @tinkercloud/sdk
+pnpm add @tinkercloud/sdk
+yarn add @tinkercloud/sdk
+bun add @tinkercloud/sdk
+deno add npm:@tinkercloud/sdk
 ```
 
 JSR provides the same API directly from the reviewed TypeScript source:
 
 ```sh
-deno add jsr:@tinyhost/sdk
+deno add jsr:@tinkercloud/sdk
 ```
 
 These commands will work only after the corresponding first publication.
@@ -53,7 +53,7 @@ Do not publish until all of these are complete:
 
 1. Confirm the canonical public GitHub repository and update exact-case package
    metadata.
-2. Confirm maintainers control the `@tinyhost` scope and `sdk` package on npm
+2. Confirm maintainers control the `@tinkercloud` scope and `sdk` package on npm
    and JSR.
 3. Review the dry-run file lists and the generated npm tarball.
 4. Run the complete release and secret-scanning gates from a clean checkout.
@@ -67,4 +67,4 @@ Do not publish until all of these are complete:
 Prefer registry trusted publishing with short-lived OIDC credentials. Do not
 add an npm token, JSR token, `.npmrc` credential, or developer session to this
 repository. A successful publication is distribution evidence only; it does
-not prove TinyHost authorization or isolation.
+not prove Tinkercloud authorization or isolation.

@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 )
 
 // Kind separates request and verification budgets so a request flood cannot

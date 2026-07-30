@@ -2,7 +2,7 @@ package releases
 
 import (
 	"errors"
-	"github.com/tinyhost/tiny/internal/appnamespace"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
 	"strings"
 	"testing"
 )

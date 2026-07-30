@@ -31,7 +31,7 @@ cross-database rollback claim. Intent failure denies before the app-data write.
 
 Managed-data commands are capability operations, not deployment commands. The
 route slug is an ownership target only; after exact scope/app-binding/ownership
-validation TinyHost derives the immutable app ID and passes a typed
+validation Tinkercloud derives the immutable app ID and passes a typed
 deployer-data context to the existing app-data service. These commands never
 accept a database/file selector, SQL, schema, migration, bulk operation, or
 viewer identity. The full API and denial charter live in
@@ -46,13 +46,13 @@ rejects a declared body above that limit before staging, and consumes at most
 one additional byte for an unknown-length stream to prove and return the same
 rejection. It never buffers the archive in memory.
 
-The CLI creates one private temporary archive per logical `tiny deploy`
+The CLI creates one private temporary archive per logical `tinker deploy`
 invocation, removes it on every exit path, and sends a fresh cryptographically
 random idempotency key. A retry of that invocation reuses its key; a later
 invocation, including one for the same app, receives a different key.
 
-Before archiving, `tiny deploy [DIR]` uses `DIR` or `.` and loads a local strict
-`tiny.yaml`. A human deploy may create a missing manifest through the bounded
+Before archiving, `tinker deploy [DIR]` uses `DIR` or `.` and loads a local strict
+`tinker.yaml`. A human deploy may create a missing manifest through the bounded
 local wizard; JSON mode never does. The deployer credential is first proven by
 the API-version and authenticated `whoami` checks. Only a definite unauthorized
 result may enter the existing OTP flow, and a fresh bearer is persisted only
@@ -80,7 +80,7 @@ active deployment pointer in one transaction. The owner remains server-derived
 and implicit; the client never supplies an owner or app ID for this binding.
 
 Before activation, a newly staged app's exact HTTPS origin receives a bounded
-certificate-readiness probe at `/_tiny/api/v1/app`. This is a protected,
+certificate-readiness probe at `/_tinker/api/v1/app`. This is a protected,
 non-mutating endpoint: it must never issue a viewer handoff, set a cookie, or
 otherwise alter authentication state. The server may retry only transient/readiness
 failure within one cancellable 45-second overall budget, with finite attempts
@@ -195,7 +195,7 @@ preserves the previous active pointer.
   response headers, internal path, or policy membership. A failure before a
   successful activation response remains `deploy_failed` and carries no active
   receipt.
-- A later `tiny deploy` invocation is a new immutable deployment attempt even
+- A later `tinker deploy` invocation is a new immutable deployment attempt even
   when its release hash matches the active release. Hash equality alone never
   proves activation or policy installation. Activating a same-hash candidate
   remains valid and atomically supersedes the old deployment, because the

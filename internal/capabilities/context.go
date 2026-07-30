@@ -4,7 +4,7 @@ package capabilities
 import (
 	"errors"
 
-	"github.com/tinyhost/tiny/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
 )
 
 var ErrUnauthorized = errors.New("capability request is not authorized")

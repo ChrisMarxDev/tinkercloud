@@ -11,7 +11,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 // The top-level file is the operator-visible contract; exact normalized bytes
@@ -72,7 +72,7 @@ func TestControlCredentialMigrationUpgradesAndDeniesLegacyChallenge(t *testing.T
 	if _, err = db.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('u','owner@example.com','deployer','active',?)", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
-	legacyBearer := "tiny_legacy_control_or_cli"
+	legacyBearer := "tinker_legacy_control_or_cli"
 	legacyBearerHash := sha256.Sum256([]byte(legacyBearer))
 	if _, err = db.Exec("INSERT INTO api_tokens(id,user_id,secret_hash,scopes,expires_at) VALUES('legacy_token','u',?,'app:read',?)", legacyBearerHash[:], now.Add(time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)

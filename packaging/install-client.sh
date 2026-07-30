@@ -1,9 +1,9 @@
 #!/bin/sh
-# Install the unprivileged Tiny deployer client. The script embeds the public
-# release key and never downloads or installs the privileged tinyhost binary.
+# Install the unprivileged Tinker deployer client. The script embeds the public
+# release key and never downloads or installs the privileged tinkercloud binary.
 set -eu
 
-fail() { echo "tiny client installer: $*" >&2; exit 1; }
+fail() { echo "tinker client installer: $*" >&2; exit 1; }
 
 test "$(id -u)" != 0 || fail "refusing to run as root"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
@@ -21,22 +21,22 @@ case "$(uname -m)" in
   arm64|aarch64) arch=arm64 ;;
   *) fail "unsupported architecture" ;;
 esac
-artifact="tiny-$platform-$arch"
+artifact="tinker-$platform-$arch"
 
-base=${TINYHOST_CLIENT_RELEASE_BASE:-}
+base=${TINKER_RELEASE_BASE:-}
 case "$base" in
   https://*) ;;
-  *) fail "TINYHOST_CLIENT_RELEASE_BASE must be an HTTPS release directory" ;;
+  *) fail "TINKER_RELEASE_BASE must be an HTTPS release directory" ;;
 esac
 case "$base" in */) ;; *) base="$base/" ;; esac
 
-install_dir=${TINYHOST_CLIENT_INSTALL_DIR:-"${HOME:-}/.local/bin"}
+install_dir=${TINKER_INSTALL_DIR:-"${HOME:-}/.local/bin"}
 test -n "$install_dir" || fail "client install directory unavailable"
 mkdir -p "$install_dir"
 test -d "$install_dir" || fail "client install directory unavailable"
 
 umask 077
-work=$(mktemp -d "${TMPDIR:-/tmp}/tiny-client-install.XXXXXX")
+work=$(mktemp -d "${TMPDIR:-/tmp}/tinker-client-install.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 cat >"$work/release-public-key.pem" <<'EOF'
 -----BEGIN PUBLIC KEY-----
@@ -100,8 +100,8 @@ openssl pkeyutl -verify -pubin -inkey "$work/release-public-key.pem" -rawin \
 
 # Stage in the destination directory so the final replacement is atomic. A
 # verified candidate is never executed by this installer.
-target_tmp="$install_dir/.tiny.new.$$"
+target_tmp="$install_dir/.tinker.new.$$"
 trap 'rm -f "$target_tmp"; rm -rf "$work"' EXIT HUP INT TERM
 install -m 0755 "$work/$artifact" "$target_tmp"
-mv -f "$target_tmp" "$install_dir/tiny"
-echo "installed $artifact to $install_dir/tiny"
+mv -f "$target_tmp" "$install_dir/tinker"
+echo "installed $artifact to $install_dir/tinker"

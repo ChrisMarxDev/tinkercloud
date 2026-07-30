@@ -14,7 +14,7 @@ operator approves a binding for one app, that app can build a basic chat
 interface with a small provider-neutral SDK:
 
 ```ts
-const reply = await tiny.llm.chat.complete({
+const reply = await tinker.llm.chat.complete({
   messages: [
     { role: "user", content: "Summarize this review." },
   ],
@@ -26,11 +26,11 @@ reply.message.content;
 The implemented public operation is non-streaming completion. A compatible
 streaming method remains the deferred L3 slice.
 
-## Why this belongs in TinyHost
+## Why this belongs in Tinkercloud
 
 This lets deployers build useful private chat and summarization apps without
 running a backend or receiving an organization credential. It extends the SDK
-as the app platform while preserving the gateway and TinyHost as the only
+as the app platform while preserving the gateway and Tinkercloud as the only
 security, policy, quota, and credential boundary.
 
 The design is governed most directly by Principles 1, 3, 4, 8, 10, 12, 13,
@@ -55,7 +55,7 @@ never receive a secret or generic authenticated proxy.
 
 ### Deferred L3 slice
 
-- `tiny.llm.chat.stream(...)` as an async iterable over bounded text deltas.
+- `tinker.llm.chat.stream(...)` as an async iterable over bounded text deltas.
 - Cancellation and partial-response handling using the same authorization,
   reservation, usage, and audit model as non-streaming completion.
 - A deployable minimal chat example with continuous sending/streaming/error
@@ -69,8 +69,8 @@ never receive a secret or generic authenticated proxy.
 - Tool/function calling, embeddings, images, files, web search, agents,
   conversation storage, or provider-specific request passthrough.
 - Prompt/completion logging or a provider-response replay system.
-- Custom/operator-written adapters or third-party code loaded into TinyHost.
-- Claims that prompts remain inside TinyHost: approved content leaves the VPS
+- Custom/operator-written adapters or third-party code loaded into Tinkercloud.
+- Claims that prompts remain inside Tinkercloud: approved content leaves the VPS
   for the selected external provider.
 
 ## Actors, trust boundary, and ownership
@@ -78,14 +78,14 @@ never receive a secret or generic authenticated proxy.
 | Actor or component | Owns / may do | Must not do |
 |---|---|---|
 | Operator | Adds and rotates a provider key; defines model/limit profiles; approves or revokes an app binding | Expose key material through a read path |
-| Deployer | Requests `llm.chat` in `tiny.yaml`; builds the app UI; sees the approved profile's safe limits and disclosure | Select a secret, provider URL, connection ID, or unrestricted model |
+| Deployer | Requests `llm.chat` in `tinker.yaml`; builds the app UI; sees the approved profile's safe limits and disclosure | Select a secret, provider URL, connection ID, or unrestricted model |
 | Viewer | Sends bounded chat content from an authorized app and receives the bounded result | Use an App A session or request to consume App B's grant or budget |
 | Gateway | Derives app, viewer, session, current policy, and typed authorization context | Trust browser-supplied app/viewer identity |
 | LLM service | Resolves the effective app grant, reserves quota, invokes one adapter, reconciles usage, audits safe metadata | Receive an app ID from SDK input or log content |
 | Provider adapter | Maps the common chat contract to one fixed allowlisted provider API | Accept arbitrary hosts, headers, paths, or credentials from the caller |
 
 The operator owns provider credentials. The app owns any conversation state it
-chooses to persist through existing KV. TinyHost owns grants, quota state,
+chooses to persist through existing KV. Tinkercloud owns grants, quota state,
 usage records, and safe audit evidence. The external provider receives the
 message content for each approved invocation.
 
@@ -93,13 +93,13 @@ message content for each approved invocation.
 
 1. The operator opens **API keys**, chooses Anthropic or Gemini, enters one API
    key, and submits it over the protected operator session. The key field is
-   write-only; TinyHost derives the connection label and opaque identifier.
-2. TinyHost validates the key with a bounded provider check, encrypts it with
+   write-only; Tinkercloud derives the connection label and opaque identifier.
+2. Tinkercloud validates the key with a bounded provider check, encrypts it with
    the host-local capability root, and stores only ciphertext plus safe
    metadata.
 3. The operator creates a chat profile: fixed provider model, input/output
    limits, timeout, per-viewer/app rate, concurrency, and monthly token budget.
-4. A deployer requests the logical capability in `tiny.yaml`:
+4. A deployer requests the logical capability in `tinker.yaml`:
 
    ```yaml
    capabilities:
@@ -112,7 +112,7 @@ message content for each approved invocation.
    verification is missing.
 6. Capability discovery returns `llm.chat` version and safe limits, never the
    provider key or internal connection identifier.
-7. A currently authorized viewer calls the SDK. TinyHost rechecks the current
+7. A currently authorized viewer calls the SDK. Tinkercloud rechecks the current
    grant and connection on every invocation.
 8. Disabling the connection, revoking the app binding, suspending the app, or
    revoking the viewer denies the next request.
@@ -145,7 +145,7 @@ type ChatResponse = {
   requestId: string;
 };
 
-tiny.llm.chat.complete(
+tinker.llm.chat.complete(
   request: ChatRequest,
   options?: { signal?: AbortSignal },
 ): Promise<ChatResponse>;
@@ -159,7 +159,7 @@ base URL, headers, or raw provider options.
 ### Streaming follow-on
 
 ```ts
-for await (const event of tiny.llm.chat.stream(request, { signal })) {
+for await (const event of tinker.llm.chat.stream(request, { signal })) {
   if (event.type === "text") append(event.delta);
   if (event.type === "done") showUsage(event.usage);
 }
@@ -226,7 +226,7 @@ surface. On retry, resend only after an explicit viewer action. Capability
 revocation transitions to a durable unavailable state and preserves local
 conversation display.
 
-TinyHost does not own chat history. Apps may persist completed messages in KV,
+Tinkercloud does not own chat history. Apps may persist completed messages in KV,
 subject to the existing utility-grade durability disclaimer.
 
 ## Backend and persistence changes
@@ -243,7 +243,7 @@ The accepted schema is implemented by
 - `llm_usage`: app/profile/period counters and reservations; no prompt,
   completion, raw provider body, or credential data.
 
-The encryption root is a TinyHost-owned secret supplied through the existing
+The encryption root is a Tinkercloud-owned secret supplied through the existing
 root-owned/systemd credential boundary. Ciphertext may live in SQLite; the root
 key may not. Plaintext exists only in bounded process memory for validation and
 provider invocation.
@@ -258,16 +258,16 @@ plaintext or silently reactivate a revoked grant.
 |---|---|
 | Contract | Add `specs/capabilities/llm-chat-contract.md`; update HTTP, manifest, security, and event/audit contracts |
 | Decision | Add `docs/decisions/0047-operator-governed-llm-chat.md` and index it |
-| Manifest | Extend `internal/releases/manifest.go` and `specs/manifest/tiny-yaml.md` with a logical chat request, not a connection/model |
+| Manifest | Extend `internal/releases/manifest.go` and `specs/manifest/tinker-yaml.md` with a logical chat request, not a connection/model |
 | Trust seam | Extend `apps.App` and sealed `appauth.AuthorizationContext` with an effective chat grant reference derived from active server state |
 | Domain/service | Add `internal/llm/` common types, validation, admission, reservation, service, and stable errors |
 | Adapters | Add compiled-in `internal/llm/anthropic` and `internal/llm/gemini` adapters with fixed destinations and conformance tests |
 | Persistence | Add migration 0006 and `internal/persistence/llm.go` for connections, grants, revisions, and usage reservations |
-| Gateway/API | Add a protected `LLMChat` endpoint classification and `POST /_tiny/api/v1/llm/chat`; extend capability discovery |
+| Gateway/API | Add a protected `LLMChat` endpoint classification and `POST /_tinker/api/v1/llm/chat`; extend capability discovery |
 | Composition | Inject the service and outbound HTTP client through `internal/compose/`; add no listener or internal HTTP service |
 | Operator control | Add write-only create/rotate/disable connection and profile/grant controls in `internal/control*` and embedded native UI |
-| SDK | Provider-neutral types and `tiny.llm.chat.complete` in `sdk/typescript/src/index.ts`; `stream` remains L3 |
-| Examples/skills | Add a private minimal chat example; update `skills/tiny-platform` first, refresh marked role-skill copies, and run drift checks |
+| SDK | Provider-neutral types and `tinker.llm.chat.complete` in `sdk/typescript/src/index.ts`; `stream` remains L3 |
+| Examples/skills | Add a private minimal chat example; update `skills/tinkercloud-platform` first, refresh marked role-skill copies, and run drift checks |
 
 No file or raw URL serves provider data. No backend runtime, worker process, or
 second public listener is added.
@@ -347,7 +347,7 @@ discovery are present.
 ### L2 — Non-streaming chat completion
 
 **Implemented.** The common service, Anthropic and Gemini adapters, protected route,
-`tiny.llm.chat.complete`, example, conformance tests, and targeted failure
+`tinker.llm.chat.complete`, example, conformance tests, and targeted failure
 injection provide the first deployer/viewer-observable outcome.
 
 ### L3 — Streaming chat
@@ -364,7 +364,7 @@ grant semantics.
   behind conformance-tested adapters and return `TemporarilyUnavailable` on
   unknown shapes.
 - **Prompt injection:** content can manipulate model output but must never alter
-  TinyHost authorization, destinations, headers, credentials, or grants.
+  Tinkercloud authorization, destinations, headers, credentials, or grants.
 - **Streaming ambiguity:** disconnects may consume provider tokens without a
   final usage frame. Reserve conservatively and do not promise exact spend.
 - **Secret lifecycle:** preserve ADR 0047's implemented write-only rotation,

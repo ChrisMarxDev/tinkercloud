@@ -6,7 +6,7 @@ specific sections without overriding it.
 ## Get started
 
 - [Human setup: host your first private app](getting-started/first-app.md)
-- [Tiny Ritual starter app](../examples/starter-app/)
+- [Tinker Ritual starter app](../examples/starter-app/)
 
 ## Product
 
@@ -49,5 +49,5 @@ specific sections without overriding it.
 - [HTTP contract](../specs/api/http-contract.md)
 - [Unified browser identity and app-bound handoff contract](../specs/api/browser-identity-handoff-contract.md)
 - [Event vocabulary](../specs/events/event-catalog.md)
-- [Manifest contract](../specs/manifest/tiny-yaml.md)
+- [Manifest contract](../specs/manifest/tinker-yaml.md)
 - [Native web UI contract](../specs/ui/native-web-system.md)

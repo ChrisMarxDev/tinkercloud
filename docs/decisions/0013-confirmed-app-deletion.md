@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost is presently a playground for replaceable applications. Deployers need
+Tinkercloud is presently a playground for replaceable applications. Deployers need
 confirmed deletion to remove an app rather than leaving a tombstone, retained
 release bytes, or a restore-like record. The operation still must not let a
 client choose a filesystem path or leave sessions, tokens, or live connections

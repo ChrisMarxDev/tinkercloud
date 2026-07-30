@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TinyHost LLM Chat Capability — Review Plan</title>
+  <title>Tinkercloud LLM Chat Capability — Review Plan</title>
   <style>
     :root{color-scheme:light;--bg:#f3f6f1;--panel:#fff;--soft:#edf3e9;--ink:#182116;--muted:#61705f;--line:#d5dfd1;--brand:#367a2a;--warn:#936600;--danger:#a3352c}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -20,7 +20,7 @@
 <body>
 <main>
   <header>
-    <p>Implementation review · 2026-07-29 · TinyHost</p>
+    <p>Implementation review · 2026-07-29 · Tinkercloud</p>
     <h1>Operator-governed LLM chat</h1>
     <p>Plan one provider-neutral chat capability in which an operator connects
       Anthropic or Gemini, approves an app binding, and browser apps receive
@@ -42,8 +42,8 @@
     <div class="section-head"><h2>Goal and Scope</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
     <label class="review"><input type="checkbox" checked><span>Operator adds or rotates a write-only Anthropic/Gemini key and defines a fixed model/limit profile.</span></label>
     <label class="review"><input type="checkbox" checked><span>Deployer requests logical <code>llm.chat</code>; operator approves a per-app binding.</span></label>
-    <label class="review"><input type="checkbox" checked><span>SDK adds <code>tiny.llm.chat.complete</code>; streaming follows as an additive slice.</span></label>
-    <label class="review"><input type="checkbox" checked><span>Exclude raw keys, generic HTTP, caller-selected providers/models, tools, files, embeddings, images, search, agents, and TinyHost-owned chat history.</span></label>
+    <label class="review"><input type="checkbox" checked><span>SDK adds <code>tinker.llm.chat.complete</code>; streaming follows as an additive slice.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Exclude raw keys, generic HTTP, caller-selected providers/models, tools, files, embeddings, images, search, agents, and Tinkercloud-owned chat history.</span></label>
     <textarea placeholder="Reviewer notes for goal and scope"></textarea>
   </section>
 
@@ -63,7 +63,7 @@
 
   <section data-section="Logic and Data Flow">
     <div class="section-head"><h2>Logic and Data Flow</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
-    <pre>SDK POST /_tiny/api/v1/llm/chat
+    <pre>SDK POST /_tinker/api/v1/llm/chat
 → gateway derives app/viewer and issues sealed AuthorizationContext
 → strict route/origin/version/body validation
 → resolve active app grant and fixed operator profile
@@ -74,7 +74,7 @@
 → return common chat response or stable typed error</pre>
     <label class="review"><input type="checkbox" checked><span>No caller input selects app, viewer, connection, provider, URL, headers, API key, or arbitrary model.</span></label>
     <label class="review"><input type="checkbox" checked><span>No automatic provider retries in the first slice; ambiguous spend stays conservatively reserved.</span></label>
-    <label class="review"><input type="checkbox" checked><span>Prompts and completions are never persisted or logged by TinyHost.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Prompts and completions are never persisted or logged by Tinkercloud.</span></label>
     <textarea placeholder="Reviewer notes for data flow"></textarea>
   </section>
 
@@ -125,7 +125,7 @@
     <div class="section-head"><h2>Risks and Seams to Watch</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
     <label class="review"><input type="checkbox" checked><span>Authorized viewers can create spend: require per-viewer/app limits and atomic worst-case reservation.</span></label>
     <label class="review"><input type="checkbox" checked><span>Provider drift fails unavailable behind conformance-tested adapters; unknown response fields do not silently change semantics.</span></label>
-    <label class="review"><input type="checkbox" checked><span>Prompt injection may affect output but can never affect TinyHost authorization, destinations, headers, credentials, or grants.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Prompt injection may affect output but can never affect Tinkercloud authorization, destinations, headers, credentials, or grants.</span></label>
     <label class="review"><input type="checkbox" checked><span>Streaming disconnects create usage ambiguity; do not promise exact currency spend or release reservations optimistically.</span></label>
     <textarea placeholder="Reviewer notes for risks"></textarea>
   </section>

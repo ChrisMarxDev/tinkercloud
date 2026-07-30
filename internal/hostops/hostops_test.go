@@ -12,7 +12,7 @@ func TestFixedHostPlans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-T", "--", "root@host.example", "tinyhost", "status"}
+	want := []string{"-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-T", "--", "root@host.example", "tinkercloud", "status"}
 	if !reflect.DeepEqual(status.Args, want) || len(status.Stdin) != 0 {
 		t.Fatalf("status plan = %#v", status)
 	}

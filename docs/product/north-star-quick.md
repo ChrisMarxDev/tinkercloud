@@ -4,7 +4,7 @@ Primary reference:
 [“Quick: An internal hosting platform for the AI era”](https://shopify.engineering/quick),
 Shopify Engineering, published June 10, 2026.
 
-Quick is TinyHost's north star for staff usability, constrained capability
+Quick is Tinkercloud's north star for staff usability, constrained capability
 design, and agent-assisted creation. It is a reference, not an architecture to
 copy literally.
 
@@ -33,14 +33,14 @@ methods. Quick also treats constraints as a product advantage: a small fixed set
 of primitives remains easier to use, maintain, and combine creatively than
 custom backends, jobs, and general infrastructure.
 
-## What TinyHost should borrow
+## What Tinkercloud should borrow
 
 ### Folder-to-URL immediacy
 
 The normal path should remain:
 
 ```text
-tiny deploy .
+tinker deploy .
 ```
 
 No framework, container, deployment pipeline, database provisioning, or
@@ -55,10 +55,10 @@ review and automation, not paperwork a human must prepare before the command.
 Identity, KV, realtime, files, and later AI should feel like one coherent SDK:
 
 ```ts
-const viewer = await tiny.user.current();
-const posts = await tiny.kv.list({ prefix: "posts/" });
-tiny.live.onKvChange({ prefix: "posts/" }, refreshPosts);
-const answer = await tiny.llm.generate(...);
+const viewer = await tinker.user.current();
+const posts = await tinker.kv.list({ prefix: "posts/" });
+tinker.live.onKvChange({ prefix: "posts/" }, refreshPosts);
+const answer = await tinker.llm.generate(...);
 ```
 
 The deliberately small KV API and ephemeral live layer should make the platform
@@ -66,7 +66,7 @@ disappear without pretending to be a general database.
 
 ### Server-held provider credentials
 
-Apps invoke capabilities; they do not receive API keys. TinyHost adds stronger
+Apps invoke capabilities; they do not receive API keys. Tinkercloud adds stronger
 per-app grants, operation scopes, quotas, and audit because its trust environment
 is broader than one company network.
 
@@ -83,25 +83,25 @@ capabilities over custom runtimes, cron jobs, or arbitrary backend execution.
 
 ### One small operational footprint
 
-Quick's single-server success supports TinyHost's one-VPS target. TinyHost
+Quick's single-server success supports Tinkercloud's one-VPS target. Tinkercloud
 should add quotas and rate limits early because even trusted staff tools can
 accidentally create loops or excessive storage/provider usage.
 
-## Where TinyHost deliberately differs
+## Where Tinkercloud deliberately differs
 
-| Quick reference | TinyHost decision |
+| Quick reference | Tinkercloud decision |
 |---|---|
 | All sites visible to all Shopify employees | Apps are private allowlist-only by default |
 | No meaningful site ownership/permission model | Explicit deployer ownership and per-app policy |
-| Shopify IAP supplies a trusted company identity | TinyHost owns email OTP, app sessions, and authorization |
+| Shopify IAP supplies a trusted company identity | Tinkercloud owns email OTP, app sessions, and authorization |
 | Google Cloud Storage and CloudSQL | One self-hosted VPS, SQLite, and private local releases |
 | Internal company trust bubble | Treat app code, viewers, deployers, archives, and browser input as untrusted |
 | Direct overwrite-style simplicity | Immutable releases, verified activation, and failed-activation preservation |
-| Shopify service infrastructure and AI proxy | Operator-managed adapters and credentials behind TinyHost |
+| Shopify service infrastructure and AI proxy | Operator-managed adapters and credentials behind Tinkercloud |
 
 ## Decision filter
 
-When evaluating a TinyHost feature, ask:
+When evaluating a Tinkercloud feature, ask:
 
 1. Does it make folder-to-secure-URL faster or more reliable?
 2. Does it remove a question, repeated value, prerequisite file, or manual

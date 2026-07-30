@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
 )
 
 func newCollectionRepo(t *testing.T, limits collections.Limits) (CollectionRepository, *AppDatabaseManager) {

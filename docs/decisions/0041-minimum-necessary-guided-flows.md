@@ -4,7 +4,7 @@
 
 ## Context
 
-TinyHost accumulated technically valid commands that required people to prepare
+Tinkercloud accumulated technically valid commands that required people to prepare
 configuration files, repeat server flags, and understand internal setup order.
 Those requirements are useful for deterministic automation but are unnecessary
 ceremony for a human whose actual goal is “set up this VPS” or “deploy this
@@ -18,21 +18,21 @@ defaults, and ask one bounded question only when a required value cannot be
 discovered or safely defaulted. Optional values appear behind one review/edit
 step rather than as mandatory questions.
 
-`tinyhost setup` owns generation of non-secret server configuration. It may ask
+`tinkercloud setup` owns generation of non-secret server configuration. It may ask
 for a base domain, operator email, and a Resend credential source, then derive
 conventional platform/app hostnames and sending defaults. Missing external DNS
 or email state produces one exact external action and a resumable continuation.
-Resend records are collected before the DNS checkpoint so TinyHost and provider
+Resend records are collected before the DNS checkpoint so Tinkercloud and provider
 records can be added in one DNS-provider session.
 Secrets never appear in argv or ordinary config: setup consumes a root-readable
 file or writes one from a no-echo prompt directly into the root-owned
 credential boundary.
 
-`tiny deploy [DIR]` owns first-run local onboarding. It reuses a verified default
+`tinker deploy [DIR]` owns first-run local onboarding. It reuses a verified default
 platform and bearer, inspects the project, derives safe slug/output defaults,
 defaults access to owner-only, and asks only about missing or ambiguous required
 state. One review/edit screen ends in one final deploy action whose label names
-any access broadening. It writes `tiny.yaml` as an atomic, reviewable receipt
+any access broadening. It writes `tinker.yaml` as an atomic, reviewable receipt
 without a separate confirmation; the deployer need not author YAML first.
 
 JSON and other non-interactive modes never prompt, guess, or mutate missing

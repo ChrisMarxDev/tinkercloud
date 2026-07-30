@@ -1,4 +1,4 @@
-// Package gemini maps TinyHost's common chat contract to Gemini's fixed
+// Package gemini maps Tinkercloud's common chat contract to Gemini's fixed
 // generateContent endpoint. It does not provide proxy behavior.
 package gemini
 
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
 const officialBase = "https://generativelanguage.googleapis.com/v1beta/models/"

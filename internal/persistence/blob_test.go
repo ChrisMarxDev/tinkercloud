@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 )
 
 type fakeBlobBytes struct {

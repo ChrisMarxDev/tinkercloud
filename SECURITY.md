@@ -1,6 +1,6 @@
 # Security Policy
 
-TinyHost is a security-sensitive, pre-release project. Please disclose
+Tinkercloud is a security-sensitive, pre-release project. Please disclose
 vulnerabilities privately and allow time for a coordinated fix.
 
 ## Supported versions
@@ -20,7 +20,7 @@ Do not open a public issue, discussion, or pull request for a suspected
 vulnerability.
 
 Use GitHub's
-[private vulnerability report](https://github.com/ChrisMarxDev/tiny/security/advisories/new).
+[private vulnerability report](https://github.com/ChrisMarxDev/tinkercloud/security/advisories/new).
 Include:
 
 - the affected commit or version;

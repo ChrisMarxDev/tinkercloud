@@ -6,7 +6,7 @@ Status: Accepted for V1
 
 Candidate-aware activation verifies policy, certificate readiness, and a
 server-side anonymous probe before atomically installing a release. That is
-necessary, but a `tiny deploy` success message also promises that the deployer
+necessary, but a `tinker deploy` success message also promises that the deployer
 can reach the public DNS/TLS gateway path a viewer will use. Trusting only
 boolean activation fields would let an in-process or incorrectly composed
 control path appear verified without exercising that public route.
@@ -19,7 +19,7 @@ than deriving it from its control client URL.
 ## Decision
 
 The authenticated activation result carries a server-derived `domain` with the
-protected app URL. Before `tiny deploy` returns success, the client requires
+protected app URL. Before `tinker deploy` returns success, the client requires
 that URL to be exactly `https://{slug}.{domain}/` and makes a new
 anonymous GET using the selected real HTTP/TLS transport.
 

@@ -54,7 +54,7 @@ func (f FileInstaller) atomic(path string, b []byte, mode os.FileMode) error {
 	if e := os.MkdirAll(filepath.Dir(path), 0700); e != nil {
 		return e
 	}
-	tmp, e := os.CreateTemp(filepath.Dir(path), ".tinyhost-")
+	tmp, e := os.CreateTemp(filepath.Dir(path), ".tinkercloud-")
 	if e != nil {
 		return e
 	}

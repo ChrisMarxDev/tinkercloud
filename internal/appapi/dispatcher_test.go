@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/appauth"
-	"github.com/tinyhost/tiny/internal/apps"
-	"github.com/tinyhost/tiny/internal/collections"
-	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/kv"
-	"github.com/tinyhost/tiny/internal/llm"
-	"github.com/tinyhost/tiny/internal/policies"
-	"github.com/tinyhost/tiny/internal/sessions"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
+	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
 func authFor(t *testing.T, appID string) appauth.AuthorizationContext {
@@ -70,18 +70,18 @@ func TestLLMChatWireContractAndStrictJSON(t *testing.T) {
 	s := llm.New(repo, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: llmAdapterSpy{}})
 	d := Dispatcher{LLM: s, Origin: func(*http.Request) bool { return true }}
 	a := authForLLM(t, "a")
-	w := request(d, a, http.MethodPost, "/_tiny/api/v1/llm/chat", `{"messages":[{"role":"user","content":"hi"}],"max_output_tokens":3}`, true)
+	w := request(d, a, http.MethodPost, "/_tinker/api/v1/llm/chat", `{"messages":[{"role":"user","content":"hi"}],"max_output_tokens":3}`, true)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"input_tokens":1`) || strings.Contains(w.Body.String(), "InputTokens") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodPost, "/_tiny/api/v1/llm/chat", `{"messages":[],"messages":[]}`, true)
+	w = request(d, a, http.MethodPost, "/_tinker/api/v1/llm/chat", `{"messages":[],"messages":[]}`, true)
 	if w.Code != 400 {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	raw := []byte(`{"messages":[{"role":"user","content":"`)
 	raw = append(raw, 0xff)
 	raw = append(raw, []byte(`"}]}`)...)
-	r := httptest.NewRequest(http.MethodPost, "/_tiny/api/v1/llm/chat", bytes.NewReader(raw))
+	r := httptest.NewRequest(http.MethodPost, "/_tinker/api/v1/llm/chat", bytes.NewReader(raw))
 	r.Host = "example.com"
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Origin", "http://example.com")
@@ -94,11 +94,11 @@ func TestLLMChatWireContractAndStrictJSON(t *testing.T) {
 
 func TestLLMDiscoveryExposesOnlyEffectiveSafeLimits(t *testing.T) {
 	d := Dispatcher{Capabilities: []Capability{{Name: "llm.chat", Version: 1, Limits: map[string]int{"model": 99}}}, LLM: llm.New(&llmRepoSpy{}, nil)}
-	w := request(d, authForLLM(t, "a"), http.MethodGet, "/_tiny/api/v1/capabilities", "", false)
+	w := request(d, authForLLM(t, "a"), http.MethodGet, "/_tinker/api/v1/capabilities", "", false)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"disclosure"`) || !strings.Contains(w.Body.String(), `"max_output_tokens":10`) || strings.Contains(w.Body.String(), `"model":99`) {
 		t.Fatalf("discovery=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, authFor(t, "a"), http.MethodGet, "/_tiny/api/v1/capabilities", "", false)
+	w = request(d, authFor(t, "a"), http.MethodGet, "/_tinker/api/v1/capabilities", "", false)
 	if strings.Contains(w.Body.String(), "llm.chat") {
 		t.Fatalf("unrequested llm leaked into discovery: %s", w.Body.String())
 	}
@@ -185,34 +185,34 @@ func request(d Dispatcher, a appauth.AuthorizationContext, method, path, body st
 func TestTwoAppIsolationVersionAndMalformedRequest(t *testing.T) {
 	d := Dispatcher{KV: kv.New(kv.DefaultLimits(), nil), AppSlug: func(a appauth.AuthorizationContext) string { return "app-" + a.AppID() }}
 	a, b := authFor(t, "a"), authFor(t, "b")
-	w := request(d, a, http.MethodPut, "/_tiny/api/v1/kv/state%2Fx", `{"value":{"ok":true}}`, true)
+	w := request(d, a, http.MethodPut, "/_tinker/api/v1/kv/state%2Fx", `{"value":{"ok":true}}`, true)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w = request(d, b, http.MethodGet, "/_tiny/api/v1/kv/state%2Fx", "", false)
+	w = request(d, b, http.MethodGet, "/_tinker/api/v1/kv/state%2Fx", "", false)
 	if w.Code != 404 {
 		t.Fatal("cross-app isolation", w.Code)
 	}
-	w = request(d, a, http.MethodPut, "/_tiny/api/v1/kv/state%2Fx", `{"value":1,"expected_version":9}`, true)
+	w = request(d, a, http.MethodPut, "/_tinker/api/v1/kv/state%2Fx", `{"value":1,"expected_version":9}`, true)
 	if w.Code != 409 || !strings.Contains(w.Body.String(), "req_safe") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodPut, "/_tiny/api/v1/kv/x", `{"unknown":1}`, true)
+	w = request(d, a, http.MethodPut, "/_tinker/api/v1/kv/x", `{"unknown":1}`, true)
 	if w.Code != 400 {
 		t.Fatal(w.Code)
 	}
-	w = request(d, a, http.MethodPut, "/_tiny/api/v1/kv/x", `{"value":1}`, false)
+	w = request(d, a, http.MethodPut, "/_tinker/api/v1/kv/x", `{"value":1}`, false)
 	if w.Code != 403 {
 		t.Fatal(w.Code)
 	}
 }
 func TestCurrentIdentityAndAppAreServerDerived(t *testing.T) {
 	d := Dispatcher{KV: kv.New(kv.DefaultLimits(), nil), AppSlug: func(appauth.AuthorizationContext) string { return "demo" }}
-	w := request(d, authFor(t, "a"), http.MethodGet, "/_tiny/api/v1/me", "", false)
+	w := request(d, authFor(t, "a"), http.MethodGet, "/_tinker/api/v1/me", "", false)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "demo") || strings.Contains(w.Body.String(), "app_id") {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	w = request(d, nil, http.MethodGet, "/_tiny/api/v1/me", "", false)
+	w = request(d, nil, http.MethodGet, "/_tinker/api/v1/me", "", false)
 	if w.Code != 401 {
 		t.Fatal(w.Code)
 	}
@@ -221,7 +221,7 @@ func TestCurrentIdentityAndAppAreServerDerived(t *testing.T) {
 func TestDisabledKVListDeniedBeforeDispatcher(t *testing.T) {
 	spy := &listSpy{}
 	d := Dispatcher{KV: spy}
-	w := request(d, authForKV(t, "a", false), http.MethodGet, "/_tiny/api/v1/kv?prefix=state", "", false)
+	w := request(d, authForKV(t, "a", false), http.MethodGet, "/_tinker/api/v1/kv?prefix=state", "", false)
 	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "capability_unavailable") {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -234,27 +234,27 @@ func TestCollectionRoutesAreProtectedStrictAndVersioned(t *testing.T) {
 	spy := &collectionSpy{}
 	d := Dispatcher{Collections: spy}
 	a := authFor(t, "a")
-	w := request(d, a, http.MethodPost, "/_tiny/api/v1/db/tasks", `{"data":{"title":"one"}}`, true)
+	w := request(d, a, http.MethodPost, "/_tinker/api/v1/db/tasks", `{"data":{"title":"one"}}`, true)
 	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"doc_abcdefghijklmnopqrstuv"`) {
 		t.Fatalf("create=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/tasks?cursor=x", "", false)
+	w = request(d, a, http.MethodGet, "/_tinker/api/v1/db/tasks?cursor=x", "", false)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("invalid cursor=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/Tasks", "", false)
+	w = request(d, a, http.MethodGet, "/_tinker/api/v1/db/Tasks", "", false)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("invalid collection=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodPut, "/_tiny/api/v1/db/tasks/doc_abcdefghijklmnopqrstuv", `{"data":{"title":"two"},"expected_version":9}`, true)
+	w = request(d, a, http.MethodPut, "/_tinker/api/v1/db/tasks/doc_abcdefghijklmnopqrstuv", `{"data":{"title":"two"},"expected_version":9}`, true)
 	if w.Code != http.StatusConflict {
 		t.Fatalf("stale write=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/tasks?snapshot=1", "", false)
+	w = request(d, a, http.MethodGet, "/_tinker/api/v1/db/tasks?snapshot=1", "", false)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"documents"`) {
 		t.Fatalf("snapshot=%d %s", w.Code, w.Body.String())
 	}
-	w = request(d, a, http.MethodPost, "/_tiny/api/v1/db/tasks", `{"data":{}}`, false)
+	w = request(d, a, http.MethodPost, "/_tinker/api/v1/db/tasks", `{"data":{}}`, false)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("origin denial=%d", w.Code)
 	}
@@ -263,7 +263,7 @@ func TestCollectionRoutesAreProtectedStrictAndVersioned(t *testing.T) {
 func TestDisabledCollectionDoesNotReachRepository(t *testing.T) {
 	spy := &collectionSpy{}
 	d := Dispatcher{Collections: spy}
-	w := request(d, authForKV(t, "a", false), http.MethodGet, "/_tiny/api/v1/db/tasks", "", false)
+	w := request(d, authForKV(t, "a", false), http.MethodGet, "/_tinker/api/v1/db/tasks", "", false)
 	if w.Code != http.StatusForbidden || spy.calls != 0 {
 		t.Fatalf("status=%d calls=%d body=%s", w.Code, spy.calls, w.Body.String())
 	}
@@ -273,7 +273,7 @@ func TestDisabledCollectionDoesNotReachRepository(t *testing.T) {
 // SDK clients must be able to iterate entries without special-casing it.
 func TestKVListEmptyPageSerializesEntriesAsArray(t *testing.T) {
 	d := Dispatcher{KV: kv.New(kv.DefaultLimits(), nil)}
-	w := request(d, authFor(t, "a"), http.MethodGet, "/_tiny/api/v1/kv?prefix=missing/", "", false)
+	w := request(d, authFor(t, "a"), http.MethodGet, "/_tinker/api/v1/kv?prefix=missing/", "", false)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
@@ -299,8 +299,8 @@ func TestSDKVersionNegotiation(t *testing.T) {
 	d := Dispatcher{AppSlug: func(appauth.AuthorizationContext) string { return "alpha" }}
 	a := authFor(t, "a")
 	for _, version := range []string{"", "0.1.0", "0.999.12"} {
-		r := httptest.NewRequest(http.MethodGet, "/_tiny/api/v1/me", nil)
-		r.Header.Set("X-Tiny-SDK-Version", version)
+		r := httptest.NewRequest(http.MethodGet, "/_tinker/api/v1/me", nil)
+		r.Header.Set("X-Tinker-SDK-Version", version)
 		w := httptest.NewRecorder()
 		d.Dispatch(a, w, r)
 		if w.Code != http.StatusOK {
@@ -308,8 +308,8 @@ func TestSDKVersionNegotiation(t *testing.T) {
 		}
 	}
 	for _, version := range []string{"1.0.0", "not-semver", "0.1", "0.1.0-beta"} {
-		r := httptest.NewRequest(http.MethodGet, "/_tiny/api/v1/me", nil)
-		r.Header.Set("X-Tiny-SDK-Version", version)
+		r := httptest.NewRequest(http.MethodGet, "/_tinker/api/v1/me", nil)
+		r.Header.Set("X-Tinker-SDK-Version", version)
 		w := httptest.NewRecorder()
 		d.Dispatch(a, w, r)
 		if w.Code != http.StatusUpgradeRequired || !strings.Contains(w.Body.String(), "sdk_version_incompatible") {

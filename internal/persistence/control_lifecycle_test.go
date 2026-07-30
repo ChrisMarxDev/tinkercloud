@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/blob"
-	"github.com/tinyhost/tiny/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 )
 
 type lifecycleLiveSpy struct {

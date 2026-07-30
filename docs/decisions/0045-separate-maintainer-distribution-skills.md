@@ -14,9 +14,9 @@ authority.
 
 Create two standalone maintainer skills:
 
-- `distribute-tiny-cli` for the native CLI, npm-family executable package,
+- `distribute-tinker-cli` for the native CLI, npm-family executable package,
   Homebrew formula, and one-line installer;
-- `distribute-tiny-sdk` for npm/JSR browser client packaging.
+- `distribute-tinkercloud-sdk` for npm/JSR browser client packaging.
 
 Each classifies work as inspect, prepare, or publish. Inspect and prepare are
 non-publishing defaults. Publication requires explicit authorization for the

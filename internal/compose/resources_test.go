@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tinyhost/tiny/internal/config"
-	"github.com/tinyhost/tiny/internal/deployments"
-	"github.com/tinyhost/tiny/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
 type resourceDisk struct{ d operations.Disk }
