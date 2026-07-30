@@ -42,7 +42,7 @@
       </div>
       <form class="tiny-inline-form" method="post" action="/logout">
         <input type="hidden" name="csrf" value="{{.CSRF}}">
-        <button class="tiny-button tiny-button--quiet tiny-button--small" type="submit">Sign out</button>
+        <button class="tiny-button tiny-button--quiet tiny-button--small" type="submit">Sign out of TinyHost</button>
       </form>
     </div>
   </header>
@@ -50,9 +50,15 @@
   <main class="tiny-main" id="main">
     <div class="tiny-page-heading">
       <div class="tiny-page-heading__copy">
-        <p class="tiny-eyebrow">Private by default</p>
-        <h1>Your tiny cloud.</h1>
-        <p>Apps, access, releases, and server health—kept small enough to understand.</p>
+        {{if eq .Actor.Role "operator"}}
+          <p class="tiny-eyebrow">Private by default</p>
+          <h1>Your tiny cloud.</h1>
+          <p>Apps, access, releases, and server health—kept small enough to understand.</p>
+        {{else}}
+          <p class="tiny-eyebrow">Deployer overview</p>
+          <h1>Your apps.</h1>
+          <p>Only the private apps you own are shown here. Use the Tiny CLI to deploy and manage them.</p>
+        {{end}}
       </div>
       <span class="tiny-status" data-state="active">Control plane active</span>
     </div>
@@ -67,25 +73,30 @@
       <div class="tiny-notice tiny-notice--success" role="status"><p>{{.Notice}}</p></div>
     {{end}}
 
-    <section class="tiny-section" aria-labelledby="overview-title">
-      <div class="tiny-section-header">
-        <div><p class="tiny-eyebrow">At a glance</p><h2 id="overview-title">Platform overview</h2></div>
-      </div>
-      <div class="tiny-grid tiny-grid--3">
-        <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Your apps</p><p class="tiny-stat__value">{{len .View.Apps}}</p></article>
-        {{if eq .Actor.Role "operator"}}
+    {{if eq .Actor.Role "operator"}}
+      <section class="tiny-section" aria-labelledby="overview-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">At a glance</p><h2 id="overview-title">Platform overview</h2></div>
+        </div>
+        <div class="tiny-grid tiny-grid--3">
+          <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Your apps</p><p class="tiny-stat__value">{{len .View.Apps}}</p></article>
           <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Active deployers</p><p class="tiny-stat__value">{{len .View.ActiveDeployerEmails}}</p></article>
-        {{end}}
-        <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Health checks</p><p class="tiny-stat__value">{{len .View.Health}}</p></article>
-      </div>
-    </section>
+          <article class="tiny-card tiny-stat"><p class="tiny-stat__label">Health checks</p><p class="tiny-stat__value">{{len .View.Health}}</p></article>
+        </div>
+      </section>
+    {{end}}
 
     <section class="tiny-section" aria-labelledby="apps-title">
       <div class="tiny-section-header">
         <div><p class="tiny-eyebrow">Private applications</p><h2 id="apps-title">Your apps</h2></div>
-        <p>Every active app stays behind its current owner and allowlist policy.</p>
+        {{if eq .Actor.Role "operator"}}<p>Every active app stays behind its current owner and allowlist policy.</p>{{else}}<p>This list is derived from your current deployer account.</p>{{end}}
       </div>
-      {{if .View.Apps}}
+      {{if .Unavailable}}
+        <div class="tiny-state tiny-state--unavailable" role="alert">
+          <div class="tiny-state__icon" aria-hidden="true">!</div>
+          <div><h3>Your app overview is unavailable.</h3><p>Retry from the dashboard. If it continues, ask the operator to run <code>tinyhost doctor</code>.</p></div>
+        </div>
+      {{else if .View.Apps}}
         <div class="tiny-app-filter" data-tiny-app-filter hidden>
           <label class="tiny-field" for="app-filter-query">
             <span class="tiny-label">Search apps</span>
@@ -107,15 +118,45 @@
         <div class="tiny-grid tiny-grid--2" id="app-list" data-tiny-app-list>
           {{range .View.Apps}}
             {{$app := .}}
+            {{$qr := tinyQR .StableURL}}
             <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="{{.Slug}}" data-tiny-app-description="{{.Description}}" data-tiny-app-status="{{.Status}}">
               <div class="tiny-app-card__summary">
                 <div class="tiny-card__header">
                   <div><p class="tiny-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tiny-card__meta">{{.Description}}</p>{{end}}</div>
-                  {{if .StableURL}}<a class="tiny-button tiny-button--secondary tiny-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>{{end}}
+                  {{if .StableURL}}
+                    <div class="tiny-app-card__actions">
+                      <a class="tiny-button tiny-button--secondary tiny-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>
+                      {{if $qr}}<button class="tiny-button tiny-button--secondary tiny-icon-action" type="button" data-tiny-dialog-open="qr-{{.Slug}}" aria-label="Show QR code for {{.Slug}}" title="Show QR code for {{.Slug}}"><span aria-hidden="true">▦</span></button>{{end}}
+                    </div>
+                  {{end}}
                   <span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span>
                 </div>
                 <p class="tiny-card__meta">Current policy: {{.Access.Mode}} (revision {{.Access.Revision}}); releases: {{len .Releases}}; tokens: {{len .Tokens}}</p>
               </div>
+              {{if $qr}}
+                <dialog class="tiny-dialog tiny-dialog--compact" id="qr-{{.Slug}}" aria-labelledby="qr-title-{{.Slug}}">
+                  <div class="tiny-dialog__header">
+                    <div>
+                      <p class="tiny-eyebrow">Open on your phone</p>
+                      <h2 id="qr-title-{{.Slug}}">{{.Slug}}</h2>
+                    </div>
+                    <form method="dialog">
+                      <button class="tiny-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
+                    </form>
+                  </div>
+                  <div class="tiny-dialog__body tiny-qr-dialog__body">
+                    <div class="tiny-qr-frame"><canvas class="tiny-qr" width="650" height="650" data-tiny-qr="{{$qr}}" role="img" aria-label="QR code for this app URL"></canvas></div>
+                    <p>Scan with your phone to open this app. Its normal sign-in and access policy still apply.</p>
+                    <a class="tiny-qr-url tiny-mono" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer">{{.StableURL}}</a>
+                  </div>
+                  <div class="tiny-dialog__actions">
+                    <form method="dialog">
+                      <button class="tiny-button tiny-button--secondary" type="submit" value="close">Close</button>
+                    </form>
+                  </div>
+                </dialog>
+              {{end}}
+              {{if eq $.Actor.Role "operator"}}
               <div class="tiny-app-card__body">
                 <details class="tiny-details">
                   <summary>Access policy</summary>
@@ -267,6 +308,7 @@
                   </div>
                 </details>
               </div>
+              {{end}}
             </article>
           {{end}}
         </div>
@@ -300,19 +342,38 @@
         </form>
       </section>
 
-      <section class="tiny-section" aria-labelledby="llm-title">
-        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator only</p><h2 id="llm-title">LLM chat capability</h2></div><p>Provider credentials are encrypted and write-only. App content is sent to the approved external provider.</p></div>
-        <div class="tiny-grid tiny-grid--2">
-          <article class="tiny-card tiny-stack">
-            <div><h3>Add provider connection</h3><p class="tiny-card__meta">TinyHost verifies the credential before storing its encrypted envelope. The credential cannot be shown again.</p></div>
-            <form class="tiny-stack" method="post" action="/dashboard/llm/connections">
-              <input type="hidden" name="csrf" value="{{.CSRF}}">
-              <label class="tiny-field" for="llm-connection-name"><span class="tiny-label">Display name</span><input class="tiny-input" id="llm-connection-name" name="display_name" maxlength="128" required autocomplete="off" placeholder="Team Anthropic"></label>
-              <label class="tiny-field" for="llm-connection-provider"><span class="tiny-label">Provider</span><select class="tiny-select" id="llm-connection-provider" name="provider"><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
-              <label class="tiny-field" for="llm-connection-secret"><span class="tiny-label">Provider credential</span><input class="tiny-input tiny-mono" id="llm-connection-secret" type="password" name="secret" maxlength="4096" required autocomplete="new-password"><span class="tiny-help">Stored only as an encrypted envelope. It is never rendered or returned.</span></label>
-              <button class="tiny-button tiny-button--primary" type="submit">Verify and add connection</button>
-            </form>
+      <section class="tiny-section" aria-labelledby="api-keys-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator only</p><h2 id="api-keys-title">API keys</h2></div><p>Provider API keys are encrypted and write-only. TinyHost never shows them again.</p></div>
+        {{if .View.LLMKeyManagementReady}}
+          <div class="tiny-grid tiny-grid--2">
+            <article class="tiny-card tiny-stack">
+              <div><h3>Add an API key</h3><p class="tiny-card__meta">Choose a supported provider. TinyHost verifies the API key before storing its encrypted envelope.</p></div>
+              <form class="tiny-stack" method="post" action="/dashboard/llm/connections">
+                <input type="hidden" name="csrf" value="{{.CSRF}}">
+                <label class="tiny-field" for="llm-connection-provider"><span class="tiny-label">Provider</span><select class="tiny-select" id="llm-connection-provider" name="provider"><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
+                <label class="tiny-field" for="llm-connection-secret"><span class="tiny-label">API key</span><input class="tiny-input tiny-mono" id="llm-connection-secret" type="password" name="secret" maxlength="4096" required autocomplete="new-password"><span class="tiny-help">Write-only. It is never rendered or returned.</span></label>
+                <button class="tiny-button tiny-button--primary" type="submit">Verify and save API key</button>
+              </form>
+            </article>
+          </div>
+        {{else}}
+          <article class="tiny-state tiny-state--unavailable" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinyhost llm enable</code>, then restart TinyHost. API keys cannot be added, rotated, or disabled until it is available.</p></article>
+        {{end}}
+        {{if .View.LLMConnections}}
+        <div class="tiny-grid tiny-grid--2 tiny-section__spaced">
+          {{range .View.LLMConnections}}
+          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>{{.DisplayName}}</h3><p class="tiny-card__meta">{{.Provider}} · <code>{{.ID}}</code></p></div><span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span></div>
+            {{if $.View.LLMKeyManagementReady}}<details class="tiny-details"><summary>Rotate API key</summary><div class="tiny-details__body tiny-stack"><p class="tiny-card__meta">TinyHost verifies the replacement against this connection’s stored provider. Provider selection cannot be changed here.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/rotate"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Replacement API key</span><input class="tiny-input tiny-mono" type="password" name="secret" maxlength="4096" required autocomplete="new-password"></label><button class="tiny-button tiny-button--primary" type="submit">Verify and rotate API key</button></form></div></details>
+            {{if eq .Status "active"}}<details class="tiny-details"><summary>Disable API key</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future calls using profiles on this API key will be denied.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Type <code>disable:{{.ID}}</code></span><input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="submit">Disable API key</button></form></div></details>{{end}}{{end}}
           </article>
+          {{end}}
+        </div>
+        {{end}}
+      </section>
+
+      <section class="tiny-section" aria-labelledby="llm-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator only</p><h2 id="llm-title">LLM chat</h2></div><p>Choose fixed profiles, app grants, limits, and usage. App content is sent to the approved external provider.</p></div>
+        <div class="tiny-grid tiny-grid--2">
           <article class="tiny-card tiny-stack">
             <div><h3>Create chat profile</h3><p class="tiny-card__meta">A profile fixes one model and every per-call, rate, concurrency, and monthly-token bound.</p></div>
             {{if .View.LLMConnections}}
@@ -325,17 +386,6 @@
             {{else}}<p class="tiny-card__meta">Add an active provider connection before creating a profile.</p>{{end}}
           </article>
         </div>
-
-        {{if .View.LLMConnections}}
-        <div class="tiny-grid tiny-grid--2 tiny-section__spaced">
-          {{range .View.LLMConnections}}
-          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>{{.DisplayName}}</h3><p class="tiny-card__meta">{{.Provider}} · <code>{{.ID}}</code></p></div><span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span></div>
-            <details class="tiny-details"><summary>Rotate credential</summary><div class="tiny-details__body tiny-stack"><p class="tiny-card__meta">TinyHost verifies the replacement against this connection’s stored provider. Provider selection cannot be changed here.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/rotate"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Replacement credential</span><input class="tiny-input tiny-mono" type="password" name="secret" maxlength="4096" required autocomplete="new-password"></label><button class="tiny-button tiny-button--primary" type="submit">Verify and rotate credential</button></form></div></details>
-            {{if eq .Status "active"}}<details class="tiny-details"><summary>Disable connection</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future calls using profiles on this connection will be denied.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Type <code>disable:{{.ID}}</code></span><input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="submit">Disable connection</button></form></div></details>{{end}}
-          </article>
-          {{end}}
-        </div>
-        {{end}}
 
         {{if .View.LLMProfiles}}
           <div class="tiny-section-header tiny-section__spaced"><div><p class="tiny-eyebrow">Fixed bounds</p><h3>Chat profiles</h3></div></div>
@@ -358,20 +408,22 @@
       </section>
     {{end}}
 
-    <section class="tiny-section" aria-labelledby="health-title">
-      <div class="tiny-section-header">
-        <div><p class="tiny-eyebrow">Fail closed</p><h2 id="health-title">Server health</h2></div>
-        <p>Run <code>tinyhost doctor</code> on the VPS for local credential and dependency diagnostics.</p>
-      </div>
-      <div class="tiny-grid tiny-grid--2">
-        {{range .View.Health}}
-          <article class="tiny-card tiny-card--flat">
-            <div class="tiny-card__header"><h3>{{.Name}}</h3><span class="tiny-status" data-state="{{.State}}">{{.State}}</span></div>
-            <p class="tiny-card__meta">{{.Detail}}</p>
-          </article>
-        {{end}}
-      </div>
-    </section>
+    {{if eq .Actor.Role "operator"}}
+      <section class="tiny-section" aria-labelledby="health-title">
+        <div class="tiny-section-header">
+          <div><p class="tiny-eyebrow">Fail closed</p><h2 id="health-title">Server health</h2></div>
+          <p>Run <code>tinyhost doctor</code> on the VPS for local credential and dependency diagnostics.</p>
+        </div>
+        <div class="tiny-grid tiny-grid--2">
+          {{range .View.Health}}
+            <article class="tiny-card tiny-card--flat">
+              <div class="tiny-card__header"><h3>{{.Name}}</h3><span class="tiny-status" data-state="{{.State}}">{{.State}}</span></div>
+              <p class="tiny-card__meta">{{.Detail}}</p>
+            </article>
+          {{end}}
+        </div>
+      </section>
+    {{end}}
     <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
   </main>
 </div>

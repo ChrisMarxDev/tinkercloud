@@ -1,6 +1,7 @@
 # ADR 0024: Separate control browser sessions from CLI bearer tokens
 
-**Status:** Accepted for V1
+**Status:** Dashboard-session portion superseded by ADR 0051; CLI bearer
+separation retained
 
 ## Context
 
@@ -30,14 +31,22 @@ ADR 0033 adds a fourth, still separate browser credential: a platform-host
 global *viewer identity* session. It can participate only in a one-time,
 app-bound viewer handoff and is neither a control cookie nor a CLI bearer.
 
+ADR 0051 removes the dashboard control-session credential and makes that global
+browser identity the dashboard authentication input. Dashboard authority still
+requires a fresh role lookup. CLI bearer separation and header/cookie
+cross-presentation denial from this decision remain in force.
+
 ## Consequences
 
-- A dashboard cookie cannot be replayed to the bearer control API, and a CLI
-  token cannot authenticate dashboard HTML.
-- Browser logout and root operator recovery revoke control-session rows;
-  suspension/revocation still denies both credential types on the next request.
+The following two bullets are historical consequences of the superseded
+dashboard-session portion. They do not describe a supported current browser
+credential path; ADR 0051 replaces it with the admin-host global identity.
+
+- The retired dashboard cookie could not be replayed to the bearer control API,
+  and a CLI token could not authenticate dashboard HTML.
+- The retired browser logout and root recovery revoked control-session rows.
 - The schema migration is forward-only. No downgrade promise is made, and
   operators/deployers must complete a fresh CLI login after upgrade; an
   interrupted legacy OTP flow also requires a fresh request.
-- Global viewer identity does not merge dashboard/control authority with viewer
-  authentication, even where normalized email values match.
+- The current global browser identity does not merge dashboard-role authority
+  with app-policy authorization, even where normalized email values match.

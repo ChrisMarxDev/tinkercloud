@@ -4,19 +4,27 @@
 package controlapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/identity"
+	"github.com/tinyhost/tiny/internal/otp"
 	"github.com/tinyhost/tiny/internal/ratelimit"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/compatibility"
+	"github.com/tinyhost/tiny/internal/kv"
 )
 
 const MaxBody = 1 << 20
@@ -31,6 +39,10 @@ var ErrLLMRevision = errors.New("llm capability revision conflict")
 
 type Actor struct {
 	ID, Email, Role string
+	// IdentitySessionID is populated only for the server-derived dashboard
+	// browser identity. It binds dashboard CSRF to that current identity
+	// session and is deliberately never serialized or accepted from clients.
+	IdentitySessionID string `json:"-"`
 	// CredentialID is server-derived from the bearer row and is used only by
 	// narrow self-revocation. It is never accepted from the request body.
 	CredentialID string
@@ -53,6 +65,16 @@ type Service interface {
 	RevokeToken(context.Context, Actor, string, string, string) error
 	CreateDeployment(context.Context, Actor, string, string, Upload) (any, error)
 	Activate(context.Context, Actor, string, string, string) (ActivationResult, error)
+	DataKVList(context.Context, Actor, string, string, string, int) (any, error)
+	DataKVGet(context.Context, Actor, string, string) (any, error)
+	DataKVSet(context.Context, Actor, string, string, json.RawMessage, *uint64, string) (any, error)
+	DataKVDelete(context.Context, Actor, string, string, *uint64, string) (any, error)
+	DataCollections(context.Context, Actor, string, string, int) (any, error)
+	DataDocumentsList(context.Context, Actor, string, string, string, int) (any, error)
+	DataDocumentGet(context.Context, Actor, string, string, string) (any, error)
+	DataDocumentCreate(context.Context, Actor, string, string, json.RawMessage, string) (any, error)
+	DataDocumentUpdate(context.Context, Actor, string, string, string, json.RawMessage, *uint64, string) (any, error)
+	DataDocumentDelete(context.Context, Actor, string, string, string, *uint64, string) (any, error)
 }
 type TokenInput struct {
 	Scopes           []string `json:"scopes"`
@@ -81,10 +103,10 @@ type Upload struct {
 type ActivationResult struct {
 	DeploymentID string `json:"deployment_id"`
 	URL          string `json:"url"`
-	// AppSuffix is server-derived deployment evidence. It lets a deployer verify
-	// the returned app hostname without assuming the control-plane host is also
-	// the wildcard app suffix.
-	AppSuffix            string `json:"app_suffix"`
+	// Domain is server-derived deployment evidence. It lets a deployer verify
+	// the returned app hostname without assuming the dashboard host from its
+	// control client URL.
+	Domain               string `json:"domain"`
 	PolicyReady          bool   `json:"policy_ready"`
 	TLSReady             bool   `json:"tls_ready"`
 	AnonymousDenied      bool   `json:"anonymous_denied"`
@@ -103,24 +125,35 @@ type Dispatcher struct {
 	// Compatibility is static build policy. It must never contain host,
 	// identity, app, persistence, or credential-derived values.
 	Compatibility compatibility.Matrix
+	// OTPIssuanceFailure receives only a fixed failure category. Production
+	// composition records it in the server log; it must never receive request,
+	// email, transaction, provider, or database error details.
+	OTPIssuanceFailure func(OTPIssuanceFailureCategory)
 }
-type LoginChannel string
+
+type OTPIssuanceFailureCategory = otp.IssuanceFailureCategory
 
 const (
-	BrowserLoginChannel LoginChannel = "browser"
-	CLILoginChannel     LoginChannel = "cli"
+	OTPIssuanceEntropy                   = otp.IssuanceEntropy
+	OTPIssuancePersistenceBeginWriteLock = otp.IssuancePersistenceBeginWriteLock
+	OTPIssuancePersistenceInvalidate     = otp.IssuancePersistenceInvalidate
+	OTPIssuancePersistenceEligibility    = otp.IssuancePersistenceEligibility
+	OTPIssuancePersistenceInsert         = otp.IssuancePersistenceInsert
+	OTPIssuancePersistenceCommit         = otp.IssuancePersistenceCommit
 )
 
+// Login is the CLI-only OTP boundary. Browser identities use the independent
+// platform identity broker and never mint a control-plane bearer.
 type Login interface {
-	RequestOTP(context.Context, string, LoginChannel, string) (string, error)
-	VerifyOTP(context.Context, string, string, LoginChannel) (string, error)
+	RequestOTP(context.Context, string, string) (string, error)
+	VerifyOTP(context.Context, string, string) (string, error)
 }
 
 // PlatformAuthenticator is intentionally distinct from the CLI bearer-token
-// authenticator. It is used only by the platform-host HTML surface, whose
-// credential is a host-only control cookie.
+// authenticator. It is used only by the admin-host HTML surface, whose
+// credential is the host-only global browser identity cookie.
 type PlatformAuthenticator interface {
-	AuthenticatePlatform(context.Context, *http.Request) (Actor, error)
+	AuthenticatePlatform(context.Context, http.ResponseWriter, *http.Request) (Actor, error)
 }
 
 // DashboardReader is an optional, safe read-model seam for the HTML UI. It
@@ -136,8 +169,13 @@ type DashboardView struct {
 	Audit                  []DashboardAudit
 	Health                 []DashboardHealth
 	LLMConnections         []LLMConnection
-	LLMProfiles            []LLMProfile
-	LLMGrants              []LLMGrant
+	// LLMKeyManagementReady is derived exclusively by the control service. It
+	// means the server has both its root-owned envelope boundary and a validator
+	// available for write-only provider credential mutations. The dashboard must
+	// never infer this from browser input or expose the root itself.
+	LLMKeyManagementReady bool
+	LLMProfiles           []LLMProfile
+	LLMGrants             []LLMGrant
 }
 type LLMConnection struct{ ID, DisplayName, Provider, Status string }
 type LLMProfile struct {
@@ -198,8 +236,9 @@ type envelope struct {
 	Error *apiError `json:"error,omitempty"`
 }
 type apiError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id,omitempty"`
 }
 
 func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +270,20 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		tx := ""
 		if d.Login != nil {
-			tx, _ = d.Login.RequestOTP(r.Context(), v.Email, CLILoginChannel, ratelimit.RequestFingerprint(r))
+			var err error
+			tx, err = d.Login.RequestOTP(r.Context(), v.Email, ratelimit.RequestFingerprint(r))
+			if err != nil {
+				if d.OTPIssuanceFailure != nil {
+					d.OTPIssuanceFailure(otpFailureCategory(err))
+				}
+				// The requester must not learn anything about deployer eligibility,
+				// storage state, or delivery configuration. Unlike an opaque
+				// transaction for an ineligible address, an issuer failure cannot
+				// be verified later, so fail explicitly rather than minting a false
+				// login_* receipt.
+				write(w, http.StatusServiceUnavailable, nil, "temporarily_unavailable")
+				return
+			}
 			if tx != "" && d.RateLimits != nil {
 				d.RateLimits.BindTransactionRequest(tx, v.Email, r)
 			}
@@ -257,7 +309,7 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			write(w, http.StatusTooManyRequests, nil, "rate_limited")
 			return
 		}
-		token, e := d.Login.VerifyOTP(r.Context(), v.Transaction, v.Code, CLILoginChannel)
+		token, e := d.Login.VerifyOTP(r.Context(), v.Transaction, v.Code)
 		if e != nil || token == "" {
 			write(w, 401, nil, "not_authorized")
 			return
@@ -316,6 +368,103 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		app := parts[1]
 		tail := strings.Join(parts[2:], "/")
 		switch {
+		case r.Method == "GET" && tail == "data/kv":
+			prefix, cursor, limit, ok := dataPage(r)
+			if !ok {
+				write(w, 400, nil, "validation_failed")
+				return
+			}
+			value, err := d.Service.DataKVList(r.Context(), a, app, prefix, cursor, limit)
+			d.dataResult(w, value, err)
+		case strings.HasPrefix(tail, "data/kv/"):
+			kvKey, ok := dataKVKey(r, app)
+			if !ok {
+				write(w, 400, nil, "validation_failed")
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				value, err := d.Service.DataKVGet(r.Context(), a, app, kvKey)
+				d.dataResult(w, value, err)
+			case http.MethodPut:
+				var input dataValueInput
+				if key(r) == "" || !body(r, &input) || input.Value == nil {
+					write(w, 400, nil, "validation_failed")
+					return
+				}
+				value, err := d.Service.DataKVSet(r.Context(), a, app, kvKey, input.Value, input.ExpectedVersion, key(r))
+				d.dataResult(w, value, err)
+			case http.MethodDelete:
+				var input dataExpectedVersionInput
+				if key(r) == "" || !optionalBody(r, &input) || input.ExpectedVersion == nil {
+					write(w, 400, nil, "validation_failed")
+					return
+				}
+				value, err := d.Service.DataKVDelete(r.Context(), a, app, kvKey, input.ExpectedVersion, key(r))
+				d.dataResult(w, value, err)
+			default:
+				write(w, 404, nil, "not_found")
+			}
+		case r.Method == "GET" && tail == "data/collections":
+			_, cursor, limit, ok := dataPage(r)
+			if !ok {
+				write(w, 400, nil, "validation_failed")
+				return
+			}
+			value, err := d.Service.DataCollections(r.Context(), a, app, cursor, limit)
+			d.dataResult(w, value, err)
+		case strings.HasPrefix(tail, "data/collections/"):
+			collection, id, root, ok := dataDocumentRoute(r, app)
+			if !ok {
+				write(w, 400, nil, "validation_failed")
+				return
+			}
+			if root {
+				switch r.Method {
+				case http.MethodGet:
+					_, cursor, limit, pageOK := dataPage(r)
+					if !pageOK {
+						write(w, 400, nil, "validation_failed")
+						return
+					}
+					value, err := d.Service.DataDocumentsList(r.Context(), a, app, collection, cursor, limit)
+					d.dataResult(w, value, err)
+				case http.MethodPost:
+					var input dataDocumentInput
+					if key(r) == "" || !body(r, &input) || input.Data == nil {
+						write(w, 400, nil, "validation_failed")
+						return
+					}
+					value, err := d.Service.DataDocumentCreate(r.Context(), a, app, collection, input.Data, key(r))
+					d.dataResult(w, value, err)
+				default:
+					write(w, 404, nil, "not_found")
+				}
+				return
+			}
+			switch r.Method {
+			case http.MethodGet:
+				value, err := d.Service.DataDocumentGet(r.Context(), a, app, collection, id)
+				d.dataResult(w, value, err)
+			case http.MethodPut:
+				var input dataDocumentInput
+				if key(r) == "" || !body(r, &input) || input.Data == nil || input.ExpectedVersion == nil {
+					write(w, 400, nil, "validation_failed")
+					return
+				}
+				value, err := d.Service.DataDocumentUpdate(r.Context(), a, app, collection, id, input.Data, input.ExpectedVersion, key(r))
+				d.dataResult(w, value, err)
+			case http.MethodDelete:
+				var input dataExpectedVersionInput
+				if key(r) == "" || !optionalBody(r, &input) || input.ExpectedVersion == nil {
+					write(w, 400, nil, "validation_failed")
+					return
+				}
+				value, err := d.Service.DataDocumentDelete(r.Context(), a, app, collection, id, input.ExpectedVersion, key(r))
+				d.dataResult(w, value, err)
+			default:
+				write(w, 404, nil, "not_found")
+			}
 		case r.Method == "GET" && tail == "releases":
 			value, err := d.Service.Releases(r.Context(), a, app)
 			if err != nil {
@@ -419,7 +568,12 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			out, e := d.Service.Activate(r.Context(), a, app, id, key(r))
 			if e != nil {
-				write(w, 409, nil, "conflict")
+				var activation deployments.ActivationFailure
+				if errors.As(e, &activation) {
+					write(w, 409, nil, string(activation))
+				} else {
+					write(w, 409, nil, "activation_commit_failed")
+				}
 				return
 			}
 			write(w, 200, out, "")
@@ -427,6 +581,10 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			write(w, 404, nil, "not_found")
 		}
 	}
+}
+
+func otpFailureCategory(err error) OTPIssuanceFailureCategory {
+	return otp.FailureCategory(err)
 }
 
 func compatibleControlClient(clientVersion, apiVersion string) bool {
@@ -475,7 +633,7 @@ func validTokenInput(v TokenInput) bool {
 	if len(v.Scopes) == 0 || v.ExpiresInSeconds < 60 || v.ExpiresInSeconds > 31536000 {
 		return false
 	}
-	allowed := map[string]bool{"app:read": true, "app:create": true, "app:delete": true, "deploy:create": true, "deploy:activate": true, "access:read": true, "access:write": true, "token:create": true, "token:revoke": true}
+	allowed := map[string]bool{"app:read": true, "app:create": true, "app:delete": true, "deploy:create": true, "deploy:activate": true, "access:read": true, "access:write": true, "token:create": true, "token:revoke": true, "data:read": true, "data:write": true}
 	seen := map[string]bool{}
 	for _, s := range v.Scopes {
 		if !allowed[s] || seen[s] {
@@ -540,15 +698,173 @@ func validDomain(d string) bool {
 }
 func key(r *http.Request) string { return r.Header.Get("Idempotency-Key") }
 func body(r *http.Request, v any) bool {
-	de := json.NewDecoder(io.LimitReader(r.Body, MaxBody+1))
+	raw, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
+	if err != nil || len(raw) > MaxBody || !uniqueJSON(raw) {
+		return false
+	}
+	de := json.NewDecoder(bytes.NewReader(raw))
 	de.DisallowUnknownFields()
 	return de.Decode(v) == nil && de.Decode(&struct{}{}) == io.EOF
+}
+
+// uniqueJSON rejects duplicate object members at every nesting depth. Go's
+// default JSON decoder silently selects a later duplicate, which is unsafe for
+// optimistic-version and data-mutation requests.
+func uniqueJSON(raw []byte) bool {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.UseNumber()
+	if !consumeJSONValue(d, 0) {
+		return false
+	}
+	var extra any
+	return d.Decode(&extra) == io.EOF
+}
+func consumeJSONValue(d *json.Decoder, depth int) bool {
+	if depth > 64 {
+		return false
+	}
+	token, err := d.Token()
+	if err != nil {
+		return false
+	}
+	switch token {
+	case json.Delim('{'):
+		seen := map[string]struct{}{}
+		for d.More() {
+			k, err := d.Token()
+			key, ok := k.(string)
+			if err != nil || !ok {
+				return false
+			}
+			if _, duplicate := seen[key]; duplicate {
+				return false
+			}
+			seen[key] = struct{}{}
+			if !consumeJSONValue(d, depth+1) {
+				return false
+			}
+		}
+		end, err := d.Token()
+		return err == nil && end == json.Delim('}')
+	case json.Delim('['):
+		for d.More() {
+			if !consumeJSONValue(d, depth+1) {
+				return false
+			}
+		}
+		end, err := d.Token()
+		return err == nil && end == json.Delim(']')
+	default:
+		return true
+	}
+}
+func optionalBody(r *http.Request, v any) bool {
+	if r.ContentLength == 0 {
+		return true
+	}
+	return body(r, v)
+}
+
+type dataValueInput struct {
+	Value           json.RawMessage `json:"value"`
+	ExpectedVersion *uint64         `json:"expected_version,omitempty"`
+}
+type dataDocumentInput struct {
+	Data            json.RawMessage `json:"data"`
+	ExpectedVersion *uint64         `json:"expected_version,omitempty"`
+}
+type dataExpectedVersionInput struct {
+	ExpectedVersion *uint64 `json:"expected_version,omitempty"`
+}
+
+// dataPage recognizes exactly the bounded paging grammar shared by deployer
+// data reads. It deliberately does not support filters or arbitrary queries.
+func dataPage(r *http.Request) (prefix, cursor string, limit int, ok bool) {
+	q := r.URL.Query()
+	for name, values := range q {
+		if (name != "prefix" && name != "cursor" && name != "limit") || len(values) != 1 {
+			return "", "", 0, false
+		}
+	}
+	prefix, cursor = q.Get("prefix"), q.Get("cursor")
+	limit = 100
+	if raw := q.Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			return "", "", 0, false
+		}
+		limit = parsed
+	}
+	return prefix, cursor, limit, true
+}
+
+func dataKVKey(r *http.Request, slug string) (string, bool) {
+	prefix := "/api/v1/apps/" + slug + "/data/kv/"
+	raw := strings.TrimPrefix(r.URL.EscapedPath(), prefix)
+	if raw == r.URL.EscapedPath() || raw == "" || strings.Contains(raw, "//") {
+		return "", false
+	}
+	key, err := url.PathUnescape(raw)
+	return key, err == nil && key != ""
+}
+
+// dataDocumentRoute returns a bounded collection/document route. The client
+// never gets an app ID or database selector; the slug was authorized earlier.
+func dataDocumentRoute(r *http.Request, slug string) (collection, id string, root, ok bool) {
+	prefix := "/api/v1/apps/" + slug + "/data/collections/"
+	raw := strings.TrimPrefix(r.URL.EscapedPath(), prefix)
+	if raw == r.URL.EscapedPath() || raw == "" {
+		return "", "", false, false
+	}
+	parts := strings.Split(raw, "/")
+	if len(parts) < 2 || parts[1] != "documents" || len(parts) > 3 {
+		return "", "", false, false
+	}
+	var err error
+	collection, err = url.PathUnescape(parts[0])
+	if err != nil || !collections.ValidCollection(collection) {
+		return "", "", false, false
+	}
+	if len(parts) == 2 {
+		return collection, "", true, true
+	}
+	id, err = url.PathUnescape(parts[2])
+	if err != nil || !collections.ValidDocumentID(id) {
+		return "", "", false, false
+	}
+	return collection, id, false, true
+}
+
+func (d Dispatcher) dataResult(w http.ResponseWriter, value any, err error) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if err == nil {
+		write(w, http.StatusOK, value, "")
+		return
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		write(w, http.StatusNotFound, nil, "not_found")
+		return
+	}
+	if errors.Is(err, kv.ErrVersionConflict) || errors.Is(err, collections.ErrVersionConflict) {
+		write(w, http.StatusConflict, nil, "conflict")
+		return
+	}
+	if errors.Is(err, kv.ErrInvalidKey) || errors.Is(err, kv.ErrInvalidValue) || errors.Is(err, kv.ErrInvalidListLimit) || errors.Is(err, collections.ErrInvalidCollection) || errors.Is(err, collections.ErrInvalidDocument) || errors.Is(err, collections.ErrInvalidDocumentID) || errors.Is(err, collections.ErrInvalidListLimit) {
+		write(w, http.StatusBadRequest, nil, "validation_failed")
+		return
+	}
+	if errors.Is(err, kv.ErrQuotaExceeded) || errors.Is(err, collections.ErrQuotaExceeded) || errors.Is(err, collections.ErrSnapshotTooLarge) {
+		write(w, http.StatusTooManyRequests, nil, "quota_exceeded")
+		return
+	}
+	write(w, http.StatusForbidden, nil, "not_authorized")
 }
 func write(w http.ResponseWriter, status int, v any, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if code != "" {
-		v = envelope{Error: &apiError{code, "Request could not be completed."}}
+		v = envelope{Error: &apiError{Code: code, Message: "Request could not be completed.", RequestID: w.Header().Get("X-Request-ID")}}
 	}
 	_ = json.NewEncoder(w).Encode(v)
 }

@@ -1,6 +1,7 @@
 # ADR 0002: App-scoped opaque sessions
 
-**Status:** Superseded in part by ADR 0033
+**Status:** Accepted for app-session isolation; browser-identity topology
+superseded by ADR 0051
 
 ## Context
 
@@ -12,12 +13,14 @@ revocation and current-policy enforcement.
 
 Use a host-only opaque session for each app hostname. Store only a hash of the
 random session secret in SQLite. Bind each record to one app and identity.
-Evaluate current app policy on every protected request. ADR 0033 retains this
-app-local boundary while adding a separate platform-host global viewer identity
-and one-time app-bound exchange; it does not add a parent-domain app cookie.
+Evaluate current app policy on every protected request. ADR 0051 retains this
+app-local boundary while adding the exact `admin.<domain>` global browser
+identity and one-time app-bound exchange; it does not add a parent-domain app
+cookie.
 
-The platform/control plane uses a separate cookie and session type. CLI/agent
-tokens are never viewer sessions.
+The admin dashboard authenticates from that same global browser identity but
+does a separate current-role lookup. CLI/agent tokens are never browser
+sessions.
 
 ## Consequences
 

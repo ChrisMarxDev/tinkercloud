@@ -17,7 +17,59 @@ import (
 var (
 	ErrInvalid     = errors.New("invalid challenge")
 	ErrUnavailable = errors.New("otp unavailable")
+	// ErrEntropy and ErrPersistence are fixed, non-sensitive operational
+	// categories for an OTP issuer. HTTP callers never receive either value;
+	// they let the server log an actionable category without recording a
+	// recipient, transaction, provider response, or SQL detail.
+	ErrEntropy     = errors.New("otp entropy unavailable")
+	ErrPersistence = errors.New("otp persistence unavailable")
 )
+
+// IssuanceFailureCategory is a bounded server-side diagnostic vocabulary. It
+// deliberately describes an operation, never a recipient, transaction,
+// provider, database error, or credential.
+type IssuanceFailureCategory string
+
+const (
+	IssuanceEntropy                   IssuanceFailureCategory = "entropy"
+	IssuancePersistenceBeginWriteLock IssuanceFailureCategory = "persistence_begin_write_lock"
+	IssuancePersistenceInvalidate     IssuanceFailureCategory = "persistence_invalidate"
+	IssuancePersistenceEligibility    IssuanceFailureCategory = "persistence_eligibility"
+	IssuancePersistenceInsert         IssuanceFailureCategory = "persistence_insert"
+	IssuancePersistenceCommit         IssuanceFailureCategory = "persistence_commit"
+)
+
+// IssuanceFailure carries one fixed category only. Error deliberately remains
+// generic because callers must not accidentally log or return a lower-layer
+// detail while classifying a sign-in failure.
+type IssuanceFailure struct{ Category IssuanceFailureCategory }
+
+func (e IssuanceFailure) Error() string { return "otp unavailable" }
+func (e IssuanceFailure) Is(target error) bool {
+	switch target {
+	case ErrEntropy:
+		return e.Category == IssuanceEntropy
+	case ErrPersistence:
+		return e.Category != IssuanceEntropy
+	default:
+		return false
+	}
+}
+
+func Failure(category IssuanceFailureCategory) error { return IssuanceFailure{Category: category} }
+
+func FailureCategory(err error) IssuanceFailureCategory {
+	var failure IssuanceFailure
+	if errors.As(err, &failure) {
+		return failure.Category
+	}
+	if errors.Is(err, ErrEntropy) {
+		return IssuanceEntropy
+	}
+	// An adapter that does not use the typed category remains private and is
+	// conservatively logged as the broadest durable failure.
+	return IssuancePersistenceBeginWriteLock
+}
 
 type Challenge struct {
 	ID, AppID, Email          string

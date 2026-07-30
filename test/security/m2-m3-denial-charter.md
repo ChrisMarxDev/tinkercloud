@@ -41,8 +41,8 @@ slug owned by another deployer must remain a denial: a client-side create
 conflict is never treated as evidence that the caller owns that app.
 
 For public deployment evidence, prove the deployer makes a separate anonymous
-GET to the activated `https://{slug}.{server-derived-app-suffix}/` URL before
-printing success, including when the control host and app suffix differ. The
+GET to the activated `https://{slug}.{server-derived-domain}/` URL before
+printing success. The
 GET must retain real TLS transport behavior but send neither deployer bearer
 credentials nor cookies. Reject 404, 2xx app bytes, redirects, a wrong host or
 scheme, timeout/transport failures, an oversized/malformed body, or any denial
@@ -56,6 +56,17 @@ narrow candidate must atomically move both the deployment pointer and policy
 revision. Injected policy, audit, or commit failures must preserve both old
 values. Rolling back an immutable release must atomically reinstall that
 release's canonical manifest policy.
+
+For activation replay, prove that only the exact same deployment and
+idempotency key after a durable successful activation returns success. That
+replay must consult durable audit evidence before candidate planning and must
+not rerun policy, certificate, probe, or capability gates; add a policy
+revision/audit row; or emit a live-session side effect. A different key,
+deployment, app, or non-active durable state fails closed. Activation gate
+failures expose only one stable category—`activation_policy_not_ready`,
+`activation_certificate_not_ready`, `activation_candidate_probe_failed`,
+`activation_capability_not_ready`, or `activation_commit_failed`—and, when
+the gateway supplied it, the matching `X-Request-ID` in the error envelope.
 
 For dashboard policy visibility, prove the bounded server-derived read model
 shows only the current private revision's canonical email/domain rules to an

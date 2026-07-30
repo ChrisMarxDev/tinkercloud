@@ -231,8 +231,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	cfgPath := fs.String("config", defaultConfigPath, "root-owned TinyHost config path")
 	credentialPath := fs.String("credentials", defaultCredentialPath, "root-owned systemd environment file")
-	platformHost := fs.String("platform-host", "", "platform DNS host")
-	appSuffix := fs.String("app-suffix", "", "wildcard app DNS suffix")
+	domain := fs.String("domain", "", "root domain; derives admin.<domain> and <slug>.<domain>")
 	email := fs.String("operator-email", "", "initial operator email")
 	emailFrom := fs.String("email-from", "", "verified Resend sender")
 	acmeEmail := fs.String("acme-email", "", "ACME contact email")
@@ -261,10 +260,10 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 			return errors.New("tinyhost: config_invalid")
 		}
 	} else if os.IsNotExist(err) {
-		if *platformHost == "" || *appSuffix == "" || *emailFrom == "" || *acmeEmail == "" {
+		if *domain == "" || *emailFrom == "" || *acmeEmail == "" {
 			return errors.New("tinyhost: config_values_required")
 		}
-		cfg = config.Config{PlatformHost: *platformHost, AppSuffix: *appSuffix, SessionCookie: "__Host-tiny_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: *acmeEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINYHOST_HMAC_KEY", LLMRootKeyRef: "env:TINYHOST_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
+		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tiny_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: *acmeEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINYHOST_HMAC_KEY", LLMRootKeyRef: "env:TINYHOST_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
 		if err := cfg.Validate(); err != nil {
 			return errors.New("tinyhost: config_invalid")
 		}
@@ -360,7 +359,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if err := rt.LocalHealth(ctx, *cfgPath); err != nil {
 			return errors.New("tinyhost: local_health_failed")
 		}
-		if err := rt.PublicHealth(ctx, cfg.PlatformHost); err != nil {
+		if err := rt.PublicHealth(ctx, cfg.PlatformHost()); err != nil {
 			return errors.New("tinyhost: public_health_failed")
 		}
 		if err := state.Complete(operations.InitVerified); err != nil {
@@ -370,7 +369,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 			return err
 		}
 	}
-	fmt.Fprintf(out, "init complete: https://%s/\n", cfg.PlatformHost)
+	fmt.Fprintf(out, "init complete: https://%s/\n", cfg.PlatformHost())
 	return nil
 }
 

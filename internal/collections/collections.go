@@ -84,7 +84,7 @@ type Repository interface {
 // ChangeSink receives only a successful committed mutation. It deliberately
 // carries a freshness hint, not document data or a durable replay record.
 type ChangeSink interface {
-	PublishCollectionChange(context.Context, appauth.AuthorizationContext, Mutation)
+	PublishCollectionChange(context.Context, appauth.DataAuthorizationContext, Mutation)
 }
 
 type Service struct {
@@ -237,6 +237,16 @@ func validID(value string) bool {
 // ValidDocumentID exposes the server-issued opaque ID grammar to transport
 // adapters. It does not authorize access to an otherwise valid ID.
 func ValidDocumentID(value string) bool { return validID(value) }
+
+// ValidDocument exposes the bounded JSON-object grammar to the deployer data
+// control API. It does not authorize an app or collection.
+func ValidDocument(value json.RawMessage) bool {
+	return validDocument(value, DefaultLimits().DocumentBytes)
+}
+
+// NewDocumentID keeps server-assigned document identifiers identical across
+// the viewer SDK and owner control-plane paths.
+func NewDocumentID() (string, error) { return newDocumentID() }
 
 var (
 	collectionName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$`)

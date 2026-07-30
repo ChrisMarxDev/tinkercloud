@@ -68,11 +68,12 @@ running explicitly supported Ubuntu 24.04 LTS or 26.04 LTS. Ambiguous,
 interim, end-of-life, other-distribution, or future unverified releases deny.
 
 For a new server, start with the signed installer and resumable
-`tinyhost setup`. Inspect first, then ask only for the controlled base domain,
+`tinyhost setup`. Inspect first, then ask only for the controlled root domain,
 initial operator email, and Resend credential source that cannot be derived.
-Derive conventional platform/app hosts and exact DNS records. Pause with one
-exact DNS or Resend action when external state is incomplete; resume without
-re-asking verified answers.
+Derive `admin.<domain>` and `<slug>.<domain>`, reserve `admin`, `api`, `auth`,
+`status`, `www`, `docs`, and `install`, and ask for one wildcard DNS record.
+Do not reserve `tiny` or `tinyhost`. Pause with one exact DNS or Resend action
+when external state is incomplete; resume without re-asking verified answers.
 
 The workstation `tiny host install|status|doctor|update` commands may perform
 the same root-local flow over an explicit `root@HOST` using normal OpenSSH
@@ -86,8 +87,12 @@ state, shell history, logs, or audit. Run the gateway as the unprivileged
 `tinyhost` service identity with only the narrow bind capability for 80/443.
 
 If offering `llm.chat`, configure it as an operator-owned capability adapter:
-create a named Anthropic or Gemini connection with a write-only provider key,
-define a fixed approved model/profile and bounded quotas, then grant that
+use the dashboard **API keys** section to choose Anthropic or Gemini and enter
+one write-only provider key. TinyHost derives its safe label and opaque ID;
+never ask for a name, ID, URL, or arbitrary secret. If the dashboard says key
+management is unavailable, run the root-only `tinyhost llm enable` and restart
+before entering a key; never expose or copy the encryption root. Define a fixed
+approved model/profile and bounded quotas in **LLM chat**, then grant that
 profile explicitly to selected apps. The browser receives only TinyHost's
 same-origin response; it never receives the provider key, connection ID,
 provider endpoint, raw provider error, arbitrary model choice, or an outbound
@@ -105,8 +110,17 @@ insecure TLS.
 Manage deployer authority as one revision-protected exact normalized email
 allowlist. Show the complete resulting list. Require explicit confirmation only
 when adding deployment authority. Removal immediately revokes that deployer's
-CLI tokens, control sessions, and pending OTPs while preserving their identity
-and owned app data.
+CLI tokens and pending CLI OTPs while removing dashboard authority on the next
+request. It preserves their global browser identity and independently
+authorized app access.
+
+For root recovery with `tinyhost deployers authorize|suspend|revoke`, the
+database mutation runs in a fixed child that drops permanently to `tinyhost`.
+After that child has committed and closed, TinyHost refreshes only an already
+active service and verifies it remains active; it never starts an inactive
+service. `deployer_applied_service_refresh_failed` means the authority mutation
+is durable but the platform must be checked with `sudo tinyhost doctor` before
+the changed deployer is asked to log in.
 
 Install only artifacts verified against signed release metadata. A checksum
 alone is not a trust root. An update verifies both the server artifact and the
@@ -130,8 +144,9 @@ sudo tinyhost doctor
 Do not invent another rollback command or delete rollback state by hand.
 
 Root access to the dedicated VPS is the recovery authority. If email is
-unavailable, use root-only operator recovery and revoke affected control
-sessions; never create a remote HTTP recovery bypass.
+unavailable, use root-only operator recovery and revoke affected global
+identity families and CLI credentials; never create a remote HTTP recovery
+bypass.
 
 At disk warning, diagnose and clean only through database-led TinyHost
 operations. At the write-stop watermark, new deployments, KV mutations, and

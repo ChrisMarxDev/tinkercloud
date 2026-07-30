@@ -19,9 +19,8 @@ deployment.
 
 The first supported VPN-only topology will use one operator-supplied TLS
 certificate and matching private key. The certificate must cover both the
-configured platform hostname and the wildcard application hostname. For
-example, it may contain names for `tiny.example.com` and
-`*.apps.example.com`.
+derived admin hostname and the wildcard application namespace. For
+example, it may contain names for `admin.example.com` and `*.example.com`.
 
 The guided setup flow will accept only absolute root-readable file paths, never
 private-key bytes in command arguments or echoed prompts. Before installation,
@@ -43,7 +42,7 @@ separate later decision, not a prerequisite for VPN support.
 
 - TinyHost needs no DNS-provider credential or private-CA implementation for
   its first VPN-only mode.
-- Private or split DNS must resolve the platform hostname and wildcard app
+- Private or split DNS must resolve the admin hostname and root-domain wildcard
   suffix to the VPN-reachable server.
 - Setup needs a VPN-reachable trusted-network probe; the existing public V1
   proof must not be disabled or silently reused.

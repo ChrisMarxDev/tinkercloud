@@ -30,7 +30,7 @@ func TestDeployActivatesVerified(t *testing.T) {
 			t.Fatal(r.URL, r.Header)
 		}
 		if n == 2 {
-			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		}
 		if n != 3 || r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 			t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
@@ -40,6 +40,96 @@ func TestDeployActivatesVerified(t *testing.T) {
 	o, e := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
 	if e != nil || o.DeploymentID != "d" {
 		t.Fatal(o, e)
+	}
+}
+
+func TestDeployRejectsRemovedAppSuffixActivationField(t *testing.T) {
+	c := New("https://admin.tiny.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/activate") {
+			// app_suffix was intentionally removed from the public receipt. A
+			// permissive decoder must not make a legacy response look verified.
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		}
+		return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+	})}
+
+	_, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+	if !errors.Is(err, ErrDeploymentEvidence) {
+		t.Fatalf("expected removed legacy field to fail evidence, got %v", err)
+	}
+}
+
+func TestDeployReturnsSafeActivationFailureReceipt(t *testing.T) {
+	c := New("https://tiny.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/api/v1/apps/demo/deployments":
+			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+		case "/api/v1/apps/demo/deployments/d/activate":
+			h := make(http.Header)
+			h.Set("X-Request-ID", "req_0123456789abcdef01234567")
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_certificate_not_ready","message":"raw policy detail must not escape","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}, nil
+		default:
+			t.Fatalf("unexpected request %s", r.URL)
+			return nil, nil
+		}
+	})}
+
+	result, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+	var activation *ActivationFailedError
+	if !errors.As(err, &activation) || !errors.Is(err, ErrDeploymentFailed) {
+		t.Fatalf("result=%+v err=%#v", result, err)
+	}
+	if result.DeploymentID != "d" || activation.DeploymentID != "d" || activation.State != "verified" || activation.Reason != ActivationCertificateNotReady || activation.RequestID != "req_0123456789abcdef01234567" {
+		t.Fatalf("result=%+v activation=%+v", result, activation)
+	}
+	if strings.Contains(activation.Error(), "raw policy detail") || strings.Contains(activation.Error(), "secret-token") {
+		t.Fatalf("unsafe error reflection: %q", activation.Error())
+	}
+}
+
+func TestDeployCollapsesUnsafeActivationFailures(t *testing.T) {
+	for name, response := range map[string]func(*http.Request) *http.Response{
+		"unknown code": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_0123456789abcdef01234567"}}
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_server_secret","message":"raw server secret","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+		},
+		"invalid request id": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_invalid"}}
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_commit_failed","message":"raw server secret","request_id":"req_invalid"}}`)), Header: h, Request: r}
+		},
+		"mismatched request id": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_abcdefabcdefabcdefabcdef"}}
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_commit_failed","message":"raw server secret","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+		},
+		"malformed envelope": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_0123456789abcdef01234567"}}
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_commit_failed","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+		},
+		"duplicate error member": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_0123456789abcdef01234567"}}
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_server_secret","code":"activation_commit_failed","message":"raw server secret","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+		},
+		"wrong status": func(r *http.Request) *http.Response {
+			h := http.Header{"X-Request-ID": []string{"req_0123456789abcdef01234567"}}
+			return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_commit_failed","message":"raw server secret","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := New("https://tiny.test", "secret-token")
+			c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+				if strings.HasSuffix(r.URL.Path, "/activate") {
+					return response(r), nil
+				}
+				return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
+			})}
+			_, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
+			var activation *ActivationFailedError
+			if !errors.Is(err, ErrDeploymentFailed) || errors.As(err, &activation) || strings.Contains(err.Error(), "raw server secret") || strings.Contains(err.Error(), "secret-token") {
+				t.Fatalf("unsafe error %#v", err)
+			}
+		})
 	}
 }
 
@@ -63,7 +153,7 @@ func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 			if r.Method != http.MethodPost || r.URL.Path != "/api/v1/apps/demo/deployments/d/activate" || r.Header.Get("Authorization") != "Bearer secret-token" || r.Header.Get("Idempotency-Key") == "" {
 				t.Fatalf("unexpected activation request: %s %s headers=%v", r.Method, r.URL, r.Header)
 			}
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		case 4:
 			if r.URL.String() != "https://demo.tiny.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 				t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
@@ -102,7 +192,7 @@ func deployedClient(probe func(*http.Request) (*http.Response, error)) Client {
 		case 1:
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
 		case 2:
-			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		default:
 			return probe(r)
 		}
@@ -248,7 +338,7 @@ func TestDeployControlBudgetOutlivesGenericClientTimeout(t *testing.T) {
 					return nil, r.Context().Err()
 				case <-time.After(20 * time.Millisecond):
 				}
-				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 			}
 			return anonymousDenied(r), nil
 		}),
@@ -311,7 +401,7 @@ func TestDeployRejectsUnexpectedPublicURL(t *testing.T) {
 		if n == 1 {
 			return &http.Response{StatusCode: http.StatusAccepted, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","state":"verified"}`)), Header: make(http.Header), Request: r}, nil
 		}
-		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://other.tiny.test/","app_suffix":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://other.tiny.test/","domain":"tiny.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 	})}
 	if _, err := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload"); !errors.Is(err, ErrDeploymentEvidence) {
 		t.Fatalf("error = %v, want deployment evidence denial", err)

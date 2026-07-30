@@ -80,6 +80,34 @@ The service exposes only these classifications: `unauthorized`,
 provider body, TLS failure, decrypt failure, SQL detail, or grant state to a
 browser-visible message.
 
+## Operator API-key control surface
+
+The admin-host dashboard has one operator-only **API keys** section, separate
+from **LLM chat** profiles, grants, limits, and usage. The initial key types are
+the fixed Anthropic and Gemini providers only. The create form accepts exactly a
+provider selection and one bounded write-only password API-key field. It has no
+connection ID, display-name, arbitrary secret name, provider URL, or generic
+secret field. The trusted service validates the fixed provider, generates the
+opaque connection ID, and derives the display label exactly as `Anthropic API
+key` or `Gemini API key` before persistence. Existing connection names remain
+unchanged and multiple connections for one provider remain valid.
+
+The server alone derives whether key management is ready. If its LLM repository,
+envelope root, or credential validator is unavailable, the dashboard shows an
+unavailable state with the root-only `tinyhost llm enable` and restart next
+step. It renders no create, rotate, or disable form in that state and never
+reveals the root, its environment reference, envelope, or reason-specific
+configuration detail. Rotation derives the fixed provider from the stored
+connection; a browser-supplied provider, display name, or ID is denied.
+
+These controls are operator-only and require the existing host-only control
+session, same-origin POST, CSRF, bounded form parsing, and typed service role
+check. Safe configured metadata may show the pre-existing label, fixed provider,
+opaque server-generated ID, and durable status. API keys, envelopes, values,
+provider responses, and raw validation failures never render in HTML, notices,
+audit entries, or errors. Failed validation or persistence leaves any existing
+connection unchanged.
+
 ## Deny-path evidence
 
 Tests must prove anonymous/malformed authorization, cross-app scope, disabled

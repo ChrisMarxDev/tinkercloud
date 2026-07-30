@@ -84,6 +84,30 @@ func TestKVEventAndReservedChannelDenied(t *testing.T) {
 	}
 }
 
+func TestDeployerDataHintUsesOnlyDerivedAppScope(t *testing.T) {
+	h := New(DefaultLimits())
+	inside, outside := &transport{}, &transport{}
+	in, err := h.Attach(authorized(t, "a"), inside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := h.Attach(authorized(t, "b"), outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = in.SubscribeKV("owner/"); err != nil {
+		t.Fatal(err)
+	}
+	if err = out.SubscribeKV("owner/"); err != nil {
+		t.Fatal(err)
+	}
+	dataAuth := appauth.NewDeployerDataAuthorizationContext("a", "alpha", "deployer_1", "req_1")
+	h.PublishKVChange(context.Background(), dataAuth, kv.Mutation{Key: "owner/change", Version: 1})
+	if len(inside.sent) != 1 || len(outside.sent) != 0 {
+		t.Fatalf("deployer data scope leaked: in=%d out=%d", len(inside.sent), len(outside.sent))
+	}
+}
+
 func TestCollectionChangeIsAppScopedAndClosesSlowConsumers(t *testing.T) {
 	h := New(DefaultLimits())
 	aTransport, bTransport, slowTransport := &transport{}, &transport{}, &failingTransport{}

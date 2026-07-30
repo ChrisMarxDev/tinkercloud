@@ -8,6 +8,12 @@ description: Canonical TinyHost agent guidance for building, deploying, verifyin
 This is the canonical authoring source. For a human workflow, prefer the
 self-contained `tiny-deployer` or `tiny-operator` role skill.
 
+An opt-in local deployer-workstation test wrapper may drive the normal CLI OTP
+flow through the controlled local Resend reader, but it is not production
+CI/noninteractive deployment-agent authentication. Production deployment
+agents require separately provisioned app-scoped deployer tokens and never
+receive an implicit credential write or prompt.
+
 <!-- shared:role-common:start -->
 ## Platform boundary
 
@@ -76,9 +82,27 @@ deployment.
 
 Discover the TinyHost platform URL from an explicit request, an already
 verified Tiny default, or current CLI state. If it remains missing, ask for the
-operator-provided platform URL, for example `https://tiny.example.com`. Accept
+operator-provided admin URL, for example `https://admin.example.com`. Accept
 only normalized HTTPS. Never invent it, derive it from an app hostname, follow
 a redirect, or accept insecure TLS.
+
+Remember the exact normalized `{server URL, deployer email}` pair after
+`tiny whoami` verifies both. Reuse this non-secret context in the current task
+and later follow-ups instead of asking again. Treat conversation context only
+as a candidate and reverify before mutation. Keep the pair only in conversation
+context and Tiny's protected per-server records, never in app or project files.
+
+For a known server, run `tiny whoami --server <remembered-server>` before
+concluding login is missing; a bare `tiny whoami` may inspect another default.
+If valid, continue without login or an email question. If definitely expired,
+run `tiny login --server <remembered-server>`, reuse the remembered email at
+the CLI prompt, and let the deployer enter only the OTP there. Replace the pair
+with the exact server and email returned by the successful `whoami`.
+
+Change the pair only after an explicit switch, logout, or contradictory verified
+state. Never transfer an email between servers. If `whoami` returns another
+email, stop before mutation and ask whether to adopt it or use
+`tiny login --force` for the intended account.
 
 Confirm the deployer-only `tiny` CLI is installed with `tiny version`. If it is
 missing, use the operator-provided signed client release and reviewed installer,
@@ -95,7 +119,7 @@ Do not ask the deployer for a bearer or OTP. Use the interactive CLI credential
 flow when needed:
 
 ```sh
-tiny login --server https://tiny.example.com
+tiny login --server https://admin.example.com
 tiny whoami
 ```
 
@@ -279,6 +303,39 @@ Names are display metadata, never paths. There are no public/signed blob URLs,
 folders, buckets, provider endpoints, browser credentials, or per-viewer blob
 ACLs in V1.
 
+#### Deployer data access
+
+Use `tiny data` only to inspect or deliberately repair the managed KV and JSON
+documents of an app you own. It reuses the saved CLI login and the server
+derives the private app database from the owned slug:
+
+```sh
+tiny data kv list team-pulse --prefix poll/
+tiny data kv get team-pulse poll/options
+tiny data documents list team-pulse tasks --limit 50
+tiny data documents get team-pulse tasks doc_abcdefghijklmnopqrstuv
+```
+
+`data:read` is bounded inspection. `data:write` permits one mutation at a time;
+re-read first and supply the returned version for an update or delete. A KV set
+may use an optional expected version, while destructive deletes require the
+exact target-bound `delete:...` phrase, either through the interactive prompt
+or `--confirm delete:...`. Use `--json` only for deterministic automation: it
+never prompts, requires `--confirm`, and must not mix progress text with the
+JSON result.
+
+CLI bearers created before this capability do not silently gain data scopes.
+If an exact owner receives `not_authorized` after a server upgrade, run
+`tiny login --force` once to issue a fresh interactive credential.
+
+Never use or ask for a database URL, app ID, database credential, SQLite file,
+SQL shell, schema/migration command, export/import, bulk delete, or viewer
+impersonation. A deployer cannot access another deployer's app, a
+deployment-agent token has no data scope by default, and suspended/deleting
+app lifecycle state may deny a mutation or all access. Do not place app data in
+chat, logs, or source control. See `specs/api/deployer-data-contract.md` for
+the exact scoped commands and denial behavior.
+
 #### Realtime
 
 Use custom channels for ephemeral hints:
@@ -411,6 +468,16 @@ already explicit. Then run from the project root:
 tiny deploy .
 ```
 
+For an existing app policy, first read the current policy with `tiny access get
+APP`. `tiny access set APP --file policy.json` accepts only writable policy
+members (`mode`, optional `expected_revision`, `confirm_broadening`, and
+`allow`); never paste the read-only `revision` member from a GET response. In
+an interactive terminal, Tiny names a newly added email/domain and asks once
+before writing. In JSON/non-interactive automation, set
+`confirm_broadening: true` in the file explicitly; otherwise Tiny returns
+`confirmation_required` without sending the write. A stale expected revision
+is a conflict, not permission to overwrite a newer policy.
+
 Do not upload only `dist` when `tiny.yaml` is in the project root. The CLI
 validates the project, streams an archive, activates only after policy and TLS
 readiness, preserves the last known-good release on failure, and performs its
@@ -467,11 +534,12 @@ running explicitly supported Ubuntu 24.04 LTS or 26.04 LTS. Ambiguous,
 interim, end-of-life, other-distribution, or future unverified releases deny.
 
 For a new server, start with the signed installer and resumable
-`tinyhost setup`. Inspect first, then ask only for the controlled base domain,
+`tinyhost setup`. Inspect first, then ask only for the controlled root domain,
 initial operator email, and Resend credential source that cannot be derived.
-Derive conventional platform/app hosts and exact DNS records. Pause with one
-exact DNS or Resend action when external state is incomplete; resume without
-re-asking verified answers.
+Derive `admin.<domain>` and `<slug>.<domain>`, reserve `admin`, `api`, `auth`,
+`status`, `www`, `docs`, and `install`, and ask for one wildcard DNS record.
+Do not reserve `tiny` or `tinyhost`. Pause with one exact DNS or Resend action
+when external state is incomplete; resume without re-asking verified answers.
 
 The workstation `tiny host install|status|doctor|update` commands may perform
 the same root-local flow over an explicit `root@HOST` using normal OpenSSH
@@ -485,8 +553,12 @@ state, shell history, logs, or audit. Run the gateway as the unprivileged
 `tinyhost` service identity with only the narrow bind capability for 80/443.
 
 If offering `llm.chat`, configure it as an operator-owned capability adapter:
-create a named Anthropic or Gemini connection with a write-only provider key,
-define a fixed approved model/profile and bounded quotas, then grant that
+use the dashboard **API keys** section to choose Anthropic or Gemini and enter
+one write-only provider key. TinyHost derives its safe label and opaque ID;
+never ask for a name, ID, URL, or arbitrary secret. If the dashboard says key
+management is unavailable, run the root-only `tinyhost llm enable` and restart
+before entering a key; never expose or copy the encryption root. Define a fixed
+approved model/profile and bounded quotas in **LLM chat**, then grant that
 profile explicitly to selected apps. The browser receives only TinyHost's
 same-origin response; it never receives the provider key, connection ID,
 provider endpoint, raw provider error, arbitrary model choice, or an outbound
@@ -504,8 +576,17 @@ insecure TLS.
 Manage deployer authority as one revision-protected exact normalized email
 allowlist. Show the complete resulting list. Require explicit confirmation only
 when adding deployment authority. Removal immediately revokes that deployer's
-CLI tokens, control sessions, and pending OTPs while preserving their identity
-and owned app data.
+CLI tokens and pending CLI OTPs while removing dashboard authority on the next
+request. It preserves their global browser identity and independently
+authorized app access.
+
+For root recovery with `tinyhost deployers authorize|suspend|revoke`, the
+database mutation runs in a fixed child that drops permanently to `tinyhost`.
+After that child has committed and closed, TinyHost refreshes only an already
+active service and verifies it remains active; it never starts an inactive
+service. `deployer_applied_service_refresh_failed` means the authority mutation
+is durable but the platform must be checked with `sudo tinyhost doctor` before
+the changed deployer is asked to log in.
 
 Install only artifacts verified against signed release metadata. A checksum
 alone is not a trust root. An update verifies both the server artifact and the
@@ -529,8 +610,9 @@ sudo tinyhost doctor
 Do not invent another rollback command or delete rollback state by hand.
 
 Root access to the dedicated VPS is the recovery authority. If email is
-unavailable, use root-only operator recovery and revoke affected control
-sessions; never create a remote HTTP recovery bypass.
+unavailable, use root-only operator recovery and revoke affected global
+identity families and CLI credentials; never create a remote HTTP recovery
+bypass.
 
 At disk warning, diagnose and clean only through database-led TinyHost
 operations. At the write-stop watermark, new deployments, KV mutations, and

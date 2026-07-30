@@ -35,6 +35,15 @@ func TestControlCreateAppReplayAndValidation(t *testing.T) {
 	if e := svc.CreateApp(context.Background(), a, "BAD", "x"); e == nil {
 		t.Fatal("invalid slug")
 	}
+	for _, slug := range []string{"admin", "ADMIN", "docs"} {
+		if e := svc.CreateApp(context.Background(), a, slug, "reserved-"+slug); !errors.Is(e, ErrUnavailable) {
+			t.Fatalf("CreateApp(%q) = %v; want safe denial", slug, e)
+		}
+	}
+	var reserved int
+	if e := s.DB.QueryRow("SELECT COUNT(*) FROM applications WHERE slug IN ('admin','docs')").Scan(&reserved); e != nil || reserved != 0 {
+		t.Fatalf("reserved app persisted: count=%d err=%v", reserved, e)
+	}
 }
 func TestControlCreateAppAuditRollback(t *testing.T) {
 	s := seeded(t)

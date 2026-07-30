@@ -22,9 +22,9 @@ Critical journey:
 acquire domain + supported dedicated VPS + root SSH
 → install one verified signed server binary
 → tinyhost setup discovers the host
-→ ask base domain + operator email
-→ derive conventional platform/app hosts and sender
-→ pause with exact DNS + Resend actions
+→ ask root domain + operator email
+→ derive admin.<domain>, <slug>.<domain>, and sender
+→ pause with one wildcard DNS + Resend actions
 → resume without repeating valid state
 → ingest provider secret into root-owned credentials
 → generate config, internal secrets, SQLite, service, TLS, and probes
@@ -71,7 +71,7 @@ Has no platform role or password. Email identity and app access are separate:
 
 ```text
 open app URL
-→ existing rotating platform-host global viewer identity, or generic OTP once
+→ existing rotating admin-host global browser identity, or generic OTP once
   per browser profile when absent
 → server-created one-time handoff bound to this app and safe return path
 → current app policy evaluated before grant and again at callback
@@ -79,11 +79,12 @@ open app URL
 → return to the requested app path
 ```
 
-The global identity proves only the email. Each app independently decides
-whether that identity is allowed. No deployed app receives the platform cookie,
-and an app logout revokes only its app session. Account switching is an
-explicit platform-host flow that revokes the prior identity family and child app
-sessions.
+The global identity proves only the email. A current role check separately
+controls dashboard access, and each app independently decides whether that
+identity is allowed. No deployed app receives the admin cookie, and an app
+logout revokes only its app session. Account switching and `Sign out of
+TinyHost` are explicit admin-host flows that revoke the prior identity family
+and child app sessions without revoking CLI bearers.
 
 ## Deployment agent
 

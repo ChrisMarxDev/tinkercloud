@@ -208,16 +208,16 @@ func diagnoseWithOptions(parent context.Context, c config.Config, network bool, 
 	checks = append(checks, checkWith(parent, "port_http", "listening", "not listening", func(ctx context.Context) error { return d.PortOK(ctx, c.ListenHTTP) }))
 	checks = append(checks, checkWith(parent, "port_https", "listening", "not listening", func(ctx context.Context) error { return d.PortOK(ctx, c.ListenHTTPS) }))
 	if network {
-		checks = append(checks, checkWith(parent, "dns_platform", "resolves", "unavailable", func(ctx context.Context) error { return resolved(d.DNSLookup(ctx, c.PlatformHost)) }))
+		checks = append(checks, checkWith(parent, "dns_platform", "resolves", "unavailable", func(ctx context.Context) error { return resolved(d.DNSLookup(ctx, c.PlatformHost())) }))
 		// A fixed, otherwise unused valid label tests the configured wildcard
 		// record without requiring an active application.
-		checks = append(checks, checkWith(parent, "dns_wildcard", "resolves", "unavailable", func(ctx context.Context) error { return resolved(d.DNSLookup(ctx, "tinyhost-doctor."+c.AppSuffix)) }))
+		checks = append(checks, checkWith(parent, "dns_wildcard", "resolves", "unavailable", func(ctx context.Context) error { return resolved(d.DNSLookup(ctx, "tinyhost-doctor."+c.AppSuffix())) }))
 		_, port, err := net.SplitHostPort(c.ListenHTTPS)
 		checks = append(checks, checkWith(parent, "tls_platform", "valid", "unavailable or invalid", func(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			return d.TLSCheck(ctx, c.PlatformHost, port)
+			return d.TLSCheck(ctx, c.PlatformHost(), port)
 		}))
 		checks = append(checks, checkWith(parent, "resend", "credential accepted", "unavailable", func(ctx context.Context) error {
 			if credentials.resendAPIKey == "" {

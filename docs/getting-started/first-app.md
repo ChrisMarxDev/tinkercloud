@@ -72,8 +72,8 @@ The full format is documented in the
 Replace the example URL with your TinyHost server:
 
 ```sh
-tiny --server https://tiny.example.com login
-tiny --server https://tiny.example.com deploy .
+tiny --server https://admin.example.com login
+tiny --server https://admin.example.com deploy .
 ```
 
 The deploy command prints the private app URL. Open it and sign in with the

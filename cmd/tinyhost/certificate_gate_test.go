@@ -84,6 +84,9 @@ func TestCertificateReadyImmediateSuccessDoesNotRetry(t *testing.T) {
 	attempts := 0
 	client := &http.Client{Transport: certificateRoundTrip(func(r *http.Request) (*http.Response, error) {
 		attempts++
+		if r.URL.Path != "/_tiny/api/v1/app" {
+			t.Fatalf("readiness path=%q", r.URL.Path)
+		}
 		return verifiedCertificateResponse(r, http.StatusUnauthorized), nil
 	})}
 	if !certificateReadyWithSchedule(context.Background(), "demo.example.test", client, testCertificateSchedule(4)) {
@@ -91,6 +94,22 @@ func TestCertificateReadyImmediateSuccessDoesNotRetry(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("attempts=%d want=1", attempts)
+	}
+}
+
+func TestCertificateReadyActiveAppDoesNotStartLoginHandoff(t *testing.T) {
+	client := &http.Client{Transport: certificateRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/_tiny/auth/login" {
+			t.Fatal("certificate readiness must not invoke the mutating login handoff")
+		}
+		if r.URL.Path != "/_tiny/api/v1/app" {
+			t.Fatalf("path=%q", r.URL.Path)
+		}
+		// An active private app returns the normal anonymous app API denial.
+		return verifiedCertificateResponse(r, http.StatusUnauthorized), nil
+	})}
+	if !certificateReadyWithSchedule(context.Background(), "demo.example.test", client, testCertificateSchedule(2)) {
+		t.Fatal("active app API denial did not prove certificate readiness")
 	}
 }
 

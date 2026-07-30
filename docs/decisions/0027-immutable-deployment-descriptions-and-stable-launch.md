@@ -27,7 +27,7 @@ manifest data fails the dashboard read model closed; intermediate records may
 have no description.
 
 The dashboard may render a compact, accessible external link only for an active
-current app at the server-derived stable `https://{slug}.{app_suffix}/` origin.
+current app at the server-derived stable `https://{slug}.{domain}/` origin.
 It opens in a new tab with `noopener noreferrer`. Immutable release hashes,
 release paths, storage paths, and raw release URLs are never public interface
 values.

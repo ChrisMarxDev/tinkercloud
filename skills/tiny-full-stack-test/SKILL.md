@@ -67,25 +67,44 @@ app content is exposed.
    consumed-message ledger local and mode `0600`. Never copy either to the VPS
    or print its contents.
 4. Set `TINYHOST_VPS_OTP_COMMAND` to the absolute path of
-   `scripts/read-resend-otp.py`. Supply exact platform/app host and sender
-   environment values. The reader receives only `deployer|viewer EMAIL HOST`;
-   both V1 OTP purposes must use exactly `TINYHOST_VPS_PLATFORM_HOST` because
-   the global identity broker owns the flow. It must print only a 4--12 digit
-   code.
+   `scripts/read-resend-otp.py`. Supply one `TINYHOST_VPS_DOMAIN` and the
+   sender values; the runner derives `admin.<domain>` and `<slug>.<domain>`.
+   The reader receives only `deployer|viewer EMAIL HOST`; both V1 OTP purposes
+   must use exactly `admin.<domain>` because the global browser identity owner
+   owns the flow. It must print only a 4--12 digit code.
 5. Require `TINYHOST_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINYHOST_VPS_REUSE=1` marker gating. Never
-   weaken SSH trust or introduce an OTP/auth bypass. In the real browser-jar
-   proof, read exactly one initial viewer OTP for the first allowed app through
-   the platform identity broker; the second allowed app must get a separate
-   host-only app session without another OTP, while an excluded app renders a
-   generic no-app-bytes/no-OTP denial. Assert the global identity and the
-   non-authorizing browser-binding cookies are platform-only and app session
-   cookies are distinct per app host. The binding must exist after the initial
-   broker form, never appear on an app host, and remain after a global account
-   switch. Replay a consumed callback and target it at a sibling app host as
-   denials; app-local logout must preserve global identity and sibling access,
-   while a later account switch uses its intentionally separate viewer-purpose
-   OTP and revokes all old child sessions.
+   weaken SSH trust or introduce an OTP/auth bypass. A clean rerun may remove
+   TinyHost configuration, app data, binary, and service state, but preserve
+   the fixed `/var/lib/tinyhost-acme` transport cache. Initialization must
+   still validate its path; do not erase reusable ACME account/certificate
+   state merely to repeat app/auth testing. In the real browser-jar
+   proof, read exactly one initial viewer OTP at `admin.<domain>/login`; the
+   first and second allowed apps must receive separate host-only app sessions
+   without another OTP, while an excluded app renders a generic no-app-bytes/
+   no-OTP denial. Assert the global identity and the non-authorizing browser-
+   binding cookies are dashboard-only and app session cookies are distinct per
+   app host. Preserve a path with repeated and percent-encoded query values
+   through a handoff. The binding must exist after dashboard sign-in, never
+   appear on an app host, and remain after an account switch. Replay a consumed
+   callback and target it at a sibling app host as denials; app-local logout
+   must preserve global identity and sibling access, while global dashboard
+   logout must revoke the identity and every child session. A later account
+   switch uses its intentionally separate viewer-purpose OTP and revokes all
+   old child sessions.
+   For one app, redeploy the exact same immutable archive before viewer login.
+   Require the later deployment to activate, supersede the earlier release,
+   retain its canonical private policy, and pass anonymous denial again. A
+   After deployer login, list only that deployer's apps and delete only the
+   listed fixed acceptance fixtures (`vps-e2e-update-probe`,
+   `vps-e2e-primary`, `vps-e2e-isolation`, and `vps-e2e-denied`), using a
+   fresh idempotency key per deletion. Do not delete unknown, absent, or
+   unrelated apps; list and deletion errors are terminal. Their stable hosts
+   are intentional and must be reused across clean and reuse runs so the
+   exact-host certificates are issued once and retained. Keep the per-archive
+   marker randomized to prevent stale-content evidence. The
+   certificate-readiness check uses only the non-mutating protected
+   `/_tiny/api/v1/app` endpoint; it must never start an app login handoff.
 6. Treat blob evidence as a complete capability sequence, not just a 2xx:
    discover the enabled capability, reject a multipart request with an extra
    part and prove no catalog mutation, then authenticate a viewer and prove
@@ -106,8 +125,11 @@ app content is exposed.
    restart readiness proof. A fixture with no LLM manifest request/grant must
    omit `llm.chat` from discovery and deny direct chat invocation without
    provider details. Do not substitute a VPS database/filesystem inspection.
-8. Reuse never re-initializes or wipes the VPS. It requires an explicit local
-   `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
+8. Reuse never re-initializes or wipes the VPS. The supported signed update
+   preserves the configured deployer, owned apps, and current private
+   access-policy revision/rules; verify the post-update deployer can still
+   read the owned app/policy before treating the update as accepted. It requires
+   an explicit local `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
    key and use only `tinyhost update` with its active-app health gate. The
    unattended wrapper fails before offline gates unless this is an absolute,
    existing, caller-owned non-symlink directory. After the trusted update,

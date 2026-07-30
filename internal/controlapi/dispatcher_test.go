@@ -2,6 +2,7 @@ package controlapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +12,9 @@ import (
 	"time"
 
 	"github.com/tinyhost/tiny/internal/compatibility"
+	"github.com/tinyhost/tiny/internal/deployments"
+	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/tinyhost/tiny/internal/otp"
 	"github.com/tinyhost/tiny/internal/ratelimit"
 )
 
@@ -60,6 +64,34 @@ func (s *svcFake) CreateDeployment(_ context.Context, _ Actor, _ string, _ strin
 }
 func (s *svcFake) Activate(context.Context, Actor, string, string, string) (ActivationResult, error) {
 	return ActivationResult{}, s.err
+}
+func (s *svcFake) DataKVList(context.Context, Actor, string, string, string, int) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataKVGet(context.Context, Actor, string, string) (any, error) { return nil, s.err }
+func (s *svcFake) DataKVSet(context.Context, Actor, string, string, json.RawMessage, *uint64, string) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataKVDelete(context.Context, Actor, string, string, *uint64, string) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataCollections(context.Context, Actor, string, string, int) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataDocumentsList(context.Context, Actor, string, string, string, int) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataDocumentGet(context.Context, Actor, string, string, string) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataDocumentCreate(context.Context, Actor, string, string, json.RawMessage, string) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataDocumentUpdate(context.Context, Actor, string, string, string, json.RawMessage, *uint64, string) (any, error) {
+	return nil, s.err
+}
+func (s *svcFake) DataDocumentDelete(context.Context, Actor, string, string, string, *uint64, string) (any, error) {
+	return nil, s.err
 }
 func call(d Dispatcher, m, p, b string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(m, p, strings.NewReader(b))
@@ -117,6 +149,23 @@ func TestDispatcherSuccessPropagatesActor(t *testing.T) {
 	w := call(Dispatcher{Auth: a, Service: s}, "GET", "/api/v1/whoami", "")
 	if w.Code != 200 || s.actor.ID != "u" || strings.Contains(w.Body.String(), "error") {
 		t.Fatal(w.Code, w.Body.String())
+	}
+}
+
+func TestDispatcherActivationFailureIsSafeAndCarriesGatewayRequestID(t *testing.T) {
+	a := &authFake{a: Actor{ID: "u", Active: true}}
+	s := &svcFake{err: deployments.CertificateNotReady}
+	d := Dispatcher{Auth: a, Service: s}
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/apps/a/deployments/dep/activate", nil)
+	r.Header.Set("Idempotency-Key", "activation-key")
+	w := httptest.NewRecorder()
+	w.Header().Set("X-Request-ID", "req_test")
+	d.ServeHTTP(w, r)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"activation_certificate_not_ready"`) || !strings.Contains(w.Body.String(), `"request_id":"req_test"`) {
+		t.Fatalf("activation error = %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "certificate") && !strings.Contains(w.Body.String(), "activation_certificate_not_ready") {
+		t.Fatalf("unsafe activation detail: %s", w.Body.String())
 	}
 }
 
@@ -236,16 +285,17 @@ func TestDispatcherArchiveUploadUsesConfiguredStreamingLimit(t *testing.T) {
 
 type loginFake struct {
 	requests int
-	channel  LoginChannel
+	err      error
 }
 
-func (l *loginFake) RequestOTP(_ context.Context, _ string, channel LoginChannel, _ string) (string, error) {
+func (l *loginFake) RequestOTP(_ context.Context, _ string, _ string) (string, error) {
 	l.requests++
-	l.channel = channel
+	if l.err != nil {
+		return "", l.err
+	}
 	return "login_test", nil
 }
-func (l *loginFake) VerifyOTP(_ context.Context, _, _ string, channel LoginChannel) (string, error) {
-	l.channel = channel
+func (l *loginFake) VerifyOTP(_ context.Context, _, _ string) (string, error) {
 	return "token", nil
 }
 
@@ -259,7 +309,7 @@ func TestDispatcherOTPRateLimitedBeforeLoginProvider(t *testing.T) {
 	first.RemoteAddr = "203.0.113.1:8"
 	w := httptest.NewRecorder()
 	d.ServeHTTP(w, first)
-	if w.Code != http.StatusAccepted || login.requests != 1 || login.channel != CLILoginChannel {
+	if w.Code != http.StatusAccepted || login.requests != 1 {
 		t.Fatal(w.Code, login.requests)
 	}
 	second := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp", strings.NewReader(`{"email":"b@example.com"}`))
@@ -268,6 +318,39 @@ func TestDispatcherOTPRateLimitedBeforeLoginProvider(t *testing.T) {
 	d.ServeHTTP(w, second)
 	if w.Code != http.StatusTooManyRequests || !strings.Contains(w.Body.String(), `"rate_limited"`) || login.requests != 1 {
 		t.Fatal(w.Code, w.Body.String(), login.requests)
+	}
+}
+
+func TestDispatcherOTPDoesNotMintFallbackTransactionWhenIssuerFails(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		err      error
+		category OTPIssuanceFailureCategory
+	}{
+		{"entropy", otp.Failure(otp.IssuanceEntropy), OTPIssuanceEntropy},
+		{"begin", otp.Failure(otp.IssuancePersistenceBeginWriteLock), OTPIssuancePersistenceBeginWriteLock},
+		{"invalidate", otp.Failure(otp.IssuancePersistenceInvalidate), OTPIssuancePersistenceInvalidate},
+		{"eligibility", otp.Failure(otp.IssuancePersistenceEligibility), OTPIssuancePersistenceEligibility},
+		{"insert", otp.Failure(otp.IssuancePersistenceInsert), OTPIssuancePersistenceInsert},
+		{"commit", otp.Failure(otp.IssuancePersistenceCommit), OTPIssuancePersistenceCommit},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			login := &loginFake{err: tc.err}
+			var reported OTPIssuanceFailureCategory
+			d := Dispatcher{Login: login, OTPIssuanceFailure: func(category OTPIssuanceFailureCategory) { reported = category }}
+			r := httptest.NewRequest(http.MethodPost, "/api/v1/auth/otp", strings.NewReader(`{"email":"deployer@example.com"}`))
+			w := httptest.NewRecorder()
+			d.ServeHTTP(w, r)
+			if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), `"temporarily_unavailable"`) {
+				t.Fatalf("issuer failure response = %d %s", w.Code, w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), "persistence") || strings.Contains(w.Body.String(), "login_") {
+				t.Fatalf("issuer failure leaked internal state or fake transaction: %s", w.Body.String())
+			}
+			if reported != tc.category {
+				t.Fatalf("issuer failure category=%q want=%q", reported, tc.category)
+			}
+		})
 	}
 }
 
@@ -294,5 +377,26 @@ func TestDispatcherAppLifecycleDenials(t *testing.T) {
 	d.ServeHTTP(w, r)
 	if w.Code != 403 {
 		t.Fatalf("service denial = %d", w.Code)
+	}
+}
+
+func TestDataResultKeepsQuotaDistinctFromAuthorizationDenial(t *testing.T) {
+	w := httptest.NewRecorder()
+	(Dispatcher{}).dataResult(w, nil, kv.ErrQuotaExceeded)
+	if w.Code != http.StatusTooManyRequests || !strings.Contains(w.Body.String(), `"quota_exceeded"`) {
+		t.Fatalf("quota response = %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestUniqueJSONRejectsDuplicateMembersAndExcessiveNesting(t *testing.T) {
+	if uniqueJSON([]byte(`{"outer":{"same":1,"same":2}}`)) {
+		t.Fatal("nested duplicate member accepted")
+	}
+	deep := strings.Repeat("[", 66) + "0" + strings.Repeat("]", 66)
+	if uniqueJSON([]byte(deep)) {
+		t.Fatal("excessively nested JSON accepted")
+	}
+	if !uniqueJSON([]byte(`{"outer":[{"one":1},{"two":2}]}`)) {
+		t.Fatal("valid bounded JSON rejected")
 	}
 }

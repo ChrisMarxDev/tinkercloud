@@ -47,7 +47,7 @@ specific sections without overriding it.
 
 - [Architecture decision log](decisions/README.md)
 - [HTTP contract](../specs/api/http-contract.md)
-- [Global viewer identity and app-bound handoff contract](../specs/api/global-identity-handoff-contract.md)
+- [Unified browser identity and app-bound handoff contract](../specs/api/browser-identity-handoff-contract.md)
 - [Event vocabulary](../specs/events/event-catalog.md)
 - [Manifest contract](../specs/manifest/tiny-yaml.md)
 - [Native web UI contract](../specs/ui/native-web-system.md)

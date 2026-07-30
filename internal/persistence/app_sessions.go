@@ -90,20 +90,37 @@ func (s *SQLiteStore) CreateAppSession(ctx context.Context, appID string, viewer
 	var raw string
 	var session sessions.Session
 	err := s.Write(ctx, func(tx *sql.Tx) error {
-		var err error
-		raw, session, err = issueAppSessionTx(ctx, tx, appID, viewer, expiry)
+		// This low-level fixture helper is used by integration tests. Even it
+		// creates a global parent first, so no parentless app session can be
+		// persisted after the unified-browser cutover.
+		if viewer.ID == "" || viewer.Email == "" {
+			return sessions.ErrInvalid
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO identities(id,normalized_email,created_at)
+			VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET normalized_email=excluded.normalized_email`, viewer.ID, viewer.Email, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+		binding := make([]byte, sha256.Size)
+		if _, err := rand.Read(binding); err != nil {
+			return err
+		}
+		_, parent, err := createIdentitySessionTx(ctx, tx, viewer, binding, time.Now())
+		if err != nil {
+			return err
+		}
+		raw, session, err = issueChildAppSessionTx(ctx, tx, appID, viewer, parent.ID, expiry)
 		return err
 	})
 	return raw, session, err
 }
-func issueAppSessionTx(ctx context.Context, tx *sql.Tx, appID string, viewer identity.Identity, expiry time.Time) (string, sessions.Session, error) {
-	return issueChildAppSessionTx(ctx, tx, appID, viewer, "", expiry)
-}
 
-// issueChildAppSessionTx records a platform identity parent only for the
-// global-login broker. Direct app OTP sessions remain valid independent app
-// credentials and therefore have no parent.
+// issueChildAppSessionTx is the sole child-session insertion path. Every app
+// session has one durable global identity parent, created by the admin-host
+// browser broker before the handoff is consumed.
 func issueChildAppSessionTx(ctx context.Context, tx *sql.Tx, appID string, viewer identity.Identity, identitySessionID string, expiry time.Time) (string, sessions.Session, error) {
+	if identitySessionID == "" {
+		return "", sessions.Session{}, sessions.ErrInvalid
+	}
 	b := make([]byte, 32)
 	if _, e := rand.Read(b); e != nil {
 		return "", sessions.Session{}, e
@@ -111,7 +128,7 @@ func issueChildAppSessionTx(ctx context.Context, tx *sql.Tx, appID string, viewe
 	raw := base64.RawURLEncoding.EncodeToString(b)
 	h := sha256.Sum256([]byte(raw))
 	v := sessions.Session{ID: "ses_" + raw[:12], AppID: appID, Identity: viewer, ExpiresAt: expiry.UTC()}
-	_, e := tx.ExecContext(ctx, "INSERT INTO sessions(id,scope,app_id,identity_id,identity_session_id,secret_hash,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?)", v.ID, "app", appID, viewer.ID, nullIfEmpty(identitySessionID), h[:], v.ExpiresAt.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+	_, e := tx.ExecContext(ctx, "INSERT INTO sessions(id,scope,app_id,identity_id,identity_session_id,secret_hash,expires_at,created_at) VALUES(?,?,?,?,?,?,?,?)", v.ID, "app", appID, viewer.ID, identitySessionID, h[:], v.ExpiresAt.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
 	if e != nil {
 		return "", sessions.Session{}, e
 	}
@@ -124,73 +141,37 @@ func nullIfEmpty(value string) any {
 	}
 	return value
 }
+
+// Create formerly supported direct app-session issuance. That browser path
+// was removed; only the handoff flow may create a child session now.
 func (s *SQLiteStore) Create(ctx context.Context, appID string, viewer identity.Identity, expiry time.Time) (string, sessions.Session, error) {
-	var raw string
-	var out sessions.Session
-	e := s.Write(ctx, func(tx *sql.Tx) error {
-		var status, mode string
-		var rev uint64
-		if e := tx.QueryRowContext(ctx, "SELECT a.status,a.policy_revision,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id=?", appID).Scan(&status, &rev, &mode); e != nil || status != "active" || mode != "private" {
-			return sessions.ErrInvalid
-		}
-		if _, e := tx.ExecContext(ctx, "INSERT INTO identities(id,normalized_email,created_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET normalized_email=excluded.normalized_email", viewer.ID, viewer.Email, time.Now().UTC().Format(time.RFC3339Nano)); e != nil {
-			return e
-		}
-		var allow int
-		_ = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM access_rules WHERE app_id=? AND policy_revision=? AND ((kind='email' AND normalized_value=?) OR (kind='domain' AND normalized_value=substr(?,instr(?,'@')+1)))", appID, rev, viewer.Email, viewer.Email, viewer.Email).Scan(&allow)
-		if allow == 0 {
-			return sessions.ErrInvalid
-		}
-		var issueErr error
-		raw, out, issueErr = issueAppSessionTx(ctx, tx, appID, viewer, expiry)
-		return issueErr
-	})
-	return raw, out, e
+	return "", sessions.Session{}, sessions.ErrInvalid
 }
 func (s *SQLiteStore) Validate(ctx context.Context, appID, raw string, now time.Time) (sessions.Session, error) {
 	h := sha256.Sum256([]byte(raw))
 	var v sessions.Session
-	var email, expires, created string
-	var revoked sql.NullString
-	var identitySessionID sql.NullString
-	e := s.DB.QueryRowContext(ctx, "SELECT s.id,s.app_id,i.id,i.normalized_email,s.expires_at,s.revoked_at,s.identity_session_id,s.created_at FROM sessions s JOIN identities i ON i.id=s.identity_id JOIN applications a ON a.id=s.app_id WHERE s.app_id=? AND s.scope='app' AND s.secret_hash=? AND a.status='active'", appID, h[:]).Scan(&v.ID, &v.AppID, &v.Identity.ID, &email, &expires, &revoked, &identitySessionID, &created)
-	if e != nil || revoked.Valid {
+	var email, expires, parentExpires string
+	var revoked, parentRevoked sql.NullString
+	e := s.DB.QueryRowContext(ctx, `SELECT s.id,s.app_id,i.id,i.normalized_email,s.expires_at,s.revoked_at,
+		parent.expires_at,parent.revoked_at
+		FROM sessions s
+		JOIN identities i ON i.id=s.identity_id
+		JOIN identity_sessions parent ON parent.id=s.identity_session_id
+		JOIN applications a ON a.id=s.app_id
+		WHERE s.app_id=? AND s.scope='app' AND s.secret_hash=? AND a.status='active'`, appID, h[:]).Scan(&v.ID, &v.AppID, &v.Identity.ID, &email, &expires, &revoked, &parentExpires, &parentRevoked)
+	if e != nil || revoked.Valid || parentRevoked.Valid {
 		return sessions.Session{}, sessions.ErrInvalid
 	}
 	v.ExpiresAt, e = time.Parse(time.RFC3339Nano, expires)
 	if e != nil || !now.Before(v.ExpiresAt) {
 		return sessions.Session{}, sessions.ErrInvalid
 	}
-	createdAt, e := time.Parse(time.RFC3339Nano, created)
-	if e != nil {
-		return sessions.Session{}, sessions.ErrInvalid
-	}
-	if identitySessionID.Valid {
-		if identitySessionID.String == "" {
-			return sessions.Session{}, sessions.ErrInvalid
-		}
-	} else if !s.parentlessAppSessionPostV5(ctx, createdAt) {
+	parentExpiry, err := time.Parse(time.RFC3339Nano, parentExpires)
+	if err != nil || !now.Before(parentExpiry) {
 		return sessions.Session{}, sessions.ErrInvalid
 	}
 	v.Identity.Email = email
 	return v, nil
-}
-
-// parentlessAppSessionPostV5 quarantines only sessions that predate the v5
-// identity-link schema. Newer brokerless compatibility sessions deliberately
-// remain parentless and retain their existing app-local semantics. SQLite
-// timestamp text is untrusted persisted state here: a missing or malformed v5
-// cutoff, or a malformed session creation time, must deny.
-func (s *SQLiteStore) parentlessAppSessionPostV5(ctx context.Context, createdAt time.Time) bool {
-	var cutoff string
-	if err := s.DB.QueryRowContext(ctx, "SELECT applied_at FROM schema_migrations WHERE version=5").Scan(&cutoff); err != nil {
-		return false
-	}
-	cutoffAt, err := time.Parse(time.RFC3339Nano, cutoff)
-	if err != nil {
-		return false
-	}
-	return !createdAt.Before(cutoffAt)
 }
 func (s *SQLiteStore) Revoke(ctx context.Context, appID, raw string) (string, error) {
 	h := sha256.Sum256([]byte(raw))

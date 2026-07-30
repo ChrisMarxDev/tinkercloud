@@ -72,9 +72,9 @@ tinyhost init:
 
 tinyhost setup:
   discover clean host
-  ask base domain + operator email
-  derive platform host + app suffix + sender
-  pause with exact DNS + Resend actions
+  ask root domain + operator email
+  derive admin host + app host pattern + sender
+  pause with one wildcard DNS + Resend actions
   resume without repeating valid answers
   ingest provider secret into root-owned credentials
   create user, generated config, internal secrets, data directory

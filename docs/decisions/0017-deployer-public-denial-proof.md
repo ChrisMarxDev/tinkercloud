@@ -11,15 +11,16 @@ can reach the public DNS/TLS gateway path a viewer will use. Trusting only
 boolean activation fields would let an in-process or incorrectly composed
 control path appear verified without exercising that public route.
 
-The control-plane hostname and wildcard app suffix are separately configured:
-for example, `tiny.example.com` and `*.apps.example.com`. The client therefore
-cannot derive the app host from its control server URL.
+One root `domain` is configured: for example, `example.com`. The dashboard is
+the reserved `admin.example.com` host and every app is one label beneath the
+same root. The client therefore accepts the server's explicit domain rather
+than deriving it from its control client URL.
 
 ## Decision
 
-The authenticated activation result carries a server-derived `app_suffix` with
-the protected app URL. Before `tiny deploy` returns success, the client
-requires that URL to be exactly `https://{slug}.{app_suffix}/` and makes a new
+The authenticated activation result carries a server-derived `domain` with the
+protected app URL. Before `tiny deploy` returns success, the client requires
+that URL to be exactly `https://{slug}.{domain}/` and makes a new
 anonymous GET using the selected real HTTP/TLS transport.
 
 That probe uses no bearer token and no cookie jar, follows no redirects, and

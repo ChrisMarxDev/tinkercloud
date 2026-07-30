@@ -41,7 +41,7 @@ Automation and recovery still use the explicit contract:
 
 ```bash
 sudo tinyhost init --non-interactive \
-  --platform-host tiny.example.com --app-suffix apps.example.com \
+  --domain example.com \
   --operator-email operator@example.com \
   --email-from access@example.com --acme-email operator@example.com \
   --resend-api-key-file /root/tinyhost-resend.key \
@@ -74,8 +74,8 @@ The shared initialization domain:
 7. Generates, installs, enables, and starts a hardened systemd unit whose
    writable allowlist contains exactly the configured data and ACME directories.
 8. Verifies the service is locally active.
-9. Validates the public platform gateway through verified TLS at
-   `https://{platform_host}/api/v1/version`. The probe follows no redirect and
+9. Validates the public admin gateway through verified TLS at
+   `https://admin.{domain}/api/v1/version`. The probe follows no redirect and
    accepts only its final configured host, `200` bounded
    `{"api_version":1}` JSON, and `no-store`/`nosniff` gateway headers. Per-app
    certificate readiness is verified at deployment activation, not bootstrap.
@@ -90,13 +90,13 @@ the command never advertises the service as ready until both health probes pass.
 The operator must provide:
 
 - a clean supported Hetzner VPS with a public IP;
-- `A`/`AAAA` records for the platform host and wildcard app host;
+- one wildcard `A`/`AAAA` record for the root domain;
 - a verified sending domain and Resend API key.
 
 Strict VPN-only ingress is not supported in V1. Public ACME HTTP-01 and the
 public HTTPS health proof must succeed; initialization never bypasses them.
 The accepted first post-V1 direction is one operator-supplied certificate/key
-pair covering the platform and wildcard app hostnames, as described in
+pair covering the admin and app hostnames, as described in
 [ADR 0028](../decisions/0028-operator-supplied-tls-for-vpn-only.md).
 
 `sudo tinyhost doctor` validates and explains these dependencies after the
@@ -228,11 +228,16 @@ Hosting is not open merely because someone knows the platform URL:
    `tinyhost deployers authorize <email>`. The root-only command grammar is
    `tinyhost deployers <authorize|suspend|revoke> [--config PATH] <email>`;
    `--config` defaults to `/etc/tinyhost/config.yaml` and must appear before
-   the email. It validates root authority, then writes SQLite as the unprivileged
+   the email. It writes SQLite in a fixed child that drops to the unprivileged
    `tinyhost` service identity, including a narrowly validated handoff of any
    legacy root-owned DB/WAL/SHM artifacts; it never loosens database modes.
+   Once the child has committed and closed, the root parent refreshes an
+   already-running TinyHost service and confirms it is active. It never starts
+   an inactive service. If that refresh fails, the command reports that the
+   authorization was applied but service refresh failed; run `sudo tinyhost
+   doctor` before relying on the new deployer.
 2. The deployer runs `tiny login`. If no verified default platform exists, the
-   human CLI asks once for `https://tiny.example.com`, proves compatibility
+   human CLI asks once for `https://admin.example.com`, proves compatibility
    without redirects, saves only that URL, and continues. JSON never prompts.
 3. The CLI requests an OTP; the platform returns the same safe response whether
    or not the address is authorized.

@@ -74,6 +74,208 @@ func TestGlobalIdentityOTPToAppHandoffAndDenials(t *testing.T) {
 	}
 }
 
+func TestDashboardIdentityUsesCurrentActiveRoleAndNeverViewerPermission(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	seedViewerPolicy(t, s)
+	now := time.Now().UTC()
+
+	// The app owner is an implicit viewer, so this creates the one global
+	// browser identity without granting dashboard authority through the app
+	// policy itself.
+	h, _, err := s.CreateIdentityHandoff(context.Background(), "a", "/", false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := s.RequestIdentityOTP(context.Background(), h.ID, "browser-binding", "owner@example.com", "fp", []byte("key"), now, time.Minute)
+	if err != nil || msg == nil {
+		t.Fatalf("request global identity: %#v %v", msg, err)
+	}
+	issued, err := s.VerifyIdentityOTP(context.Background(), h.ID, "browser-binding", "owner@example.com", msg.ID, msg.Code, "", []byte("key"), now, 5)
+	if err != nil {
+		t.Fatalf("issue global identity: %v", err)
+	}
+
+	got, err := s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now.Add(time.Second))
+	if err != nil || got.Actor.ID != "u" || got.Actor.Role != "deployer" || !got.Actor.Active {
+		t.Fatalf("dashboard actor=%#v err=%v", got.Actor, err)
+	}
+
+	// Role/status are intentionally not cached in the identity family. The
+	// next request observes a suspension immediately.
+	if _, err = s.DB.Exec("UPDATE users SET status='suspended' WHERE id='u'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now.Add(2*time.Second)); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("inactive deployer received dashboard authority: %v", err)
+	}
+	if _, err = s.DB.Exec("UPDATE users SET status='active', role='operator' WHERE id='u'"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now.Add(3*time.Second))
+	if err != nil || got.Actor.Role != "operator" {
+		t.Fatalf("current role not applied actor=%#v err=%v", got.Actor, err)
+	}
+
+	// A viewer identity with no active operator/deployer row can complete app
+	// handoffs, but is never dashboard authority merely because its email is a
+	// valid identity.
+	viewerHandoff, _, err := s.CreateIdentityHandoff(context.Background(), "a", "/", false, now.Add(4*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewerMsg, err := s.RequestIdentityOTP(context.Background(), viewerHandoff.ID, "viewer-binding", "viewer@example.com", "fp", []byte("key"), now.Add(4*time.Second), time.Minute)
+	if err != nil || viewerMsg == nil {
+		t.Fatalf("request viewer identity: %#v %v", viewerMsg, err)
+	}
+	viewer, err := s.VerifyIdentityOTP(context.Background(), viewerHandoff.ID, "viewer-binding", "viewer@example.com", viewerMsg.ID, viewerMsg.Code, "", []byte("key"), now.Add(4*time.Second), 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewerDashboard, err := s.AuthenticateDashboardIdentity(context.Background(), viewer.Token, now.Add(5*time.Second))
+	if !errors.Is(err, ErrIdentity) {
+		t.Fatalf("viewer identity granted dashboard access: %v", err)
+	}
+	if viewerDashboard.Identity.ID == "" || viewerDashboard.Identity.Identity.Email != "viewer@example.com" {
+		t.Fatalf("dashboard role denial discarded valid viewer identity: %#v", viewerDashboard.Identity)
+	}
+}
+
+func TestDashboardIdentityDeniesExpiredAndRevokedGlobalCredentials(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	seedViewerPolicy(t, s)
+	now := time.Now().UTC()
+	h, _, err := s.CreateIdentityHandoff(context.Background(), "a", "/", false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg, err := s.RequestIdentityOTP(context.Background(), h.ID, "browser-binding", "owner@example.com", "fp", []byte("key"), now, time.Minute)
+	if err != nil || msg == nil {
+		t.Fatal(err)
+	}
+	issued, err := s.VerifyIdentityOTP(context.Background(), h.ID, "browser-binding", "owner@example.com", msg.ID, msg.Code, "", []byte("key"), now, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("UPDATE identity_sessions SET expires_at=? WHERE id=?", now.Add(-time.Minute).Format(time.RFC3339Nano), issued.Session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("expired global identity authorized dashboard: %v", err)
+	}
+	if _, err = s.DB.Exec("UPDATE identity_sessions SET expires_at=? WHERE id=?", now.Add(time.Hour).Format(time.RFC3339Nano), issued.Session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.RevokeIdentitySession(context.Background(), issued.Token, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now.Add(time.Second)); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("revoked global identity authorized dashboard: %v", err)
+	}
+}
+
+func TestPlatformIdentityOTPIsRoleAgnosticAndDashboardLookupRemainsSeparate(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	now := time.Now().UTC()
+	challenge, err := s.RequestPlatformIdentityOTP(context.Background(), "platform-browser", "viewer@example.com", "fp", []byte("key"), now, time.Minute)
+	if err != nil || challenge == nil || challenge.Code == "" || challenge.Email != "viewer@example.com" {
+		t.Fatalf("request platform identity: %#v %v", challenge, err)
+	}
+	issued, err := s.VerifyPlatformIdentityOTP(context.Background(), "platform-browser", "viewer@example.com", challenge.ID, challenge.Code, "", false, []byte("key"), now, 5)
+	if err != nil || issued.Token == "" || issued.Session.Identity.Email != "viewer@example.com" {
+		t.Fatalf("verify platform identity: %#v %v", issued, err)
+	}
+	if _, err = s.AuthenticateDashboardIdentity(context.Background(), issued.Token, now.Add(time.Second)); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("viewer received dashboard authority: %v", err)
+	}
+	var appID sql.NullString
+	if err = s.DB.QueryRow("SELECT app_id FROM platform_identity_challenges WHERE id=?", challenge.ID).Scan(&appID); err == nil {
+		t.Fatal("platform challenge unexpectedly has app column")
+	}
+}
+
+func TestPlatformIdentityOTPDenyAndSwitchRevokesFamily(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	seedViewerPolicy(t, s)
+	now := time.Now().UTC()
+	first, err := s.RequestPlatformIdentityOTP(context.Background(), "platform-browser", "owner@example.com", "fp", []byte("key"), now, time.Minute)
+	if err != nil || first == nil {
+		t.Fatal(err)
+	}
+	if _, err = s.VerifyPlatformIdentityOTP(context.Background(), "wrong-browser", "owner@example.com", first.ID, first.Code, "", false, []byte("key"), now, 5); !errors.Is(err, ErrOTP) && !errors.Is(err, ErrIdentity) {
+		t.Fatalf("mismatched binding accepted: %v", err)
+	}
+	issued, err := s.VerifyPlatformIdentityOTP(context.Background(), "platform-browser", "owner@example.com", first.ID, first.Code, "", false, []byte("key"), now, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Establish a child app session; a forced platform account switch must
+	// return it for post-commit live-connection closure and revoke it durably.
+	h, state, err := s.CreateIdentityHandoff(context.Background(), "a", "/", false, now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = s.AuthorizeIdentityHandoff(context.Background(), h.ID, issued.Token, now.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err = s.ConsumeIdentityHandoff(context.Background(), "a", h.ID, state, now.Add(time.Second), now.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	switchChallenge, err := s.RequestPlatformIdentityOTP(context.Background(), "platform-browser", "viewer@example.com", "fp", []byte("key"), now.Add(2*time.Second), time.Minute)
+	if err != nil || switchChallenge == nil {
+		t.Fatal(err)
+	}
+	switched, err := s.VerifyPlatformIdentityOTP(context.Background(), "platform-browser", "viewer@example.com", switchChallenge.ID, switchChallenge.Code, issued.Token, true, []byte("key"), now.Add(2*time.Second), 5)
+	if err != nil || switched.Token == "" || len(switched.Revoked) != 1 {
+		t.Fatalf("switch=%#v err=%v", switched, err)
+	}
+	if _, err = s.ValidateIdentitySession(context.Background(), issued.Token, now.Add(3*time.Second)); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("old family survived platform switch: %v", err)
+	}
+}
+
+func TestPlatformIdentityOTPConcurrentCompletionsYieldOneFamily(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	now := time.Now().UTC()
+	first, err := s.RequestPlatformIdentityOTP(context.Background(), "race-browser", "one@example.com", "one", []byte("key"), now, time.Minute)
+	if err != nil || first == nil {
+		t.Fatal(err)
+	}
+	second, err := s.RequestPlatformIdentityOTP(context.Background(), "race-browser", "two@example.com", "two", []byte("key"), now, time.Minute)
+	if err != nil || second == nil {
+		t.Fatal(err)
+	}
+	results := make(chan error, 2)
+	go func() {
+		_, e := s.VerifyPlatformIdentityOTP(context.Background(), "race-browser", "one@example.com", first.ID, first.Code, "", false, []byte("key"), now.Add(time.Second), 5)
+		results <- e
+	}()
+	go func() {
+		_, e := s.VerifyPlatformIdentityOTP(context.Background(), "race-browser", "two@example.com", second.ID, second.Code, "", false, []byte("key"), now.Add(time.Second), 5)
+		results <- e
+	}()
+	ok := 0
+	for range 2 {
+		if err := <-results; err == nil {
+			ok++
+		} else if !errors.Is(err, ErrOTP) {
+			t.Fatalf("unexpected concurrent verification error: %v", err)
+		}
+	}
+	if ok != 1 {
+		t.Fatalf("concurrent platform completions issued %d identities", ok)
+	}
+	var families int
+	binding := sha256.Sum256([]byte("race-browser"))
+	if err = s.DB.QueryRow("SELECT COUNT(DISTINCT family_id) FROM identity_sessions WHERE browser_binding_hash=? AND revoked_at IS NULL", binding[:]).Scan(&families); err != nil || families != 1 {
+		t.Fatalf("active families=%d err=%v", families, err)
+	}
+}
+
 func TestGlobalIdentityRotationOverlapAndRevokeChildren(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()

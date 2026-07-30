@@ -37,9 +37,6 @@ func (s *SQLiteStore) SetDeployerStatus(ctx context.Context, email, status, requ
 			if _, err = tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", now, id); err != nil {
 				return err
 			}
-			if _, err = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=? WHERE scope='control' AND user_id=? AND revoked_at IS NULL", now, id); err != nil {
-				return err
-			}
 		}
 		_, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id,request_id) VALUES(?,?,'root',NULL,?,'success','user',?,?)", request+"_audit", time.Now().UTC().Format(time.RFC3339Nano), "deployer."+status, id, request)
 		return err

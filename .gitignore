@@ -47,6 +47,8 @@ npm-debug.log*
 # Tool caches and editor/OS noise
 .task/
 .cache/
+**/__pycache__/
+*.py[cod]
 .tmp/
 tmp/
 .DS_Store

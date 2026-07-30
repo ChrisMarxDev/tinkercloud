@@ -11,7 +11,12 @@ TinyHost ships two self-contained role-facing coding-agent skills:
 
 `tiny-platform` remains the canonical authoring source for copied role guidance.
 It is not a runtime dependency and does not create a third human role workflow.
-Internal acceptance-test and TinyHost-owned UI skills may remain separate.
+Internal acceptance-test, TinyHost-owned UI, and opt-in local
+deployer-workstation test skills may remain separate. The latter may drive the
+normal CLI OTP flow only with an exact deployer's controlled local Resend test
+mailbox; it is not production CI/noninteractive deployment-agent
+authentication. A production deployment agent uses a separately provisioned
+app-scoped deployer token and never an implicit credential write or prompt.
 Maintainer-facing release work is also separate: the
 [`distribution-skill contract`](distribution-skill-contract.md) governs the
 CLI and client-package distribution skills without changing the two human role
@@ -56,6 +61,15 @@ The skill MUST:
 9. run `tiny deploy [DIR]`; and
 10. accept success only when the CLI's fresh anonymous gateway-denial proof
     succeeds.
+
+When an authenticated deployer asks to inspect or repair an owned app's managed
+KV/documents, the skill MUST use the bounded `tiny data` command family and
+reuse the saved CLI login. It MUST explain the optional KV and required
+destructive/document optimistic version checks plus exact destructive
+confirmation, preserve deterministic `--json` behavior, and refuse
+database URLs/files, raw SQL, schema/migration commands, exports/imports,
+viewer impersonation, or another deployer's app. The app slug is an owned
+control target only; TinyHost derives the private data scope.
 
 The skill MAY continue safe local inspection or implementation while waiting
 for a non-secret answer. It MUST stop before a deployment or access broadening

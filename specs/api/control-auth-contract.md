@@ -1,18 +1,18 @@
 # Control authentication deny charter
 
-Control browser sessions, CLI bearer tokens, app viewer sessions, and global
-viewer identity sessions are four different persisted credential types. A control OTP challenge is server-bound
-to either the `browser` or `cli` channel before it is sent; verification accepts
-only that intended channel and atomically creates the matching credential type.
-Browser verification creates a `sessions.scope='control'` credential used only
-by the host-only control cookie. CLI verification creates an `api_tokens`
-credential used only through `Authorization: Bearer`. Authority is issued only
-to a normalized active authorized user and every use rechecks active status,
-expiry and revocation. App-view permission never grants control authority;
-browser control credentials are never accepted as CLI/API bearers and CLI
-bearers are never accepted from browser cookies. A global viewer identity is
-accepted only by the platform identity broker to issue a server-created,
-app-bound viewer handoff; it is never dashboard/control authority.
+The browser has one global identity credential on the exact admin host. It
+proves a normalized email only. The dashboard rechecks the current active
+operator/deployer role for that identity on every request; app hosts separately
+recheck the current policy before issuing or accepting an app-local child
+session. There is no dashboard-specific browser OTP channel, control cookie, or
+`sessions.scope='control'` credential.
+
+CLI and deployment-agent login remain a separate OTP channel. Successful CLI
+verification creates an `api_tokens` credential accepted only through
+`Authorization: Bearer`. A browser identity or app session cannot become a
+bearer, and a bearer is never accepted from a browser cookie. Authority is
+issued only to a normalized active authorized deployer and every use rechecks
+active status, expiry, revocation, scope, and resource ownership.
 
 The interactive deployer CLI persists its bearer only in one Tiny-owned
 per-user credential file per normalized HTTPS platform server URL:
@@ -25,9 +25,8 @@ with exactly the `version`, `server`, and `token` members; unknown or duplicate
 JSON members, a stored-server mismatch, malformed input, and oversized input
 deny rather than being silently repaired. The bearer is never supplied in argv
 or environment variables and is never emitted in CLI output or logs. This local
-persistence is only for CLI bearer reuse; it is neither a browser control cookie
-nor an app or viewer credential, and browser/control/app credential separation
-remains unchanged.
+persistence is only for CLI bearer reuse; it is neither a browser identity nor
+an app credential.
 
 `tiny login` first loads that exact server-bound credential and calls the
 authenticated `GET /api/v1/whoami` endpoint. A complete, authorized response
@@ -43,6 +42,19 @@ confirmation for the newly issued token; failure leaves the prior credential
 intact. A `429 rate_limited` response is safe to report as a bounded retry
 instruction, but never identifies an email address, authorization state, or
 whether a challenge was created.
+
+The CLI OTP request returns the same accepted transaction shape for syntactic
+input whether or not the address is an active deployer. If the server cannot
+create the durable CLI challenge, it returns only generic `503
+temporarily_unavailable`; it must not invent a `login_` fallback transaction
+that verification can never consume. Server logs may record exactly one fixed
+failure category—`cli_otp_issuance_entropy` or one of
+`cli_otp_issuance_persistence_begin_write_lock`,
+`cli_otp_issuance_persistence_invalidate`,
+`cli_otp_issuance_persistence_eligibility`,
+`cli_otp_issuance_persistence_insert`, or
+`cli_otp_issuance_persistence_commit`—with no email, transaction, provider
+response, database error, path, or credential value.
 
 After any successful `tiny login`—whether it reused a validated bearer or
 completed fresh OTP—the CLI persists the normalized HTTPS platform URL as a
@@ -65,10 +77,10 @@ running the target command or altering the default.
 
 `POST /api/v1/auth/logout` accepts only a currently authenticated global CLI
 bearer. The route derives both deployer and bearer-row ID from authentication,
-then atomically revokes exactly that global bearer and records a safe audit
-event. It has no token ID, app ID, cookie, or body input, and cannot revoke
-browser control sessions, viewer sessions, app-scoped bearer tokens, or any
-other CLI bearer. A CLI `tiny logout` deletes only the matching local
+then atomically revokes exactly that bearer and records a safe audit event. It
+has no token ID, app ID, cookie, or body input, and cannot revoke browser
+identity families, app sessions, app-scoped bearer tokens, or any other CLI
+bearer. A CLI `tiny logout` deletes only the matching local
 server-bound credential after this success. `401 not_authorized` means the
 bearer is already unusable and permits that same local cleanup; transport,
 5xx, persistence, malformed-response, and other ambiguous failures retain the
@@ -83,35 +95,53 @@ unchanged. Token list and dashboard read models may return `last_used_at` as a
 nullable timestamp, but never raw credentials, credential hashes, IP addresses,
 or user-agent metadata.
 
-Control OTP verification uses the configured bounded attempt limit (default
-five). Each incorrect code durably increments the challenge attempt count before
-the generic denial is returned; reaching the limit denies later correct codes.
-Successful verification consumes the challenge and creates its credential in
-one transaction, so concurrent submissions can issue at most one credential.
+The deployer data-control routes use the same bearer authentication boundary,
+but do not treat a passing control credential as sufficient. They require exact
+`data:read` or `data:write` scope, current ownership of the route slug, and any
+token app binding before the server derives the immutable app ID and creates a
+typed deployer-data authorization context. A global browser identity cookie,
+app viewer cookie, or generic matching email address cannot be converted into
+this bearer authority. Deployment-agent tokens receive
+no data scope by default. `data:read` may inspect an owned active/suspended app;
+`data:write` is active-app only; deleting/deleted/unavailable apps deny both.
+The control database must durably record metadata-only audit intent before an
+app-data write begins; intent failure denies the write. L1–L3 make no
+cross-database transaction, post-write outcome, reconciliation, or rollback
+claim after the separate app-local SQLite mutation.
 
-## Platform-host HTML UI
+CLI and browser identity OTP verification use the configured bounded attempt
+limit (default five). Each incorrect code durably increments the challenge
+attempt count before the generic denial is returned; reaching the limit denies
+later correct codes. Successful verification consumes the challenge and
+creates its credential in one transaction, so concurrent submissions can issue
+at most one credential.
 
-The platform host exposes a server-rendered login and dashboard at `/login` and
-`/`. The form OTP flow has the same generic delivery response for every valid
-email. Successful verification sets only the host-only `__Host-tiny_control`
-cookie (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`); it is distinct from
-the app-viewer cookie and is not accepted by CLI/API bearer authentication.
-It is also distinct from host-only `__Host-tiny_identity`, which proves a
-viewer email only and cannot access dashboard/control read models.
+## Admin-host HTML UI
+
+The exact `admin.<domain>` host exposes a server-rendered login and dashboard at
+`/login` and `/`. The form OTP flow has the same generic delivery response for
+every syntactically valid email. Successful verification sets only the
+host-only `__Host-tiny_identity` cookie (`Secure`, `HttpOnly`, `SameSite=Lax`,
+`Path=/`, no `Domain`). The same identity can start app-bound handoffs without
+another OTP, but it receives dashboard data only after a current role check.
 
 The dashboard uses only server-derived control authority and bounded safe read
-models: owned app status, the current private policy revision plus its
-canonical email/domain allowlist, release metadata, token metadata,
-and, for operators, deployer and audit metadata. It never renders a raw token,
-token hash, provider credential, secret reference, or release filesystem path.
-Browser mutations require an exact same-origin check plus a fresh double-submit
-CSRF token. The V1 dashboard calls the same typed, audited control-service
+models. A deployer receives only a compact list of owned app status and safe
+current summary metadata; policy, token, release-management, suspension,
+deletion, provider, audit, and host-management controls remain in the scoped
+CLI. Operators additionally receive the current private policy revision plus
+its canonical email/domain allowlist, release metadata, token metadata,
+deployer, and audit metadata. It never renders a raw token, token hash,
+provider credential, secret reference, or release filesystem path.
+Browser mutations require an exact HTTPS `Origin` check plus a fresh
+double-submit CSRF token bound to the global identity family. Sibling app
+origins are cross-origin and denied even though they are same-site. The V1
+dashboard calls the same typed, audited control-service
 boundary as the CLI/API; it does not proxy browser credentials to the bearer
-API. Operators may authorize, suspend, and revoke deployers. Deployer-owned
-app forms show the current policy's canonical additional viewers and may replace
-that policy, create a scoped token (shown only in
-the create response), revoke a token, suspend/resume, and delete an app.
-Operators may suspend/resume any app. App deletion requires the exact
+API. Operators may authorize, suspend, and revoke deployers. The deployer
+overview does not render management forms; deployers use the scoped CLI to
+replace a policy, create/revoke a token, suspend/resume, and delete an owned
+app. Operators may suspend/resume any app. App deletion requires the exact
 form confirmation `delete:{slug}`.
 
 An access-policy replacement carries the positive `expected_revision` rendered
@@ -122,13 +152,32 @@ an email or domain beyond the current policy, `confirm_broadening: true` is
 also required; the dashboard presents an explicit confirmation and a safe
 post-success summary.
 
+`tiny access set APP --file POLICY.json` first reads the caller's current
+server-derived policy. It uses that read only to fill a missing
+`expected_revision` and to identify additions in the requested complete policy;
+it never computes authorization locally. When the requested revision still
+matches and it adds an exact email or domain, an interactive invocation asks
+one explicit `Continue? [y/N]` confirmation before its PUT and writes
+`confirm_broadening: true` only after an affirmative answer. `--json` and
+non-interactive automation never prompt: the policy file must contain the
+explicit boolean `confirm_broadening: true` or the CLI returns the stable
+`confirmation_required` result without sending a mutation. A stale revision
+is sent unchanged and remains the server's `conflict` result. The server
+continues to enforce confirmation inside its replacement transaction; a CLI
+cannot turn a broadened write into an authorized one.
+
 ### UI deny charter
 
 - An anonymous or invalid platform cookie redirects only to login and reveals
   no dashboard data.
 - A deployer cannot receive operator-only deployer or audit read models.
-- A missing, cross-origin, or mismatched CSRF form cannot change browser
-  control-session state.
+- A missing, cross-origin, or mismatched CSRF form cannot change dashboard or
+  global identity state.
+- Dashboard “Sign out of TinyHost” succeeds only after it durably revokes the
+  presented identity family and every derived app session. Missing revocation
+  wiring or persistence failure leaves cookies intact, returns a safe server
+  failure, and cannot revoke a CLI/agent bearer. App-local logout revokes only
+  the current app session.
 - A deployer cannot invoke an operator deployer-status form; ownership and
   active role are rechecked in the service transaction, not trusted from HTML.
 - A missing or mismatched app deletion confirmation cannot change app status.
@@ -145,13 +194,14 @@ post-success summary.
 - Incorrect OTP submissions consume the configured attempt budget even though
   their response is a generic denial; a later correct code cannot bypass an
   exhausted challenge.
-- A browser-channel challenge cannot mint a CLI bearer, and a CLI-channel
-  challenge cannot mint a browser control session, even with the correct code.
-- A control cookie presented as a bearer token, a CLI bearer presented as a
-  control cookie, or an app viewer session presented on either control surface
-  is denied without recording successful-use metadata.
-- A global viewer identity cookie is not a control session, cannot access the
-  dashboard, cannot mint a CLI bearer, and cannot select an app or user role.
+- A browser identity challenge cannot mint a CLI bearer, and a CLI challenge
+  cannot mint a browser identity, even with the correct code.
+- A global identity or app cookie presented as a bearer, or a CLI bearer
+  presented as a browser cookie, is denied without recording successful-use
+  metadata.
+- A global identity can access the dashboard only through a current
+  operator/deployer role lookup. It cannot mint a CLI bearer, select an app, or
+  turn matching email text into authority.
 - A reusable CLI bearer is accepted only after a complete authenticated
   `whoami` response for its normalized server. A malformed response,
   dependency failure, unexpected status, or ambiguous authorization result
@@ -173,6 +223,13 @@ post-success summary.
   scope, malformed-route, and revoked-bearer requests. A successful logout
   revokes exactly the authenticated global bearer; another bearer remains
   usable. Persistence failure never produces a successful logout response.
+- Data-control routes deny anonymous, browser/viewer cross-presentation,
+  wrong owner, wrong app binding, missing/wrong/revoked scope, malformed data
+  selector, suspended write, and deleting/unavailable app requests before an
+  app database is opened. A data write with stale version, pre-write audit
+  intent failure, or app-data persistence failure has no partial data change.
+  The current audit row proves only the pre-write intent and is never
+  misreported as an atomic cross-database outcome or rollback.
 
 ## Owned application lifecycle
 

@@ -142,11 +142,11 @@
           </tr>
           <tr>
             <td>7</td>
-            <td>Enter the controlled base domain.</td>
+            <td>Enter the controlled root domain.</td>
             <td>TinyHost normalizes it and previews the resulting topology.</td>
             <td>One base domain, for example <code>example.com</code>.</td>
-            <td><code>tiny.example.com</code>, <code>apps.example.com</code>, and <code>access@example.com</code>. “Edit topology” is optional.</td>
-            <td>Domain ownership cannot be discovered. Separate platform/app/sender questions are unnecessary when defaults work.</td>
+            <td><code>admin.example.com</code>, <code>&lt;slug&gt;.example.com</code>, and <code>access@example.com</code>.</td>
+            <td>Domain ownership cannot be discovered. Separate dashboard/app/sender questions are unnecessary.</td>
           </tr>
           <tr>
             <td>8</td>
@@ -185,7 +185,7 @@
             <td>Leave the assistant paused at one combined DNS checkpoint.</td>
             <td>TinyHost saves validated non-secret progress and prints its records beside the Resend-supplied records.</td>
             <td>None.</td>
-            <td><code>A tiny → VPS IPv4</code> and <code>A *.apps → VPS IPv4</code>; matching AAAA only for discovered usable IPv6.</td>
+            <td>One <code>A * → VPS IPv4</code> wildcard record; matching AAAA only for discovered usable IPv6.</td>
             <td>DNS is external and eventually consistent; re-entering prior answers is unnecessary.</td>
           </tr>
           <tr>
@@ -324,7 +324,7 @@
           <tr>
             <td>24</td>
             <td>Use dashboard search/status filters and direct-launch controls to inspect apps.</td>
-            <td>TinyHost searches current app slug/description locally and launches only the stable protected app origin. Operator authority does not grant viewer access; normal global viewer identity, app handoff, and current policy still apply.</td>
+            <td>TinyHost searches current app slug/description locally and launches only the stable protected app origin. Operator authority does not grant app access; the global browser identity, app handoff, and current policy still apply.</td>
             <td>A search term or filter only when the operator chooses to narrow the list.</td>
             <td>App URLs, status, description, ownership, and release state are server-derived.</td>
             <td>Do not ask for an app ID or URL the server already knows.</td>

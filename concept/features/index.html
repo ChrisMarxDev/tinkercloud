@@ -25,66 +25,78 @@
         <tbody>
           <tr>
             <td>1</td>
+            <td><a href="identity-domain-architecture.html">One domain, one browser identity, isolated app sessions</a></td>
+            <td>5</td><td>5</td><td>3</td>
+            <td>Locked replacement for split browser sessions: one <code>admin</code> broker, independent dashboard/app authorization, and host-only child sessions.</td>
+          </tr>
+          <tr>
+            <td>2</td>
             <td><a href="../flows/operator.html">Minimum-necessary guided operator setup</a></td>
             <td>5</td><td>4</td><td>5</td>
             <td>Replace the flag/config ceremony with resumable discovery, exact external actions, and generated config.</td>
           </tr>
           <tr>
-            <td>2</td>
+            <td>3</td>
             <td><a href="../flows/deployer.html">Inference-first deploy wizard completion</a></td>
             <td>5</td><td>3</td><td>5</td>
             <td>Derive project state, ask only about ambiguity, and make the manifest a receipt.</td>
           </tr>
           <tr>
-            <td>3</td>
+            <td>4</td>
             <td><a href="reactive-collections.html">Reactive collections live VPS exit evidence (complete)</a></td>
             <td>5</td><td>4</td><td>5</td>
             <td>One control database plus isolated app-local SQLite files passed the exact-build two-app VPS matrix.</td>
           </tr>
           <tr>
-            <td>4</td>
+            <td>5</td>
+            <td><a href="deployer-data-access.html">Deployer data access live VPS exit evidence</a></td>
+            <td>4</td><td>3</td><td>4</td>
+            <td>The bounded owner-scoped API/CLI is implemented locally; prove the two-owner live-host matrix before release.</td>
+          </tr>
+          <tr>
+            <td>6</td>
             <td><a href="../../docs/operations/sdk-distribution.md">SDK and signed release publication</a></td>
             <td>4</td><td>3</td><td>4</td>
             <td>Prepared artifacts need confirmed public trust roots and registry namespaces.</td>
           </tr>
           <tr>
-            <td>5</td>
+            <td>7</td>
             <td><a href="tinkerbox-brand.html">Tinkerbox naming and icon direction</a></td>
             <td>3</td><td>1</td><td>4</td>
             <td>Explore before public naming hardens; keep the symbol to one box and one face.</td>
           </tr>
           <tr>
-            <td>6</td>
+            <td>8</td>
             <td><a href="capability-broker.html">LLM streaming and provider release evidence</a></td>
             <td>5</td><td>5</td><td>3</td>
             <td>L1/L2 bounded chat is implemented post-V1; keep L3 deferred and collect live-host/provider evidence.</td>
           </tr>
           <tr>
-            <td>7</td>
+            <td>9</td>
             <td>Direct S3-compatible blob adapter</td>
             <td>3</td><td>4</td><td>2</td>
             <td>Wait for evidence that local VPS blob limits are a real constraint.</td>
           </tr>
           <tr>
-            <td>8</td>
+            <td>10</td>
             <td>Durable realtime history and multi-node fan-out</td>
             <td>2</td><td>5</td><td>1</td>
             <td>Defer; V1 intentionally uses KV recovery plus ephemeral single-node hints.</td>
           </tr>
           <tr>
-            <td>9</td>
+            <td>11</td>
             <td>Temporary invitations and groups</td>
             <td>3</td><td>4</td><td>2</td>
             <td>Wait for evidence that exact email/domain policies cannot express real use.</td>
           </tr>
           <tr>
-            <td>10</td>
+            <td>12</td>
             <td>Operator backup and disaster recovery</td>
             <td>3</td><td>4</td><td>2</td>
             <td>Do not delay replaceable-app V1; total VPS loss remains explicit.</td>
           </tr>
           <tr>
-            <td>11</td>
+            <td>13</td>
             <td>Backend application runtime</td>
             <td>4</td><td>5</td><td>1</td>
             <td>Refuse in V1; requires a separate security concept.</td>
@@ -100,7 +112,7 @@
         unless their isolation and recovery cost is independently funded.</p>
       <p>Secure gateway, control plane, immutable deployment, browser SDK, KV,
         local blobs, realtime, bounded collections, per-app data databases,
-        global viewer identity, CLI credential reuse, the supported
+        global browser identity with dashboard-role checks, CLI credential reuse, the supported
         non-provider <code>tiny dev</code> subset, dashboard project controls,
         agent skills, and post-V1 non-streaming LLM chat are implemented
         foundations. Their implemented cores are not planned work; only the

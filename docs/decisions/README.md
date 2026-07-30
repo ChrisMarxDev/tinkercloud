@@ -23,7 +23,7 @@
 | [0023](0023-policy-revision-concurrency.md) | Optimistic concurrency for access-policy replacement | Accepted for V1; rollback references superseded by 0039 |
 | [0020](0020-root-deployer-database-identity.md) | Root deployer command writes SQLite as the service identity | Accepted for V1 |
 | [0021](0021-embedded-native-web-design-system.md) | Embedded dependency-free design system for TinyHost-owned web UI | Accepted for V1 |
-| [0024](0024-separated-control-browser-sessions.md) | Separate control browser sessions from CLI bearer tokens | Accepted for V1 |
+| [0024](0024-separated-control-browser-sessions.md) | Separate control browser sessions from CLI bearer tokens | Dashboard-session portion superseded by 0051; CLI bearer separation retained |
 | [0025](0025-tinyhost-owned-port-confinement.md) | Confine TinyHost-owned network exposure to TCP 80 and 443 | Accepted for V1 |
 | [0026](0026-sdk-registry-distribution.md) | One SDK API across npm and JSR | Accepted for preparation |
 | [0027](0027-immutable-deployment-descriptions-and-stable-launch.md) | Immutable deployment descriptions and stable dashboard launch | Accepted; rollback portion superseded by 0039 |
@@ -33,7 +33,7 @@
 | [0030](0030-v1-lightweight-local-blob-storage.md) | Lightweight local blob storage behind a provider-neutral seam | Accepted for V1 |
 | [0031](0031-trusted-issue-loop-draft-prs.md) | Trusted issue loop proposes changes through draft pull requests | Accepted for repository delivery |
 | [0032](0032-local-resend-reader-for-unattended-vps-acceptance.md) | Local Resend reader for unattended VPS acceptance | Accepted for V1 acceptance evidence |
-| [0033](0033-global-viewer-identity-app-bound-handoff.md) | Global viewer identity with app-bound handoffs | Accepted for V1 |
+| [0033](0033-global-viewer-identity-app-bound-handoff.md) | Global viewer identity with app-bound handoffs | Handoff retained; naming/dashboard topology superseded by 0051 |
 | [0035](0035-bounded-update-listener-readiness.md) | Bounded local listener readiness before update health gates | Accepted for V1 |
 | [0036](0036-per-user-cli-credential-file.md) | Protected per-user CLI credential file | Accepted for V1 |
 | [0037](0037-deploy-first-cli-onboarding.md) | Deploy-first local manifest onboarding | Accepted for V1 |
@@ -48,6 +48,9 @@
 | [0046](0046-github-beta-release-channel.md) | GitHub prereleases are the pre-rename beta channel | Accepted for beta distribution |
 | [0047](0047-operator-governed-llm-chat.md) | Operator-governed encrypted LLM chat capability | Accepted for post-V1 L1/L2 |
 | [0048](0048-per-app-sqlite-collections.md) | Per-app SQLite databases and bounded document collections | Accepted |
+| [0049](0049-typed-deployer-app-data-access.md) | Typed deployer access to managed app data | Accepted |
+| [0050](0050-local-deployer-workstation-otp-automation.md) | Local deployer-workstation OTP automation is not CI credentialing | Accepted for V1 test infrastructure |
+| [0051](0051-one-domain-single-browser-identity.md) | One root domain and a single browser identity broker | Accepted replacement architecture; implementation in progress |
 
 ## Decision rule
 

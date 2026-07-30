@@ -10,9 +10,9 @@ import (
 
 func TestPlatformHostUsesOnlyPlatformHandler(t *testing.T) {
 	called := false
-	g := gateway.Gateway{Config: config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}, Platform: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) })}
-	r := httptest.NewRequest("GET", "http://tiny.test/api/v1/whoami", nil)
-	r.Host = "tiny.test"
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test"}, Platform: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) })}
+	r := httptest.NewRequest("GET", "http://admin.apps.tiny.test/api/v1/whoami", nil)
+	r.Host = "admin.apps.tiny.test"
 	w := httptest.NewRecorder()
 	g.ServeHTTP(w, r)
 	if !called || w.Code != 204 {

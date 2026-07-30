@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -9,10 +10,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
 	"strings"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/controlapi"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/policies"
 	"github.com/tinyhost/tiny/internal/sessions"
@@ -75,6 +78,26 @@ type IdentityOTPResult struct {
 	Token   string
 	Session IdentitySession
 	Revoked []AppSessionRef
+}
+
+// PlatformIdentityChallenge is delivery data for the platform-only identity
+// broker. It carries no app, role, or authorization result.
+type PlatformIdentityChallenge struct{ ID, Code, Email string }
+
+// DashboardIdentityResult is the only persistence result that turns a global
+// browser identity into dashboard authority. The identity credential itself
+// conveys no role: every call joins its normalized email to the current active
+// operator/deployer record in the same transaction that records identity use.
+//
+// Revoked contains app sessions which the gateway must close after the
+// transaction commits. It is populated for rotated-token replay, just as it is
+// for ValidateIdentitySession.
+type DashboardIdentityResult struct {
+	Actor            controlapi.Actor
+	Identity         IdentitySession
+	ReplacementToken string
+	Revoked          []AppSessionRef
+	FamilyRevoked    bool
 }
 
 func randomOpaque(prefix string) (string, error) {
@@ -357,6 +380,80 @@ func (s *SQLiteStore) ValidateIdentitySession(ctx context.Context, raw string, n
 	return out, err
 }
 
+// AuthenticateDashboardIdentity validates the platform-only global identity
+// cookie and derives dashboard authority from the current users row. It never
+// accepts an app session or bearer token, and it never copies a role into
+// identity_sessions. Suspending/revoking a deployer or changing a role thus
+// takes effect on the next dashboard request.
+func (s *SQLiteStore) AuthenticateDashboardIdentity(ctx context.Context, raw string, now time.Time) (DashboardIdentityResult, error) {
+	var out DashboardIdentityResult
+	denied := false
+	err := s.Write(ctx, func(tx *sql.Tx) error {
+		v, prior, err := identitySessionTx(ctx, tx, raw, now)
+		if err != nil {
+			if !errors.Is(err, errRotatedIdentityReplay) {
+				return err
+			}
+			if revokeErr := revokeIdentityFamilyTx(ctx, tx, v.FamilyID, now, &out.Revoked); revokeErr != nil {
+				return revokeErr
+			}
+			out.FamilyRevoked = true
+			denied = true
+			return nil
+		}
+		// Preserve proof that the browser identity itself is valid even when the
+		// subsequent dashboard-role lookup denies it. Callers must not clear a
+		// viewer's global identity merely because that viewer has no dashboard
+		// role; they may still have app policy access.
+		out.Identity = v
+
+		var actor controlapi.Actor
+		if err := tx.QueryRowContext(ctx, `SELECT id,normalized_email,role
+			FROM users
+			WHERE normalized_email=? AND status='active' AND role IN ('operator','deployer')`, v.Identity.Email).
+			Scan(&actor.ID, &actor.Email, &actor.Role); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrIdentity
+			}
+			return err
+		}
+		actor.Active = true
+		actor.IdentitySessionID = v.ID
+		out.Actor = actor
+
+		if !prior && now.Sub(v.RotatedAt) >= identityRotateAfter {
+			replacement, err := randomOpaque("gid_")
+			if err != nil {
+				return err
+			}
+			newHash := sha256.Sum256([]byte(replacement))
+			oldHash := sha256.Sum256([]byte(raw))
+			result, err := tx.ExecContext(ctx, `UPDATE identity_sessions
+				SET previous_secret_hash=?,previous_valid_until=?,secret_hash=?,rotated_at=?,last_seen_at=?
+				WHERE id=? AND secret_hash=? AND revoked_at IS NULL`, oldHash[:], now.Add(identityPreviousOverlap).UTC().Format(time.RFC3339Nano), newHash[:], now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano), v.ID, oldHash[:])
+			if err != nil {
+				return err
+			}
+			if n, _ := result.RowsAffected(); n != 1 {
+				return ErrIdentity
+			}
+			out.ReplacementToken = replacement
+			out.Identity.RotatedAt = now.UTC()
+			out.Identity.LastSeenAt = now.UTC()
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE identity_sessions SET last_seen_at=? WHERE id=? AND revoked_at IS NULL", now.UTC().Format(time.RFC3339Nano), v.ID); err != nil {
+			return err
+		}
+		out.Identity.LastSeenAt = now.UTC()
+		return nil
+	})
+	if err == nil && denied {
+		err = ErrIdentity
+	}
+	return out, err
+}
+
 // GetIdentityHandoff returns only a live unconsumed server-created handoff.
 // It exists for the platform's “use another email” action; it never trusts an
 // app, return path, or state value provided by the browser.
@@ -443,6 +540,161 @@ func (s *SQLiteStore) RequestIdentityOTP(ctx context.Context, handoffID, rawBrow
 		return nil, nil
 	}
 	return s.CreateChallenge(ctx, appID, "viewer", email, fingerprintHash(key, fingerprint), key, eligible, now, ttl)
+}
+
+// RequestPlatformIdentityOTP creates a generic, platform-only identity
+// challenge. It deliberately does not inspect users, roles, app policies, or
+// handoffs: any syntactically valid email may establish an identity, while
+// dashboard authorization later performs the current-role lookup.
+func (s *SQLiteStore) RequestPlatformIdentityOTP(ctx context.Context, rawBrowserBinding, rawEmail, fingerprint string, key []byte, now time.Time, ttl time.Duration) (*PlatformIdentityChallenge, error) {
+	binding, err := browserBindingHash(rawBrowserBinding)
+	if err != nil {
+		return nil, ErrIdentity
+	}
+	email, err := identity.Normalize(rawEmail)
+	if err != nil {
+		return nil, nil
+	}
+	if len(key) == 0 {
+		return nil, ErrIdentity
+	}
+	if ttl <= 0 {
+		ttl = 10 * time.Minute
+	}
+	b := make([]byte, 16)
+	if _, err = rand.Read(b); err != nil {
+		return nil, err
+	}
+	id := fmt.Sprintf("pidotp_%x", b)
+	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+	if err != nil {
+		return nil, err
+	}
+	code := fmt.Sprintf("%06d", n.Int64())
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(id + ":" + code))
+	err = s.Write(ctx, func(tx *sql.Tx) error {
+		// New forms supersede only the same browser/email tuple. A different
+		// submitted email must still race at verification, where the binding's
+		// one-family invariant chooses exactly one completion.
+		if _, err := tx.ExecContext(ctx, `UPDATE platform_identity_challenges
+			SET invalidated_at=?
+			WHERE browser_binding_hash=? AND normalized_email=?
+			  AND consumed_at IS NULL AND invalidated_at IS NULL`, now.UTC().Format(time.RFC3339Nano), binding[:], email); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `INSERT INTO platform_identity_challenges
+			(id,browser_binding_hash,normalized_email,code_hash,expires_at,attempts,request_fingerprint_hash,created_at)
+			VALUES(?,?,?,?,?,?,?,?)`, id, binding[:], email, h.Sum(nil), now.Add(ttl).UTC().Format(time.RFC3339Nano), 0, fingerprintHash(key, fingerprint), now.UTC().Format(time.RFC3339Nano))
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &PlatformIdentityChallenge{ID: id, Code: code, Email: email}, nil
+}
+
+// VerifyPlatformIdentityOTP atomically consumes a platform-only challenge and
+// creates the same global identity family used by app handoffs. force is the
+// explicit account-switch path; a non-force completion cannot replace a valid
+// presented identity. Concurrent completions for one browser binding serialize
+// on the active-family uniqueness constraint and the generation check.
+func (s *SQLiteStore) VerifyPlatformIdentityOTP(ctx context.Context, rawBrowserBinding, rawEmail, challengeID, code, oldGlobalRaw string, force bool, key []byte, now time.Time, maxAttempts int) (IdentityOTPResult, error) {
+	binding, err := browserBindingHash(rawBrowserBinding)
+	if err != nil {
+		return IdentityOTPResult{}, ErrIdentity
+	}
+	email, err := identity.Normalize(rawEmail)
+	if err != nil || challengeID == "" || len(key) == 0 {
+		return IdentityOTPResult{}, ErrOTP
+	}
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	var raw string
+	var out IdentitySession
+	var revoked []AppSessionRef
+	denied := false
+	err = s.Write(ctx, func(tx *sql.Tx) error {
+		var hash []byte
+		var expires, created string
+		var attempts int
+		var consumed, invalid sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT code_hash,expires_at,attempts,consumed_at,invalidated_at,created_at
+			FROM platform_identity_challenges
+			WHERE id=? AND browser_binding_hash=? AND normalized_email=?`, challengeID, binding[:], email).
+			Scan(&hash, &expires, &attempts, &consumed, &invalid, &created); err != nil || consumed.Valid || invalid.Valid {
+			denied = true
+			return nil
+		}
+		expiresAt, parseErr := parseTime(expires)
+		createdAt, createdErr := parseTime(created)
+		if parseErr != nil || createdErr != nil || !now.Before(expiresAt) || attempts >= maxAttempts {
+			denied = true
+			return nil
+		}
+		h := hmac.New(sha256.New, key)
+		h.Write([]byte(challengeID + ":" + code))
+		if !hmac.Equal(hash, h.Sum(nil)) {
+			if _, err := tx.ExecContext(ctx, "UPDATE platform_identity_challenges SET attempts=attempts+1 WHERE id=? AND attempts<?", challengeID, maxAttempts); err != nil {
+				return err
+			}
+			denied = true
+			return nil
+		}
+
+		bound, hasBound, err := activeBrowserBindingSessionTx(ctx, tx, binding[:])
+		if err != nil {
+			return err
+		}
+		if hasBound && now.Before(bound.ExpiresAt) && !bound.CreatedAt.Before(createdAt) {
+			denied = true
+			return nil
+		}
+		if !force && oldGlobalRaw != "" {
+			if _, _, oldErr := identitySessionTx(ctx, tx, oldGlobalRaw, now); oldErr == nil || errors.Is(oldErr, errRotatedIdentityReplay) {
+				denied = true
+				return nil
+			} else if !errors.Is(oldErr, ErrIdentity) {
+				return oldErr
+			}
+		}
+		if hasBound {
+			if err := revokeIdentityFamilyTx(ctx, tx, bound.FamilyID, now, &revoked); err != nil {
+				return err
+			}
+		}
+		if force && oldGlobalRaw != "" {
+			if err := revokeIdentitySessionTx(ctx, tx, oldGlobalRaw, now, &revoked); err != nil && !errors.Is(err, ErrIdentity) {
+				return err
+			}
+		}
+		viewer := identity.Identity{ID: email, Email: email}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO identities(id,normalized_email,created_at,last_authenticated_at)
+			VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET normalized_email=excluded.normalized_email,last_authenticated_at=excluded.last_authenticated_at`, viewer.ID, viewer.Email, now.UTC().Format(time.RFC3339Nano), now.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
+		raw, out, err = createIdentitySessionTx(ctx, tx, viewer, binding[:], now)
+		if err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE platform_identity_challenges SET consumed_at=?
+			WHERE id=? AND consumed_at IS NULL AND invalidated_at IS NULL`, now.UTC().Format(time.RFC3339Nano), challengeID)
+		if err != nil {
+			return err
+		}
+		if n, _ := result.RowsAffected(); n != 1 {
+			return ErrOTP
+		}
+		return nil
+	})
+	if err != nil {
+		return IdentityOTPResult{}, err
+	}
+	if denied {
+		return IdentityOTPResult{}, ErrOTP
+	}
+	return IdentityOTPResult{Token: raw, Session: out, Revoked: revoked}, nil
 }
 
 func createIdentitySessionTx(ctx context.Context, tx *sql.Tx, viewer identity.Identity, browserBindingHash []byte, now time.Time) (string, IdentitySession, error) {

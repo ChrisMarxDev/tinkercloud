@@ -17,8 +17,10 @@ identities
 ```
 
 `users` represent platform authority. `identities` represent authenticated
-viewer email identities. The same email may correspond to both records, but
-viewer authorization never implies deployer authority.
+browser email identities. The same normalized email may correspond to both
+records. The dashboard performs a current role lookup; each app performs a
+current policy lookup. Neither authorization follows merely from matching
+email text.
 
 ## Apps and policies
 
@@ -42,7 +44,8 @@ interpretation.
 
 Uniqueness:
 
-- app slug is unique under the configured app suffix;
+- app slug is unique under the configured root domain and cannot equal a
+  reserved platform label;
 - normalized email/domain rules are unique within one policy revision;
 - an active app must reference an activatable policy revision.
 
@@ -50,13 +53,17 @@ Uniqueness:
 
 ```text
 otp_challenges
-  id, app_id?, purpose, control_channel?(browser|cli), normalized_email,
+  id, app_id?, purpose, control_channel?(cli), normalized_email,
   code_hash, expires_at, attempts, consumed_at, invalidated_at,
   request_fingerprint_hash, created_at
 
 sessions
-  id, scope(control|app), app_id?, identity_id?, user_id?, identity_session_id?,
+  id, scope(app), app_id, identity_id, identity_session_id,
   secret_hash, expires_at, revoked_at, last_seen_at, created_at
+
+platform_identity_challenges
+  id, normalized_email, code_hash, browser_binding_hash,
+  expires_at, attempts, consumed_at, invalidated_at, created_at
 
 identity_sessions
   id, identity_id, family_id, secret_hash, browser_binding_hash,
@@ -68,13 +75,12 @@ identity_handoffs
   authorized_at?, consumed_at, created_at
 ```
 
-An app session requires `app_id` and `identity_id`. A control session requires
-`user_id` and cannot be presented as an app session or bearer token. A CLI
-bearer exists only in `api_tokens` and cannot be presented as a browser control
-session. Control OTP challenges are bound to their server-selected credential
-channel; existing unbound challenges fail closed. An `identity_session` proves
-only a viewer email on the platform host and belongs to one family; it is not a
-control session. An app session can record that family as its parent so global
+An app session requires `app_id`, `identity_id`, and its global identity-family
+parent. A CLI bearer exists only in `api_tokens` and cannot be presented as a
+browser credential. A platform identity challenge has no app or role and can
+issue only a global browser identity. An `identity_session` proves only an
+email on the admin host and belongs to one family; the dashboard still resolves
+the current `users` role. An app session records that family as its parent so global
 switch, revocation, or rotation-replay detection revokes every derived local
 session. A handoff is state-bound to one server-derived app, stores only secret
 hashes, expires in five minutes or less, and is atomically single-use. The
@@ -87,13 +93,12 @@ The binding lookup has one narrow additional use: it may revoke that bound
 family and its descendants during browser cleanup; it never returns an identity
 or grants access.
 
-Migration 5 adds the optional child linkage without rewriting any existing app
-session. At app-session validation, a parentless session is quarantined when
-its RFC3339 creation time predates migration 5's persisted `applied_at`
-cutoff. Parent-linked sessions use their normal validation path; explicitly
-configured brokerless parentless sessions created at/after the cutoff retain
-their local semantics. Missing or malformed cutoff/session timestamps deny
-without changing persisted revocation state.
+Migration 5 adds the child linkage without rewriting any existing app session.
+At app-session validation, a parentless session is quarantined when its RFC3339
+creation time predates migration 5's persisted `applied_at` cutoff. Every newly
+issued app session is handoff-linked; a parentless post-cutoff session denies.
+Missing or malformed cutoff/session timestamps also deny without changing
+persisted revocation state.
 
 ## Deployments
 

@@ -10,20 +10,17 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/browseridentity"
+	"github.com/tinyhost/tiny/internal/gateway"
 	"github.com/tinyhost/tiny/internal/identity"
-	"github.com/tinyhost/tiny/internal/ratelimit"
 	"github.com/tinyhost/tiny/internal/releases"
 	webui "github.com/tinyhost/tiny/web"
 )
-
-const ControlCookieName = "__Host-tiny_control"
-const controlCSRFCookie = "__Host-tiny_control_csrf"
 
 //go:embed templates/*.html
 var templateFiles embed.FS
@@ -33,17 +30,15 @@ var templateFiles embed.FS
 type Platform struct {
 	API   http.Handler
 	Auth  PlatformAuthenticator
-	Login Login
 	Views DashboardReader
 	// Actions is deliberately separate from API. HTML forms call the same
 	// typed service boundary, with the actor always derived from the control
 	// cookie. They never replay browser credentials into the bearer API.
-	Actions    UIActions
-	Now        func() time.Time
-	RateLimits *ratelimit.Limiter
+	Actions UIActions
+	Now     func() time.Time
 }
 
-// UIActions is the narrow, audited mutation surface used by the platform-host
+// UIActions is the narrow, audited mutation surface used by the admin-host
 // forms. Implementations must re-check role and ownership; route parameters
 // and form fields are untrusted input.
 type UIActions interface {
@@ -53,7 +48,7 @@ type UIActions interface {
 	RevokeToken(context.Context, Actor, string, string, string) error
 	SetAppStatus(context.Context, Actor, string, string, string) error
 	DeleteApp(context.Context, Actor, string, string) error
-	CreateLLMConnection(context.Context, Actor, string, string, string) error
+	CreateLLMConnection(context.Context, Actor, string, string) error
 	RotateLLMConnection(context.Context, Actor, string, string) error
 	DisableLLMConnection(context.Context, Actor, string) error
 	CreateLLMProfile(context.Context, Actor, LLMProfileInput) error
@@ -63,10 +58,6 @@ type UIActions interface {
 }
 
 const maxUIFormBytes int64 = 16 << 10
-
-type controlCredentialRevoker interface {
-	RevokeControlCredential(context.Context, string) error
-}
 
 func (p Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -84,30 +75,6 @@ func (p Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.dashboard(w, r)
-	case "/login":
-		switch r.Method {
-		case http.MethodGet:
-			p.loginForm(w, "", "")
-		case http.MethodPost:
-			p.requestOTP(w, r)
-		default:
-			p.methodNotAllowed(w)
-		}
-	case "/login/verify":
-		switch r.Method {
-		case http.MethodGet:
-			p.verifyForm(w, r.URL.Query().Get("transaction"), "")
-		case http.MethodPost:
-			p.verifyOTP(w, r)
-		default:
-			p.methodNotAllowed(w)
-		}
-	case "/logout":
-		if r.Method != http.MethodPost {
-			p.methodNotAllowed(w)
-			return
-		}
-		p.logout(w, r)
 	default:
 		if r.Method == http.MethodPost && p.formAction(w, r) {
 			return
@@ -120,14 +87,14 @@ func (p Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // checks before parsing any action payload, then invokes an audited service
 // with a server-derived actor and a server-generated idempotency key.
 func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
-	a, ok := p.actor(r)
-	if !ok || !sameOrigin(r) || !p.validCSRF(r) || p.Actions == nil {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 2 || (parts[0] != "apps" && parts[0] != "deployers" && parts[0] != "dashboard") {
+		return false
+	}
+	a, ok := p.actor(w, r)
+	if !ok || !gateway.SameOrigin(r) || !p.validCSRF(r, a) || p.Actions == nil {
 		p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
 		return true
-	}
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	if len(parts) < 2 {
-		return false
 	}
 	key := newUIRequestKey()
 	if key == "" {
@@ -145,12 +112,15 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
 			return true
 		}
-		name, provider, secret := strings.TrimSpace(r.FormValue("display_name")), r.FormValue("provider"), r.FormValue("secret")
-		if name == "" || len(name) > 128 || strings.ContainsAny(name, "\x00\r\n") || (provider != "anthropic" && provider != "gemini") || len(secret) < 1 || len(secret) > 4096 {
-			p.errorPage(w, http.StatusBadRequest, "Connection needs review", "Use a short display name, a supported provider, and a valid credential.", "/dashboard", "Return to dashboard")
+		provider, secret := r.FormValue("provider"), r.FormValue("secret")
+		_, browserName := r.Form["display_name"]
+		_, browserID := r.Form["id"]
+		_, browserConnectionID := r.Form["connection_id"]
+		if browserName || browserID || browserConnectionID || (provider != "anthropic" && provider != "gemini") || len(secret) < 1 || len(secret) > 4096 {
+			p.errorPage(w, http.StatusBadRequest, "API key needs review", "Choose a supported provider and enter a valid API key.", "/dashboard", "Return to dashboard")
 			return true
 		}
-		err = p.Actions.CreateLLMConnection(r.Context(), a, name, provider, secret)
+		err = p.Actions.CreateLLMConnection(r.Context(), a, provider, secret)
 		return p.actionResult(w, r, err, "llm_connection_created")
 	}
 	if len(parts) == 5 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "connections" && parts[4] == "rotate" {
@@ -415,18 +385,20 @@ func parseLLMProfile(r *http.Request) (LLMProfileInput, bool) {
 }
 
 func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
-	a, ok := p.actor(r)
+	a, ok := p.actor(w, r)
 	if !ok {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	csrf := p.csrf(w, r)
+	csrf := p.csrf(w, r, a)
 	v := DashboardView{Health: []DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinyhost doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
+	unavailable := false
 	if p.Views != nil {
 		var err error
 		v, err = p.Views.Dashboard(r.Context(), a)
 		if err != nil {
 			v = DashboardView{Health: []DashboardHealth{{Name: "dashboard read model", State: "unavailable", Detail: "Retry or run tinyhost doctor locally."}}}
+			unavailable = true
 		}
 	}
 	notice := ""
@@ -450,104 +422,48 @@ func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 	case "llm_grant_revoked":
 		notice = "LLM chat grant revoked. Future calls are denied."
 	}
-	p.render(w, "dashboard.html", dashboardPage{Actor: a, View: v, CSRF: csrf, Notice: notice})
+	p.render(w, "dashboard.html", dashboardPage{Actor: a, View: v, CSRF: csrf, Notice: notice, Unavailable: unavailable})
 }
-func (p Platform) loginForm(w http.ResponseWriter, tx, message string) {
-	p.render(w, "login.html", loginPage{Transaction: tx, Message: message})
-}
-func (p Platform) requestOTP(w http.ResponseWriter, r *http.Request) {
-	if p.Login == nil {
-		p.loginForm(w, "", "Unable to continue. Try again later.")
-		return
-	}
-	_ = r.ParseForm()
-	email := r.Form.Get("email")
-	tx := ""
-	if p.RateLimits == nil || p.RateLimits.AllowRequest(ratelimit.OTPRequest, r, email, "control") {
-		tx, _ = p.Login.RequestOTP(r.Context(), email, BrowserLoginChannel, ratelimit.RequestFingerprint(r))
-		if tx != "" && p.RateLimits != nil {
-			p.RateLimits.BindTransactionRequest(tx, email, r)
-		}
-	}
-	// Always show the same state to prevent account enumeration.
-	p.verifyForm(w, tx, "If that address is authorized, a code has been sent.")
-}
-func (p Platform) verifyForm(w http.ResponseWriter, tx, message string) {
-	p.render(w, "verify.html", verifyPage{Transaction: tx, Message: message})
-}
-func (p Platform) verifyOTP(w http.ResponseWriter, r *http.Request) {
-	if p.Login == nil {
-		p.verifyForm(w, "", "Unable to verify that code.")
-		return
-	}
-	_ = r.ParseForm()
-	if p.RateLimits != nil && !p.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, r.Form.Get("transaction"), "control") {
-		p.verifyForm(w, r.Form.Get("transaction"), "Unable to verify that code.")
-		return
-	}
-	token, err := p.Login.VerifyOTP(r.Context(), r.Form.Get("transaction"), r.Form.Get("code"), BrowserLoginChannel)
-	if err != nil || token == "" {
-		p.verifyForm(w, r.Form.Get("transaction"), "Unable to verify that code.")
-		return
-	}
-	now := time.Now()
-	if p.Now != nil {
-		now = p.Now()
-	}
-	http.SetCookie(w, &http.Cookie{Name: ControlCookieName, Value: token, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: now.Add(30 * 24 * time.Hour)})
-	p.csrf(w, r)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-func (p Platform) logout(w http.ResponseWriter, r *http.Request) {
-	if _, ok := p.actor(r); !ok || !sameOrigin(r) || !p.validCSRF(r) {
-		p.errorPage(w, http.StatusForbidden, "Sign out not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
-		return
-	}
-	if c, err := r.Cookie(ControlCookieName); err == nil {
-		if revoker, ok := p.Login.(controlCredentialRevoker); ok {
-			_ = revoker.RevokeControlCredential(r.Context(), c.Value)
-		}
-	}
-	http.SetCookie(w, &http.Cookie{Name: ControlCookieName, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1})
-	http.SetCookie(w, &http.Cookie{Name: controlCSRFCookie, Value: "", Path: "/", Secure: true, SameSite: http.SameSiteStrictMode, MaxAge: -1})
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-func (p Platform) actor(r *http.Request) (Actor, bool) {
+func (p Platform) actor(w http.ResponseWriter, r *http.Request) (Actor, bool) {
 	if p.Auth == nil {
 		return Actor{}, false
 	}
-	a, err := p.Auth.AuthenticatePlatform(r.Context(), r)
+	a, err := p.Auth.AuthenticatePlatform(r.Context(), w, r)
 	return a, err == nil && a.Active
 }
-func (p Platform) csrf(w http.ResponseWriter, r *http.Request) string {
-	if c, err := r.Cookie(controlCSRFCookie); err == nil && len(c.Value) >= 32 {
+func (p Platform) csrf(w http.ResponseWriter, r *http.Request, actor Actor) string {
+	subject := actor.IdentitySessionID
+	// Test-only authenticators do not carry a browser identity session. A real
+	// ControlAuthenticator always supplies one; keep isolated UI rendering
+	// tests deterministic without weakening the production path.
+	if subject == "" && actor.ID != "" {
+		subject = "test-" + actor.ID
+	}
+	if subject == "" {
+		return ""
+	}
+	prefix := subject + "."
+	if c, err := r.Cookie(browseridentity.CSRFCookieName); err == nil && strings.HasPrefix(c.Value, prefix) && len(c.Value) >= len(prefix)+32 {
 		return c.Value
 	}
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		return ""
 	}
-	v := base64.RawURLEncoding.EncodeToString(b)
-	http.SetCookie(w, &http.Cookie{Name: controlCSRFCookie, Value: v, Path: "/", Secure: true, SameSite: http.SameSiteStrictMode})
+	v := prefix + base64.RawURLEncoding.EncodeToString(b)
+	http.SetCookie(w, &http.Cookie{Name: browseridentity.CSRFCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	return v
 }
-func (p Platform) validCSRF(r *http.Request) bool {
-	c, e := r.Cookie(controlCSRFCookie)
-	if e != nil || c.Value == "" {
+func (p Platform) validCSRF(r *http.Request, actor Actor) bool {
+	c, e := r.Cookie(browseridentity.CSRFCookieName)
+	subject := actor.IdentitySessionID
+	if subject == "" && actor.ID != "" {
+		subject = "test-" + actor.ID
+	}
+	if e != nil || c.Value == "" || subject == "" || !strings.HasPrefix(c.Value, subject+".") {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(r.FormValue("csrf"))) == 1
-}
-func sameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = r.Header.Get("Referer")
-	}
-	if origin == "" {
-		return false
-	}
-	u, err := url.Parse(origin)
-	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && strings.EqualFold(u.Host, r.Host)
 }
 func (p Platform) methodNotAllowed(w http.ResponseWriter) {
 	w.Header().Set("Allow", "GET, POST")
@@ -573,13 +489,12 @@ func (p Platform) render(w http.ResponseWriter, name string, data any) {
 	_ = t.ExecuteTemplate(w, "base", data)
 }
 
-type loginPage struct{ Transaction, Message string }
-type verifyPage struct{ Transaction, Message string }
 type dashboardPage struct {
-	Actor  Actor
-	View   DashboardView
-	CSRF   string
-	Notice string
+	Actor       Actor
+	View        DashboardView
+	CSRF        string
+	Notice      string
+	Unavailable bool
 }
 type tokenPage struct {
 	Actor Actor

@@ -36,17 +36,20 @@ type deploymentReceipt struct {
 	ID           string                          `json:"deployment_id,omitempty"`
 	URL          string                          `json:"url,omitempty"`
 	State        string                          `json:"state"`
-	Verification client.DeploymentEvidenceReason `json:"verification"`
+	Verification client.DeploymentEvidenceReason `json:"verification,omitempty"`
+	Reason       client.ActivationFailureReason  `json:"reason,omitempty"`
+	RequestID    string                          `json:"request_id,omitempty"`
 }
 
 func main() {
-	os.Exit(runWith(os.Args[1:], os.Stdout, os.Stderr, runnerDeps{store: client.FileStore{}, prompt: stdinPrompt{r: bufio.NewReader(os.Stdin), w: os.Stderr}}))
+	os.Exit(runWith(os.Args[1:], os.Stdout, os.Stderr, runnerDeps{store: client.FileStore{}, prompt: stdinPrompt{r: bufio.NewReader(os.Stdin), w: os.Stderr}, input: os.Stdin}))
 }
 
 type runnerDeps struct {
 	store     client.Store
 	prompt    client.Prompt
 	newClient func(string, string) client.Client
+	input     io.Reader
 }
 
 const maxSetupServerInput = 2048
@@ -154,6 +157,9 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		code, message := serverFailure(resolveErr)
 		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 		return 2
+	}
+	if len(args) >= 1 && args[0] == "data" {
+		return runData(args[1:], resolvedServer, *jsonOutput, stdout, stderr, deps)
 	}
 	if len(args) == 1 && args[0] == "logout" {
 		if deps.store == nil {
@@ -267,10 +273,11 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"read_failed", "Policy file could not be read."}})
 			return 1
 		}
-		var policy map[string]any
+		var policy accessPolicyFile
 		de := json.NewDecoder(bytes.NewReader(b))
-		if e = de.Decode(&policy); e != nil || policy == nil || de.Decode(&struct{}{}) != io.EOF {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_policy", "Policy file must be valid JSON."}})
+		de.DisallowUnknownFields()
+		if e = de.Decode(&policy); e != nil || de.Decode(&struct{}{}) != io.EOF {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_policy", "Policy file must contain only writable access-policy fields."}})
 			return 1
 		}
 		base := resolvedServer
@@ -283,22 +290,38 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		if deps.newClient != nil {
 			deployer = deps.newClient(base, token)
 		}
-		if _, supplied := policy["expected_revision"]; !supplied {
-			var current struct {
-				Revision uint64 `json:"revision"`
-			}
-			if e = deployer.Do(context.Background(), "GET", "/api/v1/apps/"+url.PathEscape(args[2])+"/access", "", nil, &current); e != nil || current.Revision == 0 {
-				writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"policy_read_failed", "Current policy could not be read."}})
+		var current accessPolicyView
+		if e = deployer.Do(context.Background(), "GET", "/api/v1/apps/"+url.PathEscape(args[2])+"/access", "", nil, &current); e != nil || current.Revision == 0 {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"policy_read_failed", "Current policy could not be read."}})
+			return 1
+		}
+		if policy.ExpectedRevision == nil {
+			policy.ExpectedRevision = &current.Revision
+		}
+		// The server remains the authorization authority. This client-side read
+		// exists solely to name a broadened requested policy before its mutation.
+		if policyRevisionMatches(policy, current.Revision) && policyBroadensAccess(policy, current) && !policy.ConfirmBroadening {
+			if *jsonOutput || deps.prompt == nil {
+				writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"confirmation_required", "Policy adds viewer access. Set confirm_broadening to true and retry."}})
 				return 1
 			}
-			policy["expected_revision"] = current.Revision
+			answer, promptErr := deps.prompt.Ask("This policy adds viewer access. Continue? [y/N]: ")
+			if promptErr != nil || !affirmative(answer) {
+				writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"confirmation_required", "Access broadening was not confirmed."}})
+				return 1
+			}
+			policy.ConfirmBroadening = true
 		}
 		key, e := client.IdempotencyKey()
 		if e != nil {
 			return 1
 		}
 		if e = deployer.Do(context.Background(), "PUT", "/api/v1/apps/"+url.PathEscape(args[2])+"/access", key, policy, nil); e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"not_authorized", "Policy update failed."}})
+			if errors.Is(e, client.ErrConflict) {
+				writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"policy_conflict", "Policy changed. Read it again and retry."}})
+				return 1
+			}
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"policy_update_failed", "Policy update failed."}})
 			return 1
 		}
 		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: "access policy updated"})
@@ -430,6 +453,22 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 				})
 				return 1
 			}
+			var activation *client.ActivationFailedError
+			if errors.As(e, &activation) {
+				writeTo(stdout, stderr, *jsonOutput, result{
+					Deployment: &deploymentReceipt{
+						ID:        activation.DeploymentID,
+						State:     "verified",
+						Reason:    activation.Reason,
+						RequestID: activation.RequestID,
+					},
+					Error: &cliError{
+						"activation_failed",
+						"Deployment activation failed.",
+					},
+				})
+				return 1
+			}
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be verified."}})
 			return 1
 		}
@@ -452,6 +491,58 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	}
 	writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: m.Name})
 	return 0
+}
+
+type accessPolicyView struct {
+	Revision uint64 `json:"revision"`
+	Allow    struct {
+		Emails  []string `json:"emails"`
+		Domains []string `json:"domains"`
+	} `json:"allow"`
+}
+
+type accessPolicyFile struct {
+	Mode              string  `json:"mode"`
+	ExpectedRevision  *uint64 `json:"expected_revision,omitempty"`
+	ConfirmBroadening bool    `json:"confirm_broadening"`
+	Allow             struct {
+		Emails  []string `json:"emails"`
+		Domains []string `json:"domains"`
+	} `json:"allow"`
+}
+
+func policyRevisionMatches(policy accessPolicyFile, current uint64) bool {
+	return policy.ExpectedRevision != nil && *policy.ExpectedRevision == current
+}
+
+func policyBroadensAccess(policy accessPolicyFile, current accessPolicyView) bool {
+	currentEmails, currentDomains := map[string]bool{}, map[string]bool{}
+	for _, value := range current.Allow.Emails {
+		currentEmails[value] = true
+	}
+	for _, value := range current.Allow.Domains {
+		currentDomains[value] = true
+	}
+	for _, value := range policy.Allow.Emails {
+		if !currentEmails[value] {
+			return true
+		}
+	}
+	for _, value := range policy.Allow.Domains {
+		if !currentDomains[value] {
+			return true
+		}
+	}
+	return false
+}
+
+func affirmative(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
 }
 
 // stagedArchive keeps deploy bundles out of process memory and gives the
@@ -786,6 +877,9 @@ func requiresServer(args []string) bool {
 	}
 	if len(args) >= 2 && args[0] == "tokens" {
 		return validTokenCommand(args[1:])
+	}
+	if len(args) >= 2 && args[0] == "data" {
+		return validDataCommand(args[1:])
 	}
 	return false
 }
@@ -1211,7 +1305,15 @@ func writeTo(stdout, stderr io.Writer, j bool, r result) {
 			if r.Deployment.URL != "" {
 				fmt.Fprintf(stderr, "URL: %s\n", r.Deployment.URL)
 			}
-			fmt.Fprintf(stderr, "Verification: %s\n", r.Deployment.Verification)
+			if r.Deployment.Verification != "" {
+				fmt.Fprintf(stderr, "Verification: %s\n", r.Deployment.Verification)
+			}
+			if r.Deployment.Reason != "" {
+				fmt.Fprintf(stderr, "Reason: %s\n", r.Deployment.Reason)
+			}
+			if r.Deployment.RequestID != "" {
+				fmt.Fprintf(stderr, "Request ID: %s\n", r.Deployment.RequestID)
+			}
 		}
 		return
 	}

@@ -24,17 +24,17 @@ The reviewed HTML flows already include the accepted edits below.
 - acquire/control a domain;
 - create a supported dedicated VPS and retain root SSH;
 - own firewall policy while exposing only required 80/443;
-- provide one base domain and initial operator email;
+- provide one root domain and initial operator email;
 - establish Resend domain ownership and provide the provider secret through the
   root-owned credential boundary;
-- enter operator OTP only when no valid control session exists;
+- enter browser OTP only when no valid global identity exists;
 - choose the exact active-deployer email set and confirm additions/reactivations;
 - confirm app suspension; and
 - provide a replacement email only when a chosen root recovery changes it.
 
 ### Derived, defaulted, delayed, or removed
 
-- platform host, app suffix, sender, ACME contact, service identity, paths,
+- admin host, app host pattern, sender, ACME contact, service identity, paths,
   internal secrets, config, database, probe hosts, and current allowlist are
   derived;
 - the trusted release source is default; alternate source is advanced;

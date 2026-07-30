@@ -2,22 +2,18 @@ package compose
 
 import (
 	"context"
-	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/live"
 	"github.com/tinyhost/tiny/internal/sessions"
 	"time"
 )
 
 type LiveSessions struct {
-	Sessions SessionIssuerValidatorRevoker
+	Sessions SessionValidatorRevoker
 	Hub      *live.Hub
 }
 
 func (l LiveSessions) Validate(ctx context.Context, a, t string, n time.Time) (sessions.Session, error) {
 	return l.Sessions.Validate(ctx, a, t, n)
-}
-func (l LiveSessions) Create(ctx context.Context, a string, i identity.Identity, e time.Time) (string, sessions.Session, error) {
-	return l.Sessions.Create(ctx, a, i, e)
 }
 func (l LiveSessions) Revoke(ctx context.Context, a, t string) (string, error) {
 	id, e := l.Sessions.Revoke(ctx, a, t)

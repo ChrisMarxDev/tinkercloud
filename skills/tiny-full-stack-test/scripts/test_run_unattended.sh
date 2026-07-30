@@ -39,7 +39,7 @@ run() {
   TINYHOST_VPS_E2E=1 TINYHOST_VPS_SSH_TARGET=root@203.0.113.10 \
   TINYHOST_VPS_ACKNOWLEDGE=root@203.0.113.10 \
   TINYHOST_VPS_KNOWN_HOSTS_FILE="$tmp/known_hosts" \
-  TINYHOST_VPS_PLATFORM_HOST=tiny.example.test TINYHOST_VPS_APP_SUFFIX=apps.example.test \
+  TINYHOST_VPS_DOMAIN=example.test \
   TINYHOST_VPS_OPERATOR_EMAIL=operator@example.test TINYHOST_VPS_DEPLOYER_EMAIL=deployer@example.test \
   TINYHOST_VPS_VIEWER_EMAIL=viewer@example.test TINYHOST_VPS_EMAIL_FROM=tiny@example.test \
   TINYHOST_VPS_ACME_EMAIL=operator@example.test TINYHOST_VPS_RESEND_API_KEY_FILE="$tmp/send-key" \

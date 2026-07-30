@@ -167,19 +167,19 @@ Before a styled happy path is accepted, tests must prove:
    card and text notice primitives; they retain generic copy, provide a safe
    next step, and expose no policy membership, account existence, callback
    state, or app bytes.
-16. “Use another email” is an ordinary platform-host POST verification flow.
-   Its visible confirmation makes clear that it changes the browser’s viewer
-   identity and signs app sessions out; it is not a dashboard control sign-out,
+16. “Use another email” is an ordinary admin-host POST verification flow.
+   Its visible confirmation makes clear that it changes the browser identity
+   and signs app sessions out; it is not an app-local sign-out,
    app-local GET mutation, or a client-side account selector.
 17. App-host UI labels its existing POST action “Sign out of this app” (or an
-   equivalently local phrase), never “Sign out everywhere.” Platform identity
-   UI labels the separate POST action “Use another email” or “Sign out of
-   TinyHost apps,” and explains its global consequence. An allowed handoff may
+   equivalently local phrase), never “Sign out everywhere.” Admin identity UI
+   labels the separate POST action “Use another email” or “Sign out of
+   TinyHost,” and explains its global consequence. An allowed handoff may
    show the verified email only as ordinary escaped text. An unauthorized app
    shows the generic denial notice; when a valid global identity is already
    established, it may show that verified email and “Use another email,” but
    never allowlist, app-policy, or callback details.
-18. The platform-host browser-binding cookie is a non-authorizing HTTP-only
+18. The admin-host browser-binding cookie is a non-authorizing HTTP-only
    implementation detail for OTP race grouping. Authentication pages never
    render, serialize, label, or expose it in URLs, forms, templates,
    JavaScript, notices, or deployed-app content. It remains stable through
@@ -199,18 +199,48 @@ Before a styled happy path is accepted, tests must prove:
    states that removed addresses are signed out and cannot deploy. The form
    never renders credential/provider detail; server-side role, CSRF, origin,
    revision, collision, audit, and idempotency denials prevent mutation.
-21. Operator LLM controls expose only safe connection metadata, fixed profile
-    bounds, grant state, and aggregate usage. Provider credentials and their
-    encrypted envelopes are write-only: no dashboard, form value, notice,
-    audit row, error, source, or reveal path may render them. Connection and
-    profile identifiers are server-generated opaque values; create forms have
-    no identifier fields, and app grant targets come from a server-rendered
-    app route rather than a browser-supplied app ID. Credential rotation never
-    accepts a provider selector: the server resolves the existing connection's
-    provider before validating the replacement. Profile/grant writes carry the
-    current revision; disabling a connection or disabling/revoking a grant
-    requires a visible exact-target confirmation plus the normal operator,
-    same-origin, and CSRF checks.
+21. Operator controls split provider credentials into a top-level **API keys**
+    section and place profiles, grants, limits, and aggregate usage in **LLM
+    chat**. Provider credentials and their encrypted envelopes are write-only:
+    no dashboard, form value, notice, audit row, error, source, or reveal path
+    may render them. The fixed-provider API-key create form asks only for
+    provider and one password field; it has no display-name, identifier,
+    arbitrary secret, URL, or generic-key input. The server generates the
+    identifier and derives `Anthropic API key` or `Gemini API key`; existing
+    connection labels still render. Credential rotation never accepts a
+    provider selector: the server resolves the existing connection's provider
+    before validating the replacement. A server-derived unavailable key state
+    gives only the root-only `tinyhost llm enable` plus restart next step and
+    renders no credential mutation form or encryption-root detail. Profile/grant
+    writes carry the current revision; disabling a connection or
+    disabling/revoking a grant requires a visible exact-target confirmation
+    plus the normal operator, same-origin, and CSRF checks. Deployer dashboards
+    omit both sections.
+22. An app quick-navigation QR code is derived only from the same
+    server-rendered stable gateway URL admitted for the adjacent launch link.
+    It is generated locally with no remote image, request, analytics, release
+    path, token, session, or browser-held authorization state. If the URL
+    cannot be encoded, the dashboard omits the QR trigger instead of rendering
+    a broken or substituted code. Scanning the code never bypasses the app's
+    ordinary viewer authentication and current access policy.
+23. Every authenticated dashboard, including the deployer-only owned-app
+    overview, renders a labelled ordinary `POST /logout` form named `Sign out
+    of TinyHost` in the persistent top bar. It carries the fresh
+    server-rendered CSRF value and revokes the global browser identity family
+    plus every derived app session before cookies are cleared or the browser is
+    redirected to sign-in. Missing revocation capability, persistence failure,
+    anonymous state, or a cross-origin/CSRF failure leaves cookies intact and
+    renders a safe server error; global sign-out never revokes a CLI/agent
+    bearer. App-host local logout is distinctly labelled `Sign out of this app`
+    and revokes only that app session.
+24. A non-operator deployer's dashboard is a compact, server-derived list of
+    only that deployer's owned app cards. It may show stable launch links and
+    current durable summary metadata, but it omits policy, token, release,
+    suspension, deletion, provider, audit, health-management, and deployer
+    management controls rather than rendering disabled or unauthorized forms.
+    Those management operations remain available through the scoped Tiny CLI.
+    A failed app read model renders a visible unavailable state and never
+    substitutes an empty owned-app list.
 
 ## Accessibility contract
 
@@ -235,6 +265,9 @@ Before a styled happy path is accepted, tests must prove:
 - Dialogs use the native `dialog` element, have a programmatic title, expose a
   visible close action, close with Escape, and return focus through the
   browser's native modal behavior.
+- Quick-navigation QR dialogs include the destination as visible,
+  overflow-safe text, explain that normal sign-in still applies, and keep at
+  least the standard four-module quiet zone around the code.
 - Expandable cards use native `details` and `summary`, so disclosure remains
   keyboard-operable without JavaScript.
 - Page landmarks, heading order, table headers, and native button/link

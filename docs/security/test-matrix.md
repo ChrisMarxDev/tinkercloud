@@ -38,7 +38,7 @@ cannot observe or mutate B by:
 
 Test:
 
-- exact platform host;
+- exact derived admin host;
 - exact one-label app host;
 - uppercase and trailing-dot input;
 - host with port;

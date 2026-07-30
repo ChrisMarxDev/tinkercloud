@@ -50,7 +50,7 @@ func (p pipeListener) Close() error              { return p.Conn.Close() }
 func (p pipeListener) Addr() net.Addr            { return p.Conn.LocalAddr() }
 
 func initArgs(root string) []string {
-	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinyhost.env"), "--platform-host", "tiny.example.test", "--app-suffix", "apps.tiny.example.test", "--operator-email", "operator@example.test", "--email-from", "operator@example.test", "--acme-email", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--resend-api-key-file", filepath.Join(root, "resend"), "--hmac-key-file", filepath.Join(root, "hmac")}
+	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinyhost.env"), "--domain", "apps.tiny.example.test", "--operator-email", "operator@example.test", "--email-from", "operator@example.test", "--acme-email", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--resend-api-key-file", filepath.Join(root, "resend"), "--hmac-key-file", filepath.Join(root, "hmac")}
 }
 
 func TestSupportedUbuntuHostDenyCharter(t *testing.T) {

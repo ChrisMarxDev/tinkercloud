@@ -34,6 +34,46 @@
     return document.querySelector("[data-tiny-toast-region]");
   }
 
+  function initializeQRCodes() {
+    var size = 57;
+    var quiet = 4;
+    var scale = 10;
+    var codes = document.querySelectorAll("canvas[data-tiny-qr]");
+    codes.forEach(function (canvas) {
+      var encoded = canvas.getAttribute("data-tiny-qr");
+      var binary;
+      try {
+        binary = window.atob(encoded || "");
+      } catch (_) {
+        return;
+      }
+      if (binary.length !== Math.ceil(size * size / 8)) {
+        return;
+      }
+      var context = canvas.getContext("2d");
+      if (!context) {
+        return;
+      }
+      var style = window.getComputedStyle(canvas);
+      var ink = style.getPropertyValue("--tiny-qr-ink").trim() || "#000000";
+      var surface = style.getPropertyValue("--tiny-qr-surface").trim() || "#ffffff";
+      canvas.width = (size + quiet * 2) * scale;
+      canvas.height = canvas.width;
+      context.imageSmoothingEnabled = false;
+      context.fillStyle = surface;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = ink;
+      for (var index = 0; index < size * size; index++) {
+        var value = binary.charCodeAt(index >> 3);
+        if (value & (1 << (7 - (index & 7)))) {
+          var x = index % size;
+          var y = Math.floor(index / size);
+          context.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+        }
+      }
+    });
+  }
+
   function initializeAppFilters() {
     var filters = document.querySelectorAll("[data-tiny-app-filter]");
     filters.forEach(function (filter) {
@@ -328,6 +368,7 @@
     }
   }, true);
 
+  initializeQRCodes();
   initializeAppFilters();
 
   window.TinyUI = Object.freeze({

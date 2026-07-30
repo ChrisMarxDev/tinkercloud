@@ -38,7 +38,7 @@ func TestProtectedStaticPathDeniesBeforeReleaseRead(t *testing.T) {
 	}
 	appsRepo := apps.NewMemoryRepository(apps.App{ID: "app_a", Slug: "alpha", OwnerIdentityID: "idn_owner", ReleaseRoot: root, ReleaseEvidence: evidence, Status: apps.Active, SPAFallback: true})
 	policiesStore := &policies.MemoryStore{Policies: map[string]policies.Policy{"app_a": {AppID: "app_a", OwnerIdentityID: "idn_owner", Revision: 1, Emails: map[string]struct{}{viewer.Email: {}}, Valid: true}}}
-	h := gateway.Gateway{Config: config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: "__Host-tiny_app"}, Apps: appsRepo, Authorizer: appauth.Authorizer{Sessions: store, Policies: policiesStore}}
+	h := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test", SessionCookie: "__Host-tiny_app"}, Apps: appsRepo, Authorizer: appauth.Authorizer{Sessions: store, Policies: policiesStore}}
 	inspections := 0
 	restore := staticruntime.SetInspectorForTest(func(path string) (releases.FileManifest, error) {
 		inspections++
@@ -75,7 +75,7 @@ func TestProtectedStaticPathDeniesBeforeReleaseRead(t *testing.T) {
 		}
 	}
 	// Route classification and authorization are both release-file-free. This
-	// includes login/OTP routes, reserved routes, anonymous static, and a
+	// includes broker-handoff routes, retired direct-OTP routes, reserved routes, anonymous static, and a
 	// cross-app session. Only a sealed context may trigger inspection.
 	for _, p := range []string{"/_tiny/auth/login", "/_tiny/auth/otp", "/_tiny/auth/verify", "/_tiny/auth/logout", "/_tiny/auth/callback", "/_tiny/not-a-route"} {
 		method := http.MethodGet
@@ -163,7 +163,7 @@ func readBody(t *testing.T, r *http.Response) string {
 	return string(b)
 }
 func TestHostClassificationFailsClosed(t *testing.T) {
-	cfg := config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}
+	cfg := config.Config{Domain: "apps.tiny.test"}
 	for _, raw := range []string{"alpha.apps.tiny.test", "ALPHA.APPS.TINY.TEST.", "alpha.apps.tiny.test:443"} {
 		h, ok := gateway.ClassifyHost(raw, cfg)
 		if !ok || h.Kind != gateway.App || h.Slug != "alpha" {
@@ -175,15 +175,34 @@ func TestHostClassificationFailsClosed(t *testing.T) {
 			t.Fatalf("accepted malformed %q", raw)
 		}
 	}
+	for _, raw := range []string{"docs.apps.tiny.test", "auth.apps.tiny.test", "status.apps.tiny.test"} {
+		if _, ok := gateway.ClassifyHost(raw, cfg); ok {
+			t.Fatalf("accepted reserved app hostname %q", raw)
+		}
+	}
+	for _, raw := range []string{"admin.apps.tiny.test", "ADMIN.APPS.TINY.TEST"} {
+		h, ok := gateway.ClassifyHost(raw, cfg)
+		if !ok || h.Kind != gateway.Platform {
+			t.Fatalf("admin host was not classified as the platform: %q", raw)
+		}
+	}
 	if h, ok := gateway.ClassifyHost("alpha.apps.tiny.test.evil", cfg); !ok || h.Kind != gateway.Unknown {
 		t.Fatal("suffix trick must be an unknown host")
 	}
 }
 func TestRouteRegistryCoversClasses(t *testing.T) {
 	r := gateway.Registry()
-	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppOTPRequest, gateway.AppOTPVerify, gateway.AppLogout, gateway.AppIdentityCallback, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Collections, gateway.Blobs, gateway.Live, gateway.ProtectedStatic} {
+	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppLogout, gateway.AppIdentityCallback, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Collections, gateway.Blobs, gateway.Live, gateway.ProtectedStatic} {
 		if r[class] == "" {
 			t.Fatalf("route class %d missing", class)
+		}
+	}
+}
+
+func TestDirectAppOTPPathsAreReserved(t *testing.T) {
+	for _, p := range []string{"/_tiny/auth/otp", "/_tiny/auth/verify"} {
+		if got := gateway.ClassifyRoute(http.MethodPost, p); got != gateway.Reserved {
+			t.Fatalf("retired direct app OTP path %q classified as %v, want reserved", p, got)
 		}
 	}
 }
@@ -201,7 +220,7 @@ func TestReturnPathRejectsCrossHostAndControlInput(t *testing.T) {
 
 func TestAnonymousDocumentNavigationRedirectsOnlyProtectedStatic(t *testing.T) {
 	h := gateway.Gateway{
-		Config: config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: sessions.AppCookieName},
+		Config: config.Config{Domain: "apps.tiny.test", SessionCookie: sessions.AppCookieName},
 		Apps:   apps.NewMemoryRepository(apps.App{ID: "app_a", Slug: "alpha", Status: apps.Active}),
 	}
 	request := func(method, path, dest, accept string) *httptest.ResponseRecorder {

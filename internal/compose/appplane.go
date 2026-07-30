@@ -17,20 +17,20 @@ import (
 )
 
 // AppPlane composes the only app ingress; it never exposes a second handler.
-func AppPlane(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, hub *live.Hub, login Login) http.Handler {
+func AppPlane(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, hub *live.Hub, login Login) http.Handler {
 	return AppPlaneWithPlatform(cfg, appsRepo, sessions, policy, repo, hub, login, nil)
 }
-func AppPlaneWithPlatform(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
+func AppPlaneWithPlatform(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
 	return AppPlaneWithPlatformAndBlobs(cfg, appsRepo, sessions, policy, repo, nil, hub, login, platform)
 }
-func AppPlaneWithPlatformAndBlobs(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
+func AppPlaneWithPlatformAndBlobs(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
 	return AppPlaneWithPlatformAndBlobsAndCollections(cfg, appsRepo, sessions, policy, repo, blobs, nil, hub, login, platform)
 }
-func AppPlaneWithPlatformAndBlobsAndCollections(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
+func AppPlaneWithPlatformAndBlobsAndCollections(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler) http.Handler {
 	return AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg, appsRepo, sessions, policy, repo, blobs, documents, hub, login, platform, nil)
 }
-func AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg config.Config, appsRepo apps.Repository, sessions SessionIssuerValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler, llmService *llm.Service) http.Handler {
-	// The broker owns only its fixed platform-host namespace and delegates every
+func AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler, llmService *llm.Service) http.Handler {
+	// The broker owns only its fixed admin-host namespace and delegates every
 	// control/dashboard route to the existing platform handler. Its interface is
 	// deliberately independent from the gateway's app authorization context.
 	if login.IdentityBroker != nil && platform != nil {

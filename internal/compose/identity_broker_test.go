@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tinyhost/tiny/internal/apps"
+	"github.com/tinyhost/tiny/internal/browseridentity"
 	"github.com/tinyhost/tiny/internal/gateway"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/otp"
@@ -28,7 +29,7 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	store := newBrokerStore(now)
 	var closed []persistence.AppSessionRef
 	b := &IdentityBroker{
-		Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test",
+		Store: store, Domain: "apps.tiny.test",
 		Now: func() time.Time { return now }, AppSessionTTL: time.Hour,
 		RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) },
 	}
@@ -37,6 +38,7 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	alpha := apps.App{ID: "app-alpha", Slug: "alpha"}
 	beta := apps.App{ID: "app-beta", Slug: "beta"}
 	denied := apps.App{ID: "app-denied", Slug: "denied"}
+	const preservedReturn = "/projects/42?tag=a&tag=b&next=%2Ffoo%3Fx%3D1"
 
 	start := func(app apps.App, ret string) (*http.Cookie, string) {
 		w := httptest.NewRecorder()
@@ -59,7 +61,7 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 		r.Host = app.Slug + ".apps.tiny.test"
 		r.AddCookie(state)
 		login.DispatchPreAuth(app, gateway.AppIdentityCallback, w, r)
-		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/report?tab=1" {
+		if w.Code != http.StatusSeeOther || w.Header().Get("Location") != preservedReturn {
 			t.Fatalf("%s callback status=%d location=%q", app.Slug, w.Code, w.Header().Get("Location"))
 		}
 		for _, c := range w.Result().Cookies() {
@@ -71,7 +73,10 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 		return nil
 	}
 
-	alphaState, alphaHandoff := start(alpha, "/report?tab=1")
+	// The handoff retains the full same-host path and query exactly, including
+	// repeated and percent-encoded values. A fragment is browser-local and is
+	// intentionally not server-guaranteed.
+	alphaState, alphaHandoff := start(alpha, preservedReturn+"#browser-only")
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(alphaHandoff), nil)
 	r.Host = "tiny.test"
@@ -113,7 +118,7 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 		t.Fatal("missing alpha app cookie")
 	}
 
-	betaState, betaHandoff := start(beta, "/report?tab=1")
+	betaState, betaHandoff := start(beta, preservedReturn)
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(betaHandoff), nil)
 	r.Host = "tiny.test"
@@ -170,10 +175,106 @@ func TestIdentityBrokerReusesOneGlobalOTPAcrossApps(t *testing.T) {
 	}
 }
 
+func TestIdentityBrokerPlatformLoginIssuesTheSameIdentityUsedForAppHandoffs(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	store := newBrokerStore(now)
+	b := IdentityBroker{Store: store, PlatformHost: "admin.apps.tiny.test", AppSuffix: "apps.tiny.test", HMACKey: []byte("test"), Now: func() time.Time { return now }}
+	h := b.PlatformHandler(http.NotFoundHandler())
+
+	page := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/login", nil)
+	r.Host = "admin.apps.tiny.test"
+	h.ServeHTTP(page, r)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Sign in to TinyHost") {
+		t.Fatalf("platform login page status=%d body=%q", page.Code, page.Body.String())
+	}
+	binding := browserBindingCookieFrom(t, page.Result().Cookies())
+	request := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/login", strings.NewReader("email=viewer%40example.test"))
+	r.Host = "admin.apps.tiny.test"
+	r.Header.Set("Origin", "https://admin.apps.tiny.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(binding)
+	h.ServeHTTP(request, r)
+	if request.Code != http.StatusOK || store.platformRequests != 1 || !strings.Contains(request.Body.String(), `name="transaction" value="pid_1"`) {
+		t.Fatalf("platform OTP request status=%d body=%q", request.Code, request.Body.String())
+	}
+	verify := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/login/verify", strings.NewReader("email=viewer%40example.test&transaction=pid_1&code=123456"))
+	r.Host = "admin.apps.tiny.test"
+	r.Header.Set("Origin", "https://admin.apps.tiny.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(binding)
+	h.ServeHTTP(verify, r)
+	if verify.Code != http.StatusSeeOther || verify.Header().Get("Location") != "/dashboard" {
+		t.Fatalf("platform verify status=%d location=%q", verify.Code, verify.Header().Get("Location"))
+	}
+	global := cookieByName(verify.Result().Cookies(), GlobalIdentityCookieName)
+	if global == nil || !global.Secure || !global.HttpOnly || global.Value != "global" {
+		t.Fatalf("global identity cookie=%+v", global)
+	}
+
+	app := apps.App{ID: "app-alpha", Slug: "alpha"}
+	login := Login{IdentityBroker: &b}
+	start := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "https://alpha.apps.tiny.test/_tiny/auth/login?return=/projects/42%3Ftag%3Da%26tag%3Db%26next%3D%252Ffoo%253Fx%253D1", nil)
+	r.Host = "alpha.apps.tiny.test"
+	login.DispatchPreAuth(app, gateway.AppLogin, start, r)
+	u, _ := url.Parse(start.Header().Get("Location"))
+	handoff := u.Query().Get("handoff")
+	appIdentity := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+	r.Host = "admin.apps.tiny.test"
+	r.AddCookie(global)
+	h.ServeHTTP(appIdentity, r)
+	if appIdentity.Code != http.StatusSeeOther || !strings.Contains(appIdentity.Header().Get("Location"), "alpha.apps.tiny.test/_tiny/auth/callback") || store.requests != 0 {
+		t.Fatalf("global app handoff status=%d location=%q appOTPs=%d", appIdentity.Code, appIdentity.Header().Get("Location"), store.requests)
+	}
+}
+
+func TestIdentityBrokerDashboardLogoutRequiresOriginAndCSRFThenRevokesGlobalIdentity(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	store := newBrokerStore(now)
+	closed := 0
+	b := IdentityBroker{Store: store, Now: func() time.Time { return now }, RevokeChildren: func([]persistence.AppSessionRef) { closed++ }}
+	h := b.PlatformHandler(http.NotFoundHandler())
+	csrf := &http.Cookie{Name: browseridentity.CSRFCookieName, Value: "gis_test.csrf-value"}
+	identityCookie := &http.Cookie{Name: GlobalIdentityCookieName, Value: "global"}
+	for _, tc := range []struct {
+		name, origin string
+		want         int
+	}{
+		{"missing-origin", "", http.StatusForbidden},
+		{"cross-origin", "https://evil.test", http.StatusForbidden},
+		{"same-origin", "https://admin.apps.tiny.test", http.StatusSeeOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "https://admin.apps.tiny.test/logout", strings.NewReader("csrf=gis_test.csrf-value"))
+			r.Host = "admin.apps.tiny.test"
+			if tc.origin != "" {
+				r.Header.Set("Origin", tc.origin)
+			}
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			r.AddCookie(csrf)
+			r.AddCookie(identityCookie)
+			h.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status=%d", w.Code)
+			}
+			if tc.want == http.StatusSeeOther {
+				if w.Header().Get("Location") != "/login" || closed != 1 || !hasExpiredCookie(w.Result().Cookies(), GlobalIdentityCookieName) || !hasExpiredCookie(w.Result().Cookies(), browseridentity.CSRFCookieName) {
+					t.Fatalf("logout location=%q closed=%d cookies=%+v", w.Header().Get("Location"), closed, w.Result().Cookies())
+				}
+			}
+		})
+	}
+}
+
 func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +328,7 @@ func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testin
 func TestIdentityBrokerOTPRejectsMissingOrMismatchedBrowserBinding(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -308,20 +409,43 @@ func TestBrokerStoreBindingGroupsConcurrentDifferentEmails(t *testing.T) {
 }
 
 func TestConfiguredIdentityBrokerFailsClosedInsteadOfLegacyAppLogin(t *testing.T) {
-	l := Login{IdentityBroker: &IdentityBroker{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}}
+	l := Login{IdentityBroker: &IdentityBroker{Domain: "apps.tiny.test"}}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/_tiny/auth/login?return=%2F", nil)
 	r.Host = "alpha.apps.tiny.test"
 	l.DispatchPreAuth(apps.App{ID: "app-alpha", Slug: "alpha"}, gateway.AppLogin, w, r)
-	if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Sign-in needs another try") || strings.Contains(w.Body.String(), `name="email"`) {
+	if w.Code != http.StatusServiceUnavailable || strings.Contains(w.Body.String(), `name="email"`) {
 		t.Fatalf("configured broker fallback status=%d body=%q", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformLoginWithViewerIdentityAndNoDashboardRoleDoesNotLoop(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	store := dashboardDeniedBrokerStore{brokerStore: *newBrokerStore(now)}
+	b := IdentityBroker{Store: &store, Now: func() time.Time { return now }}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tiny.test/login", nil)
+	r.Host = "admin.apps.tiny.test"
+	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
+	b.PlatformHandler(http.NotFoundHandler()).ServeHTTP(w, r)
+	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), "This account cannot use the dashboard.") || !strings.Contains(w.Body.String(), "viewer@example.com") {
+		t.Fatalf("viewer dashboard login looped or disclosed unsafe state: status=%d location=%q body=%q", w.Code, w.Header().Get("Location"), w.Body.String())
+	}
+	var csrf *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == browseridentity.CSRFCookieName {
+			csrf = c
+		}
+	}
+	if csrf == nil || !csrf.HttpOnly || !strings.HasPrefix(csrf.Value, "gis_test.") {
+		t.Fatalf("no-role page did not issue identity-bound CSRF cookie: %#v", csrf)
 	}
 }
 
 func TestIdentityBrokerRotationSetsReplacementPlatformCookie(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +474,7 @@ func TestIdentityBrokerClosesChildrenAfterRotatedTokenReplayRevocation(t *testin
 		t.Fatal(err)
 	}
 	var closed []persistence.AppSessionRef
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }, RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }, RevokeChildren: func(refs []persistence.AppSessionRef) { closed = append(closed, refs...) }}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
 	r.Host = "tiny.test"
@@ -368,7 +492,7 @@ func TestIdentityBrokerInvalidIdentityCookieClearsBeforeGenericReauth(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
 	r.Host = "tiny.test"
@@ -388,7 +512,7 @@ func TestIdentityBrokerIdentityPersistenceFailurePreservesCookieAndDeniesOTP(t *
 		t.Fatal(err)
 	}
 	store := failingValidateBrokerStore{brokerStore: base}
-	b := &IdentityBroker{Store: &store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: &store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/_tiny/identity?handoff="+url.QueryEscape(h.ID), nil)
 	r.Host = "tiny.test"
@@ -402,7 +526,7 @@ func TestIdentityBrokerIdentityPersistenceFailurePreservesCookieAndDeniesOTP(t *
 func TestIdentityBrokerOTPPostRequiresExactPlatformOrigin(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", Now: func() time.Time { return now }}
 	h, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -442,7 +566,7 @@ func TestIdentityBrokerHandoffCreationIsSeparatelyRateLimited(t *testing.T) {
 	})
 	limits.SetClock(func() time.Time { return now })
 	store := newBrokerStore(now)
-	b := &IdentityBroker{Store: store, PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", RateLimits: limits, Now: func() time.Time { return now }}
+	b := &IdentityBroker{Store: store, Domain: "apps.tiny.test", RateLimits: limits, Now: func() time.Time { return now }}
 	login := Login{IdentityBroker: b}
 	for attempt := 0; attempt < 2; attempt++ {
 		w := httptest.NewRecorder()
@@ -453,7 +577,7 @@ func TestIdentityBrokerHandoffCreationIsSeparatelyRateLimited(t *testing.T) {
 		if attempt == 0 && w.Code != http.StatusSeeOther {
 			t.Fatalf("first handoff status=%d", w.Code)
 		}
-		if attempt == 1 && (w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "Sign-in needs another try")) {
+		if attempt == 1 && w.Code != http.StatusServiceUnavailable {
 			t.Fatalf("limited handoff status=%d body=%q", w.Code, w.Body.String())
 		}
 	}
@@ -634,18 +758,46 @@ func hasCookie(cookies []*http.Cookie, name string) bool {
 	return false
 }
 
-type brokerStore struct {
-	mu                sync.Mutex
-	now               time.Time
-	handoffs          map[string]persistence.IdentityHandoff
-	states            map[string]string
-	bindings          map[string]string
-	completedBindings map[string]string
-	requests          int
+func cookieByName(cookies []*http.Cookie, name string) *http.Cookie {
+	for _, c := range cookies {
+		if c.Name == name {
+			return c
+		}
+	}
+	return nil
 }
 
+func hasExpiredCookie(cookies []*http.Cookie, name string) bool {
+	for _, c := range cookies {
+		if c.Name == name && c.MaxAge < 0 {
+			return true
+		}
+	}
+	return false
+}
+
+type brokerStore struct {
+	mu                 sync.Mutex
+	now                time.Time
+	handoffs           map[string]persistence.IdentityHandoff
+	states             map[string]string
+	bindings           map[string]string
+	completedBindings  map[string]string
+	requests           int
+	platformRequests   int
+	platformChallenges map[string]brokerPlatformChallenge
+}
+
+type dashboardDeniedBrokerStore struct{ brokerStore }
+
+func (*dashboardDeniedBrokerStore) AuthenticateDashboardIdentity(context.Context, string, time.Time) (persistence.DashboardIdentityResult, error) {
+	return persistence.DashboardIdentityResult{}, persistence.ErrIdentity
+}
+
+type brokerPlatformChallenge struct{ binding, email string }
+
 func newBrokerStore(now time.Time) *brokerStore {
-	return &brokerStore{now: now, handoffs: map[string]persistence.IdentityHandoff{}, states: map[string]string{}, bindings: map[string]string{}, completedBindings: map[string]string{}}
+	return &brokerStore{now: now, handoffs: map[string]persistence.IdentityHandoff{}, states: map[string]string{}, bindings: map[string]string{}, completedBindings: map[string]string{}, platformChallenges: map[string]brokerPlatformChallenge{}}
 }
 func (s *brokerStore) CreateIdentityHandoff(_ context.Context, app, ret string, force bool, now time.Time) (persistence.IdentityHandoff, string, error) {
 	id := "ih_" + string(rune('a'+len(s.handoffs)))
@@ -683,7 +835,7 @@ func (s *brokerStore) ValidateIdentitySession(_ context.Context, raw string, _ t
 	if raw == "rotate" {
 		replacement = "global"
 	}
-	return persistence.IdentityValidationResult{Session: persistence.IdentitySession{Identity: identity.Identity{ID: "viewer@example.com", Email: "viewer@example.com"}, ExpiresAt: s.now.Add(time.Hour)}, ReplacementToken: replacement}, nil
+	return persistence.IdentityValidationResult{Session: persistence.IdentitySession{ID: "gis_test", Identity: identity.Identity{ID: "viewer@example.com", Email: "viewer@example.com"}, ExpiresAt: s.now.Add(time.Hour)}, ReplacementToken: replacement}, nil
 }
 func (s *brokerStore) AuthorizeIdentityHandoff(_ context.Context, id, raw string, _ time.Time) (persistence.IdentityHandoff, persistence.IdentitySession, error) {
 	h, e := s.GetIdentityHandoff(context.Background(), id, time.Time{})
@@ -754,6 +906,28 @@ func (s *brokerStore) RevokeIdentityBrowserBinding(_ context.Context, raw string
 		return nil, persistence.ErrIdentity
 	}
 	return []persistence.AppSessionRef{{AppID: "app-alpha", SessionID: "s-alpha"}}, nil
+}
+
+func (s *brokerStore) RequestPlatformIdentityOTP(_ context.Context, binding, email, _ string, _ []byte, _ time.Time, _ time.Duration) (*persistence.PlatformIdentityChallenge, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if binding == "" || email == "" {
+		return nil, errors.New("denied")
+	}
+	s.platformRequests++
+	id := "pid_" + string(rune('0'+s.platformRequests))
+	s.platformChallenges[id] = brokerPlatformChallenge{binding: binding, email: email}
+	return &persistence.PlatformIdentityChallenge{ID: id, Code: "123456", Email: email}, nil
+}
+
+func (s *brokerStore) VerifyPlatformIdentityOTP(_ context.Context, binding, email, tx, code, _ string, _ bool, _ []byte, _ time.Time, _ int) (persistence.IdentityOTPResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.platformChallenges[tx]
+	if !ok || c.binding != binding || c.email != email || code != "123456" {
+		return persistence.IdentityOTPResult{}, errors.New("denied")
+	}
+	return persistence.IdentityOTPResult{Token: "global", Session: persistence.IdentitySession{Identity: identity.Identity{ID: email, Email: email}, ExpiresAt: s.now.Add(time.Hour)}}, nil
 }
 
 var _ identityOutbox = noopBrokerOutbox{}

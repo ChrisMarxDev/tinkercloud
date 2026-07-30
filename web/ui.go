@@ -25,6 +25,7 @@ func FuncMap() template.FuncMap {
 		"tinyCSS":  func() template.CSS { return template.CSS(stylesheet) },
 		"tinyJS":   func() template.JS { return template.JS(interactions) },
 		"tinyMark": func() template.HTML { return template.HTML(cloudMark) },
+		"tinyQR":   qrCodeData,
 	}
 }
 

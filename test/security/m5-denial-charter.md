@@ -19,8 +19,8 @@ errors, and provider failures must not disclose keys, credential paths,
 references, or provider response bodies.
 
 Init must not mark a host ready merely because a public URL answers. Its
-derived platform probe permits only verified HTTPS at
-`https://{platform_host}/api/v1/version`, with no redirect, the final configured
+derived admin probe permits only verified HTTPS at
+`https://admin.{domain}/api/v1/version`, with no redirect, the final configured
 host, `200`, `application/json`, bounded exact `{"api_version":1}` evidence,
 and `no-store`/`nosniff` gateway headers. Reject 401, 404, 5xx, arbitrary 2xx
 or HTML, malformed/oversized or duplicate-key JSON, wrong version, redirect,
@@ -66,19 +66,15 @@ single-session revoke survives restart and never revokes the sibling sessions;
 wrong-app and expired credentials deny throughout. Tests may compare only
 redacted values and persisted hashes, never raw credential values.
 
-Control authentication uses three server-owned credential types: browser
-control sessions, CLI bearer tokens, and app viewer sessions. A control OTP
-challenge is durably bound to the server-selected browser or CLI channel before
-delivery. A channel mismatch, legacy challenge without a channel, browser
-session used as bearer, CLI bearer used as a control cookie, or app session used
-on either control surface denies without issuing, authenticating, or recording
-credential-use state. Root recovery revokes both operator bearer tokens and
-control sessions before a new operator becomes active. Upgrade migration
-evidence proves existing databases gain the control-channel column while old
-unbound challenges fail closed. Because old `api_tokens` cannot be classified
-as browser or CLI credentials, the follow-on migration revokes all of them;
-pre-upgrade bearer values deny while a freshly issued post-migration CLI token
-remains valid, and rerunning the migration engine never revives a token.
+Control authentication uses one global browser identity with current dashboard
+role checks, separate CLI bearers, and app-local child sessions. A browser
+identity challenge cannot mint a CLI bearer; a CLI challenge cannot mint a
+browser identity. Browser/app cookies used as bearers, or bearers used as
+cookies, deny without issuing, authenticating, or recording credential-use
+state. Root recovery revokes affected operator bearers and global identity
+families before a new operator becomes active. Migration evidence proves old
+dashboard control-session rows are removed and cannot authenticate or be
+reissued; rerunning the migration engine never revives them.
 
 The packaged and generated systemd units are a privilege boundary: tests reject
 root execution, missing `NoNewPrivileges`, any ambient or bounding capability

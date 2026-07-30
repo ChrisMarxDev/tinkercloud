@@ -53,10 +53,10 @@ the control-plane mark, stylesheet, or chrome.
 - Keep authentication, authorization, confirmation, CSRF, ownership, and
   mutation on typed server paths. Browser state and animation are never
   security controls.
-- Global viewer identity/handoff pages use the existing auth card, native form,
+- Global browser identity/handoff pages use the existing auth card, native form,
   and text-bearing notice primitives. Do not create an account picker,
   browser-held identity state, or app-visible control. “Use another email” is
-  a platform-host POST verification flow whose copy says it signs app sessions
+  an admin-host POST verification flow whose copy says it signs app sessions
   out. Keep it visibly distinct from app-host “Sign out of this app”; generic
   denied and handoff states reveal no policy membership, callback state, or app
   bytes.
@@ -68,6 +68,12 @@ the control-plane mark, stylesheet, or chrome.
   items. Hide controls until initialization, leave every item visible without
   JavaScript, use labelled native controls plus a polite result count, and do
   not fetch, persist, or use filtering as authorization.
+- For app-card phone navigation, derive the QR code only from the same
+  server-rendered stable gateway URL as the launch link. Generate it locally,
+  keep the destination visible in the native dialog, state that app sign-in
+  still applies, and omit the action on encoding failure; never call a remote
+  QR service or encode a release path, credential, session, or app-selected
+  identity.
 - After a successful irreversible app deletion, the redirected operational
   dashboard's server read model excludes the app from its list, local
   search/filter inputs and results, and visible count because confirmed
@@ -81,14 +87,29 @@ the control-plane mark, stylesheet, or chrome.
   broadening checkbox. State that removed emails are signed out and cannot
   deploy; keep revision, authorization, collision, idempotency, audit, CSRF,
   and origin checks on the typed server path.
-- Operator-managed external-capability credentials use native password fields
-  and are strictly write-only: do not add a reveal, value echo, recovery, or
-  provider-URL display. Connection/profile IDs are server-generated, so create
-  forms never ask for one. For credential rotation, omit a provider select and
-  derive the provider server-side from the existing connection. App capability
-  grant forms are nested under the server-rendered app target; revision fields
-  protect profile/grant changes, and disable/revoke actions show an exact-target
-  confirmation field.
+- A deployer dashboard is a compact, server-derived owned-app overview, not a
+  visually disabled operator dashboard. Render only owned app summaries and
+  stable launch links; omit management forms and every operator surface.
+  Deployer management remains in the scoped Tiny CLI.
+- Render the dashboard `Sign out of TinyHost` action as an ordinary labelled
+  `POST /logout` form in the persistent top bar for every authenticated role.
+  It carries the server-rendered CSRF value and must not clear browser cookies
+  or redirect until the server has durably revoked the global identity family
+  and every derived app session. A failed revocation remains a visible server
+  error; it is never a local-only sign-out and never revokes CLI/agent bearers.
+  App hosts separately label their local action `Sign out of this app`.
+- Operator-managed external-capability credentials live in a distinct
+  operator-only **API keys** section, before capability-specific profiles and
+  grants. Initial fixed-provider creation asks only for provider and one native
+  write-only password field; do not add a display-name, ID, URL, arbitrary-key,
+  reveal, value echo, recovery, or provider-URL display. The service derives
+  labels and connection/profile IDs server-side. If the server has no ready
+  credential boundary, render the root-only enable-and-restart next step and no
+  credential mutation forms or root detail. For credential rotation, omit a
+  provider select and derive the provider server-side from the existing
+  connection. App capability grant forms are nested under the server-rendered
+  app target; revision fields protect profile/grant changes, and disable/revoke
+  actions show an exact-target confirmation field.
 - Escape user-controlled text through `html/template`. Never introduce unsafe
   HTML injection to make a component convenient.
 - Keep the server self-contained and the dependency surface narrow.

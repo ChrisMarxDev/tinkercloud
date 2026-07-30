@@ -9,7 +9,7 @@ import (
 )
 
 func valid(root string) Config {
-	return Config{PlatformHost: "TINY.TEST.", AppSuffix: ".APPS.TINY.TEST.", SessionCookie: "__Host-tiny_app", ListenHTTP: "127.0.0.1:80", ListenHTTPS: "127.0.0.1:443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "cache"), EmailFrom: "a@test", ACMEEmail: "a@test", ResendAPIKeyRef: "env:R", HMACKeyRef: "env:H", OTPExpiry: time.Minute, SessionExpiry: time.Hour, OTPMaxAttempts: 5}
+	return Config{Domain: ".TINY.TEST.", SessionCookie: "__Host-tiny_app", ListenHTTP: "127.0.0.1:80", ListenHTTPS: "127.0.0.1:443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "cache"), EmailFrom: "a@test", ACMEEmail: "a@test", ResendAPIKeyRef: "env:R", HMACKeyRef: "env:H", OTPExpiry: time.Minute, SessionExpiry: time.Hour, OTPMaxAttempts: 5}
 }
 func TestConfigValidationAndSecrets(t *testing.T) {
 	c := valid(t.TempDir())
@@ -36,11 +36,22 @@ func TestConfigValidationAndSecrets(t *testing.T) {
 func TestLoadCanonical(t *testing.T) {
 	root := t.TempDir()
 	p := filepath.Join(root, "c.yaml")
-	text := "platform_host: TINY.TEST.\napp_suffix: .APPS.TINY.TEST.\nsession_cookie: __Host-tiny_app\nlisten_http: 127.0.0.1:80\nlisten_https: 127.0.0.1:443\ndata_directory: " + filepath.Join(root, "data") + "\nsecret_refs:\n  hmac_key: env:H\nemail:\n  from: a@test\n  resend_api_key: env:R\nacme:\n  email: a@test\n  cache_directory: " + filepath.Join(root, "cache") + "\notp:\n  expiry: 1m\n  max_attempts: 5\nsession:\n  expiry: 1h\n"
+	text := "domain: TINY.TEST.\nsession_cookie: __Host-tiny_app\nlisten_http: 127.0.0.1:80\nlisten_https: 127.0.0.1:443\ndata_directory: " + filepath.Join(root, "data") + "\nsecret_refs:\n  hmac_key: env:H\nemail:\n  from: a@test\n  resend_api_key: env:R\nacme:\n  email: a@test\n  cache_directory: " + filepath.Join(root, "cache") + "\notp:\n  expiry: 1m\n  max_attempts: 5\nsession:\n  expiry: 1h\n"
 	os.WriteFile(p, []byte(text), 0600)
 	c, e := LoadYAML(p)
-	if e != nil || c.PlatformHost != "tiny.test" || c.AppSuffix != "apps.tiny.test" {
+	if e != nil || c.Domain != "tiny.test" || c.PlatformHost() != "admin.tiny.test" || c.AppSuffix() != "tiny.test" {
 		t.Fatal(c, e)
+	}
+}
+
+func TestConfigRejectsSplitAndUnsafeDomains(t *testing.T) {
+	root := t.TempDir()
+	for _, domain := range []string{"", "localhost", "127.0.0.1", "*.tiny.test", "admin@tiny.test", "-tiny.test", "tiny..test", "tïny.test"} {
+		c := valid(root)
+		c.Domain = domain
+		if c.Validate() == nil {
+			t.Fatalf("unsafe domain accepted: %q", domain)
+		}
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/client"
 	"github.com/tinyhost/tiny/internal/releases"
 )
 
@@ -35,7 +36,7 @@ func configEnv(t *testing.T) map[string]string {
 	if err := os.WriteFile(key, []byte("re_test\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINYHOST_VPS_PLATFORM_HOST": "tiny.example.test", "TINYHOST_VPS_APP_SUFFIX": "apps.example.test", "TINYHOST_VPS_OPERATOR_EMAIL": "operator@example.test", "TINYHOST_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINYHOST_VPS_VIEWER_EMAIL": "viewer@example.test", "TINYHOST_VPS_EMAIL_FROM": "tiny@example.test", "TINYHOST_VPS_ACME_EMAIL": "admin@example.test", "TINYHOST_VPS_RESEND_API_KEY_FILE": key}
+	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINYHOST_VPS_DOMAIN": "example.test", "TINYHOST_VPS_OPERATOR_EMAIL": "operator@example.test", "TINYHOST_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINYHOST_VPS_VIEWER_EMAIL": "viewer@example.test", "TINYHOST_VPS_EMAIL_FROM": "tiny@example.test", "TINYHOST_VPS_ACME_EMAIL": "admin@example.test", "TINYHOST_VPS_RESEND_API_KEY_FILE": key}
 }
 func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 	v := configEnv(t)
@@ -123,30 +124,42 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 	}
 }
 
+func TestConfigRequiresOneCanonicalRootDomain(t *testing.T) {
+	v := configEnv(t)
+	v["TINYHOST_VPS_DOMAIN"] = "Admin.Example.Test"
+	if _, err := LoadConfig(env(v)); err == nil {
+		t.Fatal("non-canonical root domain accepted")
+	}
+	v["TINYHOST_VPS_DOMAIN"] = "admin.example.test"
+	if _, err := LoadConfig(env(v)); err != nil {
+		t.Fatalf("canonical root domain rejected: %v", err)
+	}
+}
+
 func TestGlobalIdentityHandoffCallbackIsExact(t *testing.T) {
 	const handoff = "handoff_opaque"
-	if !isAppHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, handoff) {
+	if !isAppHandoffCallback("https://alpha.example.test/_tiny/auth/callback?handoff="+handoff, handoff) {
 		t.Fatal("valid opaque callback rejected")
 	}
 	for _, raw := range []string{
 		"/_tiny/auth/callback?handoff=" + handoff,
-		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&return=https://evil.example",
-		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
-		"https://alpha.apps.example.test/_tiny/auth/login?handoff=" + handoff,
+		"https://alpha.example.test/_tiny/auth/callback?handoff=" + handoff + "&return=https://evil.example",
+		"https://alpha.example.test/_tiny/auth/callback?handoff=other",
+		"https://alpha.example.test/_tiny/auth/login?handoff=" + handoff,
 	} {
 		if isAppHandoffCallback(raw, handoff) {
 			t.Fatalf("accepted unsafe generic callback %q", raw)
 		}
 	}
-	if !isExactHandoffCallback("https://alpha.apps.example.test/_tiny/auth/callback?handoff="+handoff, "alpha.apps.example.test", handoff) {
+	if !isExactHandoffCallback("https://alpha.example.test/_tiny/auth/callback?handoff="+handoff, "alpha.example.test", handoff) {
 		t.Fatal("exact callback rejected")
 	}
 	for _, raw := range []string{
-		"https://beta.apps.example.test/_tiny/auth/callback?handoff=" + handoff,
-		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=" + handoff + "&x=1",
-		"https://alpha.apps.example.test/_tiny/auth/callback?handoff=other",
+		"https://beta.example.test/_tiny/auth/callback?handoff=" + handoff,
+		"https://alpha.example.test/_tiny/auth/callback?handoff=" + handoff + "&x=1",
+		"https://alpha.example.test/_tiny/auth/callback?handoff=other",
 	} {
-		if isExactHandoffCallback(raw, "alpha.apps.example.test", handoff) {
+		if isExactHandoffCallback(raw, "alpha.example.test", handoff) {
 			t.Fatalf("accepted wrong-app or malformed callback %q", raw)
 		}
 	}
@@ -157,9 +170,9 @@ func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	platform, _ := url.Parse("https://tiny.example.test/")
-	first, _ := url.Parse("https://first.apps.example.test/")
-	second, _ := url.Parse("https://second.apps.example.test/")
+	platform, _ := url.Parse("https://admin.example.test/")
+	first, _ := url.Parse("https://first.example.test/")
+	second, _ := url.Parse("https://second.example.test/")
 	jar.SetCookies(platform, []*http.Cookie{
 		{Name: "__Host-tiny_identity", Value: "identity", Path: "/", Secure: true},
 		{Name: "__Host-tiny_browser", Value: "browser-profile", Path: "/", Secure: true},
@@ -170,21 +183,21 @@ func TestCookieScopeAssertionsRequirePlatformAndPerAppCookies(t *testing.T) {
 	})
 	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "second", Path: "/", Secure: true}})
 	h := &http.Client{Jar: jar}
-	s := Suite{Config: Config{PlatformHost: "tiny.example.test"}}
-	if err := s.assertCookieScopes(h, "first.apps.example.test", ""); err != nil {
+	s := Suite{Config: Config{Domain: "example.test"}}
+	if err := s.assertCookieScopes(h, "first.example.test", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err != nil {
+	if err := assertDistinctAppCookies(h, "first.example.test", "second.example.test"); err != nil {
 		t.Fatal(err)
 	}
-	if state, ok := identityStateCookie(h, "first.apps.example.test"); !ok || state != "state" {
+	if state, ok := identityStateCookie(h, "first.example.test"); !ok || state != "state" {
 		t.Fatal("app-host handoff state was not retained for replay evidence")
 	}
 	if !hasCookie(jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(jar.Cookies(first), "__Host-tiny_browser") || hasCookie(jar.Cookies(second), "__Host-tiny_browser") {
 		t.Fatal("platform browser binding was not retained as an exact-host cookie")
 	}
 	jar.SetCookies(second, []*http.Cookie{{Name: "__Host-tiny_app", Value: "first", Path: "/", Secure: true}})
-	if err := assertDistinctAppCookies(h, "first.apps.example.test", "second.apps.example.test"); err == nil {
+	if err := assertDistinctAppCookies(h, "first.example.test", "second.example.test"); err == nil {
 		t.Fatal("accepted shared app token across app hosts")
 	}
 }
@@ -268,7 +281,7 @@ func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
 		waits++
 		return nil
 	}}
-	argv := []string{"/usr/local/bin/tinyhost", "init", "--non-interactive", "--platform-host", "tiny.example.test"}
+	argv := []string{"/usr/local/bin/tinyhost", "init", "--non-interactive", "--domain", "example.test"}
 	if err := s.initWithReadinessRetry(context.Background(), argv...); err != nil {
 		t.Fatal(err)
 	}
@@ -358,6 +371,77 @@ func TestCleanGuardRejectsExistingHostAndReuseIsExplicit(t *testing.T) {
 	}
 	if len(f.got) != 2 || !strings.Contains(strings.Join(f.got[1], " "), "cat") {
 		t.Fatal("reuse should verify only its marker before mutation")
+	}
+}
+
+func TestCleanGuardPreservesACMECacheAcrossFreshApplicationState(t *testing.T) {
+	f := &calls{}
+	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: f}
+	if err := s.cleanGuard(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range f.got {
+		if strings.Contains(strings.Join(call, " "), "/var/lib/tinyhost-acme") {
+			t.Fatal("clean application-state guard rejected reusable ACME cache")
+		}
+	}
+}
+
+func TestVPSE2EFixtureSlugsAreStableAndBounded(t *testing.T) {
+	want := []string{
+		"vps-e2e-update-probe",
+		"vps-e2e-primary",
+		"vps-e2e-isolation",
+		"vps-e2e-denied",
+	}
+	if got := vpsFixtureSlugs[:]; !slices.Equal(got, want) {
+		t.Fatalf("fixture slugs = %v, want %v", got, want)
+	}
+}
+
+func TestResetFixtureAppsDeletesOnlyListedOwnedFixtures(t *testing.T) {
+	var deleted, keys []string
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps":
+			// Deliberately out of fixture order and mixed with a non-fixture app:
+			// cleanup must remain bounded to the named, ownership-scoped entries.
+			return jsonResponse(r, http.StatusOK, `[{"slug":"unrelated-app","status":"active"},{"slug":"vps-e2e-denied","status":"active"},{"slug":"vps-e2e-primary","status":"active"}]`), nil
+		case r.Method == http.MethodDelete:
+			deleted = append(deleted, r.URL.Path)
+			key := r.Header.Get("Idempotency-Key")
+			if !strings.HasPrefix(key, "idem_") {
+				t.Fatalf("delete missing fresh idempotency key: %q", key)
+			}
+			keys = append(keys, key)
+			return jsonResponse(r, http.StatusNoContent, ``), nil
+		default:
+			t.Fatalf("unexpected cleanup request %s %s", r.Method, r.URL.Path)
+			return nil, nil
+		}
+	})}
+	c := client.Client{Base: "https://admin.example.test", Token: "fixture-token", HTTP: h}
+	if err := resetFixtureApps(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"/api/v1/apps/vps-e2e-primary", "/api/v1/apps/vps-e2e-denied"}; !slices.Equal(deleted, want) {
+		t.Fatalf("deleted = %v, want %v", deleted, want)
+	}
+	if len(keys) != 2 || keys[0] == keys[1] {
+		t.Fatalf("deletion keys must be present and distinct: %v", keys)
+	}
+}
+
+func TestResetFixtureAppsFailsClosedOnListFailure(t *testing.T) {
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps" {
+			t.Fatalf("cleanup mutated after list failure: %s %s", r.Method, r.URL.Path)
+		}
+		return jsonResponse(r, http.StatusInternalServerError, `failure`), nil
+	})}
+	c := client.Client{Base: "https://admin.example.test", Token: "fixture-token", HTTP: h}
+	if err := resetFixtureApps(context.Background(), c); err == nil {
+		t.Fatal("accepted failed ownership-scoped fixture list")
 	}
 }
 
@@ -496,6 +580,13 @@ func TestHiddenTransactionAndMarkerDenial(t *testing.T) {
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func jsonResponse(r *http.Request, status int, body string) *http.Response {
+	h := make(http.Header)
+	h.Set("Content-Type", "application/json")
+	return &http.Response{StatusCode: status, Header: h, Body: io.NopCloser(strings.NewReader(body)), Request: r}
+}
+
 func denialSuite(status func(string) int, body func(string) string) Suite {
 	return Suite{HTTP: &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: status(r.URL.Path), Body: io.NopCloser(strings.NewReader(body(r.URL.Path))), Header: make(http.Header), Request: r}, nil

@@ -51,7 +51,23 @@ const (
 	restartBlobReadinessBudget   = 45 * time.Second
 	restartBlobInitialDelay      = 500 * time.Millisecond
 	restartBlobMaxDelay          = 5 * time.Second
+
+	// These are the complete, bounded set of fixture app names used by the
+	// external acceptance suite. Their hostnames are intentionally stable: a
+	// valid exact-host certificate is cached after its first issuance, so
+	// repeated clean or reuse runs do not create new ACME names.
+	vpsUpdateProbeSlug  = "vps-e2e-update-probe"
+	vpsPrimaryAppSlug   = "vps-e2e-primary"
+	vpsIsolationAppSlug = "vps-e2e-isolation"
+	vpsDeniedAppSlug    = "vps-e2e-denied"
 )
+
+var vpsFixtureSlugs = [...]string{
+	vpsUpdateProbeSlug,
+	vpsPrimaryAppSlug,
+	vpsIsolationAppSlug,
+	vpsDeniedAppSlug,
+}
 
 var numericCode = regexp.MustCompile(`^[0-9]{4,12}$`)
 var rootTarget = regexp.MustCompile(`^root@(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?|\[[0-9A-Fa-f:]+\])$`)
@@ -63,7 +79,7 @@ var legacyUpdateManifestFlag = regexp.MustCompile(`(?m)^(?:flag provided but not
 // not a shell fragment and no mode disables host-key verification.
 type Config struct {
 	Target, Port, IdentityFile, KnownHosts          string
-	PlatformHost, AppSuffix                         string
+	Domain                                          string
 	OperatorEmail, DeployerEmail, ViewerEmail       string
 	EmailFrom, ACMEEmail, ResendKeyFile, OTPCommand string
 	ReleaseDir                                      string
@@ -79,11 +95,11 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	}
 	c := Config{
 		Target: strings.TrimSpace(getenv(EnvTarget)), Port: strings.TrimSpace(getenv("TINYHOST_VPS_SSH_PORT")), IdentityFile: strings.TrimSpace(getenv("TINYHOST_VPS_SSH_IDENTITY_FILE")), KnownHosts: strings.TrimSpace(getenv(EnvKnownHosts)),
-		PlatformHost: strings.TrimSpace(getenv("TINYHOST_VPS_PLATFORM_HOST")), AppSuffix: strings.TrimSpace(getenv("TINYHOST_VPS_APP_SUFFIX")),
+		Domain:        strings.TrimSpace(getenv("TINYHOST_VPS_DOMAIN")),
 		OperatorEmail: strings.TrimSpace(getenv("TINYHOST_VPS_OPERATOR_EMAIL")), DeployerEmail: strings.TrimSpace(getenv("TINYHOST_VPS_DEPLOYER_EMAIL")), ViewerEmail: strings.TrimSpace(getenv("TINYHOST_VPS_VIEWER_EMAIL")),
 		EmailFrom: strings.TrimSpace(getenv("TINYHOST_VPS_EMAIL_FROM")), ACMEEmail: strings.TrimSpace(getenv("TINYHOST_VPS_ACME_EMAIL")), ResendKeyFile: strings.TrimSpace(getenv("TINYHOST_VPS_RESEND_API_KEY_FILE")), OTPCommand: strings.TrimSpace(getenv("TINYHOST_VPS_OTP_COMMAND")), ReleaseDir: strings.TrimSpace(getenv("TINYHOST_VPS_RELEASE_DIR")), Reuse: getenv("TINYHOST_VPS_REUSE") == "1",
 	}
-	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINYHOST_VPS_PLATFORM_HOST": c.PlatformHost, "TINYHOST_VPS_APP_SUFFIX": c.AppSuffix, "TINYHOST_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINYHOST_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINYHOST_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINYHOST_VPS_EMAIL_FROM": c.EmailFrom, "TINYHOST_VPS_ACME_EMAIL": c.ACMEEmail, "TINYHOST_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
+	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINYHOST_VPS_DOMAIN": c.Domain, "TINYHOST_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINYHOST_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINYHOST_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINYHOST_VPS_EMAIL_FROM": c.EmailFrom, "TINYHOST_VPS_ACME_EMAIL": c.ACMEEmail, "TINYHOST_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
 		if value == "" || strings.ContainsAny(value, "\r\n\x00") {
 			return Config{}, fmt.Errorf("%s is required and must be a single line", name)
 		}
@@ -127,8 +143,8 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if c.Reuse && c.ReleaseDir == "" {
 		return Config{}, errors.New("reuse requires an explicit release directory")
 	}
-	if !dnsName.MatchString(strings.ToLower(c.PlatformHost)) || !dnsName.MatchString(strings.ToLower(c.AppSuffix)) || strings.EqualFold(c.PlatformHost, c.AppSuffix) || strings.HasSuffix(strings.ToLower(c.PlatformHost), "."+strings.ToLower(c.AppSuffix)) {
-		return Config{}, errors.New("platform and app suffix must be distinct DNS names")
+	if c.Domain != strings.ToLower(c.Domain) || !dnsName.MatchString(c.Domain) {
+		return Config{}, errors.New("domain must be a canonical DNS name")
 	}
 	for _, e := range []string{c.OperatorEmail, c.DeployerEmail, c.ViewerEmail, c.EmailFrom, c.ACMEEmail} {
 		if !emailName.MatchString(strings.ToLower(e)) {
@@ -149,6 +165,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	}
 	return c, nil
 }
+
+func (c Config) PlatformHost() string { return "admin." + c.Domain }
+func (c Config) AppSuffix() string    { return c.Domain }
 
 // Runner is injectable so ordinary unit tests never open SSH or SCP.
 type Runner interface {
@@ -331,7 +350,12 @@ func (s *Suite) cleanGuard(ctx context.Context) error {
 		}
 		return nil
 	}
-	for _, p := range []string{"/etc/tinyhost", "/var/lib/tinyhost", "/var/lib/tinyhost-acme", "/usr/local/bin/tinyhost", "/etc/systemd/system/tinyhost.service"} {
+	// The ACME cache is deliberately not application state. A previous
+	// disposable run may leave its account and still-valid certificates at the
+	// fixed cache path so another clean install for the same domain does not
+	// needlessly consume public CA issuance capacity. `tinyhost init` still
+	// applies the normal no-symlink/path checks before trusting that directory.
+	for _, p := range []string{"/etc/tinyhost", "/var/lib/tinyhost", "/usr/local/bin/tinyhost", "/etc/systemd/system/tinyhost.service"} {
 		if err := s.remote(ctx, "test", "!", "-e", p); err != nil {
 			return fmt.Errorf("host is not clean (%s exists); set TINYHOST_VPS_REUSE=1 only for a disposable existing TinyHost host: %w", p, err)
 		}
@@ -339,7 +363,7 @@ func (s *Suite) cleanGuard(ctx context.Context) error {
 	return nil
 }
 func (s *Suite) reuseMarker() string {
-	return "platform=" + s.Config.PlatformHost + "\napp_suffix=" + s.Config.AppSuffix + "\ntarget=" + s.Config.Target + "\n"
+	return "domain=" + s.Config.Domain + "\ntarget=" + s.Config.Target + "\n"
 }
 
 func tempSecret(dir string) (string, error) {
@@ -447,7 +471,7 @@ func (s *Suite) Run(ctx context.Context) error {
 		if err = s.remote(ctx, "/bin/sh", remoteDir+"/packaging/install.sh", remoteDir+"/tinyhost-linux-amd64", remoteDir+"/tinyhost-linux-amd64.metadata.json", remoteDir+"/tinyhost-linux-amd64.signature"); err != nil {
 			return err
 		}
-		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinyhost", "init", "--non-interactive", "--platform-host", s.Config.PlatformHost, "--app-suffix", s.Config.AppSuffix, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--acme-email", s.Config.ACMEEmail, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
+		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinyhost", "init", "--non-interactive", "--domain", s.Config.Domain, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--acme-email", s.Config.ACMEEmail, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
 			return err
 		}
 		if err = s.remote(ctx, "mkdir", "-m", "0700", "/var/lib/tinyhost-vps-e2e"); err != nil {
@@ -612,35 +636,34 @@ var setTerminalEcho = func(ctx context.Context, enabled bool) error {
 }
 
 func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
-	base := "https://" + s.Config.PlatformHost
-	login, err := client.Login(ctx, base, otpPrompt{ctx: ctx, config: s.Config, purpose: "deployer", host: s.Config.PlatformHost})
+	base := "https://" + s.Config.PlatformHost()
+	login, err := client.Login(ctx, base, otpPrompt{ctx: ctx, config: s.Config, purpose: "deployer", host: s.Config.PlatformHost()})
 	if err != nil {
 		return fmt.Errorf("deployer OTP login: %w", err)
 	}
 	c := client.New(base, login.Token)
+	// A previous interrupted acceptance run can leave only this suite's known
+	// fixture apps behind. ListApps is ownership-scoped, so delete exclusively
+	// names returned for this authenticated deployer; never probe or remove any
+	// other app. Each deletion receives a new key because deletion is durable
+	// and a prior invocation may have completed after the client lost its reply.
+	if err := resetFixtureApps(ctx, c); err != nil {
+		return err
+	}
 	// A reused VPS may deliberately be on a pre-blob release. Deploy a legacy
 	// manifest solely to create the updater's active anonymous-denial probe,
 	// then upgrade through the signed health-gated path before any blob feature
 	// is requested or parsed by that old server.
 	if s.Config.Reuse {
-		probeSuffix, e := randomID()
-		if e != nil {
-			return e
+		if _, _, err := s.deploySmokeApp(ctx, c, vpsUpdateProbeSlug, false); err != nil {
+			return fmt.Errorf("deploy legacy update probe: %w", err)
 		}
-		probeSlug := "vps-update-probe-" + probeSuffix
-		if _, _, e = s.deploySmokeApp(ctx, c, probeSlug, false); e != nil {
-			return fmt.Errorf("deploy legacy update probe: %w", e)
-		}
-		if e = s.applyReuseUpdate(ctx, remoteDir, probeSlug); e != nil {
-			return e
+		if err := s.applyReuseUpdate(ctx, remoteDir, vpsUpdateProbeSlug); err != nil {
+			return err
 		}
 	}
-	suffix, err := randomID()
-	if err != nil {
-		return err
-	}
-	slug := "vps-" + suffix
-	appHost, marker, err := s.deploySmokeApp(ctx, c, slug, true)
+	slug := vpsPrimaryAppSlug
+	appHost, marker, err := s.deploySmokeAppWithRedeploy(ctx, c, slug, true)
 	if err != nil {
 		return err
 	}
@@ -650,9 +673,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err = s.anonymousLLMChatDenied(ctx, appHost); err != nil {
 		return err
 	}
-	// The first app signs the browser in through the platform-host identity
-	// broker. It is the only OTP used for the initial cross-app access traversal;
-	// the second allowed app must not need one. A later, explicit account-switch
+	// The dashboard signs the browser in once. Each app later receives only a
+	// server-derived, host-only child session through its handoff; the second
+	// allowed app must not need another OTP. A later, explicit account-switch
 	// security case intentionally verifies a separate viewer-purpose OTP.
 	viewer, blobID, firstCallback, firstState, err := s.firstViewerFlow(ctx, appHost, marker)
 	if err != nil {
@@ -701,7 +724,38 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err := s.appLocalLogoutAndBrokerReopen(ctx, viewer, appHost, secondHost, marker); err != nil {
 		return err
 	}
-	return s.globalIdentityDeniedApp(ctx, c, viewer, appHost, secondHost)
+	deniedHost, err := s.globalIdentityDeniedApp(ctx, c, viewer, appHost, secondHost)
+	if err != nil {
+		return err
+	}
+	return s.dashboardGlobalLogout(ctx, viewer, appHost, secondHost, deniedHost)
+}
+
+// resetFixtureApps removes stale state only for fixture slugs that the
+// authenticated deployer currently owns. It intentionally does not infer
+// anything from absent names, inspect foreign apps, or attempt broad cleanup.
+func resetFixtureApps(ctx context.Context, c client.Client) error {
+	owned, err := c.ListApps(ctx)
+	if err != nil {
+		return fmt.Errorf("list owned fixture apps: %w", err)
+	}
+	present := make(map[string]struct{}, len(owned))
+	for _, app := range owned {
+		present[app.Slug] = struct{}{}
+	}
+	for _, slug := range vpsFixtureSlugs {
+		if _, ok := present[slug]; !ok {
+			continue
+		}
+		key, err := client.IdempotencyKey()
+		if err != nil {
+			return fmt.Errorf("create fixture deletion idempotency key: %w", err)
+		}
+		if err := c.DeleteApp(ctx, slug, key); err != nil {
+			return fmt.Errorf("delete owned fixture app %q: %w", slug, err)
+		}
+	}
+	return nil
 }
 
 // warmCertificate intentionally uses the gateway's pre-auth app route. This
@@ -789,19 +843,16 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 }
 
 func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSlug, firstHost, blobID string, viewer *http.Client) (string, error) {
-	suffix, err := randomID()
-	if err != nil {
-		return "", err
-	}
-	slug := "vps-isolation-" + suffix
+	slug := vpsIsolationAppSlug
 	host, marker, err := s.deploySmokeApp(ctx, c, slug, true)
 	if err != nil {
 		return "", fmt.Errorf("deploy isolation app: %w", err)
 	}
-	// This is deliberately not another OTP flow. The browser already has a
-	// platform-host global identity, so this app must receive only its own
+	// This is deliberately not another OTP flow. The browser already has an
+	// admin-host global identity, so this app must receive only its own
 	// derived, host-only app session after the one-time handoff.
-	if err := s.viewerFlowWithExistingIdentity(ctx, viewer, host, marker); err != nil {
+	const preservedReturn = "/workspace/42?tab=open&tag=first&tag=second&encoded=a%2Bb"
+	if err := s.viewerFlowWithExistingIdentityAt(ctx, viewer, host, marker, preservedReturn); err != nil {
 		return "", fmt.Errorf("second allowed app did not reuse global identity: %w", err)
 	}
 	if err := assertDistinctAppCookies(viewer, firstHost, host); err != nil {
@@ -830,103 +881,151 @@ func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSl
 // to each app's current policy. It intentionally never invokes readOTP: a
 // rejection must be a friendly broker document, not a second OTP or app-byte
 // leak.
-func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, viewer *http.Client, oldFirstHost, oldSecondHost string) error {
-	suffix, err := randomID()
-	if err != nil {
-		return err
-	}
-	slug := "vps-global-denied-" + suffix
+func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, viewer *http.Client, oldFirstHost, oldSecondHost string) (string, error) {
+	slug := vpsDeniedAppSlug
 	// The current viewer is denied, but the configured deployer is allowed; the
 	// denial page therefore gives the real account-switch path a safe target.
 	host, marker, err := s.deploySmokeAppForViewer(ctx, c, slug, s.Config.DeployerEmail, false)
 	if err != nil {
-		return fmt.Errorf("deploy globally denied app: %w", err)
+		return "", fmt.Errorf("deploy globally denied app: %w", err)
 	}
 	handoff, err := s.beginAppHandoff(ctx, viewer, host)
 	if err != nil {
-		return err
+		return "", err
 	}
-	platform := "https://" + s.Config.PlatformHost
+	platform := "https://" + s.Config.PlatformHost()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	response, err := viewer.Do(request)
 	if err != nil {
-		return err
+		return "", err
 	}
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil {
-		return readErr
+		return "", readErr
 	}
 	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("This account cannot open this app.")) || bytes.Contains(body, []byte(marker)) || bytes.Contains(body, []byte("transaction")) {
-		return fmt.Errorf("globally authenticated denied app leaked or did not render generic denial: status=%d", response.StatusCode)
+		return "", fmt.Errorf("globally authenticated denied app leaked or did not render generic denial: status=%d", response.StatusCode)
 	}
 	// A switch is a same-origin POST. Its successful OTP verification revokes
 	// every child session before the broker issues the replacement identity.
 	form := url.Values{"handoff": {handoff}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/use-another", strings.NewReader(form.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return err
+		return "", err
 	}
 	body, readErr = io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil || response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("Sign in to continue.")) {
-		return errors.New("account switch form unavailable")
+		return "", errors.New("account switch form unavailable")
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/otp", strings.NewReader(form.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return err
+		return "", err
 	}
 	body, readErr = io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	tx := hiddenValue(string(body), "transaction")
 	if readErr != nil || response.StatusCode != http.StatusOK || tx == "" {
-		return errors.New("switch OTP transaction missing")
+		return "", errors.New("switch OTP transaction missing")
 	}
-	code, err := readOTP(ctx, s.Config, "viewer", s.Config.DeployerEmail, s.Config.PlatformHost)
+	code, err := readOTP(ctx, s.Config, "viewer", s.Config.DeployerEmail, s.Config.PlatformHost())
 	if err != nil {
-		return err
+		return "", err
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}, "transaction": {tx}, "code": {code}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/verify", strings.NewReader(form.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return err
+		return "", err
 	}
 	callback := response.Header.Get("Location")
 	response.Body.Close()
 	if response.StatusCode != http.StatusSeeOther || !isExactHandoffCallback(callback, host, handoff) {
-		return errors.New("account switch did not return exact callback")
+		return "", errors.New("account switch did not return exact callback")
 	}
 	for _, oldHost := range []string{oldFirstHost, oldSecondHost} {
 		if err := s.assertAppDenied(ctx, viewer, oldHost, ""); err != nil {
-			return fmt.Errorf("old child session remained usable after switch: %w", err)
+			return "", fmt.Errorf("old child session remained usable after switch: %w", err)
 		}
 	}
 	if err := s.finishAppHandoffForEmail(ctx, viewer, host, marker, callback, s.Config.DeployerEmail); err != nil {
+		return "", err
+	}
+	if err := s.assertCookieScopes(viewer, host, ""); err != nil {
+		return "", err
+	}
+	return host, nil
+}
+
+// dashboardGlobalLogout proves the one visible TinyHost sign-out action is
+// global: it destroys the admin identity and every independently scoped app
+// child session, rather than merely clearing the dashboard cookie.
+func (s *Suite) dashboardGlobalLogout(ctx context.Context, h *http.Client, hosts ...string) error {
+	platform := "https://" + s.Config.PlatformHost()
+	page, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/", nil)
+	if err != nil {
 		return err
 	}
-	return s.assertCookieScopes(viewer, host, "")
+	response, err := h.Do(page)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	response.Body.Close()
+	if readErr != nil || response.StatusCode != http.StatusOK {
+		return errors.New("dashboard was unavailable before global logout")
+	}
+	csrf := hiddenValue(string(body), "csrf")
+	if csrf == "" {
+		return errors.New("dashboard global logout CSRF token missing")
+	}
+	form := url.Values{"csrf": {csrf}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, platform+"/logout", strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Origin", platform)
+	response, err = h.Do(request)
+	if err != nil {
+		return err
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/login" {
+		return fmt.Errorf("dashboard global logout did not redirect to sign-in: status=%d", response.StatusCode)
+	}
+	admin, _ := url.Parse(platform + "/")
+	if hasCookie(h.Jar.Cookies(admin), "__Host-tiny_identity") {
+		return errors.New("dashboard global logout retained the global identity cookie")
+	}
+	for _, host := range hosts {
+		if err := s.assertAppDenied(ctx, h, host, ""); err != nil {
+			return fmt.Errorf("global logout left an app session usable: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Suite) replayedAndWrongAppHandoffsDeny(ctx context.Context, h *http.Client, firstHost, secondHost, consumedCallback, consumedState, marker string) error {
@@ -1047,7 +1146,18 @@ func (s *Suite) deploySmokeApp(ctx context.Context, c client.Client, slug string
 	return s.deploySmokeAppForViewer(ctx, c, slug, s.Config.ViewerEmail, blobs)
 }
 
+// deploySmokeAppWithRedeploy is the one black-box regression that sends the
+// exact same immutable archive to an already active app. It proves same-hash
+// deployment supersedes the old release without broadening policy.
+func (s *Suite) deploySmokeAppWithRedeploy(ctx context.Context, c client.Client, slug string, blobs bool) (string, string, error) {
+	return s.deploySmokeAppForViewerWithRedeploy(ctx, c, slug, s.Config.ViewerEmail, blobs, true)
+}
+
 func (s *Suite) deploySmokeAppForViewer(ctx context.Context, c client.Client, slug, viewerEmail string, blobs bool) (string, string, error) {
+	return s.deploySmokeAppForViewerWithRedeploy(ctx, c, slug, viewerEmail, blobs, false)
+}
+
+func (s *Suite) deploySmokeAppForViewerWithRedeploy(ctx context.Context, c client.Client, slug, viewerEmail string, blobs, redeploy bool) (string, string, error) {
 	key, _ := client.IdempotencyKey()
 	if err := c.Do(ctx, http.MethodPost, "/api/v1/apps", key, map[string]string{"slug": slug}, nil); err != nil {
 		return "", "", fmt.Errorf("create app: %w", err)
@@ -1057,7 +1167,7 @@ func (s *Suite) deploySmokeAppForViewer(ctx context.Context, c client.Client, sl
 	if err := c.Do(ctx, http.MethodPut, "/api/v1/apps/"+slug+"/access", key, policy, nil); err != nil {
 		return "", "", fmt.Errorf("set access policy: %w", err)
 	}
-	host := slug + "." + s.Config.AppSuffix
+	host := slug + "." + s.Config.AppSuffix()
 	if err := s.warmCertificate(ctx, host); err != nil {
 		return "", "", err
 	}
@@ -1072,6 +1182,32 @@ func (s *Suite) deploySmokeAppForViewer(ctx context.Context, c client.Client, sl
 	}
 	if err = deployed.Verified(); err != nil {
 		return "", "", err
+	}
+	if redeploy {
+		key, _ = client.IdempotencyKey()
+		second, err := c.Deploy(ctx, slug, bytes.NewReader(archive), size, key)
+		if err != nil {
+			return "", "", fmt.Errorf("redeploy same archive: %w", err)
+		}
+		if err = second.Verified(); err != nil || second.DeploymentID == deployed.DeploymentID {
+			return "", "", fmt.Errorf("same-archive redeploy receipt: %w", err)
+		}
+		releases, err := c.ListReleases(ctx, slug)
+		if err != nil {
+			return "", "", fmt.Errorf("list redeployed releases: %w", err)
+		}
+		var active, superseded string
+		for _, release := range releases {
+			if release.State == "active" {
+				active = release.ID
+			}
+			if release.ID == deployed.DeploymentID && release.State == "superseded" {
+				superseded = release.ID
+			}
+		}
+		if active != second.DeploymentID || superseded != deployed.DeploymentID {
+			return "", "", errors.New("same-archive redeploy did not supersede the prior release")
+		}
 	}
 	return host, marker, nil
 }
@@ -1167,8 +1303,9 @@ func (s *Suite) anonymousDenied(ctx context.Context, host, marker string) error 
 }
 
 // firstViewerFlow is the only point where the initial access traversal reads a
-// viewer OTP. It creates a global platform-host identity and an app-scoped
-// session for the first allowed app; opening the second allowed app reads none.
+// viewer OTP. It creates a global identity at admin.<domain>, then obtains an
+// app-scoped session for the first allowed app; opening the second app reads no
+// OTP.
 func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http.Client, string, string, string, error) {
 	jar, e := cookiejar.New(nil)
 	if e != nil {
@@ -1178,13 +1315,25 @@ func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http
 	hc := *h
 	hc.Jar = jar
 	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if e = s.completeDashboardIdentityOTP(ctx, &hc); e != nil {
+		return nil, "", "", "", e
+	}
 	handoff, e := s.beginAppHandoff(ctx, &hc, host)
 	if e != nil {
 		return nil, "", "", "", e
 	}
-	callback, e := s.completeFirstIdentityOTP(ctx, &hc, handoff)
+	platformRequest, e := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
 	if e != nil {
 		return nil, "", "", "", e
+	}
+	response, e := hc.Do(platformRequest)
+	if e != nil {
+		return nil, "", "", "", e
+	}
+	callback := response.Header.Get("Location")
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther || !isExactHandoffCallback(callback, host, handoff) {
+		return nil, "", "", "", fmt.Errorf("dashboard identity did not continue to app callback: status=%d", response.StatusCode)
 	}
 	state, ok := identityStateCookie(&hc, host)
 	if !ok {
@@ -1213,11 +1362,18 @@ func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http
 // valid platform identity is authorized only for this newly resolved app and
 // exchanged for that host's own app cookie.
 func (s *Suite) viewerFlowWithExistingIdentity(ctx context.Context, h *http.Client, host, marker string) error {
-	handoff, err := s.beginAppHandoff(ctx, h, host)
+	return s.viewerFlowWithExistingIdentityAt(ctx, h, host, marker, "/")
+}
+
+// viewerFlowWithExistingIdentityAt proves an app path and its ordered raw
+// query survive the app-to-admin handoff. The viewer identity remains entirely
+// server-derived; this is only the safe relative return destination.
+func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Client, host, marker, returnPath string) error {
+	handoff, err := s.beginAppHandoffAt(ctx, h, host, returnPath)
 	if err != nil {
 		return err
 	}
-	platformRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+	platformRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+s.Config.PlatformHost()+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
 	if err != nil {
 		return err
 	}
@@ -1232,7 +1388,7 @@ func (s *Suite) viewerFlowWithExistingIdentity(ctx context.Context, h *http.Clie
 	if !isExactHandoffCallback(response.Header.Get("Location"), host, handoff) {
 		return errors.New("existing identity redirected to an unsafe callback")
 	}
-	if err := s.finishAppHandoff(ctx, h, host, marker, response.Header.Get("Location")); err != nil {
+	if err := s.finishAppHandoffAt(ctx, h, host, marker, response.Header.Get("Location"), returnPath); err != nil {
 		return err
 	}
 	return s.assertCookieScopes(h, host, "")
@@ -1242,7 +1398,14 @@ func (s *Suite) viewerFlowWithExistingIdentity(ctx context.Context, h *http.Clie
 // opaque server-created handoff id; the app ID and callback origin never come
 // from this browser-facing protocol.
 func (s *Suite) beginAppHandoff(ctx context.Context, h *http.Client, host string) (string, error) {
-	document, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/"), nil)
+	return s.beginAppHandoffAt(ctx, h, host, "/")
+}
+
+func (s *Suite) beginAppHandoffAt(ctx context.Context, h *http.Client, host, returnPath string) (string, error) {
+	if !strings.HasPrefix(returnPath, "/") || strings.HasPrefix(returnPath, "//") {
+		return "", errors.New("unsafe app return path")
+	}
+	document, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, returnPath), nil)
 	if err != nil {
 		return "", err
 	}
@@ -1270,7 +1433,7 @@ func (s *Suite) beginAppHandoff(ctx context.Context, h *http.Client, host string
 	}
 	location := response.Header.Get("Location")
 	parsed, err := url.Parse(location)
-	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, s.Config.PlatformHost) || parsed.Path != "/_tiny/identity" {
+	if err != nil || parsed.Scheme != "https" || !strings.EqualFold(parsed.Host, s.Config.PlatformHost()) || parsed.Path != "/_tiny/identity" {
 		return "", fmt.Errorf("app login returned unsafe platform handoff location %q", location)
 	}
 	handoff := parsed.Query().Get("handoff")
@@ -1280,28 +1443,33 @@ func (s *Suite) beginAppHandoff(ctx context.Context, h *http.Client, host string
 	return handoff, nil
 }
 
-func (s *Suite) completeFirstIdentityOTP(ctx context.Context, h *http.Client, handoff string) (string, error) {
-	platform := "https://" + s.Config.PlatformHost
-	page, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/_tiny/identity?handoff="+url.QueryEscape(handoff), nil)
+func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client) error {
+	platform := "https://" + s.Config.PlatformHost()
+	page, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/login", nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 	response, err := h.Do(page)
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil {
-		return "", readErr
+		return readErr
 	}
-	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("Sign in to continue.")) {
-		return "", fmt.Errorf("first broker page missing generic sign-in form: status=%d", response.StatusCode)
+	// Assert the stable form contract rather than product copy. The dashboard
+	// and app broker deliberately use different headings, but both remain
+	// generic and must not expose role or policy eligibility.
+	if response.StatusCode != http.StatusOK ||
+		!bytes.Contains(body, []byte(`action="/login"`)) ||
+		!bytes.Contains(body, []byte(`name="email"`)) {
+		return fmt.Errorf("dashboard login page missing generic sign-in form: status=%d", response.StatusCode)
 	}
-	form := url.Values{"email": {s.Config.ViewerEmail}, "handoff": {handoff}}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/otp", strings.NewReader(form.Encode()))
+	form := url.Values{"email": {s.Config.ViewerEmail}}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, platform+"/login", strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// Platform identity mutations enforce an exact platform Origin. This is
@@ -1310,44 +1478,59 @@ func (s *Suite) completeFirstIdentityOTP(ctx context.Context, h *http.Client, ha
 	request.Header.Set("Origin", platform)
 	response, err = h.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, readErr = io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil {
-		return "", readErr
+		return readErr
 	}
 	tx := hiddenValue(string(body), "transaction")
 	if response.StatusCode != http.StatusOK || tx == "" {
-		return "", errors.New("global viewer OTP transaction missing")
+		return errors.New("dashboard identity OTP transaction missing")
 	}
-	code, err := readOTP(ctx, s.Config, "viewer", s.Config.ViewerEmail, s.Config.PlatformHost)
+	code, err := readOTP(ctx, s.Config, "viewer", s.Config.ViewerEmail, s.Config.PlatformHost())
 	if err != nil {
-		return "", err
+		return err
 	}
-	form = url.Values{"email": {s.Config.ViewerEmail}, "handoff": {handoff}, "transaction": {tx}, "code": {code}}
-	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tiny/identity/verify", strings.NewReader(form.Encode()))
+	form = url.Values{"email": {s.Config.ViewerEmail}, "transaction": {tx}, "code": {code}}
+	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/login/verify", strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = h.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || !isAppHandoffCallback(response.Header.Get("Location"), handoff) {
-		return "", fmt.Errorf("global viewer OTP did not continue to app callback: status=%d", response.StatusCode)
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/" {
+		return fmt.Errorf("dashboard identity OTP did not complete: status=%d", response.StatusCode)
 	}
-	return response.Header.Get("Location"), nil
+	if h.Jar == nil {
+		return errors.New("dashboard browser did not retain cookies")
+	}
+	admin, _ := url.Parse(platform + "/")
+	if !hasCookie(h.Jar.Cookies(admin), "__Host-tiny_identity") || !hasCookie(h.Jar.Cookies(admin), "__Host-tiny_browser") {
+		return errors.New("dashboard login did not issue scoped global identity")
+	}
+	return nil
 }
 
 func (s *Suite) finishAppHandoff(ctx context.Context, h *http.Client, host, marker, callbackLocation string) error {
-	return s.finishAppHandoffForEmail(ctx, h, host, marker, callbackLocation, s.Config.ViewerEmail)
+	return s.finishAppHandoffAt(ctx, h, host, marker, callbackLocation, "/")
+}
+
+func (s *Suite) finishAppHandoffAt(ctx context.Context, h *http.Client, host, marker, callbackLocation, returnPath string) error {
+	return s.finishAppHandoffForEmailAt(ctx, h, host, marker, callbackLocation, s.Config.ViewerEmail, returnPath)
 }
 
 func (s *Suite) finishAppHandoffForEmail(ctx context.Context, h *http.Client, host, marker, callbackLocation, email string) error {
+	return s.finishAppHandoffForEmailAt(ctx, h, host, marker, callbackLocation, email, "/")
+}
+
+func (s *Suite) finishAppHandoffForEmailAt(ctx context.Context, h *http.Client, host, marker, callbackLocation, email, returnPath string) error {
 	if !isExactHandoffCallback(callbackLocation, host, "") {
 		return fmt.Errorf("broker returned unsafe app callback %q", callbackLocation)
 	}
@@ -1360,10 +1543,10 @@ func (s *Suite) finishAppHandoffForEmail(ctx context.Context, h *http.Client, ho
 		return err
 	}
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/" {
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != returnPath {
 		return fmt.Errorf("app callback did not issue app session: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
 	}
-	page, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/"), nil)
+	page, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, returnPath), nil)
 	if err != nil {
 		return err
 	}
@@ -1425,7 +1608,7 @@ func (s *Suite) assertCookieScopes(h *http.Client, appHost, _ string) error {
 	if h == nil || h.Jar == nil {
 		return errors.New("viewer browser does not retain cookies")
 	}
-	platform, _ := url.Parse("https://" + s.Config.PlatformHost + "/")
+	platform, _ := url.Parse("https://" + s.Config.PlatformHost() + "/")
 	app, _ := url.Parse("https://" + appHost + "/")
 	if !hasCookie(h.Jar.Cookies(platform), "__Host-tiny_identity") || !hasCookie(h.Jar.Cookies(platform), "__Host-tiny_browser") || hasCookie(h.Jar.Cookies(platform), "__Host-tiny_app") {
 		return errors.New("platform global identity or browser-binding cookie scope is unsafe")

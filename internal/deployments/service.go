@@ -25,7 +25,23 @@ var (
 	ErrIdempotency = errors.New("idempotency conflict")
 	ErrProbe       = errors.New("protected probe failed")
 	ErrRateLimited = errors.New("deployment rate limited")
+	ErrReplay      = errors.New("activation replay conflict")
 )
+
+// ActivationFailure is a stable, safe category for control-plane callers.
+// It intentionally contains no policy, TLS, probe, capability, or database
+// detail. Those details remain in bounded server diagnostics.
+type ActivationFailure string
+
+const (
+	PolicyNotReady       ActivationFailure = "activation_policy_not_ready"
+	CertificateNotReady  ActivationFailure = "activation_certificate_not_ready"
+	CandidateProbeFailed ActivationFailure = "activation_candidate_probe_failed"
+	CapabilityNotReady   ActivationFailure = "activation_capability_not_ready"
+	CommitFailed         ActivationFailure = "activation_commit_failed"
+)
+
+func (e ActivationFailure) Error() string { return string(e) }
 
 type Actor struct {
 	ID     string
@@ -48,6 +64,9 @@ type Repository interface {
 	Get(context.Context, string) (Record, error)
 	Active(context.Context, string) (*Record, error)
 	CommitActivation(context.Context, Record, *Record, string) error
+	// ActivationReplay checks durable activation evidence before state planning.
+	// A mismatch is an error and must not be retried through activation gates.
+	ActivationReplay(context.Context, Record, string) (bool, error)
 	Fail(context.Context, string) error
 }
 
@@ -302,38 +321,104 @@ func (s *Service) Activate(ctx context.Context, a Actor, id, requestID string) e
 	if requestID == "" {
 		return ErrDenied
 	}
-	r, e := s.Repo.Get(ctx, id)
-	if e != nil || r.OwnerID != a.ID || !a.Active {
-		return ErrDenied
-	}
-	unlock := s.lock(r.AppID)
-	defer unlock()
-	old, e := s.Repo.Active(ctx, r.AppID)
+	r, unlock, e := s.activationRecord(ctx, a, id)
 	if e != nil {
 		return e
+	}
+	defer unlock()
+	replayed, e := s.Repo.ActivationReplay(ctx, r, requestID)
+	if e != nil {
+		return CommitFailed
+	}
+	if replayed {
+		return nil
+	}
+	old, e := s.Repo.Active(ctx, r.AppID)
+	if e != nil {
+		return CommitFailed
 	}
 	// A release which declares a protected external capability must not become
 	// active merely because composition forgot to supply its verifier. This is
 	// intentionally stricter than optional non-LLM capability behavior.
-	if !s.Gates.Policy(ctx, r) || !s.Gates.Certificate(ctx, r) || (r.Manifest.LLMChat && (s.CapabilityReady == nil || !s.CapabilityReady(ctx, r))) {
-		return releases.ErrTransition
+	if !s.Gates.Policy(ctx, r) {
+		return PolicyNotReady
+	}
+	if !s.Gates.Certificate(ctx, r) {
+		return CertificateNotReady
+	}
+	if r.Manifest.LLMChat && (s.CapabilityReady == nil || !s.CapabilityReady(ctx, r)) {
+		return CapabilityNotReady
 	}
 	if !s.Gates.Probe(ctx, r) {
-		return ErrProbe
+		return CandidateProbeFailed
 	}
 	if e := r.CanActivate(releases.ActivationRequirements{PolicyReady: true, CertificateReady: true, DenialProbePassed: true}); e != nil {
-		return e
+		return CommitFailed
 	}
-	return s.Repo.CommitActivation(ctx, r, old, requestID)
+	if e := s.Repo.CommitActivation(ctx, r, old, requestID); e != nil {
+		return CommitFailed
+	}
+	return nil
+}
+
+// ActivationReplay is the narrow no-side-effect route for a control adapter
+// that must decide whether to notify live clients. It permits only repository
+// verification of a current exact committed activation; it never invokes a
+// gate or attempts a transition.
+func (s *Service) ActivationReplay(ctx context.Context, a Actor, id, requestID string) (bool, error) {
+	if requestID == "" {
+		return false, ErrDenied
+	}
+	r, unlock, err := s.activationRecord(ctx, a, id)
+	if err != nil {
+		return false, err
+	}
+	defer unlock()
+	return s.Repo.ActivationReplay(ctx, r, requestID)
+}
+
+// activationRecord uses an initial ownership-bound record only to choose the
+// per-app lock. It then refetches and re-authorizes under that lock, so a
+// concurrent activation cannot leave an exact retry holding a stale verified
+// candidate while durable state has already moved it to active.
+func (s *Service) activationRecord(ctx context.Context, a Actor, id string) (Record, func(), error) {
+	initial, err := s.Repo.Get(ctx, id)
+	if err != nil || initial.OwnerID != a.ID || initial.AppID == "" || !a.Active {
+		return Record{}, nil, ErrDenied
+	}
+	unlock := s.lock(initial.AppID)
+	r, err := s.Repo.Get(ctx, id)
+	if err != nil || r.OwnerID != a.ID || r.AppID != initial.AppID || !a.Active {
+		unlock()
+		return Record{}, nil, ErrDenied
+	}
+	return r, unlock, nil
 }
 
 // MemoryRepository is deliberately test-only style infrastructure that models
 // transactional ownership/current-pointer behavior and injectable failures.
 type MemoryRepository struct {
-	mu         sync.Mutex
-	Records    map[string]Record
-	Current    map[string]string
-	FailCommit error
+	mu               sync.Mutex
+	Records          map[string]Record
+	Current          map[string]string
+	FailCommit       error
+	ActivationAudits map[string]string
+}
+
+func (m *MemoryRepository) ActivationReplay(_ context.Context, next Record, requestID string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.ActivationAudits == nil {
+		return false, nil
+	}
+	target, ok := m.ActivationAudits[requestID]
+	if !ok {
+		return false, nil
+	}
+	if target != next.ID || next.State != releases.Active || m.Current[next.AppID] != next.ID {
+		return false, ErrReplay
+	}
+	return true, nil
 }
 
 func (m *MemoryRepository) Create(_ context.Context, r Record) error {
@@ -368,7 +453,7 @@ func (m *MemoryRepository) Active(_ context.Context, app string) (*Record, error
 	r := m.Records[id]
 	return &r, nil
 }
-func (m *MemoryRepository) CommitActivation(_ context.Context, next Record, old *Record, _ string) error {
+func (m *MemoryRepository) CommitActivation(_ context.Context, next Record, old *Record, requestID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.FailCommit != nil {
@@ -382,6 +467,10 @@ func (m *MemoryRepository) CommitActivation(_ context.Context, next Record, old 
 		m.Records[o.ID] = o
 	}
 	m.Current[next.AppID] = next.ID
+	if m.ActivationAudits == nil {
+		m.ActivationAudits = map[string]string{}
+	}
+	m.ActivationAudits[requestID] = next.ID
 	return nil
 }
 func (m *MemoryRepository) Fail(_ context.Context, id string) error {

@@ -17,7 +17,7 @@ revoked, or unrelated viewer cannot retrieve any part of the app.
 
 | Slice | Included | Exit signal |
 |---|---|---|
-| Secure gateway | Host resolution, global viewer identity, app-bound handoff, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
+| Secure gateway | Host resolution, global browser identity, dashboard-role checks, app-bound handoff, app session, policy evaluation, protected static files | Negative requests cannot retrieve any asset |
 | Deployment | Deployer login, archive upload, validation, immutable release, atomic activation, failure recovery | One command returns a verified protected URL |
 | App primitives | First-class TypeScript SDK, capability discovery, current-user, JSON KV, lightweight local blobs, and ephemeral realtime | A static app persists current state and bounded attachments and receives live notifications without auth, database, bucket, or mount ceremony |
 | Operations | Hetzner-first setup, status, administration, signed update/rollback | Operator initializes a clean VPS with one command |
@@ -44,8 +44,8 @@ primitive at once.
 - One operator and multiple deployers managed as one exact active email list.
 - Exact-email and email-domain viewer rules.
 - Private-only app policy; an owner is always an implicit viewer.
-- One rotating platform-host viewer identity plus app-bound handoffs into
-  isolated app-scoped opaque viewer sessions.
+- One rotating admin-host browser identity plus current dashboard-role checks
+  and app-bound handoffs into isolated app-scoped opaque sessions.
 - Scoped deployer/API tokens with hashed-at-rest secrets.
 - Static archive deployment and SPA fallback.
 - Current-user, bounded JSON KV, app-shared local blob, and app-scoped

@@ -46,57 +46,36 @@ POST /_tiny/auth/logout
 GET  /_tiny/auth/callback
 ```
 
-In a deployed global-viewer-identity configuration, `GET /_tiny/auth/login`
-creates a bounded, server-owned handoff and the platform identity broker is the
-**only** browser viewer-session issuance route. Direct app-host
-`POST /_tiny/auth/otp` and `POST /_tiny/auth/verify` are retired: form callers
-receive the generic native retry page and JSON callers receive the normal safe
-`not_authorized` envelope. They remain available only to an explicitly
-brokerless local compatibility harness.
+`GET /_tiny/auth/login` creates a bounded, server-owned handoff and the
+platform identity broker is the **only** browser viewer-session issuance route.
+`POST /_tiny/auth/otp` and `POST /_tiny/auth/verify` do not exist on app hosts;
+they are reserved gateway paths and deny before app content or identity/session
+issuance. There is no brokerless compatibility harness.
 
-The platform-host broker owns:
+The exact admin-host broker owns the browser-facing login flow:
 
 ```text
-GET  /_tiny/identity?handoff=<opaque>
-POST /_tiny/identity/otp
-POST /_tiny/identity/verify
-POST /_tiny/identity/use-another
-POST /_tiny/identity/logout
+GET  /login
+POST /login
+GET  /login/verify
+POST /login/verify
+POST /logout
 ```
 
 Every platform broker POST requires an exact HTTPS same-origin `Origin` header
-matching the configured platform host, an URL-encoded form body, and a bounded
+matching the derived admin host, an URL-encoded form body, and a bounded
 body. Missing, malformed, or cross-origin requests return the same generic
 native retry response without issuing OTP, changing a handoff, rotating an
 identity, clearing a valid cookie, or serving app bytes. Anonymous app-host
 handoff creation is independently rate-limited in bounded in-memory state; it
 does not spend or bypass the email OTP budget.
 
-The legacy/local-harness OTP request representation is:
-
-```json
-{ "email": "alice@example.com" }
-```
-
-Always returns a generic accepted representation if syntactically valid.
-
-OTP verify:
-
-```json
-{
-  "transaction": "login_...",
-  "code": "483921"
-}
-```
-
-In a brokerless local compatibility harness only, successful verification sets
-a host-only app session cookie and redirects to a validated relative return
-path. In a deployed broker, successful platform verification sets only the
-platform identity cookie and redirects to an app-bound callback, which issues
-the app-local child cookie after atomic policy/state checks.
+Successful admin-host verification sets only the global identity cookie and
+continues an app-bound callback when the login began from an app. The callback
+issues an app-local child cookie only after its atomic state and policy checks.
 
 For a document navigation with no app cookie, the app host uses a
-server-created, state-bound handoff through the platform host. The browser
+server-created, state-bound handoff through the admin host. The browser
 never supplies an app ID or callback host.
 The app callback consumes an opaque one-time grant and state after current
 policy rechecks; it is not an API, SDK, or app-content route.
@@ -261,17 +240,18 @@ Delivery is best-effort: there is no persistence, history, replay, ordering
 guarantee, or resume cursor. After reconnect, clients reread current KV or
 collection state.
 
-## Platform host: authentication and control
+## Admin host: CLI control API and browser control UI
 
 ```text
 POST /api/v1/auth/otp
 POST /api/v1/auth/verify
 GET  /api/v1/whoami
 
-GET  /auth/viewer
-POST /auth/viewer/otp
-POST /auth/viewer/verify
-GET  /auth/viewer/handoff
+GET  /login
+POST /login
+GET  /login/verify
+POST /login/verify
+POST /logout
 
 GET  /api/v1/apps
 POST /api/v1/apps
@@ -281,6 +261,17 @@ GET  /api/v1/apps/{slug}/deployments/{id}
 POST /api/v1/apps/{slug}/deployments/{id}/activate
 GET  /api/v1/apps/{slug}/access
 PUT  /api/v1/apps/{slug}/access
+
+GET    /api/v1/apps/{slug}/data/kv?prefix=&limit=&cursor=
+GET    /api/v1/apps/{slug}/data/kv/{key}
+PUT    /api/v1/apps/{slug}/data/kv/{key}
+DELETE /api/v1/apps/{slug}/data/kv/{key}
+GET    /api/v1/apps/{slug}/data/collections?limit=&cursor=
+GET    /api/v1/apps/{slug}/data/collections/{collection}/documents?limit=&cursor=
+GET    /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}
+POST   /api/v1/apps/{slug}/data/collections/{collection}/documents
+PUT    /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}
+DELETE /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}
 ```
 
 The CLI may combine create/upload/activate into `tiny deploy`, but the server
@@ -293,16 +284,38 @@ returns the distinct non-success `active_but_unverified` receipt defined by the
 control and deployment contract rather than collapsing it into
 `deploy_failed`.
 
-## Cookie split
+An activation that does not commit returns HTTP `409` and the ordinary safe
+error envelope. Its `error.code` is exactly one of
+`activation_policy_not_ready`, `activation_certificate_not_ready`,
+`activation_candidate_probe_failed`, `activation_capability_not_ready`, or
+`activation_commit_failed`. `error.request_id` exactly matches a syntactically
+valid `X-Request-ID`. A deployer CLI may show only the already-known deployment
+ID, literal state `verified`, that allowlisted code, and the matching request
+ID as a non-success `activation_failed` receipt. Unknown codes, malformed
+envelopes, absent/invalid/mismatched request IDs, other statuses, and transport
+failures are the generic non-success `deploy_failed` result with no receipt.
+Neither result claims `active` or weakens the required anonymous public probe.
 
-- Global viewer identity: host-only platform cookie with a distinct name;
-  email identity only, never a control credential.
-- Control plane: host-only platform cookie with a distinct name.
+The deployer-data routes are bearer-control API routes, never app-host SDK
+routes. They require an active deployer, current token scope, optional token
+app binding, and current ownership of `{slug}` before TinyHost resolves the
+private immutable app ID. `data:read` permits bounded KV/document reads;
+`data:write` permits one optimistic-versioned KV/document mutation at a time.
+The route slug is not a database selector, and neither an operator browser
+session nor a viewer credential has this authority. The full semantics,
+responses, limits, audit behavior, and denials are defined in
+[`deployer-data-contract.md`](deployer-data-contract.md).
+
+## Credential split
+
+- Global browser identity: host-only `__Host-tiny_identity` cookie on the
+  exact admin host. It proves email identity only; dashboard role is a separate
+  current server-side check.
 - App plane: host-only app session cookie; never a parent-domain cookie.
 - CLI/agent: bearer token, never accepted as an app viewer session.
 
 Global identities and app sessions are opaque persisted credentials. One
-browser profile has one global viewer identity; it may hold independent app
+browser profile has one global browser identity; it may hold independent app
 sessions for allowed apps. The global identity is exchanged only via a
 five-minute-or-less, state-bound, one-time app handoff, and the current policy
 is checked again on every protected app request. Sessions survive a normal

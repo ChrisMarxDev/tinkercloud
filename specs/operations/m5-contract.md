@@ -77,20 +77,25 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   authorization. VPN membership alone never creates or substitutes for a
   TinyHost session.
 - `tinyhost deployers authorize|suspend|revoke` authenticates its local caller
-  as root before parsing configuration, then permanently drops to the installed
-  `tinyhost` service identity before opening SQLite. The database, WAL, and SHM
-  files are therefore created and written only by that service identity; the
-  command never widens their modes. Before the drop it may hand off only an
+  as root before parsing configuration, then runs its one fixed SQLite mutation
+  in a child that permanently drops to the installed `tinyhost` service
+  identity before opening SQLite. The database, WAL, and SHM files are
+  therefore created and written only by that service identity; the command
+  never widens their modes. Before the child starts, root may hand off only an
   existing regular root-owned database/WAL/SHM artifact after no-symlink,
-  owner, and non-permissive-mode validation. Missing service identity,
-  privilege-drop, handoff, SQLite, or mutation failure denies the command
-  without reporting success.
+  owner, and non-permissive-mode validation. After the child durably commits
+  and closes, the root parent `try-restart`s only an already active service and
+  confirms it is active; it never starts an inactive service. Missing service
+  identity, privilege-drop, handoff, SQLite, mutation, service-state, or
+  refresh failure denies a success result. A refresh failure uses explicit
+  `deployer_applied_service_refresh_failed` because the durable mutation is not
+  rolled back.
 - Init state is an ordered, fail-closed JSON record beside the root-owned
   config. It records `preflight`, `paths`, `database`, `operator`, `service`,
   and `verified` only after each step succeeds; gaps or unknown steps deny
   continuation.
-- The final init public-health proof is derived only from the configured
-  `platform_host`: `https://{platform_host}/api/v1/version`. It uses verified
+- The final init public-health proof is derived only from the configured root
+  `domain`: `https://admin.{domain}/api/v1/version`. It uses verified
   TLS (with no insecure override), follows no redirect, and accepts only the
   exact final host, a `200` JSON object containing only `{"api_version":1}`,
   and the gateway's `Cache-Control: no-store` and
@@ -98,9 +103,9 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   HTML response, malformed/oversized JSON, redirect, hostname mismatch, TLS,
   transport, or timeout failure leaves `verified` incomplete.
 - Recovery requires an explicit local-root guard before operator replacement.
-  In the same transaction it revokes every prior operator control credential,
-  including credentials belonging to a same-email operator being reactivated;
-  no pre-recovery control credential remains usable after recovery succeeds.
+  In the same transaction it revokes prior operator CLI credentials and the
+  affected global browser identity families, including credentials belonging
+  to a same-email operator being reactivated.
 - At the critical disk watermark, writes deny while safe existing reads remain.
 - The authenticated operator dashboard includes a small host-resource read
   model for CPU utilization, RAM utilization, and TinyHost data-volume usage.
@@ -161,7 +166,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   only the V1 `tinyhost-linux-amd64` filename, follows no redirects, rejects
   credentials, query strings, private/link-local/loopback origins, cross-origin
   components, and bodies over the per-component limits. The public health URL
-  is derived from `platform_host`; the anonymous-denial URL is derived from
+  is derived as `admin.<domain>`; the anonymous-denial URL is derived from
   locally verified installed app state, never caller input. If no active app
   exists, the updater must prove that exact database state, platform health,
   socket confinement, and safe unknown-app-host denial; any ambiguous read is
@@ -234,7 +239,7 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
   identity and never bypasses current app policy.
 - A self-signed, hostname-mismatched, expired, or unverified certificate never
   becomes healthy evidence.
-- A supplied certificate that does not cover both the exact platform hostname
+- A supplied certificate that does not cover both the exact admin hostname
   and wildcard app hostname, does not match its private key, or is read through
   a symlink or permissive secret path never becomes installed state.
 - Temporary renewal exposure, disabled TLS verification, a skipped

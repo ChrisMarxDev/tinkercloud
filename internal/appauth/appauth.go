@@ -27,7 +27,23 @@ type AuthorizationContext interface {
 	SessionID() string
 	PolicyRevision() uint64
 	RequestID() string
+	DataActorKind() string
+	DataActorID() string
+	dataAuthorizedContext()
 	authorizedContext()
+}
+
+// DataAuthorizationContext is the narrower, sealed trust seam for app-local
+// persistence and best-effort freshness hints. It deliberately has no viewer
+// identity or session: a deployer acting through the control plane is not
+// turned into a synthetic app viewer.
+type DataAuthorizationContext interface {
+	AppID() string
+	AppSlug() string
+	RequestID() string
+	DataActorKind() string
+	DataActorID() string
+	dataAuthorizedContext()
 }
 type authorizationContext struct {
 	app       apps.App
@@ -52,6 +68,31 @@ func (c authorizationContext) SessionID() string           { return c.session.ID
 func (c authorizationContext) PolicyRevision() uint64      { return c.revision }
 func (c authorizationContext) RequestID() string           { return c.requestID }
 func (c authorizationContext) authorizedContext()          {}
+func (c authorizationContext) DataActorKind() string       { return "viewer" }
+func (c authorizationContext) DataActorID() string         { return c.session.Identity.ID }
+func (c authorizationContext) dataAuthorizedContext()      {}
+
+type deployerDataAuthorizationContext struct {
+	appID, slug, actorID, requestID string
+}
+
+func (c deployerDataAuthorizationContext) AppID() string          { return c.appID }
+func (c deployerDataAuthorizationContext) AppSlug() string        { return c.slug }
+func (c deployerDataAuthorizationContext) RequestID() string      { return c.requestID }
+func (c deployerDataAuthorizationContext) DataActorKind() string  { return "deployer" }
+func (c deployerDataAuthorizationContext) DataActorID() string    { return c.actorID }
+func (c deployerDataAuthorizationContext) dataAuthorizedContext() {}
+
+// NewDeployerDataAuthorizationContext is called only after the control plane
+// has authenticated the bearer, checked its data scope, and derived ownership.
+// It intentionally cannot satisfy AuthorizationContext, so it can never reach
+// viewer/static/WebSocket dispatchers.
+func NewDeployerDataAuthorizationContext(appID, slug, actorID, requestID string) DataAuthorizationContext {
+	if appID == "" || slug == "" || actorID == "" {
+		return nil
+	}
+	return deployerDataAuthorizationContext{appID: appID, slug: slug, actorID: actorID, requestID: requestID}
+}
 
 var ErrDenied = errors.New("app authorization denied")
 

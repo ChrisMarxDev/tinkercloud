@@ -161,14 +161,14 @@ def validate_request(argv: list[str]) -> tuple[str, str, str, str]:
         fail("invalid reader invocation")
     purpose, email, hostname = argv[1], argv[2].lower(), argv[3].lower()
     sender = os.environ.get("TINYHOST_VPS_EMAIL_FROM", "")
-    platform = os.environ.get("TINYHOST_VPS_PLATFORM_HOST", "").lower()
-    suffix = os.environ.get("TINYHOST_VPS_APP_SUFFIX", "").lower()
+    domain = os.environ.get("TINYHOST_VPS_DOMAIN", "").lower()
+    platform = "admin." + domain
     if not EMAIL.fullmatch(email) or not EMAIL.fullmatch(sender) or not HOST.fullmatch(hostname):
         fail("invalid reader invocation")
-    if not HOST.fullmatch(platform) or not HOST.fullmatch(suffix) or platform == suffix:
+    if not HOST.fullmatch(domain) or not HOST.fullmatch(platform):
         fail("invalid reader configuration")
-    # The global identity broker sends both deployer and viewer OTPs from the
-    # configured platform host. App-host viewer OTPs are not a V1 flow.
+    # The global identity owner sends both deployer and viewer OTPs from the
+    # derived admin host. App-host viewer OTPs are not a V1 flow.
     if hostname != platform:
         fail("invalid reader hostname")
     return purpose, email, hostname, sender

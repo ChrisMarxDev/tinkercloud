@@ -197,8 +197,8 @@ func updateChecks(cfg config.Config, slug, target, cfgPath string) []update.Heal
 	return []update.Health{
 		update.ListenerHealth{Addresses: []string{cfg.ListenHTTP, cfg.ListenHTTPS}},
 		update.ExecHealth{Binary: target, Config: cfgPath, Env: os.Environ()},
-		update.HTTPHealth{URL: "https://" + cfg.PlatformHost + "/api/v1/version", Client: client},
-		update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix + updateAnonymousDenyPath, Client: client}},
+		update.HTTPHealth{URL: "https://" + cfg.PlatformHost() + "/api/v1/version", Client: client},
+		update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix() + updateAnonymousDenyPath, Client: client}},
 	}
 }
 

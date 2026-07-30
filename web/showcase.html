@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>TinyHost native web system</title>
   <link rel="stylesheet" href="assets/tinyhost.css?v=1">
-  <script src="assets/tinyhost.js" defer></script>
+  <script src="assets/tinyhost.js?v=1" defer></script>
 </head>
 <body>
   <a class="tiny-skip" href="#main">Skip to content</a>
@@ -22,7 +22,10 @@
           <strong>operator@acme.com</strong>
           <span>operator</span>
         </div>
-        <button class="tiny-button tiny-button--quiet tiny-button--small" type="button">Sign out</button>
+        <form class="tiny-inline-form" method="post" action="/logout">
+          <input type="hidden" name="csrf" value="server-rendered-token">
+          <button class="tiny-button tiny-button--quiet tiny-button--small" type="submit">Sign out of TinyHost</button>
+        </form>
       </div>
     </header>
 
@@ -249,7 +252,7 @@
         </div>
         <div class="tiny-grid tiny-grid--2" id="showcase-app-list" data-tiny-app-list>
           <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="payroll-preview" data-tiny-app-description="Payroll review for finance" data-tiny-app-status="active">
-            <div class="tiny-app-card__summary"><div class="tiny-card__header"><div><h3>payroll-preview</h3><p class="tiny-card__meta">Payroll review for finance</p></div><a class="tiny-button tiny-button--secondary tiny-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><span class="tiny-status" data-state="active">active</span></div><p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
+            <div class="tiny-app-card__summary"><div class="tiny-card__header"><div><h3>payroll-preview</h3><p class="tiny-card__meta">Payroll review for finance</p></div><div class="tiny-app-card__actions"><a class="tiny-button tiny-button--secondary tiny-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tiny-button tiny-button--secondary tiny-icon-action" type="button" data-tiny-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tiny-status" data-state="active">active</span></div><p class="tiny-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
           </article>
           <article class="tiny-card tiny-app-card" data-tiny-app-card data-tiny-app-slug="migration-sandbox" data-tiny-app-description="Safe migration rehearsal" data-tiny-app-status="suspended">
             <div class="tiny-app-card__summary"><div class="tiny-card__header"><h3>migration-sandbox</h3><span class="tiny-status" data-state="suspended">suspended</span></div><p class="tiny-card__meta">Private policy r3 · 1 release · 0 tokens</p></div>
@@ -356,17 +359,44 @@
         </div>
       </section>
 
-      <section class="tiny-section" aria-labelledby="llm-showcase-title">
-        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">Write-only LLM connection</h2></div><p>Safe metadata is visible; provider credentials never return to the page.</p></div>
+      <section class="tiny-section" aria-labelledby="api-keys-showcase-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="api-keys-showcase-title">API keys</h2></div><p>Safe metadata is visible; provider API keys never return to the page.</p></div>
         <div class="tiny-grid tiny-grid--2">
-          <article class="tiny-card tiny-stack"><div><h3>Add a provider connection</h3><p class="tiny-card__meta">The credential is encrypted after verification and cannot be shown again.</p></div><label class="tiny-field"><span class="tiny-label">Display name</span><input class="tiny-input" value="Team provider"></label><label class="tiny-field"><span class="tiny-label">Provider</span><select class="tiny-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tiny-field"><span class="tiny-label">Provider credential</span><input class="tiny-input tiny-mono" type="password" autocomplete="new-password"><span class="tiny-help">Write-only. Never displayed or recovered.</span></label><button class="tiny-button tiny-button--primary" type="button">Verify and add connection</button></article>
-          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>Team provider</h3><p class="tiny-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tiny-status" data-state="active">active</span></div><details class="tiny-details"><summary>Disable connection</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future chat calls using this connection will be denied.</p><label class="tiny-field"><span class="tiny-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tiny-input tiny-mono" autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="button">Disable connection</button></div></details></article>
+          <article class="tiny-card tiny-stack"><div><h3>Add an API key</h3><p class="tiny-card__meta">The API key is encrypted after verification and cannot be shown again.</p></div><label class="tiny-field"><span class="tiny-label">Provider</span><select class="tiny-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tiny-field"><span class="tiny-label">API key</span><input class="tiny-input tiny-mono" type="password" autocomplete="new-password"><span class="tiny-help">Write-only. Never displayed or recovered.</span></label><button class="tiny-button tiny-button--primary" type="button">Verify and save API key</button></article>
+          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>Anthropic API key</h3><p class="tiny-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tiny-status" data-state="active">active</span></div><details class="tiny-details"><summary>Disable API key</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future chat calls using this API key will be denied.</p><label class="tiny-field"><span class="tiny-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tiny-input tiny-mono" autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="button">Disable API key</button></div></details></article>
         </div>
+        <article class="tiny-state tiny-state--unavailable tiny-section__spaced" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinyhost llm enable</code>, then restart TinyHost. API keys cannot be added, rotated, or disabled until it is available.</p></article>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="llm-showcase-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">LLM chat</h2></div><p>Profiles, app grants, limits, and usage stay separate from API-key management.</p></div>
       </section>
 
       <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
     </main>
   </div>
+
+  <dialog class="tiny-dialog tiny-dialog--compact" id="showcase-qr-dialog" aria-labelledby="showcase-qr-title">
+    <div class="tiny-dialog__header">
+      <div>
+        <p class="tiny-eyebrow">Open on your phone</p>
+        <h2 id="showcase-qr-title">payroll-preview</h2>
+      </div>
+      <form method="dialog">
+        <button class="tiny-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
+      </form>
+    </div>
+    <div class="tiny-dialog__body tiny-qr-dialog__body">
+      <div class="tiny-qr-frame"><canvas class="tiny-qr" width="650" height="650" data-tiny-qr="/mtrPDw/P8EV4cpKSpBuvFpXSUnLt0FobsDAJduntrf72hLsE14dEKixB/qqqqqqqv4BbS3GSkkA762tvw8O4l7qhpHS0mOQoPDiy8ua0TYtJIaCmzctPLrvLxbWjYpJIMDC0NiPDjtTR4PAAtJIaGtE99vLrJaWioQIpJAeHlEku3DjLa2KK6TtJre1lk8/XLt5+f0sKepK6a2q7vxfD96cvl/KPtKopKZrmjTa9vDxlnRqaG4tLZwP4g8PvLz+txQS1GigcQ6tq8qysMrKxJSnHAwMaX9o8Pw0J/34sS3ShoWbR/K8rWloVwhMSnfh4bqn1I8JWtqV0gjS3Zl5arGra8r/j4LwiRSnbhYYXVzo8I3vyoOxAS1eSksWbxet3Q8P2sJthovS0liLhfDnS8v+2Z8tIoaOdjz8HL3LTzvXSGpIsODEkpnfDnJCRuPy/tIoaGkkAl3L/paW+oBBpJEeHsU/tfDqra2qMF9tJHeXsUuq/L/p+O+t03pKoeGqaupnDz7e3fsF3tLYpKeq/rra1vDxb4A=" role="img" aria-label="QR code for this app URL"></canvas></div>
+      <p>Scan with your phone to open this app. Its normal sign-in and access policy still apply.</p>
+      <a class="tiny-qr-url tiny-mono" href="/">https://payroll-preview.apps.example.test/</a>
+    </div>
+    <div class="tiny-dialog__actions">
+      <form method="dialog">
+        <button class="tiny-button tiny-button--secondary" type="submit" value="close">Close</button>
+      </form>
+    </div>
+  </dialog>
 
   <dialog class="tiny-dialog" id="suspend-dialog" aria-labelledby="suspend-dialog-title">
     <div class="tiny-dialog__header">

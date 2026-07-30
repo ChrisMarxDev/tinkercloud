@@ -20,6 +20,10 @@ import (
 )
 
 var ErrUnauthorized = errors.New("not authorized")
+var ErrNotFound = errors.New("not found")
+var ErrConflict = errors.New("conflict")
+var ErrValidation = errors.New("validation failed")
+var ErrQuotaExceeded = errors.New("quota exceeded")
 
 // BuildVersion is injected into released tiny binaries. Development builds
 // omit compatibility headers so older V1 servers retain the documented
@@ -256,7 +260,7 @@ type LoginResult struct {
 type DeploymentResult struct {
 	DeploymentID         string `json:"deployment_id"`
 	URL                  string `json:"url"`
-	AppSuffix            string `json:"app_suffix"`
+	Domain               string `json:"domain"`
 	PolicyReady          bool   `json:"policy_ready"`
 	TLSReady             bool   `json:"tls_ready"`
 	AnonymousDenied      bool   `json:"anonymous_denied"`
@@ -291,6 +295,33 @@ func (e *ActiveButUnverifiedError) Error() string {
 	return "active deployment public verification incomplete"
 }
 func (e *ActiveButUnverifiedError) Unwrap() error { return ErrDeploymentEvidence }
+
+// ActivationFailureReason is the small, public diagnostic category returned
+// when a verified candidate cannot be activated. It is intentionally an
+// allowlist: server messages, headers, transport errors, and policy detail are
+// never carried into deployer output.
+type ActivationFailureReason string
+
+const (
+	ActivationPolicyNotReady       ActivationFailureReason = "activation_policy_not_ready"
+	ActivationCertificateNotReady  ActivationFailureReason = "activation_certificate_not_ready"
+	ActivationCandidateProbeFailed ActivationFailureReason = "activation_candidate_probe_failed"
+	ActivationCapabilityNotReady   ActivationFailureReason = "activation_capability_not_ready"
+	ActivationCommitFailed         ActivationFailureReason = "activation_commit_failed"
+)
+
+// ActivationFailedError means the server did not commit activation for a
+// previously verified candidate. It is not an active receipt: State is always
+// the literal pre-activation state, verified.
+type ActivationFailedError struct {
+	DeploymentID string
+	State        string
+	Reason       ActivationFailureReason
+	RequestID    string
+}
+
+func (e *ActivationFailedError) Error() string { return "deployment activation failed" }
+func (e *ActivationFailedError) Unwrap() error { return ErrDeploymentFailed }
 
 type publicVerificationError struct {
 	reason    DeploymentEvidenceReason
@@ -341,10 +372,27 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 		if e != nil {
 			return DeploymentResult{}, e
 		}
+		path := "/api/v1/apps/" + url.PathEscape(slug) + "/deployments/" + url.PathEscape(deploymentID) + "/activate"
+		req, e := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.Base, "/")+path, nil)
+		if e != nil {
+			return DeploymentResult{}, e
+		}
+		setCompatibilityHeaders(req)
+		req.Header.Set("Idempotency-Key", k)
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+		res, e := h.Do(req)
+		if e != nil {
+			return DeploymentResult{}, e
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			if failed := activationFailure(res, deploymentID); failed != nil {
+				return DeploymentResult{DeploymentID: deploymentID}, failed
+			}
+			return DeploymentResult{}, ErrDeploymentFailed
+		}
 		var activated DeploymentResult
-		deploymentClient := c
-		deploymentClient.HTTP = h
-		if e = deploymentClient.Do(ctx, "POST", "/api/v1/apps/"+url.PathEscape(slug)+"/deployments/"+url.PathEscape(deploymentID)+"/activate", k, nil, &activated); e != nil {
+		if e = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&activated); e != nil {
 			return DeploymentResult{}, e
 		}
 		if e = c.verifyPublicDeployment(ctx, slug, activated); e != nil {
@@ -396,6 +444,105 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 	return DeploymentResult{}, ErrDeploymentFailed
 }
 
+func activationFailure(res *http.Response, deploymentID string) error {
+	if res == nil || res.StatusCode != http.StatusConflict || res.Body == nil || !gatewayRequestID.MatchString(res.Header.Get("X-Request-ID")) {
+		return nil
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 32<<10+1))
+	if err != nil || len(body) > 32<<10 || !uniqueActivationErrorJSON(body) {
+		return nil
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(body, &envelope) != nil || len(envelope) != 1 {
+		return nil
+	}
+	raw, ok := envelope["error"]
+	if !ok {
+		return nil
+	}
+	var detail map[string]json.RawMessage
+	if json.Unmarshal(raw, &detail) != nil || len(detail) != 3 {
+		return nil
+	}
+	var code, message, requestID string
+	if json.Unmarshal(detail["code"], &code) != nil ||
+		json.Unmarshal(detail["message"], &message) != nil ||
+		json.Unmarshal(detail["request_id"], &requestID) != nil ||
+		message == "" || !gatewayRequestID.MatchString(requestID) || requestID != res.Header.Get("X-Request-ID") {
+		return nil
+	}
+	reason, ok := activationFailureReasons[code]
+	if !ok {
+		return nil
+	}
+	return &ActivationFailedError{
+		DeploymentID: deploymentID,
+		State:        "verified",
+		Reason:       reason,
+		RequestID:    requestID,
+	}
+}
+
+// uniqueActivationErrorJSON rejects duplicate object members before the error
+// envelope is decoded into maps. json.Unmarshal otherwise keeps the later
+// value, which could turn an ambiguous server response into a trusted receipt.
+func uniqueActivationErrorJSON(raw []byte) bool {
+	d := json.NewDecoder(bytes.NewReader(raw))
+	if !consumeActivationErrorJSON(d, 0) {
+		return false
+	}
+	var trailing any
+	return d.Decode(&trailing) == io.EOF
+}
+
+func consumeActivationErrorJSON(d *json.Decoder, depth int) bool {
+	if depth > 16 {
+		return false
+	}
+	token, err := d.Token()
+	if err != nil {
+		return false
+	}
+	switch token {
+	case json.Delim('{'):
+		seen := map[string]struct{}{}
+		for d.More() {
+			key, err := d.Token()
+			name, ok := key.(string)
+			if err != nil || !ok {
+				return false
+			}
+			if _, duplicate := seen[name]; duplicate {
+				return false
+			}
+			seen[name] = struct{}{}
+			if !consumeActivationErrorJSON(d, depth+1) {
+				return false
+			}
+		}
+		end, err := d.Token()
+		return err == nil && end == json.Delim('}')
+	case json.Delim('['):
+		for d.More() {
+			if !consumeActivationErrorJSON(d, depth+1) {
+				return false
+			}
+		}
+		end, err := d.Token()
+		return err == nil && end == json.Delim(']')
+	default:
+		return true
+	}
+}
+
+var activationFailureReasons = map[string]ActivationFailureReason{
+	string(ActivationPolicyNotReady):       ActivationPolicyNotReady,
+	string(ActivationCertificateNotReady):  ActivationCertificateNotReady,
+	string(ActivationCandidateProbeFailed): ActivationCandidateProbeFailed,
+	string(ActivationCapabilityNotReady):   ActivationCapabilityNotReady,
+	string(ActivationCommitFailed):         ActivationCommitFailed,
+}
+
 // verifyPublicDeployment is the deployer's independent, network-facing gate.
 // Server activation evidence is necessary but cannot prove the public DNS/TLS
 // gateway path that a viewer will reach. The probe therefore uses the returned
@@ -405,7 +552,7 @@ func (c Client) verifyPublicDeployment(ctx context.Context, slug string, result 
 	if err := result.Verified(); err != nil {
 		return publicEvidenceError(EvidenceActivationIncomplete, false)
 	}
-	probeURL, err := expectedAppURL(slug, result.AppSuffix, result.URL)
+	probeURL, err := expectedAppURL(slug, result.Domain, result.URL)
 	if err != nil {
 		return publicEvidenceError(EvidencePublicProbeURL, false)
 	}
@@ -739,7 +886,24 @@ func (c Client) Do(ctx context.Context, method, path, key string, in, out any) e
 	if res.StatusCode == 401 || res.StatusCode == 403 {
 		return ErrUnauthorized
 	}
+	if res.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if res.StatusCode == http.StatusConflict {
+		return ErrConflict
+	}
+	if res.StatusCode == http.StatusBadRequest {
+		return ErrValidation
+	}
 	if res.StatusCode == http.StatusTooManyRequests {
+		var envelope struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.NewDecoder(io.LimitReader(res.Body, 32<<10)).Decode(&envelope) == nil && envelope.Error.Code == "quota_exceeded" {
+			return ErrQuotaExceeded
+		}
 		return ErrRateLimited
 	}
 	if res.StatusCode < 200 || res.StatusCode > 299 {

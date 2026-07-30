@@ -51,3 +51,23 @@ the built SDK/package versions.
   decision. V1 preparation therefore keeps the minimum at `0.1.0`.
 - Post-restart health, denial evidence, rollback, and manual-update requirements
   in the M5 contract remain mandatory.
+
+## Persistent-state preservation
+
+A supported TinyHost update and its embedded schema migrations operate on the
+installed control database in the configured data directory. They must preserve
+every existing operator and deployer user row (including immutable ID,
+normalized email, role, and status), every app's owner, and every active access
+policy revision and rule. They must also preserve an otherwise-valid existing
+authority credential unless a separately versioned migration contract names the
+credential class and its required invalidation reason. An update must never
+silently delete or recreate accounts, ownership, or access rules.
+
+The preservation assertion applies before the candidate binary is considered
+healthy and again after the supported restart path. Failed verification,
+migration, replacement, or post-restart health must leave the prior healthy
+binary and the same durable data directory authoritative. Update validation
+must include an executable seeded-state regression for operator/deployer
+identity, owned-app policy, and valid authority continuity; a migration that
+intentionally changes credential validity requires an explicit compatibility
+decision and narrow regression in addition to this invariant.

@@ -91,9 +91,9 @@ message content for each approved invocation.
 
 ## Implemented operator and deployer flow
 
-1. The operator opens **Connections**, chooses Anthropic or Gemini, enters a
-   display name and API key, and submits it over the protected operator
-   session. The key field is write-only.
+1. The operator opens **API keys**, chooses Anthropic or Gemini, enters one API
+   key, and submits it over the protected operator session. The key field is
+   write-only; TinyHost derives the connection label and opaque identifier.
 2. TinyHost validates the key with a bounded provider check, encrypts it with
    the host-local capability root, and stores only ciphertext plus safe
    metadata.

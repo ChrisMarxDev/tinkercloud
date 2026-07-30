@@ -22,10 +22,10 @@ func HandlePublicRequest(w, r):
         GenericNotFound(w)
         return
 
-    route = ClassifyHost(host, configuredPlatformHost, configuredAppSuffix)
+    route = ClassifyHost(host, configuredDomain)
 
     switch route.Kind:
-    case Platform:
+    case Admin:
         controlPlane.Serve(w, r)
     case Unknown:
         GenericNotFound(w)
@@ -104,7 +104,9 @@ mutation fail.
 Public-facing responses reveal as little resource state as practical:
 
 - unknown host and missing app share a generic response;
-- OTP request always returns the same accepted message;
+- syntactically valid OTP requests return the same accepted transaction shape
+  regardless of identity eligibility; a durable issuer outage returns only the
+  generic `503 temporarily_unavailable`, never a fake transaction;
 - unauthenticated browser navigation may show login;
 - API and asset requests use stable unauthorized responses without content;
 - internal reason codes appear only in redacted structured logs and audit data.

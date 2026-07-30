@@ -66,7 +66,7 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	adapter := &llmGatewayAdapter{}
 	service := llm.New(repo, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: adapter})
 	h := compose.AppPlaneWithPlatformAndBlobsCollectionsAndLLM(
-		config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: sessions.AppCookieName, ListenHTTPS: ":443"},
+		config.Config{Domain: "apps.tiny.test", SessionCookie: sessions.AppCookieName, ListenHTTPS: ":443"},
 		store, store, store, nil, nil, nil, live.New(live.DefaultLimits()), compose.Login{}, nil, service,
 	)
 	server := httptest.NewServer(h)

@@ -235,11 +235,11 @@ func (h *Hub) publishFrom(ctx context.Context, sender *connection, channel strin
 }
 
 // PublishKVChange satisfies kv.ChangeSink. It is called only after KV mutation.
-func (h *Hub) PublishKVChange(ctx context.Context, auth appauth.AuthorizationContext, m kv.Mutation) {
-	app, _, _, err := capabilities.Scope(auth)
-	if err != nil {
+func (h *Hub) PublishKVChange(ctx context.Context, auth appauth.DataAuthorizationContext, m kv.Mutation) {
+	if auth == nil || auth.AppID() == "" {
 		return
 	}
+	app := auth.AppID()
 	e := Envelope{V: 1, Type: "kv.changed", Key: m.Key, Version: m.Version, Deleted: m.Deleted}
 	h.mu.Lock()
 	targets := make([]*connection, 0)
@@ -265,11 +265,11 @@ func (h *Hub) PublishKVChange(ctx context.Context, auth appauth.AuthorizationCon
 // PublishCollectionChange satisfies collections.ChangeSink. It is called only
 // after the app-local SQLite transaction commits, so it is a freshness hint
 // rather than an uncommitted or durable event.
-func (h *Hub) PublishCollectionChange(ctx context.Context, auth appauth.AuthorizationContext, m collections.Mutation) {
-	app, _, _, err := capabilities.Scope(auth)
-	if err != nil {
+func (h *Hub) PublishCollectionChange(ctx context.Context, auth appauth.DataAuthorizationContext, m collections.Mutation) {
+	if auth == nil || auth.AppID() == "" {
 		return
 	}
+	app := auth.AppID()
 	e := Envelope{V: 1, Type: "collection.changed", Collection: m.Collection, ID: m.ID, Version: m.Version, Revision: m.Revision, Deleted: m.Deleted}
 	h.mu.Lock()
 	targets := make([]*connection, 0)

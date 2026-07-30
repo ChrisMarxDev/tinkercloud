@@ -261,6 +261,35 @@ func (s DeploymentRepository) Active(ctx context.Context, appID string) (*deploy
 	return &r, nil
 }
 
+// ActivationReplay consults durable audit evidence before any verified-state
+// planning. A completed exact retry must never create another policy revision,
+// audit row, or live side effect. Any reused key for another target or a state
+// that no longer proves the committed result fails closed.
+func (s DeploymentRepository) ActivationReplay(ctx context.Context, next deployments.Record, requestID string) (bool, error) {
+	if requestID == "" || next.ID == "" || next.AppID == "" || next.OwnerID == "" {
+		return false, deployments.ErrDenied
+	}
+	var target string
+	err := s.Store.DB.QueryRowContext(ctx, "SELECT target_id FROM audit_events WHERE action='deployment.activated' AND actor_id=? AND request_id=?", next.OwnerID, requestID).Scan(&target)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if target != next.ID {
+		return false, deployments.ErrIdempotency
+	}
+	var current, state string
+	if err := s.Store.DB.QueryRowContext(ctx, "SELECT a.current_deployment_id,d.state FROM applications a JOIN deployments d ON d.id=a.current_deployment_id WHERE a.id=?", next.AppID).Scan(&current, &state); err != nil {
+		return false, deployments.ErrIdempotency
+	}
+	if current != next.ID || state != string(releases.Active) || next.State != releases.Active {
+		return false, deployments.ErrIdempotency
+	}
+	return true, nil
+}
+
 // CandidatePolicyReady validates the policy carried by an immutable candidate,
 // rather than consulting the app's ambient current policy. It is used before
 // activation as a fail-closed gate; CommitActivation repeats the checks inside

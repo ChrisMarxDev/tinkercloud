@@ -11,7 +11,7 @@ import (
 )
 
 func TestDenyCSPAndNoCORS(t *testing.T) {
-	g := gateway.Gateway{Config: config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test"}}
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test"}}
 	r := httptest.NewRequest(http.MethodOptions, "http://evil.test/", nil)
 	r.Host = "evil.test"
 	r.Header.Set("Origin", "https://evil.test")

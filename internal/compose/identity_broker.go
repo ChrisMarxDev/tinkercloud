@@ -8,6 +8,7 @@ package compose
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"html/template"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tinyhost/tiny/internal/browseridentity"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/gateway"
 	"github.com/tinyhost/tiny/internal/otp"
@@ -28,12 +30,12 @@ import (
 const (
 	// GlobalIdentityCookieName is host-only at the platform origin. It is never
 	// sent to deployed applications.
-	GlobalIdentityCookieName = "__Host-tiny_identity"
+	GlobalIdentityCookieName = browseridentity.IdentityCookieName
 	// BrowserBindingCookieName is intentionally not an identity credential. It
 	// is a host-only, opaque browser-profile binding used only to serialize OTP
 	// completions started by the same browser. It is never sent to app hosts,
 	// templates, URLs, forms, JavaScript, or logs.
-	BrowserBindingCookieName = "__Host-tiny_browser"
+	BrowserBindingCookieName = browseridentity.BindingCookieName
 	identityStateCookieName  = "__Host-tiny_identity_state"
 	browserBindingLifetime   = 30 * 24 * time.Hour
 	browserBindingMaxBytes   = 256
@@ -56,11 +58,23 @@ type IdentityStore interface {
 	RevokeIdentityBrowserBinding(context.Context, string, time.Time) ([]persistence.AppSessionRef, error)
 }
 
+// platformIdentityStore is deliberately separate from app handoffs. It lets
+// any email establish one platform identity; dashboard access stays a current
+// role lookup in ControlAuthenticator and app access stays a policy lookup.
+type platformIdentityStore interface {
+	RequestPlatformIdentityOTP(context.Context, string, string, string, []byte, time.Time, time.Duration) (*persistence.PlatformIdentityChallenge, error)
+	VerifyPlatformIdentityOTP(context.Context, string, string, string, string, string, bool, []byte, time.Time, int) (persistence.IdentityOTPResult, error)
+}
+
+type dashboardIdentityStore interface {
+	AuthenticateDashboardIdentity(context.Context, string, time.Time) (persistence.DashboardIdentityResult, error)
+}
+
 type identityOutbox interface {
 	EnqueueOTP(context.Context, otp.Message) error
 }
 
-// IdentityBroker joins two safe browser transports: a platform-host-only
+// IdentityBroker joins two safe browser transports: an admin-host-only
 // global identity cookie and a one-time app-bound handoff. It never makes the
 // platform cookie an app credential.
 type IdentityBroker struct {
@@ -72,7 +86,10 @@ type IdentityBroker struct {
 	AppSessionTTL time.Duration
 	PlatformHost  string
 	AppSuffix     string
-	RateLimits    *ratelimit.Limiter
+	// Domain remains an internal test convenience for pre-domain fixtures. New
+	// production composition always supplies the exact PlatformHost/AppSuffix.
+	Domain     string
+	RateLimits *ratelimit.Limiter
 	// RevokeChildren runs only after the persistence transaction commits. It is
 	// used to close already-upgraded live connections whose child app sessions
 	// were revoked by global logout or an account switch.
@@ -101,10 +118,24 @@ func (b IdentityBroker) appTTL() time.Duration {
 	return 24 * time.Hour
 }
 
+func (b IdentityBroker) platformHost() string {
+	if b.PlatformHost != "" {
+		return b.PlatformHost
+	}
+	return "tiny.test"
+}
+
+func (b IdentityBroker) appSuffix() string {
+	if b.AppSuffix != "" {
+		return b.AppSuffix
+	}
+	return b.Domain
+}
+
 // AppLogin begins an app-origin handoff. raw state is host-only on this app;
 // the platform receives only the opaque handoff id.
 func (b IdentityBroker) AppLogin(appID, returnPath string, w http.ResponseWriter, r *http.Request) bool {
-	if b.Store == nil || b.PlatformHost == "" || b.AppSuffix == "" {
+	if b.Store == nil || b.platformHost() == "" || b.appSuffix() == "" {
 		return false
 	}
 	// A handoff is durable state. Keep anonymous document navigations bounded
@@ -126,7 +157,7 @@ func (b IdentityBroker) AppLogin(appID, returnPath string, w http.ResponseWriter
 		expires = b.now().Add(b.otpTTL())
 	}
 	http.SetCookie(w, &http.Cookie{Name: identityStateCookieName, Value: state, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expires})
-	http.Redirect(w, r, "https://"+b.PlatformHost+"/_tiny/identity?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
+	http.Redirect(w, r, "https://"+b.platformHost()+"/_tiny/identity?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
 	return true
 }
 
@@ -160,6 +191,22 @@ func (b IdentityBroker) AppCallback(appID string, w http.ResponseWriter, r *http
 // dashboard/control routes keep their existing handler and credentials.
 func (b IdentityBroker) PlatformHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/login" && r.Method == http.MethodGet {
+			b.platformLoginPage(w, r, false)
+			return
+		}
+		if r.URL.Path == "/login/verify" && r.Method == http.MethodPost {
+			b.platformVerifyOTP(w, r)
+			return
+		}
+		if r.URL.Path == "/login" && r.Method == http.MethodPost {
+			b.platformRequestOTP(w, r)
+			return
+		}
+		if r.URL.Path == "/logout" && r.Method == http.MethodPost {
+			b.platformLogout(w, r)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/_tiny/identity") {
 			next.ServeHTTP(w, r)
 			return
@@ -193,6 +240,133 @@ func (b IdentityBroker) PlatformHandler(next http.Handler) http.Handler {
 		}
 		platformNotFound(w)
 	})
+}
+
+func (b IdentityBroker) platformLoginPage(w http.ResponseWriter, r *http.Request, replace bool) {
+	if b.Store == nil {
+		b.retryStatus(w, http.StatusServiceUnavailable)
+		return
+	}
+	if c, err := r.Cookie(GlobalIdentityCookieName); err == nil && c.Value != "" && !replace {
+		v, err := b.Store.ValidateIdentitySession(r.Context(), c.Value, b.now())
+		if err == nil {
+			if dashboard, ok := b.Store.(dashboardIdentityStore); ok {
+				result, dashboardErr := dashboard.AuthenticateDashboardIdentity(r.Context(), c.Value, b.now())
+				if dashboardErr == nil {
+					b.rotateIdentity(w, result.Identity, result.ReplacementToken)
+					http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+					return
+				}
+				if errors.Is(dashboardErr, persistence.ErrIdentity) {
+					csrf := b.platformCSRF(w, r, v.Session.ID)
+					b.render(w, platformNoRoleTemplate, platformNoRolePage{Email: v.Session.Identity.Email, CSRF: csrf})
+					return
+				}
+				b.retryStatus(w, http.StatusServiceUnavailable)
+				return
+			}
+			b.rotateIdentity(w, v.Session, v.ReplacementToken)
+			http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+			return
+		}
+		if errors.Is(err, persistence.ErrIdentity) {
+			if len(v.Revoked) > 0 && b.RevokeChildren != nil {
+				b.RevokeChildren(uniqueAppSessionRefs(v.Revoked))
+			}
+			http.SetCookie(w, browseridentity.ExpiredCookie(GlobalIdentityCookieName))
+		} else {
+			// A store failure is not evidence that the current identity is stale;
+			// do not start a replacement-login flow that could mask it.
+			b.retryStatus(w, http.StatusServiceUnavailable)
+			return
+		}
+	}
+	if !b.ensureBrowserBinding(w, r) {
+		b.retryStatus(w, http.StatusServiceUnavailable)
+		return
+	}
+	b.render(w, platformEmailTemplate, platformEmailPage{Replace: replace})
+}
+
+func (b IdentityBroker) platformRequestOTP(w http.ResponseWriter, r *http.Request) {
+	if !gateway.SameOrigin(r) || !hasMediaType(r, "application/x-www-form-urlencoded") {
+		b.retry(w)
+		return
+	}
+	s, ok := b.Store.(platformIdentityStore)
+	if !ok {
+		b.retryStatus(w, http.StatusServiceUnavailable)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	if r.ParseForm() != nil {
+		b.retry(w)
+		return
+	}
+	binding, ok := browserBinding(r)
+	if !ok {
+		b.retry(w)
+		return
+	}
+	email := r.Form.Get("email")
+	tx := opaqueTransaction()
+	if b.RateLimits == nil || b.RateLimits.AllowRequest(ratelimit.OTPRequest, r, email, "platform_identity") {
+		if m, err := s.RequestPlatformIdentityOTP(r.Context(), binding, email, ratelimit.RequestFingerprint(r), b.HMACKey, b.now(), b.otpTTL()); err == nil && m != nil {
+			tx = m.ID
+			if b.Outbox != nil {
+				_ = b.Outbox.EnqueueOTP(r.Context(), otp.Message{Email: m.Email, Code: m.Code, ChallengeID: m.ID})
+			}
+			if b.RateLimits != nil {
+				b.RateLimits.BindTransactionRequest(tx, email, r)
+			}
+		}
+	}
+	b.render(w, platformCodeTemplate, platformCodePage{Email: email, Transaction: tx, Replace: r.Form.Get("replace") == "1"})
+}
+
+func (b IdentityBroker) platformVerifyOTP(w http.ResponseWriter, r *http.Request) {
+	if !gateway.SameOrigin(r) || !hasMediaType(r, "application/x-www-form-urlencoded") {
+		b.retry(w)
+		return
+	}
+	s, ok := b.Store.(platformIdentityStore)
+	if !ok {
+		b.retryStatus(w, http.StatusServiceUnavailable)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	if r.ParseForm() != nil {
+		b.retry(w)
+		return
+	}
+	binding, ok := browserBinding(r)
+	if !ok || (b.RateLimits != nil && !b.RateLimits.AllowTransactionRequest(ratelimit.OTPVerify, r, r.Form.Get("transaction"), "platform_identity")) {
+		b.retry(w)
+		return
+	}
+	old := ""
+	if c, err := r.Cookie(GlobalIdentityCookieName); err == nil {
+		old = c.Value
+	}
+	result, err := s.VerifyPlatformIdentityOTP(r.Context(), binding, r.Form.Get("email"), r.Form.Get("transaction"), r.Form.Get("code"), old, r.Form.Get("replace") == "1", b.HMACKey, b.now(), b.OTPMaxAttempt)
+	if err != nil || result.Token == "" {
+		b.retry(w)
+		return
+	}
+	if len(result.Revoked) > 0 && b.RevokeChildren != nil {
+		b.RevokeChildren(uniqueAppSessionRefs(result.Revoked))
+	}
+	http.SetCookie(w, identityCookie(result.Token, result.Session.ExpiresAt))
+	http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.CSRFCookieName))
+	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+}
+
+func (b IdentityBroker) platformLogout(w http.ResponseWriter, r *http.Request) {
+	if !gateway.SameOrigin(r) || !b.validPlatformCSRF(r) {
+		b.retryStatus(w, http.StatusForbidden)
+		return
+	}
+	b.logoutTo(w, r, "/login")
 }
 
 func (b IdentityBroker) identityPage(w http.ResponseWriter, r *http.Request) {
@@ -313,6 +487,7 @@ func (b IdentityBroker) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		b.RevokeChildren(result.Revoked)
 	}
 	http.SetCookie(w, identityCookie(result.Token, result.Session.ExpiresAt))
+	http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.CSRFCookieName))
 	// Verification authorizes the stored handoff atomically with global-session
 	// issuance. Re-authorizing here would race the one-time transition and is
 	// intentionally rejected by persistence.
@@ -353,6 +528,13 @@ func (b IdentityBroker) useAnother(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b IdentityBroker) logout(w http.ResponseWriter, r *http.Request) {
+	b.logoutTo(w, r, "/")
+}
+
+// logoutTo durably revokes the global family before clearing any cookies. It
+// is shared by the private app identity route and the dashboard's visible
+// global sign-out action.
+func (b IdentityBroker) logoutTo(w http.ResponseWriter, r *http.Request, redirect string) {
 	if !gateway.SameOrigin(r) || b.Store == nil {
 		b.retry(w)
 		return
@@ -408,7 +590,8 @@ func (b IdentityBroker) logout(w http.ResponseWriter, r *http.Request) {
 		b.RevokeChildren(uniqueAppSessionRefs(refs))
 	}
 	http.SetCookie(w, expiredCookie(GlobalIdentityCookieName))
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.CSRFCookieName))
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
 func uniqueAppSessionRefs(refs []persistence.AppSessionRef) []persistence.AppSessionRef {
@@ -428,11 +611,11 @@ func uniqueAppSessionRefs(refs []persistence.AppSessionRef) []persistence.AppSes
 }
 
 func (b IdentityBroker) redirectCallback(w http.ResponseWriter, r *http.Request, h persistence.IdentityHandoff) {
-	if h.ID == "" || h.AppSlug == "" || !validAppHost(h.AppSlug, b.AppSuffix) {
+	if h.ID == "" || h.AppSlug == "" || !validAppHost(h.AppSlug, b.appSuffix()) {
 		b.retry(w)
 		return
 	}
-	http.Redirect(w, r, "https://"+appHost(h.AppSlug, b.AppSuffix)+"/_tiny/auth/callback?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
+	http.Redirect(w, r, "https://"+appHost(h.AppSlug, b.appSuffix())+"/_tiny/auth/callback?handoff="+url.QueryEscape(h.ID), http.StatusSeeOther)
 }
 
 func (b IdentityBroker) rotateIdentity(w http.ResponseWriter, session persistence.IdentitySession, raw string) {
@@ -442,7 +625,7 @@ func (b IdentityBroker) rotateIdentity(w http.ResponseWriter, session persistenc
 }
 
 func identityCookie(raw string, expiry time.Time) *http.Cookie {
-	return &http.Cookie{Name: GlobalIdentityCookieName, Value: raw, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, Expires: expiry}
+	return browseridentity.IdentityCookie(raw, expiry)
 }
 
 // ensureBrowserBinding only prepares the normal browser form flow. Unlike the
@@ -482,14 +665,44 @@ func browserBindingCookie(raw string, expiry time.Time) *http.Cookie {
 }
 
 func expiredCookie(name string) *http.Cookie {
-	return &http.Cookie{Name: name, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: -1}
+	return browseridentity.ExpiredCookie(name)
+}
+
+func (b IdentityBroker) validPlatformCSRF(r *http.Request) bool {
+	c, err := r.Cookie(browseridentity.CSRFCookieName)
+	identityCookie, identityErr := r.Cookie(GlobalIdentityCookieName)
+	if err != nil || identityErr != nil || c.Value == "" || r.ParseForm() != nil || b.Store == nil {
+		return false
+	}
+	validation, validationErr := b.Store.ValidateIdentitySession(r.Context(), identityCookie.Value, b.now())
+	if validationErr != nil || validation.Session.ID == "" || !strings.HasPrefix(c.Value, validation.Session.ID+".") {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(c.Value), []byte(r.Form.Get("csrf"))) == 1
+}
+
+func (b IdentityBroker) platformCSRF(w http.ResponseWriter, r *http.Request, identitySessionID string) string {
+	if identitySessionID == "" {
+		return ""
+	}
+	prefix := identitySessionID + "."
+	if c, err := r.Cookie(browseridentity.CSRFCookieName); err == nil && strings.HasPrefix(c.Value, prefix) && len(c.Value) >= len(prefix)+32 {
+		return c.Value
+	}
+	random := make([]byte, 24)
+	if _, err := rand.Read(random); err != nil {
+		return ""
+	}
+	v := prefix + base64.RawURLEncoding.EncodeToString(random)
+	http.SetCookie(w, &http.Cookie{Name: browseridentity.CSRFCookieName, Value: v, Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	return v
 }
 
 func appHost(slug, suffix string) string {
 	return strings.ToLower(slug) + "." + strings.ToLower(suffix)
 }
 func validAppHost(slug, suffix string) bool {
-	h, ok := gateway.ClassifyHost(appHost(slug, suffix), config.Config{PlatformHost: "platform.invalid", AppSuffix: suffix})
+	h, ok := gateway.ClassifyHost(appHost(slug, suffix), config.Config{Domain: suffix})
 	return ok && h.Kind == gateway.App && h.Slug == strings.ToLower(slug)
 }
 
@@ -523,8 +736,17 @@ type identityEmailPage struct {
 }
 type identityCodePage struct{ Email, Handoff, Transaction string }
 type identityDeniedPage struct{ Email, Handoff string }
+type platformEmailPage struct{ Replace bool }
+type platformCodePage struct {
+	Email, Transaction string
+	Replace            bool
+}
+type platformNoRolePage struct{ Email, CSRF string }
 
 var identityEmailTemplate = template.Must(template.New("identity-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="identity-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">Private app</p><h1 id="identity-title">Sign in to continue.</h1><p class="tiny-auth-card__intro">Use an email address the app owner has allowed.</p><form class="tiny-stack" method="post" action="/_tiny/identity/otp"><label class="tiny-field" for="email"><span class="tiny-label">Email address</span><input class="tiny-input" id="email" name="email" type="email" required autocomplete="email"></label><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Send one-time code</button></form><p class="tiny-auth-card__footer">This message is the same for every address.</p></section></main><script>{{tinyJS}}</script></body></html>`))
 var identityCodeTemplate = template.Must(template.New("identity-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="code-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">One small step</p><h1 id="code-title">Check your email.</h1><p class="tiny-auth-card__intro">If that address is authorized, a one-time code has been sent.</p><form class="tiny-stack" method="post" action="/_tiny/identity/verify"><label class="tiny-field" for="code"><span class="tiny-label">One-time code</span><input class="tiny-input tiny-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="handoff" value="{{.Handoff}}"><input type="hidden" name="transaction" value="{{.Transaction}}"><button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
-var identityDeniedTemplate = template.Must(template.New("identity-denied").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access unavailable · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="denied-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">Private app</p><h1 id="denied-title">This account cannot open this app.</h1><div class="tiny-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. Ask the app owner for access, or use another email.</p></div><form class="tiny-stack" method="post" action="/_tiny/identity/use-another"><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tiny-button tiny-button--secondary tiny-button--full" type="submit">Use another email</button></form><p class="tiny-auth-card__footer">We do not reveal the app’s access rules.</p></section></main><script>{{tinyJS}}</script></body></html>`))
+var identityDeniedTemplate = template.Must(template.New("identity-denied").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access unavailable · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="denied-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><p class="tiny-eyebrow">Private app</p><h1 id="denied-title">This account cannot open this app.</h1><div class="tiny-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. Ask the app owner for access, or use another email.</p></div><form class="tiny-stack" method="post" action="/_tiny/identity/use-another"><input type="hidden" name="handoff" value="{{.Handoff}}"><button class="tiny-button tiny-button--secondary tiny-button--full" type="submit">Use another email</button></form><p class="tiny-auth-card__footer">Changing email signs this browser out of TinyHost apps after verification. We do not reveal the app’s access rules.</p></section></main><script>{{tinyJS}}</script></body></html>`))
 var identityRetryTemplate = template.Must(template.New("identity-retry").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="retry-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>protected by tinyhost</span></div><h1 id="retry-title">Sign-in needs another try.</h1><div class="tiny-notice" role="alert"><p>We could not complete that sign-in step. Your access has not changed.</p></div><p class="tiny-auth-card__footer">Return to the protected app and try again.</p></section></main><script>{{tinyJS}}</script></body></html>`))
+var platformEmailTemplate = template.Must(template.New("platform-email").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign in · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="platform-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">Your tiny cloud</p><h1 id="platform-title">Sign in to TinyHost.</h1><p class="tiny-auth-card__intro">Use your email to continue to the dashboard and any apps you can access.</p><form class="tiny-stack" method="post" action="/login"><label class="tiny-field" for="email"><span class="tiny-label">Email address</span><input class="tiny-input" id="email" name="email" type="email" required autocomplete="email"></label>{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Send one-time code</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
+var platformCodeTemplate = template.Must(template.New("platform-code").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Check your email · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="platform-code-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">One small step</p><h1 id="platform-code-title">Check your email.</h1><p class="tiny-auth-card__intro">If that address can sign in, a one-time code has been sent.</p><form class="tiny-stack" method="post" action="/login/verify"><label class="tiny-field" for="code"><span class="tiny-label">One-time code</span><input class="tiny-input tiny-input--code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required></label><input type="hidden" name="email" value="{{.Email}}"><input type="hidden" name="transaction" value="{{.Transaction}}">{{if .Replace}}<input type="hidden" name="replace" value="1">{{end}}<button class="tiny-button tiny-button--primary tiny-button--full" type="submit">Verify and continue</button></form></section></main><script>{{tinyJS}}</script></body></html>`))
+var platformNoRoleTemplate = template.Must(template.New("platform-no-role").Funcs(webui.FuncMap()).Parse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard unavailable · TinyHost</title><style>{{tinyCSS}}</style></head><body><a class="tiny-skip" href="#main">Skip to content</a><main class="tiny-auth" id="main"><section class="tiny-auth-card" aria-labelledby="no-role-title"><div class="tiny-brand"><span class="tiny-brand__mark" aria-hidden="true">{{tinyMark}}</span><span>tinyhost</span></div><p class="tiny-eyebrow">Dashboard</p><h1 id="no-role-title">This account cannot use the dashboard.</h1><div class="tiny-notice" role="status"><p>Signed in as <strong>{{.Email}}</strong>. You can still open apps where you have access.</p></div><form class="tiny-stack" method="post" action="/logout"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="tiny-button tiny-button--secondary tiny-button--full" type="submit">Sign out of TinyHost</button></form><p class="tiny-auth-card__footer">Sign out, then use another email if you need dashboard access.</p></section></main><script>{{tinyJS}}</script></body></html>`))

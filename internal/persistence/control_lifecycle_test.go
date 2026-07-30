@@ -91,7 +91,11 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	hash := sha256.Sum256([]byte("viewer-session"))
-	if _, err = s.DB.Exec("INSERT INTO sessions(id,scope,app_id,identity_id,secret_hash,expires_at,created_at) VALUES('ses','app','a','i',?,?,datetime('now'))", hash[:], time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
+	parentHash := sha256.Sum256([]byte("parent-session"))
+	if _, err = s.DB.Exec("INSERT INTO identity_sessions(id,identity_id,family_id,secret_hash,browser_binding_hash,expires_at,last_seen_at,rotated_at,created_at) VALUES('parent','i','family',?,randomblob(32),?,?,?,datetime('now'))", parentHash[:], time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("INSERT INTO sessions(id,scope,app_id,identity_id,identity_session_id,secret_hash,expires_at,created_at) VALUES('ses','app','a','i','parent',?,?,datetime('now'))", hash[:], time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	live := &lifecycleLiveSpy{}
@@ -341,8 +345,24 @@ func TestControlReplaceActiveDeployersReconcilesAndRevokes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = s.DB.Exec("INSERT INTO sessions(id,scope,user_id,secret_hash,expires_at,created_at) VALUES('remove-session','control','remove',X'01',datetime('now','+1 hour'),datetime('now'))"); err != nil {
+	globalRaw, appRaw := "global-remove", "app-remove"
+	globalHash, appHash, bindingHash := sha256.Sum256([]byte(globalRaw)), sha256.Sum256([]byte(appRaw)), sha256.Sum256([]byte("remove-browser"))
+	now := time.Now().UTC()
+	if _, err = s.DB.Exec("INSERT INTO identities(id,normalized_email,created_at) VALUES('remove-identity','remove@example.com',?)", now.Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("INSERT INTO identity_sessions(id,identity_id,family_id,secret_hash,browser_binding_hash,expires_at,last_seen_at,rotated_at,created_at) VALUES('remove-global','remove-identity','remove-family',?,?,?,?,?,?)", globalHash[:], bindingHash[:], now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.DB.Exec("INSERT INTO sessions(id,scope,app_id,identity_id,secret_hash,expires_at,created_at,identity_session_id) VALUES('remove-app','app','a','remove-identity',?,?,?,'remove-global')", appHash[:], now.Add(time.Hour).Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	seedViewerPolicy(t, s)
+	if _, err = s.DB.Exec("INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES('a-remove','a',1,'email','remove@example.com','u',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Validate(context.Background(), "a", appRaw, now); err != nil {
+		t.Fatalf("independent app session invalid before deployer removal: %v", err)
 	}
 	svc := ControlService{Store: s}
 	actor := controlapi.Actor{ID: "op", Role: "operator", Active: true}
@@ -360,10 +380,20 @@ func TestControlReplaceActiveDeployersReconcilesAndRevokes(t *testing.T) {
 	if _, err = s.AuthenticateToken(context.Background(), raw, "app:read", "", time.Now()); err == nil {
 		t.Fatal("removed token remained valid")
 	}
-	var n int
-	if err = s.DB.QueryRow("SELECT COUNT(*) FROM sessions WHERE id='remove-session' AND revoked_at IS NOT NULL").Scan(&n); err != nil || n != 1 {
-		t.Fatal(n, err)
+	// Deployer removal is a control-plane change. It must deny the next
+	// dashboard lookup but neither destroy the browser's global identity nor
+	// revoke a separately authorized viewer session for an active app.
+	var globalRevoked sql.NullString
+	if err = s.DB.QueryRow("SELECT revoked_at FROM identity_sessions WHERE id='remove-global'").Scan(&globalRevoked); err != nil || globalRevoked.Valid {
+		t.Fatalf("deployer removal revoked global identity row: %#v %v", globalRevoked, err)
 	}
+	if _, err = s.AuthenticateDashboardIdentity(context.Background(), globalRaw, now); !errors.Is(err, ErrIdentity) {
+		t.Fatalf("removed deployer retained dashboard authority: %v", err)
+	}
+	if _, err = s.Validate(context.Background(), "a", appRaw, now); err != nil {
+		t.Fatalf("deployer removal revoked independent app session: %v", err)
+	}
+	var n int
 	if err = s.DB.QueryRow("SELECT COUNT(*) FROM otp_challenges WHERE id IN ('wake-otp','remove-otp') AND invalidated_at IS NOT NULL").Scan(&n); err != nil || n != 2 {
 		t.Fatal(n, err)
 	}
@@ -378,7 +408,7 @@ func TestControlReplaceActiveDeployersReconcilesAndRevokes(t *testing.T) {
 func TestControlReplaceActiveDeployersDenialsAndAtomicAudit(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
-	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now')),('d','old@example.com','deployer','active',datetime('now')); INSERT INTO api_tokens(id,user_id,secret_hash,scopes,expires_at) VALUES('token','d',X'01','app:read',datetime('now','+1 hour')); INSERT INTO sessions(id,scope,user_id,secret_hash,expires_at,created_at) VALUES('session','control','d',X'02',datetime('now','+1 hour'),datetime('now'))"); err != nil {
+	if _, err := s.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.com','operator','active',datetime('now')),('d','old@example.com','deployer','active',datetime('now')); INSERT INTO api_tokens(id,user_id,secret_hash,scopes,expires_at) VALUES('token','d',X'01','app:read',datetime('now','+1 hour'))"); err != nil {
 		t.Fatal(err)
 	}
 	svc := ControlService{Store: s}
@@ -402,15 +432,12 @@ func TestControlReplaceActiveDeployersDenialsAndAtomicAudit(t *testing.T) {
 		t.Fatalf("stale=%v", err)
 	}
 	var status string
-	var tokenRevoked, sessionRevoked sql.NullString
+	var tokenRevoked sql.NullString
 	if err := s.DB.QueryRow("SELECT status FROM users WHERE id='d'").Scan(&status); err != nil || status != "active" {
 		t.Fatalf("stale changed status %q %v", status, err)
 	}
 	if err := s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE id='token'").Scan(&tokenRevoked); err != nil || tokenRevoked.Valid {
 		t.Fatalf("stale changed token %v %v", tokenRevoked, err)
-	}
-	if err := s.DB.QueryRow("SELECT revoked_at FROM sessions WHERE id='session'").Scan(&sessionRevoked); err != nil || sessionRevoked.Valid {
-		t.Fatalf("stale changed session %v %v", sessionRevoked, err)
 	}
 	if _, err := s.DB.Exec("CREATE TRIGGER deny_allowlist_audit BEFORE INSERT ON audit_events WHEN NEW.action='deployers.reconciled' BEGIN SELECT RAISE(ABORT,'deny'); END"); err != nil {
 		t.Fatal(err)
@@ -423,8 +450,5 @@ func TestControlReplaceActiveDeployersDenialsAndAtomicAudit(t *testing.T) {
 	}
 	if err := s.DB.QueryRow("SELECT revoked_at FROM api_tokens WHERE id='token'").Scan(&tokenRevoked); err != nil || tokenRevoked.Valid {
 		t.Fatalf("audit changed token %v %v", tokenRevoked, err)
-	}
-	if err := s.DB.QueryRow("SELECT revoked_at FROM sessions WHERE id='session'").Scan(&sessionRevoked); err != nil || sessionRevoked.Valid {
-		t.Fatalf("audit changed session %v %v", sessionRevoked, err)
 	}
 }

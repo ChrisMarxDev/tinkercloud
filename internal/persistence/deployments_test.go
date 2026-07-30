@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/tinyhost/tiny/internal/controlapi"
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/releases"
 	"os"
@@ -12,6 +13,10 @@ import (
 )
 
 func manifest(slug string) releases.Manifest { return releases.Manifest{Version: 1, Name: slug} }
+
+type replayRevoker struct{ calls int }
+
+func (r *replayRevoker) Revoke(string, string) { r.calls++ }
 
 func TestDeploymentRepositoryCreateGet(t *testing.T) {
 	s := seeded(t)
@@ -221,6 +226,71 @@ func TestDeploymentCommitActivationReplacement(t *testing.T) {
 	gone, e := r.Get(context.Background(), "a1")
 	if e != nil || gone.State != releases.Superseded {
 		t.Fatal(e, gone.State)
+	}
+}
+
+func TestDeploymentActivationReplayIsExactAndDoesNotMutatePolicyOrAudit(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	r := DeploymentRepository{Store: s}
+	next := deployments.Record{Deployment: releases.Deployment{ID: "replay", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "a", IdempotencyKey: "upload", Manifest: manifest("a")}
+	if err := r.Create(context.Background(), next); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CommitActivation(context.Background(), next, nil, "activate-once"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := r.Get(context.Background(), "replay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := r.ActivationReplay(context.Background(), active, "activate-once"); err != nil || !ok {
+		t.Fatalf("exact replay=%v err=%v", ok, err)
+	}
+	var revision, audits int
+	if err := s.DB.QueryRow("SELECT policy_revision FROM applications WHERE id='a'").Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM audit_events WHERE action='deployment.activated'").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if revision != 2 || audits != 1 {
+		t.Fatalf("replay mutated durable state revision=%d audits=%d", revision, audits)
+	}
+	other := active
+	other.ID = "other"
+	if _, err := r.ActivationReplay(context.Background(), other, "activate-once"); err == nil {
+		t.Fatal("different target accepted for committed key")
+	}
+	if _, err := r.ActivationReplay(context.Background(), active, "different-key"); err != nil {
+		t.Fatalf("unseen key must proceed to normal validation: %v", err)
+	}
+}
+
+func TestControlActivationExactReplayDoesNotRevokeLiveSessions(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	repo := DeploymentRepository{Store: s}
+	next := deployments.Record{Deployment: releases.Deployment{ID: "live-replay", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "upload", Manifest: manifest("alpha")}
+	if err := repo.Create(context.Background(), next); err != nil {
+		t.Fatal(err)
+	}
+	service := &deployments.Service{Repo: repo, Gates: deployments.GateFuncs{
+		PolicyFunc:      func(context.Context, deployments.Record) bool { return true },
+		CertificateFunc: func(context.Context, deployments.Record) bool { return true },
+		ProbeFunc:       func(context.Context, deployments.Record) bool { return true },
+	}}
+	live := &replayRevoker{}
+	control := ControlService{Store: s, Deployments: service, Live: live, AppSuffix: "apps.example.test"}
+	actor := controlapi.Actor{ID: "u", Active: true}
+	if _, err := control.Activate(context.Background(), actor, "alpha", "live-replay", "same-key"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := control.Activate(context.Background(), actor, "alpha", "live-replay", "same-key"); err != nil {
+		t.Fatal(err)
+	}
+	if live.calls != 1 {
+		t.Fatalf("exact replay revoked live sessions %d times", live.calls)
 	}
 }
 func TestDeploymentFail(t *testing.T) {

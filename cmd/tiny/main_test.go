@@ -141,7 +141,7 @@ func successfulDeployTransport(t *testing.T, bearer string, archiveNames *[]stri
 			*archiveNames = tarNames(t, body)
 			return jsonResponse(r, http.StatusAccepted, `{"deployment_id":"deployment","state":"verified"}`), nil
 		case r.URL.Path == "/api/v1/apps/demo/deployments/deployment/activate":
-			return jsonResponse(r, http.StatusOK, `{"deployment_id":"deployment","url":"https://demo.tiny.example/","app_suffix":"tiny.example","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`), nil
+			return jsonResponse(r, http.StatusOK, `{"deployment_id":"deployment","url":"https://demo.tiny.example/","domain":"tiny.example","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`), nil
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL)
 			return nil, nil
@@ -197,6 +197,77 @@ func TestLoginReusesValidStoredCredentialWithoutPromptOrOTP(t *testing.T) {
 	}
 	if prompt.asked != 0 || strings.Join(paths, ",") != "GET /api/v1/version,GET /api/v1/whoami" || stored.values["https://tiny.example"] != "saved-token" || stored.putCalls != 0 || stored.defaultURL != "https://tiny.example" {
 		t.Fatalf("asked=%d paths=%v store=%q puts=%d default=%q", prompt.asked, paths, stored.values["https://tiny.example"], stored.putCalls, stored.defaultURL)
+	}
+}
+
+func TestDataKVListReusesSavedCredentialAndWritesDeterministicJSON(t *testing.T) {
+	stored := &spyStore{values: map[string]string{"https://tiny.example": "saved-token"}, defaultURL: "https://tiny.example"}
+	deps := runnerDeps{store: stored, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps/demo/data/kv" || r.URL.Query().Get("prefix") != "settings/" || r.Header.Get("Authorization") != "Bearer saved-token" {
+			t.Fatalf("request = %s %s authorization=%q", r.Method, r.URL, r.Header.Get("Authorization"))
+		}
+		return jsonResponse(r, http.StatusOK, `{"entries":[{"key":"settings/theme","value":"dark","version":2}],"next_cursor":"settings/theme"}`), nil
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"--json", "data", "kv", "list", "demo", "--prefix", "settings/"}, &out, &stderr, deps); code != 0 || out.String() != "{\"entries\":[{\"key\":\"settings/theme\",\"value\":\"dark\",\"version\":2,\"updated_at\":\"\"}],\"next_cursor\":\"settings/theme\"}\n" || stderr.Len() != 0 {
+		t.Fatalf("code=%d out=%q stderr=%q", code, out.String(), stderr.String())
+	}
+}
+
+func TestDataDeleteRequiresAppBoundConfirmationBeforeNetwork(t *testing.T) {
+	called := false
+	deps := runnerDeps{store: &spyStore{values: map[string]string{"https://tiny.example": "saved-token"}, defaultURL: "https://tiny.example"}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		called = true
+		return jsonResponse(r, http.StatusNoContent, ``), nil
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"data", "kv", "delete", "demo", "settings/theme", "--expected-version", "2", "--confirm", "delete:other:settings/theme"}, &out, &stderr, deps); code != 2 || called || stderr.String() != dataUsage+"\n" {
+		t.Fatalf("code=%d called=%v out=%q stderr=%q", code, called, out.String(), stderr.String())
+	}
+}
+
+func TestDataDeletePromptsForExactConfirmationAndSendsExpectedVersion(t *testing.T) {
+	called := false
+	deps := runnerDeps{store: &spyStore{values: map[string]string{"https://tiny.example": "saved-token"}, defaultURL: "https://tiny.example"}, prompt: &loginPrompt{values: []string{"delete:demo:settings/theme"}}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		called = true
+		body, _ := io.ReadAll(r.Body)
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/apps/demo/data/kv/settings/theme" || !strings.Contains(string(body), `"expected_version":2`) || r.Header.Get("Idempotency-Key") == "" {
+			t.Fatalf("request=%s %s body=%s", r.Method, r.URL, body)
+		}
+		return jsonResponse(r, http.StatusNoContent, ``), nil
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"data", "kv", "delete", "demo", "settings/theme", "--expected-version", "2"}, &out, &stderr, deps); code != 0 || !called || !strings.Contains(out.String(), `"deleted":true`) {
+		t.Fatalf("code=%d called=%v out=%q stderr=%q", code, called, out.String(), stderr.String())
+	}
+}
+
+func TestDataDeleteJSONRequiresAndAcceptsTargetBoundConfirmation(t *testing.T) {
+	called := false
+	deps := runnerDeps{store: &spyStore{values: map[string]string{"https://tiny.example": "saved-token"}, defaultURL: "https://tiny.example"}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		called = true
+		body, _ := io.ReadAll(r.Body)
+		if r.Method != http.MethodDelete || r.URL.Path != "/api/v1/apps/demo/data/kv/settings/theme" || !strings.Contains(string(body), `"expected_version":2`) {
+			t.Fatalf("request=%s %s body=%s", r.Method, r.URL, body)
+		}
+		return jsonResponse(r, http.StatusOK, `{"deleted":true}`), nil
+	}))}
+	var out, stderr bytes.Buffer
+	args := []string{"--json", "data", "kv", "delete", "demo", "settings/theme", "--expected-version", "2", "--confirm", "delete:demo:settings/theme"}
+	if code := runWith(args, &out, &stderr, deps); code != 0 || !called || out.String() != "{\"key\":\"settings/theme\",\"deleted\":true}\n" || stderr.Len() != 0 {
+		t.Fatalf("code=%d called=%v out=%q stderr=%q", code, called, out.String(), stderr.String())
+	}
+}
+
+func TestDataMutationRejectsInlineJSONBeforeNetwork(t *testing.T) {
+	called := false
+	deps := runnerDeps{store: &spyStore{values: map[string]string{"https://tiny.example": "saved-token"}, defaultURL: "https://tiny.example"}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		called = true
+		return jsonResponse(r, http.StatusInternalServerError, `{}`), nil
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"data", "kv", "set", "demo", "settings/theme", "--value", `"dark"`}, &out, &stderr, deps); code != 1 || called || !strings.Contains(stderr.String(), "JSON input") {
+		t.Fatalf("code=%d called=%v out=%q stderr=%q", code, called, out.String(), stderr.String())
 	}
 }
 
@@ -608,6 +679,17 @@ func TestInitWizardRejectsInvalidOversizeAndEOFWithoutWritingManifest(t *testing
 	}
 }
 
+func TestInitWizardRejectsReservedAppSlugWithoutWritingManifest(t *testing.T) {
+	project := t.TempDir()
+	prompt := &loginPrompt{values: []string{"ADMIN"}}
+	if _, err := createManifest(project, prompt); err == nil {
+		t.Fatal("reserved app slug accepted")
+	}
+	if _, err := os.Lstat(filepath.Join(project, "tiny.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("reserved slug wrote a manifest: %v", err)
+	}
+}
+
 func TestInitNeverFollowsManifestTargetSymlink(t *testing.T) {
 	project := t.TempDir()
 	target := filepath.Join(t.TempDir(), "outside.yaml")
@@ -727,6 +809,47 @@ func TestDeployReportsActiveButUnverifiedReceipt(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "unsafe public response") || strings.Contains(out.String(), "saved-token") {
 		t.Fatal("unsafe public evidence or credential leaked")
+	}
+}
+
+func TestDeployReportsActivationFailureReceipt(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tiny.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var archiveNames, calls []string
+	base := successfulDeployTransport(t, "saved-token", &archiveNames, &calls)
+	transport := tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/activate") {
+			h := make(http.Header)
+			h.Set("X-Request-ID", "req_0123456789abcdef01234567")
+			return &http.Response{StatusCode: http.StatusConflict, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"activation_candidate_probe_failed","message":"secret policy detail","request_id":"req_0123456789abcdef01234567"}}`)), Header: h, Request: r}, nil
+		}
+		return base.RoundTrip(r)
+	})
+	deps := runnerDeps{store: client.MemoryStore{"https://tiny.example": "saved-token"}, newClient: tokenClient(transport)}
+
+	var jsonOut, jsonErr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tiny.example", "deploy", project}, &jsonOut, &jsonErr, deps)
+	wantJSON := "{\"valid\":false,\"deployment\":{\"deployment_id\":\"deployment\",\"state\":\"verified\",\"reason\":\"activation_candidate_probe_failed\",\"request_id\":\"req_0123456789abcdef01234567\"},\"error\":{\"code\":\"activation_failed\",\"message\":\"Deployment activation failed.\"}}\n"
+	if code != 1 || jsonErr.Len() != 0 || jsonOut.String() != wantJSON {
+		t.Fatalf("code=%d out=%q stderr=%q", code, jsonOut.String(), jsonErr.String())
+	}
+	if strings.Contains(jsonOut.String(), "secret policy detail") || strings.Contains(jsonOut.String(), "saved-token") {
+		t.Fatal("unsafe activation detail leaked")
+	}
+
+	var humanOut, humanErr bytes.Buffer
+	code = runWith([]string{"--server", "https://tiny.example", "deploy", project}, &humanOut, &humanErr, deps)
+	wantHuman := "Deployment activation failed.\nDeployment: deployment\nState: verified\nReason: activation_candidate_probe_failed\nRequest ID: req_0123456789abcdef01234567\n"
+	if code != 1 || humanOut.Len() != 0 || humanErr.String() != wantHuman {
+		t.Fatalf("code=%d out=%q stderr=%q", code, humanOut.String(), humanErr.String())
 	}
 }
 
@@ -1053,6 +1176,92 @@ func TestAccessSetFetchesCurrentRevisionBeforeReplacement(t *testing.T) {
 	}
 }
 
+func TestAccessSetJSONBroadeningRequiresExplicitFileConfirmationBeforePUT(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"mode":"private","allow":{"emails":["viewer@example.test"],"domains":[]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	deps := runnerDeps{store: client.MemoryStore{"https://tiny.example": "token"}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps/app/access" {
+			t.Fatalf("unexpected mutation/request: %s %s", r.Method, r.URL.Path)
+		}
+		return jsonResponse(r, http.StatusOK, `{"mode":"private","revision":7,"allow":{"emails":[],"domains":[]}}`), nil
+	}))}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tiny.example", "access", "set", "app", "--file", p}, &out, &stderr, deps)
+	if code != 1 || stderr.Len() != 0 || calls != 1 || !strings.Contains(out.String(), `"code":"confirmation_required"`) {
+		t.Fatalf("code=%d calls=%d out=%q err=%q", code, calls, out.String(), stderr.String())
+	}
+}
+
+func TestAccessSetInteractiveBroadeningConfirmsAndPreservesServerEnforcement(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"mode":"private","allow":{"emails":["viewer@example.test"],"domains":[]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var putBody string
+	prompt := &loginPrompt{values: []string{"yes"}}
+	deps := runnerDeps{store: client.MemoryStore{"https://tiny.example": "token"}, prompt: prompt, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/v1/apps/app/access":
+			return jsonResponse(r, http.StatusOK, `{"mode":"private","revision":7,"allow":{"emails":[],"domains":[]}}`), nil
+		case "PUT /api/v1/apps/app/access":
+			body, _ := io.ReadAll(r.Body)
+			putBody = string(body)
+			return jsonResponse(r, http.StatusOK, `{}`), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			return nil, nil
+		}
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"--server", "https://tiny.example", "access", "set", "app", "--file", p}, &out, &stderr, deps); code != 0 || prompt.asked != 1 || !strings.Contains(putBody, `"confirm_broadening":true`) {
+		t.Fatalf("code=%d asked=%d out=%q err=%q body=%q", code, prompt.asked, out.String(), stderr.String(), putBody)
+	}
+}
+
+func TestAccessSetStrictlyRejectsReadOnlyRevisionBeforeNetwork(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"mode":"private","revision":7,"allow":{"emails":[],"domains":[]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	deps := runnerDeps{store: client.MemoryStore{"https://tiny.example": "token"}, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		t.Fatal("policy validation made a network request")
+		return nil, nil
+	}))}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tiny.example", "access", "set", "app", "--file", p}, &out, &stderr, deps)
+	if code != 1 || stderr.Len() != 0 || !strings.Contains(out.String(), `"code":"invalid_policy"`) {
+		t.Fatalf("code=%d out=%q err=%q", code, out.String(), stderr.String())
+	}
+}
+
+func TestAccessSetStaleRevisionRemainsServerConflictWithoutPrompt(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "policy.json")
+	if err := os.WriteFile(p, []byte(`{"mode":"private","expected_revision":6,"allow":{"emails":["viewer@example.test"],"domains":[]}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	prompt := &loginPrompt{values: []string{"yes"}}
+	deps := runnerDeps{store: client.MemoryStore{"https://tiny.example": "token"}, prompt: prompt, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/v1/apps/app/access":
+			return jsonResponse(r, http.StatusOK, `{"mode":"private","revision":7,"allow":{"emails":[],"domains":[]}}`), nil
+		case "PUT /api/v1/apps/app/access":
+			return jsonResponse(r, http.StatusConflict, `{"error":{"code":"conflict","message":"Conflict.","request_id":"req_0123456789abcdef01234567"}}`), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+			return nil, nil
+		}
+	}))}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tiny.example", "access", "set", "app", "--file", p}, &out, &stderr, deps)
+	if code != 1 || prompt.asked != 0 || !strings.Contains(out.String(), `"code":"policy_conflict"`) {
+		t.Fatalf("code=%d asked=%d out=%q err=%q", code, prompt.asked, out.String(), stderr.String())
+	}
+}
+
 func TestTokenCreatePrintsSecretExactlyOnce(t *testing.T) {
 	var gotBody string
 	deps := runnerDeps{
@@ -1277,7 +1486,7 @@ func TestDeployUsesFreshIdempotencyKeyForEachInvocationAndStagesArchive(t *testi
 			if !strings.HasSuffix(r.URL.Path, "/activate") || r.Header.Get("Idempotency-Key") == "" {
 				t.Fatalf("unexpected activation request %s", r.URL.Path)
 			}
-			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.example/","app_suffix":"tiny.example","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tiny.example/","domain":"tiny.example","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		})),
 	}
 	for range 2 {

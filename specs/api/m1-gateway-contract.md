@@ -3,8 +3,8 @@
 ## Trust boundary
 
 Only the public gateway accepts HTTP. It derives the application from a
-canonical `Host` and the viewer from an opaque host-only app session cookie or
-from the platform-host global identity during a server-created handoff. A
+canonical `Host` and the viewer from an opaque host-only app session cookie
+derived from the admin-host global identity during a server-created handoff. A
 protected dispatcher receives an `appauth.AuthorizationContext`, which only
 the `appauth` package can implement. It never accepts an app identifier from a
 request parameter, cookie, or header.
@@ -42,25 +42,31 @@ during symlink races.
 
 ## Viewer login
 
-JSON and form OTP requests return an opaque `otp_...` transaction with the
-same accepted shape whether delivery is eligible, ineligible, or unavailable.
-Forms are bounded and HTML-escaped. Verification atomically consumes the
-challenge, rechecks current policy, and issues only a host-only Secure,
-HttpOnly, SameSite=Lax app cookie with a safe relative return target.
+An unauthenticated app request creates a bounded, server-owned handoff and
+redirects only to the identity broker on `admin.<domain>`. The broker's bounded,
+HTML-escaped forms return the same generic result whether delivery is eligible,
+ineligible, or unavailable. Verification establishes the host-only global
+browser identity and authorizes only that stored handoff after rechecking the
+current app policy. The exact app callback atomically consumes it, rechecks
+policy again, and issues a host-only Secure, HttpOnly, SameSite=Lax app cookie.
+The callback restores the validated relative path and raw query string; direct
+app-host OTP request and verification routes do not exist.
 
-The global viewer identity and app-bound handoff are governed by
-[`global-identity-handoff-contract.md`](global-identity-handoff-contract.md).
-The platform-host global cookie proves email identity only; it is never used as
-app request authority. A missing app session may redirect an unambiguous
-document navigation through the exact platform identity broker only with a
-server-created state-bound handoff. Handoff issuance and consumption both
+The global browser identity and app-bound handoff are governed by
+[`browser-identity-handoff-contract.md`](browser-identity-handoff-contract.md).
+The admin-host cookie proves email identity only; it is never used as app
+request authority. A missing app session may redirect an unambiguous document
+navigation through the exact admin identity broker only with a server-created
+state-bound handoff. Handoff issuance and consumption both
 recheck current policy, consume the grant once, and create the existing
 app-host cookie only after success.
 
 For a genuine unauthenticated browser document navigation to a protected static
 path, the gateway may redirect only to that same app host's
-`/_tiny/auth/login?return={safe-relative-request-uri}`. It does not use a
-platform cookie as app identity and does not read release content first. API,
+`/_tiny/auth/login?return={safe-relative-request-uri}`. The handoff preserves a
+validated relative path and raw query, including repeated and percent-encoded
+query values. Fragments are browser-only and not guaranteed. The gateway does
+not use an admin cookie as app identity and does not read release content first. API,
 asset, WebSocket, range, non-document, and ambiguous requests continue to
 return the normal JSON `401 not_authorized` denial without a redirect.
 
@@ -71,7 +77,7 @@ that app cookie, and redirects a form submission to its app-host login page.
 JSON callers receive no-content success. `GET` logout is reserved/denied and
 never mutates state.
 
-Global identity switch is a platform-host POST verification outcome, not an
+Global identity switch is an admin-host POST verification outcome, not an
 app-host GET/POST parameter. It revokes the old global family and child app
 sessions before issuing the replacement identity; no app-local logout can
 select or reveal a global identity.

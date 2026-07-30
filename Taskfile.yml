@@ -155,7 +155,11 @@ tasks:
       - sh: command -v gofmt >/dev/null
         msg: Go formatting tools are required.
     cmds:
-      - gofmt -w $(git ls-files '*.go')
+      - |
+        git ls-files --cached --others --exclude-standard -- '*.go' |
+        while IFS= read -r file; do
+          test ! -f "$file" || gofmt -w "$file"
+        done
 
   format:check:
     desc: Fail if tracked Go source files are not gofmt-formatted
@@ -163,7 +167,14 @@ tasks:
       - sh: command -v gofmt >/dev/null
         msg: Go formatting tools are required.
     cmds:
-      - test -z "$(gofmt -l $(git ls-files '*.go'))"
+      - |
+        unformatted=$(
+          git ls-files --cached --others --exclude-standard -- '*.go' |
+          while IFS= read -r file; do
+            test ! -f "$file" || gofmt -l "$file"
+          done
+        )
+        test -z "$unformatted"
 
   security:
     desc: Run the offline security gates, including bounded fuzz checks
@@ -249,7 +260,7 @@ tasks:
         msg: TINYHOST_VPS_ACKNOWLEDGE must exactly equal TINYHOST_VPS_SSH_TARGET.
       - sh: test -n "${TINYHOST_VPS_KNOWN_HOSTS_FILE:-}" && test -f "$TINYHOST_VPS_KNOWN_HOSTS_FILE"
         msg: Supply a verified TINYHOST_VPS_KNOWN_HOSTS_FILE; never accept an unverified SSH host key.
-      - sh: test -n "${TINYHOST_VPS_PLATFORM_HOST:-}" && test -n "${TINYHOST_VPS_APP_SUFFIX:-}" && test -n "${TINYHOST_VPS_RESEND_API_KEY_FILE:-}"
+      - sh: test -n "${TINYHOST_VPS_DOMAIN:-}" && test -n "${TINYHOST_VPS_RESEND_API_KEY_FILE:-}"
         msg: Export the remaining VPS E2E contract variables documented in specs/operations/vps-e2e-contract.md.
     cmds:
       - go test ./test/vps -run TestVPSAcceptance -count=1 -v

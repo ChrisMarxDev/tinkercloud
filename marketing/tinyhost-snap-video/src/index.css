@@ -1,0 +1,15 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    ui-rounded, "SF Pro Rounded", "Nunito Sans", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #12043f;
+}

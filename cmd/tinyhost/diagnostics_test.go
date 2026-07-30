@@ -31,7 +31,7 @@ func diagnosticFixture(t *testing.T) (config.Config, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return config.Config{PlatformHost: "tiny.example.test", AppSuffix: "apps.tiny.example.test", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: data, ACMECachedir: cache, ResendAPIKeyRef: "env:TINY_TEST_RESEND"}, state
+	return config.Config{Domain: "apps.tiny.example.test", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: data, ACMECachedir: cache, ResendAPIKeyRef: "env:TINY_TEST_RESEND"}, state
 }
 
 func goodDeps() diagnosticDeps {
@@ -75,14 +75,14 @@ func TestDoctorChecksNetworkWithoutLeakingSecret(t *testing.T) {
 	var dns, tls, resend int
 	d.DNSLookup = func(_ context.Context, host string) ([]string, error) {
 		dns++
-		if host != cfg.PlatformHost && host != "tinyhost-doctor."+cfg.AppSuffix {
+		if host != cfg.PlatformHost() && host != "tinyhost-doctor."+cfg.AppSuffix() {
 			t.Fatal(host)
 		}
 		return []string{"203.0.113.1"}, nil
 	}
 	d.TLSCheck = func(_ context.Context, host, port string) error {
 		tls++
-		if host != cfg.PlatformHost || port != "443" {
+		if host != cfg.PlatformHost() || port != "443" {
 			t.Fatal(host, port)
 		}
 		return nil

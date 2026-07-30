@@ -1,6 +1,6 @@
 # TinyHost VPS acceptance test
 
-`go test ./test/vps -run TestVPSAcceptance -v` is a destructive, opt-in black-box acceptance run for a **disposable dedicated Ubuntu 24.04 LTS or Ubuntu 26.04 LTS amd64 VPS**. It cross-builds and uploads `tinyhost`, runs native initialization, authorizes a second deployer, performs real deployer OTP and one initial viewer OTP through the platform-host identity broker, then deploys protected apps. It proves the same browser jar reaches a second allowed app without another OTP, retains a platform-only global identity plus distinct host-only app sessions, and sees a friendly no-OTP denial for an excluded app with no app bytes. It also rejects replayed and wrong-host callbacks, proves app-local logout stays local and reopens through the broker without OTP, then intentionally verifies a separate viewer-purpose OTP to switch to the deployer identity and proves original child sessions are revoked. It also proves anonymous content denial, server-derived identity, SDK-equivalent blob capability discovery, one-file multipart upload/list/exact binary attachment download/delete, multipart extra-part denial without mutation, anonymous and cross-app denial without blob bytes, and restart persistence. The SSH target must be a root SSH destination in exact `root@host` form.
+`go test ./test/vps -run TestVPSAcceptance -v` is a destructive, opt-in black-box acceptance run for a **disposable dedicated Ubuntu 24.04 LTS or Ubuntu 26.04 LTS amd64 VPS**. It cross-builds and uploads `tinyhost`, runs native initialization, authorizes a second deployer, authenticates one browser identity at `admin.<domain>`, then deploys protected apps. It proves that same browser reaches a second allowed app without another OTP, retains a dashboard-only global identity plus distinct host-only app sessions, preserves app paths and repeated encoded query parameters through a handoff, and sees a friendly no-OTP denial for an excluded app with no app bytes. It also rejects replayed and wrong-host callbacks, proves app-local logout stays local, then proves global dashboard logout revokes every derived app session. It also proves anonymous content denial, server-derived identity, SDK-equivalent blob capability discovery, one-file multipart upload/list/exact binary attachment download/delete, multipart extra-part denial without mutation, anonymous and cross-app denial without blob bytes, and restart persistence. The SSH target must be a root SSH destination in exact `root@host` form.
 
 It never reads OTP data from SQLite, the server filesystem, or logs. Configure a local OTP reader executable; TinyHost invokes it with exactly three arguments: `deployer|viewer`, email, hostname. Its stdout must contain only a 4–12 digit code.
 
@@ -11,8 +11,7 @@ export TINYHOST_VPS_E2E=1
 export TINYHOST_VPS_SSH_TARGET=root@203.0.113.10
 export TINYHOST_VPS_ACKNOWLEDGE="$TINYHOST_VPS_SSH_TARGET"
 export TINYHOST_VPS_KNOWN_HOSTS_FILE=/absolute/path/to/known_hosts
-export TINYHOST_VPS_PLATFORM_HOST=tiny.example.com
-export TINYHOST_VPS_APP_SUFFIX=apps.example.com
+export TINYHOST_VPS_DOMAIN=example.com
 export TINYHOST_VPS_OPERATOR_EMAIL=operator@example.com
 export TINYHOST_VPS_DEPLOYER_EMAIL=deployer@example.com
 export TINYHOST_VPS_VIEWER_EMAIL=viewer@example.com
@@ -53,8 +52,8 @@ Optional `TINYHOST_VPS_SSH_PORT` and `TINYHOST_VPS_SSH_IDENTITY_FILE` are passed
 
 By default the suite refuses hosts containing TinyHost paths. For a disposable
 pre-initialized test host, `TINYHOST_VPS_REUSE=1` requires the root-owned suite
-marker at `/var/lib/tinyhost-vps-e2e/marker` to exactly match the SSH target,
-platform host, and app suffix. Reuse also requires
+marker at `/var/lib/tinyhost-vps-e2e/marker` to exactly match the SSH target
+and root domain. Reuse also requires
 `TINYHOST_VPS_RELEASE_DIR`: the suite verifies the supplied candidate against
 the installed server's pinned key and uses only the normal signed update and
 health-gate path after a new active probe app exists. It does not create a

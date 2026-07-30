@@ -15,20 +15,33 @@ import (
 
 func fakeTinyhostIdentity(t *testing.T) {
 	t.Helper()
-	oldDrop, oldPrepare := dropToTinyhostIdentity, prepareDeployerDatabaseOwnership
+	oldDrop, oldPrepare, oldMutation := dropToTinyhostIdentity, prepareDeployerDatabaseOwnership, deployerMutationRunner
 	dropToTinyhostIdentity = func() error { return nil }
 	prepareDeployerDatabaseOwnership = func(string) error { return nil }
+	deployerMutationRunner = runDeployerMutationInProcess
 	t.Cleanup(func() {
 		dropToTinyhostIdentity = oldDrop
 		prepareDeployerDatabaseOwnership = oldPrepare
+		deployerMutationRunner = oldMutation
 	})
+}
+
+func fakeDeployerServiceInactive(t *testing.T) {
+	t.Helper()
+	oldActive, oldRestart := deployerServiceIsActive, deployerServiceTryRestart
+	deployerServiceIsActive = func() (bool, error) { return false, nil }
+	deployerServiceTryRestart = func() error {
+		t.Fatal("inactive service restarted")
+		return nil
+	}
+	t.Cleanup(func() { deployerServiceIsActive, deployerServiceTryRestart = oldActive, oldRestart })
 }
 
 func deployerCommandConfig(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	cfg := config.Config{
-		PlatformHost: "tiny.example.test", AppSuffix: "apps.example.test", SessionCookie: "__Host-tiny_app",
+		Domain: "apps.example.test", SessionCookie: "__Host-tiny_app",
 		ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "acme"),
 		ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINYHOST_HMAC_KEY", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test",
 		OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour,
@@ -72,6 +85,7 @@ func TestDeployersAuthorizeParsesActionFlagsAndMutatesSQLite(t *testing.T) {
 	effectiveUID = func() int { return 0 }
 	t.Cleanup(func() { effectiveUID = old })
 	fakeTinyhostIdentity(t)
+	fakeDeployerServiceInactive(t)
 
 	configPath := deployerCommandConfig(t)
 	err, output := runDeployerCommand(t, "deployers", "authorize", "--config", configPath, "Deployer@Example.COM")
@@ -92,11 +106,75 @@ func TestDeployersAuthorizeParsesActionFlagsAndMutatesSQLite(t *testing.T) {
 	}
 }
 
+func TestDeployersRefreshesOnlyRunningServiceAfterDurableMutation(t *testing.T) {
+	oldUID, oldMutation := effectiveUID, deployerMutationRunner
+	oldActive, oldRestart := deployerServiceIsActive, deployerServiceTryRestart
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() {
+		effectiveUID, deployerMutationRunner = oldUID, oldMutation
+		deployerServiceIsActive, deployerServiceTryRestart = oldActive, oldRestart
+	})
+	fakeTinyhostIdentity(t)
+	configPath := deployerCommandConfig(t)
+
+	var calls []string
+	deployerMutationRunner = func(context.Context, string, string, string, string) error {
+		calls = append(calls, "mutation_closed")
+		return nil
+	}
+	deployerServiceIsActive = func() (bool, error) {
+		calls = append(calls, "is_active")
+		return true, nil
+	}
+	deployerServiceTryRestart = func() error {
+		calls = append(calls, "try_restart")
+		return nil
+	}
+	err, output := runDeployerCommand(t, "deployers", "authorize", "--config", configPath, "deployer@example.com")
+	if err != nil || output != "deployer authorize: deployer@example.com\n" {
+		t.Fatalf("success result err=%v output=%q", err, output)
+	}
+	if got, want := strings.Join(calls, ","), "mutation_closed,is_active,try_restart,is_active"; got != want {
+		t.Fatalf("refresh ordering=%q want=%q", got, want)
+	}
+
+	calls = nil
+	deployerMutationRunner = func(context.Context, string, string, string, string) error {
+		calls = append(calls, "mutation_failed")
+		return os.ErrPermission
+	}
+	err, output = runDeployerCommand(t, "deployers", "authorize", "--config", configPath, "deployer@example.com")
+	if err == nil || err.Error() != "tinyhost: deployer_failed" || output != "" {
+		t.Fatalf("mutation failure err=%v output=%q", err, output)
+	}
+	if got := strings.Join(calls, ","); got != "mutation_failed" {
+		t.Fatalf("service refresh after failed mutation: %q", got)
+	}
+
+	calls = nil
+	deployerMutationRunner = func(context.Context, string, string, string, string) error {
+		calls = append(calls, "mutation_closed")
+		return nil
+	}
+	deployerServiceIsActive = func() (bool, error) {
+		calls = append(calls, "is_active")
+		return false, nil
+	}
+	err, output = runDeployerCommand(t, "deployers", "authorize", "--config", configPath, "deployer@example.com")
+	if err != nil || output != "deployer authorize: deployer@example.com\n" {
+		t.Fatalf("inactive result err=%v output=%q", err, output)
+	}
+	if got := strings.Join(calls, ","); got != "mutation_closed,is_active" {
+		t.Fatalf("inactive service refresh=%q", got)
+	}
+}
+
 func TestDeployersDenyMalformedGrammarBeforeMutation(t *testing.T) {
 	old := effectiveUID
 	effectiveUID = func() int { return 0 }
 	t.Cleanup(func() { effectiveUID = old })
 	fakeTinyhostIdentity(t)
+	fakeDeployerServiceInactive(t)
 
 	configPath := deployerCommandConfig(t)
 	secret := "not-a-real-secret-or-path"
@@ -152,6 +230,7 @@ func TestDeployersCreatesDatabaseAndSidecarsAsServiceIdentity(t *testing.T) {
 		openDeployerSQLite = oldOpen
 	})
 	fakeTinyhostIdentity(t)
+	fakeDeployerServiceInactive(t)
 
 	configPath := deployerCommandConfig(t)
 	opened := false
@@ -183,25 +262,27 @@ func TestDeployersCreatesDatabaseAndSidecarsAsServiceIdentity(t *testing.T) {
 }
 
 func TestDeployersIdentityOrDatabaseFailureDoesNotReportSuccess(t *testing.T) {
-	oldUID, oldDrop, oldPrepare, oldOpen := effectiveUID, dropToTinyhostIdentity, prepareDeployerDatabaseOwnership, openDeployerSQLite
+	oldUID, oldDrop, oldPrepare, oldOpen, oldMutation := effectiveUID, dropToTinyhostIdentity, prepareDeployerDatabaseOwnership, openDeployerSQLite, deployerMutationRunner
 	effectiveUID = func() int { return 0 }
 	t.Cleanup(func() {
 		effectiveUID = oldUID
 		dropToTinyhostIdentity = oldDrop
 		prepareDeployerDatabaseOwnership = oldPrepare
 		openDeployerSQLite = oldOpen
+		deployerMutationRunner = oldMutation
 	})
 
 	configPath := deployerCommandConfig(t)
 	databasePath := filepath.Join(filepath.Dir(configPath), "data", "tinyhost.db")
 	prepareDeployerDatabaseOwnership = func(string) error { return nil }
 	dropToTinyhostIdentity = func() error { return os.ErrPermission }
+	deployerMutationRunner = runDeployerMutationInProcess
 	openDeployerSQLite = func(context.Context, string) (*persistence.SQLiteStore, error) {
 		t.Fatal("SQLite opened after service-identity failure")
 		return nil, nil
 	}
 	err, output := runDeployerCommand(t, "deployers", "authorize", "--config", configPath, "service@example.com")
-	if err == nil || err.Error() != "tinyhost: service_identity_failed" || output != "" {
+	if err == nil || err.Error() != "tinyhost: deployer_failed" || output != "" {
 		t.Fatalf("identity failure result: err=%v output=%q", err, output)
 	}
 	if _, statErr := os.Stat(databasePath); !os.IsNotExist(statErr) {
@@ -209,6 +290,7 @@ func TestDeployersIdentityOrDatabaseFailureDoesNotReportSuccess(t *testing.T) {
 	}
 
 	fakeTinyhostIdentity(t)
+	fakeDeployerServiceInactive(t)
 	openDeployerSQLite = func(context.Context, string) (*persistence.SQLiteStore, error) {
 		return nil, os.ErrPermission
 	}

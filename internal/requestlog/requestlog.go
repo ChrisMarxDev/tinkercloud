@@ -89,7 +89,12 @@ func safeOutcome(v string) string {
 	return "failed"
 }
 func safeEvent(v string) string {
-	if v == "release_cleanup" {
+	if v == "release_cleanup" || v == "cli_otp_issuance_entropy" ||
+		v == "cli_otp_issuance_persistence_begin_write_lock" ||
+		v == "cli_otp_issuance_persistence_invalidate" ||
+		v == "cli_otp_issuance_persistence_eligibility" ||
+		v == "cli_otp_issuance_persistence_insert" ||
+		v == "cli_otp_issuance_persistence_commit" {
 		return v
 	}
 	return "unknown"

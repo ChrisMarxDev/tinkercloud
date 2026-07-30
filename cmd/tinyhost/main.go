@@ -31,6 +31,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
@@ -157,19 +158,17 @@ func (v llmCredentialValidator) Validate(ctx context.Context, provider llm.Provi
 	return validator.ValidateCredential(ctx, credential)
 }
 
-func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates) (http.Handler, *live.Hub, error) {
+func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates, onOTPIssuanceFailure func(controlapi.OTPIssuanceFailureCategory)) (http.Handler, *live.Hub, error) {
 	hub := live.New(live.DefaultLimits())
 	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
-	atomic := persistence.AppLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
 	liveSessions := compose.LiveSessions{Sessions: store, Hub: hub}
-	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost, AppSuffix: c.AppSuffix, RevokeChildren: func(refs []persistence.AppSessionRef) {
+	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost(), AppSuffix: c.AppSuffix(), RevokeChildren: func(refs []persistence.AppSessionRef) {
 		for _, ref := range refs {
 			hub.Revoke(ref.AppID, ref.SessionID)
 		}
 	}}
-	login := compose.Login{Atomic: atomic, Sessions: liveSessions, Policies: store, SessionTTL: c.SessionExpiry, IdentityBroker: identityBroker}
+	login := compose.Login{Sessions: liveSessions, IdentityBroker: identityBroker}
 	limits := ratelimit.New([]byte(secrets.HMACKey), ratelimit.DefaultConfig())
-	login.RateLimits = limits
 	identityBroker.RateLimits = limits
 	if gates == nil {
 		gates = denyDeploymentGates{}
@@ -208,20 +207,28 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 		// operator binding before it can replace the prior active release.
 		return !record.Manifest.LLMChat || llmRepository != nil && llmRepository.Available(ctx, record.AppID)
 	}
-	controlAuth := persistence.ControlAuthenticator{Store: store}
+	controlAuth := persistence.ControlAuthenticator{Store: store, RevokeChildren: func(refs []persistence.AppSessionRef) {
+		for _, ref := range refs {
+			hub.Revoke(ref.AppID, ref.SessionID)
+		}
+	}}
 	controlService := persistence.ControlService{
 		Store:          store,
 		Live:           hub,
 		BlobCleanup:    blobs,
 		AppDataCleanup: persistence.AppDataPurger{DataRoot: c.DataDirectory, Store: store, Apps: appDatabases, BlobCleanup: blobs},
 		Deployments:    deploy,
-		AppSuffix:      c.AppSuffix,
+		AppSuffix:      c.AppSuffix(),
 		LLM:            llmRepository,
 		LLMValidator:   llmValidator,
+		DataKV:         persistence.KVRepository{Apps: appDatabases, WriteGate: resources.Gate},
+		DataDocuments:  persistence.CollectionRepository{Apps: appDatabases, WriteGate: resources.Gate},
+		AppDatabases:   appDatabases,
+		DataEvents:     hub,
 	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
-	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion)}, Auth: controlAuth, Views: controlService, Actions: controlService, Login: controlLogin, RateLimits: limits}
+	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion), OTPIssuanceFailure: onOTPIssuanceFailure}, Auth: controlAuth, Views: controlService, Actions: controlService}
 	if err := blobs.Reconcile(context.Background()); err != nil {
 		return nil, hub, err
 	}
@@ -311,6 +318,75 @@ var dropToTinyhostIdentity = func() error {
 
 var openDeployerSQLite = persistence.OpenSQLite
 
+// deployerMutationRunner keeps the root process privileged for the one
+// post-mutation systemd refresh while the SQLite writer itself runs in a child
+// that permanently drops to the service identity. A root command must never
+// open service-writable database artifacts as root just to retain restart
+// authority afterwards.
+var deployerMutationRunner = runDeployerMutationChild
+
+var deployerServiceIsActive = func() (bool, error) {
+	err := systemctlRunner("is-active", "--quiet", "tinyhost.service")
+	if err == nil {
+		return true, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 3 {
+		return false, nil
+	}
+	return false, err
+}
+
+var deployerServiceTryRestart = func() error {
+	return systemctlRunner("try-restart", "tinyhost.service")
+}
+
+const internalDeployerMutationCommand = "deployer-mutate-internal"
+
+func runDeployerMutationChild(ctx context.Context, databasePath, email, status, action string) error {
+	executable, err := os.Executable()
+	if err != nil || executable == "" {
+		return errors.New("deployer mutation unavailable")
+	}
+	return exec.CommandContext(ctx, executable, internalDeployerMutationCommand, "--database", databasePath, "--status", status, "--action", action, email).Run()
+}
+
+func runDeployerMutationInProcess(ctx context.Context, databasePath, email, status, action string) error {
+	if err := dropToTinyhostIdentity(); err != nil {
+		return err
+	}
+	store, err := openDeployerSQLite(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	mutationErr := store.SetDeployerStatus(ctx, email, status, "root_"+action)
+	closeErr := store.Close()
+	if mutationErr != nil {
+		return mutationErr
+	}
+	return closeErr
+}
+
+func refreshRunningDeployerService() error {
+	// Never turn a deliberately stopped TinyHost server into a public listener.
+	// A racing stop is reported as refresh failure rather than silently started.
+	active, err := deployerServiceIsActive()
+	if err != nil {
+		return errors.New("service state unavailable")
+	}
+	if !active {
+		return nil
+	}
+	if err = deployerServiceTryRestart(); err != nil {
+		return errors.New("service refresh failed")
+	}
+	active, err = deployerServiceIsActive()
+	if err != nil || !active {
+		return errors.New("service refresh failed")
+	}
+	return nil
+}
+
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -322,6 +398,22 @@ func run(args []string, out, errout *os.File) error {
 		return errors.New("tinyhost: usage")
 	}
 	switch args[0] {
+	case internalDeployerMutationCommand:
+		if effectiveUID() != 0 {
+			return errors.New("tinyhost: root_required")
+		}
+		fs := flag.NewFlagSet(internalDeployerMutationCommand, flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		databasePath := fs.String("database", "", "")
+		status := fs.String("status", "", "")
+		action := fs.String("action", "", "")
+		if fs.Parse(args[1:]) != nil || len(fs.Args()) != 1 || *databasePath == "" || map[string]string{"authorize": "active", "suspend": "suspended", "revoke": "revoked"}[*action] != *status {
+			return errors.New("tinyhost: invalid_arguments")
+		}
+		if err := runDeployerMutationInProcess(context.Background(), *databasePath, fs.Args()[0], *status, *action); err != nil {
+			return errors.New("tinyhost: deployer_failed")
+		}
+		return nil
 	case "llm":
 		if len(args) < 2 || args[1] != "enable" {
 			return errors.New("tinyhost: invalid_arguments")
@@ -389,17 +481,15 @@ func run(args []string, out, errout *os.File) error {
 		if e = prepareDeployerDatabaseOwnership(databasePath); e != nil {
 			return errors.New("tinyhost: service_identity_failed")
 		}
-		if e = dropToTinyhostIdentity(); e != nil {
-			return errors.New("tinyhost: service_identity_failed")
-		}
-		s, e := openDeployerSQLite(context.Background(), databasePath)
-		if e != nil {
+		if e = deployerMutationRunner(context.Background(), databasePath, email, status, action); e != nil {
 			return errors.New("tinyhost: deployer_failed")
 		}
-		mutationErr := s.SetDeployerStatus(context.Background(), email, status, "root_"+action)
-		closeErr := s.Close()
-		if mutationErr != nil || closeErr != nil {
-			return errors.New("tinyhost: deployer_failed")
+		// The independent service process may retain a SQLite state that is no
+		// longer usable after this root recovery write. Refresh only an already
+		// active service after the child has durably committed and closed. A
+		// failed refresh does not pretend to roll back the completed mutation.
+		if e = refreshRunningDeployerService(); e != nil {
+			return errors.New("tinyhost: deployer_applied_service_refresh_failed")
 		}
 		fmt.Fprintf(out, "deployer %s: %s\n", action, email)
 		return nil
@@ -430,18 +520,20 @@ func run(args []string, out, errout *os.File) error {
 		gates := deployments.GateFuncs{PolicyFunc: func(ctx context.Context, r deployments.Record) bool {
 			return store.CandidatePolicyReady(ctx, r)
 		}, CertificateFunc: func(ctx context.Context, r deployments.Record) bool {
-			return certificateReady(ctx, r.AppSlug+"."+cfg.AppSuffix, &http.Client{Timeout: 5 * time.Second})
+			return certificateReady(ctx, r.AppSlug+"."+cfg.AppSuffix(), &http.Client{Timeout: 5 * time.Second})
 		}, ProbeFunc: func(ctx context.Context, r deployments.Record) bool {
 			p, e := verification.ProbeCandidate(ctx, cfg, cfg.DataDirectory, r)
 			return e == nil && p.Passed()
 		}}
-		h, _, err := buildHandler(cfg, secrets, store, gates)
+		logger := slog.New(slog.NewJSONHandler(errout, nil))
+		h, _, err := buildHandler(cfg, secrets, store, gates, func(category controlapi.OTPIssuanceFailureCategory) {
+			requestlog.Service(logger, "cli_otp_issuance_"+string(category), "failed", 1)
+		})
 		if err != nil {
 			return err
 		}
-		logger := slog.New(slog.NewJSONHandler(errout, nil))
-		resolver := hostResolver{suffix: cfg.AppSuffix, store: store}
-		cm := certificates.NewAutocert(cfg.ACMECachedir, cfg.ACMEEmail, cfg.PlatformHost, resolver, func(string) bool { return true })
+		resolver := hostResolver{suffix: cfg.AppSuffix(), store: store}
+		cm := certificates.NewAutocert(cfg.ACMECachedir, cfg.ACMEEmail, cfg.PlatformHost(), resolver, func(string) bool { return true })
 		if err = os.MkdirAll(cfg.ACMECachedir, 0700); err != nil {
 			return err
 		}
@@ -462,7 +554,7 @@ func run(args []string, out, errout *os.File) error {
 		// HTTP-01 route and every other request is either a safe redirect for a
 		// configured host or a fail-closed denial.
 		plainHTTP, secureHTTPS := publicHandlers(cfg, cm, func(host string) bool {
-			return host == cfg.PlatformHost || resolver.ActiveAppHost(host)
+			return host == cfg.PlatformHost() || resolver.ActiveAppHost(host)
 		}, h)
 		hs := serverOptions(requestlog.Middleware(plainHTTP, logger))
 		ts := serverOptions(requestlog.Middleware(secureHTTPS, logger))

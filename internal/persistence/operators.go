@@ -49,9 +49,6 @@ func (s *SQLiteStore) RecoverOperator(ctx context.Context, email, request string
 		if _, err = tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=? WHERE user_id IN (SELECT id FROM users WHERE role='operator') AND revoked_at IS NULL", now); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=? WHERE scope='control' AND user_id IN (SELECT id FROM users WHERE role='operator') AND revoked_at IS NULL", now); err != nil {
-			return err
-		}
 		_, err := tx.ExecContext(ctx, "UPDATE users SET status='revoked' WHERE role='operator' AND status='active'")
 		if err != nil {
 			return err

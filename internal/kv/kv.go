@@ -57,7 +57,7 @@ type Mutation struct {
 	Deleted bool
 }
 type ChangeSink interface {
-	PublishKVChange(context.Context, appauth.AuthorizationContext, Mutation)
+	PublishKVChange(context.Context, appauth.DataAuthorizationContext, Mutation)
 }
 
 // Repository receives only the server-derived app ID from Service.
@@ -197,9 +197,16 @@ func (m memoryRepo) List(_ context.Context, app, prefix, cursor string, limit in
 func validKey(key string, max int) bool {
 	return key != "" && utf8.ValidString(key) && len([]byte(key)) <= max && !strings.ContainsRune(key, '\x00') && json.Valid([]byte(`"`+strings.ReplaceAll(strings.ReplaceAll(key, `\\`, `\\\\`), `"`, `\\"`)+`"`))
 }
+
+// ValidKey exposes the stable control-plane grammar without granting data
+// access. Authorization remains the responsibility of its caller.
+func ValidKey(key string) bool { return validKey(key, DefaultLimits().KeyBytes) }
 func validateValue(value json.RawMessage, max int) bool {
 	return len(value) > 0 && len(value) <= max && json.Valid(value)
 }
+
+// ValidValue exposes the bounded JSON value grammar to the deployer data API.
+func ValidValue(value json.RawMessage) bool { return validateValue(value, DefaultLimits().ValueBytes) }
 func (s *Service) app(auth appauth.AuthorizationContext) (string, string, error) {
 	// Check the server-derived manifest capability before resolving scope or
 	// reaching a repository. A disabled capability must never become a storage

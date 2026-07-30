@@ -326,8 +326,8 @@
           <tr>
             <td>24</td>
             <td>Open the dashboard and enter the deployer email when desired; matching email text does not reuse a viewer credential.</td>
-            <td>The platform creates a control session distinct from the CLI bearer and viewer sessions.</td>
-            <td>OTP only when no valid browser control session exists.</td>
+            <td>The admin host verifies one global browser identity, then rechecks the current deployer role for dashboard access. CLI bearer authority remains separate.</td>
+            <td>OTP only when no valid global browser identity exists; no second dashboard login.</td>
             <td>Platform and account can be reused or deliberately changed.</td>
             <td>Credential types remain separate even when one person uses them.</td>
           </tr>
@@ -344,14 +344,14 @@
             <td>Use the active app’s direct-link icon to open it.</td>
             <td>The link targets only the stable gateway origin and normal viewer authorization still applies.</td>
             <td>None.</td>
-            <td>URL from server-controlled slug and app suffix.</td>
+            <td>URL from the server-controlled slug and the single configured root domain.</td>
             <td>Convenience must not expose raw release/storage URLs.</td>
           </tr>
           <tr>
             <td>26A</td>
             <td>Continue as a viewer when the app opens.</td>
-            <td>App URL → app-bound handoff → existing global viewer identity or OTP → current policy checks → isolated app-local session.</td>
-            <td>Viewer email/OTP only when no current global viewer identity exists or an explicit account switch is requested.</td>
+            <td>App URL → app-bound handoff → existing global browser identity or OTP → current policy checks → isolated app-local session.</td>
+            <td>Email/OTP only when no current global browser identity exists or an explicit account switch is requested.</td>
             <td>App and policy come from the host/server. Deployer/control authority grants no viewer access.</td>
             <td>Matching email may be allowed as owner, but the credential boundary never transfers.</td>
           </tr>

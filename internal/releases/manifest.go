@@ -3,10 +3,10 @@ package releases
 import (
 	"bytes"
 	"errors"
+	"github.com/tinyhost/tiny/internal/appnamespace"
 	"github.com/tinyhost/tiny/internal/identity"
 	"io"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -28,9 +28,9 @@ type Manifest struct {
 	BuildOutput         string
 }
 
-var slug = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
-
-func ValidSlug(value string) bool { return slug.MatchString(value) }
+// ValidSlug preserves the releases package's established validation seam while
+// enforcing the shared public app-hostname namespace policy.
+func ValidSlug(value string) bool { return appnamespace.Valid(value) }
 
 type rawManifest struct {
 	Version     int    `yaml:"version"`
@@ -111,7 +111,7 @@ func ParseManifest(data []byte) (Manifest, error) {
 	if path.IsAbs(m.BuildOutput) || path.Clean(m.BuildOutput) != m.BuildOutput || strings.Contains(m.BuildOutput, "\\") || strings.HasPrefix(m.BuildOutput, "../") {
 		return Manifest{}, ErrManifest
 	}
-	if m.Version != 1 || !slug.MatchString(m.Name) || raw.Access.Mode != "" && raw.Access.Mode != "private" {
+	if m.Version != 1 || !ValidSlug(m.Name) || raw.Access.Mode != "" && raw.Access.Mode != "private" {
 		return Manifest{}, ErrManifest
 	}
 	if m.SPAFallback != "" && (path.IsAbs(m.SPAFallback) || path.Clean(m.SPAFallback) != m.SPAFallback || strings.Contains(m.SPAFallback, "\\")) {

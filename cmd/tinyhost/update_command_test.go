@@ -104,7 +104,7 @@ func TestRollbackRestoresBeforeAnyProbe(t *testing.T) {
 }
 
 func TestUpdateChecksUseProtectedCapabilityDenialEndpoint(t *testing.T) {
-	checks := updateChecks(config.Config{PlatformHost: "tiny.example.test", AppSuffix: "apps.tiny.example.test", ListenHTTP: ":80", ListenHTTPS: ":443"}, "payroll", "/usr/local/bin/tinyhost", "/etc/tinyhost/config.yaml")
+	checks := updateChecks(config.Config{Domain: "apps.tiny.example.test", ListenHTTP: ":80", ListenHTTPS: ":443"}, "payroll", "/usr/local/bin/tinyhost", "/etc/tinyhost/config.yaml")
 	if len(checks) != 4 {
 		t.Fatalf("health checks = %d", len(checks))
 	}

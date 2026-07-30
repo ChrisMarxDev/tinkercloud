@@ -22,7 +22,8 @@ Already implemented foundations:
 - deploy-first missing-manifest wizard, immutable descriptions, dashboard
   search/status filtering, stable launch, hard deletion, and no deployer
   rollback; and
-- global viewer identity with app-bound handoffs.
+- one global browser identity with dashboard-role checks and app-bound
+  handoffs.
 
 Remaining vertical path:
 
@@ -102,7 +103,8 @@ Outcome: operator-created app content is visible only to an allowed viewer.
 Components:
 
 - configuration, database/migrations, apps, identity, OTP, sessions, policy;
-- one platform-host global viewer identity, one-time app-bound handoff, and
+- one admin-host global browser identity, current dashboard-role checks,
+  one-time app-bound handoff, and
   local app-session child revocation;
 - host router, authorization context, protected static runtime;
 - minimal auth/operator pages and Resend adapter;
@@ -117,9 +119,9 @@ Exit gate:
 - a viewer completes OTP once per browser profile, receives no second OTP for
   an allowed app, and still receives no app bytes for denied/replayed/wrong-app
   handoff paths.
-- the global-identity migration is additive; new runtime validation quarantines
-  pre-cutoff parentless app sessions without changing `revoked_at`, while
-  post-cutoff brokerless compatibility sessions remain app-local.
+- migration validation quarantines pre-cutoff parentless app sessions without
+  changing `revoked_at`; all newly issued app sessions are handoff-linked and
+  no brokerless browser-session issuance path exists.
 
 ## M2 — Deployer control plane
 
@@ -164,13 +166,13 @@ race, and security regressions reject remote or executable design assets and
 prove user values remain escaped; this is not VPS deployment evidence or
 reduced-motion emulation evidence.
 
-Control browser sessions are persisted separately from CLI bearer tokens, and
-each control OTP is bound before delivery to its browser or CLI completion
-channel. Cross-presenting a dashboard cookie as an API bearer, a CLI bearer as
-a dashboard cookie, or an app viewer session on either surface denies without
-successful-use metadata; the upgrade path fails legacy unbound challenges
-closed and revokes every pre-separation bearer token, requiring one fresh CLI
-login.
+The dashboard authenticates only from the admin-host global browser identity,
+then rechecks the current operator/deployer role on every request. It has no
+control-session credential or dashboard-specific browser OTP channel. A CLI
+bearer remains a separate credential: cross-presenting a browser identity or
+app viewer session as a bearer, or a bearer as a browser cookie, denies without
+successful-use metadata. Global browser logout revokes its derived app sessions
+but never CLI/agent bearers.
 
 The server-rendered dashboard displays each owned app's current canonical
 private allowlist and policy revision, with editable prepopulated email/domain
@@ -215,7 +217,7 @@ accessible new-tab stable-gateway launch icon; it never links raw release
 storage and remains behind normal app authentication.
 
 Before the CLI returns the protected URL, it separately reaches that exact
-server-derived `https://{slug}.{app_suffix}/` host anonymously through the
+server-derived `https://{slug}.{domain}/` host anonymously through the
 real HTTP/TLS transport. It accepts only the composed gateway's bounded 401
 denial envelope; this client-side gate never sends the deployer token or
 cookies to the app host. Transient first-host DNS, TLS, transport, 404, and
@@ -226,8 +228,9 @@ gate while caller cancellation still wins. If independent evidence remains
 incomplete after activation, the CLI returns non-success
 `active_but_unverified` with only the safe deployment ID, URL, state, and
 reason, rather than hiding a committed release behind `deploy_failed`. The
-suffix is activation evidence rather than an inference from the control-plane
-host, so `tiny.example.com` and `*.apps.example.com` remain supported.
+exact activation host is derived as `<slug>.<domain>` from the single
+configured root domain; `admin.<domain>` is reserved for the dashboard and
+browser identity broker.
 
 The human first-app path now includes the dependency-free, owner-only Tiny
 Ritual sample and a short Markdown setup guide. A regression parses its real
@@ -436,9 +439,10 @@ skill-drift, and offline security-gate evidence pass.
 
 The root-only deployer authorization command now validates its local root
 caller, narrowly hands off any legacy root-owned SQLite DB/WAL/SHM artifacts,
-then drops permanently to `tinyhost` before opening SQLite. New and repaired
-artifacts stay owned by the gateway identity without permissive mode changes;
-ownership/drop/open failures deny without a success message.
+then mutates SQLite in a permanently dropped `tinyhost` child. New and repaired
+artifacts stay owned by the gateway identity without permissive mode changes.
+After its durable close, the root parent refreshes an already-running service
+and verifies it remains active; it never starts an inactive service.
 
 ### Planned M5 slice — lightweight host resource overview
 
@@ -592,7 +596,7 @@ preflight with an injected unavailable NTP adapter: it advanced past host
 support to the stable `clock_unsynchronized` denial, created no service user,
 config, init state, database, systemd unit, or public listener, and left only
 SSH listening after temporary evidence cleanup.
-Init remains incomplete unless the configured platform host proves the public
+Init remains incomplete unless the derived admin host proves the public
 gateway's exact HTTPS version endpoint: no redirect, a verified final host,
 `200` bounded `{"api_version":1}` JSON, and `no-store`/`nosniff` headers.
 Focused denial tests reject 401/404/5xx, arbitrary 2xx/HTML, malformed or
@@ -625,6 +629,47 @@ checks. Users retain TinyHost email OTP login and per-app authorization in the
 first VPN-only mode; central SSO remains a separate later candidate. This work
 is not authorized to weaken the M5 public proof and is not scheduled ahead of
 the committed V1 blob slice.
+
+## Implemented M4 extension — deployer data access
+
+Outcome: an authenticated deployer can use the saved `tiny` CLI login to
+inspect and deliberately repair the bounded KV/document state of an app they
+own, without receiving SQLite access or a new database service.
+
+Implemented L1–L3 boundary and required evidence:
+
+- ADR [`0049`](../decisions/0049-typed-deployer-app-data-access.md), the
+  [`deployer-data contract`](../../specs/api/deployer-data-contract.md), and
+  its [deny charter](../../test/security/deployer-data-denial-charter.md) define
+  a typed server-derived deployer-data authorization context, scoped API/CLI
+  operations, lifecycle semantics, bounded payload/page rules, and no-raw-SQL
+  boundary;
+- control bearer authentication rechecks active deployer status, expiry,
+  revocation, exact `data:read`/`data:write` scope, optional app binding, and
+  ownership before resolving an internal immutable app ID or opening data;
+- the control API and `tiny data` CLI reuse existing KV/collection response,
+  pagination, validation, quota, optimistic-version, cancellation, and
+  idempotency semantics. They expose bounded list/get plus individual create,
+  update, and delete operations—not SQLite paths/files, SQL, arbitrary filters,
+  schemas, bulk actions, export/import, or backup;
+- before a write, the control database records redacted metadata-only audit
+  intent and request digest. A successful app commit marks that intent
+  succeeded for exact replay; an interrupted outcome reconciles only when
+  current versioned state proves the result. The surface does not claim a
+  cross-database transaction or rollback. New or safely reconciled mutations
+  emit the existing app-scoped best-effort freshness hint, while failed and
+  completed replays do not. Suspended owned apps are readable for diagnosis
+  but not writable; deleting/deleted/unavailable apps deny all access; and
+- focused repository/service/control/CLI tests must prove anonymous,
+  credential-crossing, scope, app-binding, cross-owner, malformed-selector,
+  stale-version, audit-failure, cancellation, unavailable-DB, and two-deployer/
+  two-app denial behavior before this is reported as release evidence.
+
+This extension deliberately does not grant an operator access to an unowned app
+or add a dashboard data browser, database export/import, or backup feature. An
+operator who exactly owns an app uses the same owner-scoped CLI path. It retains
+one private app-local SQLite authority per app and the same loss-of-VPS
+utility-data disclaimer as M4.
 
 ## Implemented post-V1 extension — operator-governed LLM chat
 

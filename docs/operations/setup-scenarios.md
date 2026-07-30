@@ -8,7 +8,7 @@ topologies that are secure in principle but still need product work.
 | Scenario | V1 status | Security verdict | Main condition |
 |---|---|---|---|
 | Solo operator or startup on a public Hetzner VPS | Canonical V1 topology | Secure when V1 gates and operator duties are met | Public DNS and inbound TCP 80/443 |
-| Company with VPN-only ingress | Accepted direction, not yet implemented | Secure when the company supplies TLS and all VPN acceptance gates pass | One certificate covering the platform and wildcard app hosts, private DNS, and trusted-network probes |
+| Company with VPN-only ingress | Accepted direction, not yet implemented | Secure when the company supplies TLS and all VPN acceptance gates pass | One certificate covering the admin and app hosts, private DNS, and trusted-network probes |
 
 The VPN is an additional network boundary. It does not replace TinyHost's
 per-app policy, viewer authentication, session, or authorization checks.
@@ -16,12 +16,11 @@ per-app policy, viewer authentication, session, or authorization checks.
 ## Accepted setup experience
 
 The operator runs `sudo tinyhost setup` on a fresh supported machine. The
-assistant asks for the base domain and initial operator email, then derives the
-conventional platform hostname, wildcard app suffix, sending address, and ACME
-contact. An explicit edit step handles non-standard topologies. It asks only
+assistant asks for the root domain and initial operator email, then derives
+`admin.<domain>`, `<slug>.<domain>`, the sending address, and ACME contact. It asks only
 for values it cannot discover or safely default:
 
-1. the controlled base domain;
+1. the controlled root domain;
 2. the initial operator email;
 3. the verified Resend credential source; and
 4. for the future VPN-only mode, the certificate and private-key credential
@@ -158,7 +157,7 @@ current policy allows them.
 1. V1 certificate issuance uses public ACME HTTP-01. A strict VPN-only port 80
    cannot be reached by the certificate authority.
 2. Initialization requires a verified HTTPS proof for the configured public
-   platform hostname.
+   derived admin hostname.
 3. Deployment success requires gateway denial probes from a network path that
    can reach the app hostname.
 4. V1 has no implementation for installing and serving an operator-supplied
@@ -172,9 +171,8 @@ Skipping TLS validation or denial probes is also forbidden.
 ### Accepted simplest certificate model
 
 The first VPN-only setup will ask for one company-provided certificate and its
-matching private key. That certificate must cover both the platform hostname
-and the wildcard app hostname, such as `tiny.example.com` and
-`*.apps.example.com`.
+matching private key. That certificate must cover the admin and app hostnames,
+such as `admin.example.com` and `*.example.com`.
 
 The company obtains and renews the certificate. TinyHost validates it, protects
 the private key, serves HTTPS, warns about expiry, and refuses setup or
@@ -192,8 +190,7 @@ Before claiming VPN-only support:
 1. Implement ADR
    [0028](../decisions/0028-operator-supplied-tls-for-vpn-only.md): securely
    install and atomically replace one operator-supplied certificate/key pair.
-2. Define split/private DNS behavior for the platform host and wildcard app
-   suffix.
+2. Define split/private DNS behavior for the single root-domain wildcard.
 3. Replace the public proof with a trusted-network proof that keeps exact TLS,
    hostname, response, and anonymous-denial validation.
 4. Add VPN-topology install, renewal, deploy, revocation, and failure tests.

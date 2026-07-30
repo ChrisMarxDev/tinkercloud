@@ -25,7 +25,7 @@ class ReaderTests(unittest.TestCase):
         self.key.write_text("re_abcdefgh12345678")
         self.key.chmod(0o600)
         self.old = dict(os.environ)
-        os.environ.update({"TINYHOST_RESEND_READER_API_KEY_FILE": str(self.key), "TINYHOST_RESEND_OTP_LEDGER_FILE": str(self.ledger), "TINYHOST_VPS_EMAIL_FROM": "tiny@example.test", "TINYHOST_VPS_PLATFORM_HOST": "tiny.example.test", "TINYHOST_VPS_APP_SUFFIX": "apps.example.test"})
+        os.environ.update({"TINYHOST_RESEND_READER_API_KEY_FILE": str(self.key), "TINYHOST_RESEND_OTP_LEDGER_FILE": str(self.ledger), "TINYHOST_VPS_EMAIL_FROM": "tiny@example.test", "TINYHOST_VPS_DOMAIN": "example.test"})
         self.now = dt.datetime(2026, 7, 27, 12, 0, tzinfo=dt.timezone.utc)
 
     def tearDown(self):
@@ -41,7 +41,7 @@ class ReaderTests(unittest.TestCase):
             if url == reader.LIST_URL: return {"data": [self.row()]}
             self.assertEqual(url, reader.API_ORIGIN + "/emails/msg_123")
             return {"from": "tiny@example.test", "to": ["viewer@example.test"], "subject": "Your sign-in code", "text": "Your code: 123456"}
-        argv = ["reader", "viewer", "viewer@example.test", "tiny.example.test"]
+        argv = ["reader", "viewer", "viewer@example.test", "admin.example.test"]
         self.assertEqual(reader.read_once(argv, self.now, request), "123456")
         self.assertEqual(reader.load_ledger(self.ledger), {"msg_123"})
         with self.assertRaises(reader.ReaderError): reader.read_once(argv, self.now, request)
@@ -56,14 +56,14 @@ class ReaderTests(unittest.TestCase):
         with self.assertRaises(reader.ReaderError): reader.read_key()
 
     def test_accepts_platform_host_for_global_viewer_broker_only(self):
-        self.assertEqual(reader.validate_request(["reader", "viewer", "viewer@example.test", "tiny.example.test"])[2], "tiny.example.test")
+        self.assertEqual(reader.validate_request(["reader", "viewer", "viewer@example.test", "admin.example.test"])[2], "admin.example.test")
 
     def test_denies_endpoint_override_and_non_platform_hostname(self):
         with self.assertRaises(reader.ReaderError): reader.fetch_json("https://example.test/emails", "re_abcdefgh12345678")
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "two.labels.apps.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "deployer", "viewer@example.test", "slug.apps.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "slug.apps.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "apps.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "two.labels.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "deployer", "viewer@example.test", "slug.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "slug.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "example.test"])
         with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "other.example.test"])
 
     def test_denies_redirect_without_exposing_provider_body(self):

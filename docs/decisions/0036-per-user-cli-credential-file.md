@@ -11,8 +11,8 @@ the server has already issued a valid bearer. That turns the intended
 one-time-login experience into an unreliable platform-specific flow.
 
 This is client-local persistence only. It must not blur the server-persisted
-credential types: a CLI bearer remains distinct from a browser control session,
-the global viewer identity credential, and app-bound viewer sessions.
+credential types: a CLI bearer remains distinct from the global browser
+identity credential and app-bound viewer sessions.
 
 ## Decision
 
@@ -81,7 +81,7 @@ process. Therefore tokens remain narrowly scoped, time-bounded, and promptly
 revocable by server policy; local-file protection never substitutes for those
 server-side controls.
 
-No browser cookie, app-viewer credential, global viewer identity credential,
+No browser cookie, app-viewer credential, global browser identity credential,
 or operator/provider secret is stored in this file. Non-interactive deployment
 agent tokens retain their separate explicit creation and handling workflow.
 

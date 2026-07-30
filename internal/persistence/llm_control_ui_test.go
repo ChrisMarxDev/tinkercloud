@@ -31,12 +31,12 @@ func TestControlLLMCreateRotateProfileAndGrantUseDerivedTargets(t *testing.T) {
 	validator := &controlLLMValidator{}
 	service := ControlService{Store: store, LLM: &repo, LLMValidator: validator}
 	operator := controlapi.Actor{ID: "u", Role: "operator", Active: true}
-	if err := service.CreateLLMConnection(context.Background(), operator, "Team provider", "anthropic", "first-key"); err != nil {
+	if err := service.CreateLLMConnection(context.Background(), operator, "anthropic", "first-key"); err != nil {
 		t.Fatal(err)
 	}
-	var id, provider string
-	if err := store.DB.QueryRow("SELECT id,provider_kind FROM provider_connections").Scan(&id, &provider); err != nil || len(id) != 32 || provider != "anthropic" {
-		t.Fatalf("connection=%q provider=%q err=%v", id, provider, err)
+	var id, provider, label string
+	if err := store.DB.QueryRow("SELECT id,provider_kind,display_name FROM provider_connections").Scan(&id, &provider, &label); err != nil || len(id) != 32 || provider != "anthropic" || label != "Anthropic API key" {
+		t.Fatalf("connection=%q provider=%q label=%q err=%v", id, provider, label, err)
 	}
 	// Rotate receives no browser provider. The stored provider is resolved and
 	// used for validation before the credential envelope is replaced.
@@ -65,8 +65,58 @@ func TestControlLLMCreateRotateProfileAndGrantUseDerivedTargets(t *testing.T) {
 	if err := service.ApproveLLMGrant(context.Background(), operator, "missing", profile, 0); err == nil {
 		t.Fatal("browser-selected missing app gained a grant")
 	}
-	if err := service.CreateLLMConnection(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}, "Nope", "anthropic", "key"); err == nil {
+	if err := service.CreateLLMConnection(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}, "anthropic", "key"); err == nil {
 		t.Fatal("deployer created an operator connection")
+	}
+}
+
+func TestControlLLMCreateDerivesFixedLabelsAndValidationFailurePreservesExistingConnections(t *testing.T) {
+	repo, store := llmRepo(t)
+	defer store.Close()
+	operator := controlapi.Actor{ID: "u", Role: "operator", Active: true}
+	validator := &controlLLMValidator{}
+	service := ControlService{Store: store, LLM: &repo, LLMValidator: validator}
+	if err := service.CreateLLMConnection(context.Background(), operator, "gemini", "gemini-key"); err != nil {
+		t.Fatal(err)
+	}
+	var label string
+	if err := store.DB.QueryRow("SELECT display_name FROM provider_connections").Scan(&label); err != nil || label != "Gemini API key" {
+		t.Fatalf("derived label=%q err=%v", label, err)
+	}
+	validator.err = errors.New("provider denied")
+	if err := service.CreateLLMConnection(context.Background(), operator, "anthropic", "bad-key"); err == nil {
+		t.Fatal("validation failure created a connection")
+	}
+	var count int
+	if err := store.DB.QueryRow("SELECT COUNT(*) FROM provider_connections").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("validation failure changed connections=%d err=%v", count, err)
+	}
+}
+
+func TestControlLLMKeyMutationsDenyBeforeProviderValidationWithoutEnvelope(t *testing.T) {
+	repo, store := llmRepo(t)
+	defer store.Close()
+	repo.Envelope = nil
+	validator := &controlLLMValidator{}
+	service := ControlService{Store: store, LLM: &repo, LLMValidator: validator}
+	operator := controlapi.Actor{ID: "u", Role: "operator", Active: true}
+	if err := service.CreateLLMConnection(context.Background(), operator, "anthropic", "key"); err == nil {
+		t.Fatal("missing envelope created a connection")
+	}
+	if len(validator.providers) != 0 {
+		t.Fatalf("missing envelope invoked provider validation: %v", validator.providers)
+	}
+	withConnection, connectedStore := llmRepo(t)
+	defer connectedStore.Close()
+	setupLLM(t, withConnection)
+	withConnection.Envelope = nil
+	validator = &controlLLMValidator{}
+	service = ControlService{Store: connectedStore, LLM: &withConnection, LLMValidator: validator}
+	if err := service.RotateLLMConnection(context.Background(), operator, "conn", "replacement"); err == nil {
+		t.Fatal("missing envelope rotated a connection")
+	}
+	if len(validator.providers) != 0 {
+		t.Fatalf("missing envelope invoked provider validation during rotation: %v", validator.providers)
 	}
 }
 
@@ -106,6 +156,13 @@ func TestLLMGrantRejectsDisabledConnectionAndDashboardOmitsUnselectableProfile(t
 	}
 	if len(v.LLMProfiles) != 0 {
 		t.Fatalf("disabled connection profile remained selectable: %#v", v.LLMProfiles)
+	}
+	if v.LLMKeyManagementReady {
+		t.Fatal("dashboard claimed key management ready without a validator")
+	}
+	v, err = (ControlService{Store: store, LLM: &repo, LLMValidator: &controlLLMValidator{}}).Dashboard(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true})
+	if err != nil || !v.LLMKeyManagementReady {
+		t.Fatalf("dashboard readiness=%v err=%v", v.LLMKeyManagementReady, err)
 	}
 }
 

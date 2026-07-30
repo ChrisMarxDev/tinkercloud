@@ -76,8 +76,7 @@ preflight() {
   [ "${TINYHOST_VPS_OTP_COMMAND:-}" = "$reader" ] || return 1
   [ -x "$reader" ] && [ ! -L "$reader" ] || return 1
   single_line_value "${TINYHOST_VPS_KNOWN_HOSTS_FILE:-}" || return 1
-  single_line_value "${TINYHOST_VPS_PLATFORM_HOST:-}" || return 1
-  single_line_value "${TINYHOST_VPS_APP_SUFFIX:-}" || return 1
+  single_line_value "${TINYHOST_VPS_DOMAIN:-}" || return 1
   single_line_value "${TINYHOST_VPS_OPERATOR_EMAIL:-}" || return 1
   single_line_value "${TINYHOST_VPS_DEPLOYER_EMAIL:-}" || return 1
   single_line_value "${TINYHOST_VPS_VIEWER_EMAIL:-}" || return 1

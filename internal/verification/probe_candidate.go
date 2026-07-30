@@ -38,7 +38,7 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	ps := &policies.MemoryStore{Policies: map[string]policies.Policy{r.AppID: {AppID: r.AppID, OwnerIdentityID: v.ID, Revision: 1, Valid: true, Emails: map[string]struct{}{}, Domains: map[string]struct{}{}}}}
 	app := apps.App{ID: r.AppID, Slug: r.AppSlug, Status: apps.Active, ReleaseRoot: root, ReleaseEvidence: releases.FileManifest{Files: r.Files, Hash: r.ReleaseHash}, SPAFallback: r.Manifest.SPAFallback != ""}
 	g := gateway.Gateway{Config: cfg, Apps: apps.NewMemoryRepository(app), Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}}
-	host := r.AppSlug + "." + cfg.AppSuffix
+	host := r.AppSlug + "." + cfg.AppSuffix()
 	anon := httptest.NewRequest("GET", "https://"+host+"/", nil)
 	anon.Host = host
 	aw := httptest.NewRecorder()

@@ -32,7 +32,7 @@ func TestWebSocketGatewayTwoAppIsolation(t *testing.T) {
 	ad := live.WebSocketAdapter{Hub: hub, Origin: live.SameOrigin}
 	d := compose.NewAppDispatcher(appapi.Dispatcher{})
 	d.Live = &ad
-	g := gateway.Gateway{Config: config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: "__Host-tiny_app"}, Apps: repo, Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: d}
+	g := gateway.Gateway{Config: config.Config{Domain: "apps.tiny.test", SessionCookie: "__Host-tiny_app"}, Apps: repo, Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: d}
 	s := httptest.NewServer(g)
 	defer s.Close()
 	addr := s.Listener.Addr().String()

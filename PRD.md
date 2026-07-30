@@ -11,7 +11,7 @@ working labels, not architectural identifiers
 
 **North star:** [Shopify Quick](docs/product/north-star-quick.md)
 
-**Last updated:** 2026-07-29
+**Last updated:** 2026-07-30
 
 ## 0. How to use this document
 
@@ -171,10 +171,11 @@ can be established through local test and release evidence.
 - One initial operator; multiple deployers.
 - Operator reconciles one exact active-deployer allowlist by normalized email.
 - Viewer authentication through email one-time codes.
-- Separate control-plane, CLI-token, and app-viewer credentials.
-- One host-only global opaque viewer identity on the platform host plus
-  host-only, app-scoped opaque viewer sessions issued through app-bound
-  one-time handoffs.
+- One host-only global opaque browser identity on `admin.<domain>` plus
+  host-only, app-scoped opaque sessions issued through app-bound one-time
+  handoffs. Dashboard roles and app policies remain separate authorization
+  checks over that same verified identity.
+- Separate CLI and deployment-agent bearer credentials.
 - Private app policies with owner, exact email, and email-domain rules.
 - Immediate policy/session/deployer/app revocation.
 - Generic responses that resist app and email enumeration.
@@ -367,9 +368,8 @@ curl thin installer | sudo sh
 → discover host, ports, time, disk, and supported OS
 → ask only for the base domain, operator email, and Resend credential source
   that cannot be derived
-→ derive conventional platform/app hosts and sending defaults; allow an
-  explicit edit only when the operator needs a non-default topology
-→ show the exact DNS records and pause until their public values are correct
+→ derive `admin.<domain>` and `<slug>.<domain>`; reserve platform labels
+→ show the one wildcard DNS record and pause until its public value is correct
 → create service user, generated config, credentials, and data directory
 → initialize SQLite and operator
 → test Resend
@@ -402,7 +402,7 @@ operator signs in
 
 No invitation email is required: the operator can share the platform URL
 through any existing channel and the deployer requests OTP when ready. Removing
-an active address immediately revokes its CLI tokens and control sessions while
+an active address immediately revokes its CLI tokens and dashboard role while
 preserving its immutable identity and owned apps. Stale snapshots and audit
 failure leave the entire allowlist unchanged. An email address that is not
 active cannot receive a deployer token, create an app, upload a release, or
@@ -411,7 +411,7 @@ mutate access policy.
 ### 7.3 Deployer CLI login
 
 ```text
-tiny login --server https://tiny.example.com
+tiny login --server https://admin.example.com
 → load the server-bound credential file
 → authenticated whoami reuses a valid bearer and confirms identity
 → otherwise, only an unauthorized/expired bearer falls back to OTP
@@ -424,7 +424,7 @@ tiny login --server https://tiny.example.com
 
 The token is displayed only when explicitly using a non-interactive token
 creation workflow and is never logged. Every mutating CLI request sends this
-token to the platform host; the server re-evaluates deployer status, token
+token to the admin host; the server re-evaluates deployer status, token
 scope, expiry, and target ownership before acting.
 
 Interactive login persists the bearer by normalized HTTPS platform URL in one
@@ -461,10 +461,10 @@ never prompt or cache. Malformed, unsafe, non-HTTPS, incompatible, redirected,
 transport-failed, or ambiguous default/setup state fails closed rather than
 selecting a host or running the target command.
 
-`tiny logout` sends the current global CLI bearer to an authenticated
+`tiny logout` sends the current CLI bearer to an authenticated
 self-revocation route. The server derives and revokes exactly that bearer row;
-it never revokes browser control sessions, viewer sessions, app-scoped tokens,
-or another CLI bearer. The CLI removes only the matching local credential after
+it never revokes the browser identity, app sessions, app-scoped tokens, or
+another CLI bearer. The CLI removes only the matching local credential after
 confirmed revocation, or after a `401` proves it is already unusable. Ambiguous
 network/server/persistence/local-storage failures retain the credential; a
 missing local credential is idempotently logged out and leaves the default URL
@@ -528,7 +528,7 @@ viewer opens app URL
 → gateway resolves active app
 → no valid app session
 → server-created app-bound handoff to platform identity broker
-→ existing global viewer identity, or generic OTP when absent
+→ existing global browser identity, or generic OTP when absent
 → current policy rechecked at grant issue and callback consumption
 → create app-scoped session only for that resolved app
 → redirect to safe relative app path
@@ -599,16 +599,19 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   disk, permissions, clock, ports, version, and update health without exposing
   secrets.
 - **FR-OPS-006:** Root recovery MUST allow replacing the operator email and
-  revoking control sessions without email access.
+  revoking CLI credentials and global browser identity families without email
+  access.
 - **FR-OPS-007:** Updates MUST verify signed artifacts and pass a post-restart
   health gate before deleting rollback state.
 - **FR-OPS-008:** V1 MUST NOT claim backup or disaster-recovery guarantees.
 
 ### 8.2 Host and app routing
 
-- **FR-ROUTE-001:** The platform host MUST match exactly.
-- **FR-ROUTE-002:** An app host MUST be exactly one valid label below the
-  configured app suffix.
+- **FR-ROUTE-001:** Setup MUST accept one canonical root domain and derive the
+  exact platform host as `admin.<domain>`.
+- **FR-ROUTE-002:** An app host MUST be exactly one valid, non-reserved label
+  below that root domain. Reserved labels are `admin`, `api`, `auth`, `status`,
+  `www`, `docs`, and `install`, matched case-insensitively.
 - **FR-ROUTE-003:** Host input MUST be canonicalized for port, case, trailing
   dot, encoding, and trusted-proxy behavior.
 - **FR-ROUTE-004:** Unknown, malformed, missing, suspended, deleting, and failed
@@ -629,9 +632,10 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-AUTH-006:** Challenge consumption and session creation MUST be atomic.
 - **FR-AUTH-007:** Existing valid sessions MAY continue during a Resend outage;
   new authentication MUST fail closed.
-- **FR-AUTH-008:** A successful viewer OTP MAY establish exactly one opaque,
-  platform-host global viewer identity per browser profile. It MUST grant no
-  app or control authority without a separate current authorization check.
+- **FR-AUTH-008:** A successful browser OTP MAY establish exactly one opaque,
+  host-only global identity per browser profile on `admin.<domain>`. It grants
+  neither dashboard role nor app access without the relevant current
+  authorization check.
 - **FR-AUTH-009:** An app handoff MUST be server-created, state-bound,
   app-bound, one-time, and no longer than five minutes. Its issue and consume
   paths MUST re-evaluate current app policy.
@@ -642,13 +646,15 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-SESSION-002:** Viewer sessions MUST be scoped to exactly one app.
 - **FR-SESSION-003:** App cookies MUST be host-only, `Secure`, `HttpOnly`,
   `SameSite=Lax`, and `Path=/`.
-- **FR-SESSION-004:** Control-plane sessions MUST use a distinct type and cookie.
+- **FR-SESSION-004:** The dashboard MUST authenticate the global browser
+  identity and re-evaluate its current operator/deployer role on every request;
+  it MUST NOT issue a second dashboard-specific browser credential.
 - **FR-SESSION-005:** CLI/agent tokens MUST never be accepted as viewer sessions.
 - **FR-SESSION-006:** Revoked or expired sessions MUST fail the next request.
-- **FR-SESSION-007:** The global viewer identity cookie MUST be host-only on
-  the platform host, opaque, `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
+- **FR-SESSION-007:** The global browser identity cookie MUST be host-only on
+  `admin.<domain>`, opaque, `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
   and never use `Domain`, JWT, or browser storage.
-- **FR-SESSION-008:** Global viewer identity is not a control-plane credential.
+- **FR-SESSION-008:** Global browser identity proves only the normalized email.
   Global sessions last at most 30 days, rotate every 24 hours, and accept the
   immediately prior secret for no more than 60 seconds.
 - **FR-SESSION-009:** Global identity switch revokes the prior identity family
@@ -672,8 +678,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.6 Deployer and token authorization
 
-- **FR-RBAC-001:** Operator and deployer authority MUST be separate from viewer
-  identity.
+- **FR-RBAC-001:** Operator/deployer authority and app access MUST be separate
+  current authorization decisions over the verified browser identity.
 - **FR-RBAC-002:** Only an operator-authorized active deployer email may complete
   CLI login and receive a deployer token.
 - **FR-RBAC-003:** Every control command MUST declare actor, permission, target,
@@ -783,6 +789,32 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-DB-006:** Anonymous, malformed, cross-app, revoked, over-quota, and stale
   writes MUST fail before returning or changing document state.
 
+### 8.10b Deployer data administration
+
+- **FR-DATA-001:** An authenticated owner CLI MUST support bounded inspection
+  of KV entries, active collection names, and JSON documents for an owned app.
+- **FR-DATA-002:** The control gateway MUST require exact `data:read` or
+  `data:write` bearer scope, verify current ownership and app lifecycle, and
+  derive the immutable app ID before any app database is opened.
+- **FR-DATA-003:** The API and CLI MUST expose only the existing KV/document
+  capability model. They MUST NOT expose SQL, schema, migrations, a database
+  file/path/credential, bulk operations, export/import, or viewer impersonation.
+- **FR-DATA-004:** Mutations MUST be one-resource operations with bounded JSON,
+  idempotency keys, and required optimistic versions for update/delete.
+- **FR-DATA-005:** A metadata-only audit intent and one-way request digest MUST
+  persist before an app-data mutation. Exact completed retries may return a
+  safe receipt; ambiguous or mismatched retries MUST fail closed.
+- **FR-DATA-006:** An exact owner may read active or suspended app data; writes
+  require an active app. Operator status alone, browser cookies, viewer
+  identity, and another deployer's ownership MUST grant no data authority.
+- **FR-DATA-007:** Anonymous, malformed, wrong-scope, wrong-app, revoked,
+  duplicate-member JSON, quota, stale-version, audit, and unavailable-database
+  paths MUST have negative evidence and expose no foreign values or storage
+  implementation detail.
+- **FR-DATA-008:** A successful or safely reconciled control mutation MUST emit
+  the same app-scoped best-effort KV/collection freshness hint as an app
+  mutation. Denied, failed, and already-completed replays MUST emit none.
+
 ### 8.11 Realtime capability
 
 - **FR-LIVE-001:** The SDK MUST expose app-scoped WebSocket channels with
@@ -856,8 +888,10 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-UI-003:** Operator UI MUST support deployers, apps, policies, audit,
   limits, email/TLS diagnostics, disk health, version/update state, and a
   bounded recent host CPU/RAM/data-volume resource chart.
-- **FR-UI-004:** Deployer UI MUST support their apps, deployments, policies,
-  tokens, usage, suspension/deletion, and actionable failures.
+- **FR-UI-004:** Deployer UI MUST provide a compact, owned-app-only overview
+  and actionable failures. The scoped Tiny CLI supports deployment, policies,
+  tokens, usage, suspension, and deletion; the overview does not duplicate
+  those management controls.
 - **FR-UI-005:** Sensitive values MUST be write-only or display-once.
 - **FR-UI-006:** Destructive or access-broadening actions MUST show the exact
   target and require confirmation.
@@ -991,31 +1025,35 @@ Errors before authorization cannot dispatch protected content.
 
 ### 10.2 Pre-authentication request
 
-Login/OTP routes require an active resolved app but no existing session. They
-receive no release or KV repository dependency. Rate limits and generic
-responses occur before provider work.
+Login/OTP routes exist only on the exact `admin.<domain>` identity broker and
+require no dashboard role or app session. They receive no release or KV
+repository dependency. Rate limits and generic responses occur before provider
+work.
 
-### 10.2a Global viewer identity handoff
+### 10.2a Global browser identity handoff
 
 ```text
 app document request without app session
 → derive active app from hostname and create state-bound handoff
-→ redirect only to platform-host identity route
-→ validate platform-host global viewer identity or complete generic OTP
+→ redirect only to the exact admin-host identity route
+→ validate the global browser identity or complete generic OTP
 → re-evaluate app policy and authorize one-time app-bound handoff
 → exact app callback atomically consumes handoff and rechecks policy
-→ create host-only app session and redirect to safe relative path
+→ create host-only app session and redirect to the stored safe relative
+  path plus raw query
 ```
 
-The platform-host identity cookie is never sent to the app host. The app
-callback accepts no client-selected app or absolute return URL. Rejected,
+The admin identity cookie is never sent to the app host. The app callback
+accepts no client-selected app or absolute return URL. Nested paths and query
+parameters, including repeated and percent-encoded values, are preserved after
+validation. URL fragments are browser-only and are not guaranteed. Rejected,
 pre-auth, and callback paths serve no app bytes.
 
 ### 10.3 Control-plane mutation
 
 ```text
-platform/CLI request
-→ authenticate operator/deployer/token
+admin/CLI request
+→ authenticate global browser identity + current role, or CLI/agent bearer
 → authorize role + target resource + scope
 → validate idempotency and input
 → application service
@@ -1135,16 +1173,17 @@ schema_migrations
 Required constraints:
 
 - normalized deployer email unique for active users;
-- app slug unique under the configured app suffix;
+- app slug unique under the configured root domain and disjoint from every
+  reserved platform label;
 - every active app references a valid policy and deployment;
 - session type/app/user/identity combinations are valid;
-- global identity sessions have one identity and family, no app/control user;
+- global identity sessions have one identity and family and no app authority;
 - app sessions have one app and identity and can be linked to a global identity
   family; handoffs bind exactly one server-derived app and are consumed once;
-- identity-link migrations are additive: runtime validation quarantines a
-  parentless app session created before the recorded migration cutoff without
-  mutating its `revoked_at`; post-cutoff explicitly brokerless sessions retain
-  their app-local semantics and malformed cutoff/session timestamps deny;
+- identity-link migration validation quarantines a parentless app session
+  created before the recorded migration cutoff without mutating its
+  `revoked_at`; all newly issued app sessions are handoff-linked and malformed
+  cutoff/session timestamps deny;
 - deployment belongs to exactly one app;
 - the control database contains no app KV or document payloads;
 - each app-local database is selected only from the server-derived immutable
@@ -1221,11 +1260,9 @@ animation is secondary to explicit durable state.
 Non-secret typed configuration:
 
 ```yaml
-server:
-  platform_domain: tiny.example.com
-  app_domain: apps.example.com
-  listen_http: 0.0.0.0:80
-  listen_https: 0.0.0.0:443
+domain: example.com
+listen_http: 0.0.0.0:80
+listen_https: 0.0.0.0:443
 
 data:
   directory: /var/lib/tinyhost
@@ -1517,14 +1554,17 @@ Deliver:
 - capability discovery;
 - versioned JSON KV in a physically isolated app-local SQLite database;
 - bounded JSON document collections with optimistic versions and snapshots;
+- bounded owner CLI/API inspection and deliberate repair of managed KV and
+  document state;
 - bounded app-scoped blob upload, download, list, metadata, and delete backed by
   the private local data directory;
 - in-memory app-scoped WebSocket channels plus KV and collection change hints;
 - TypeScript SDK and examples;
 - generic platform skill followed by self-contained specialized skill copies.
 
-Exit: two-app KV/document/blob/live isolation, quotas/conflicts, partial-write
-and storage-disagreement recovery, reconnect/current-state recovery, revocation
+Exit: two-owner/two-app KV/document/blob/live isolation, deployer-data
+scope/replay/audit denials, quotas/conflicts, partial-write and
+storage-disagreement recovery, reconnect/current-state recovery, revocation
 disconnects, browser security, SDK compatibility, and skill tasks pass.
 
 ### M5 — Operable Hetzner-first release
@@ -1796,6 +1836,9 @@ operator-controlled production authority before the first stable release.
       enforced limits.
 - [ ] Document collections support bounded CRUD, snapshots, optimistic
       conflicts, and reconnect recovery from current app-local state.
+- [ ] Owner CLI can inspect and deliberately repair bounded KV/documents while
+      wrong-owner, wrong-scope, revoked, malformed, ambiguous-replay, and
+      unavailable-database paths fail closed.
 - [ ] Blobs support app-scoped upload/get/list/delete with opaque IDs, bounded
       local storage, attachment downloads, and partial-write recovery.
 - [ ] Cross-app, revoked, disk-stop, and metadata/storage disagreement blob

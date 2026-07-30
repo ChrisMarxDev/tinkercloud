@@ -55,6 +55,37 @@ check_distribution_skill() {
 check_distribution_skill distribute-tiny-cli
 check_distribution_skill distribute-tiny-sdk
 
+check_deployment_agent_skill() {
+  skill=tiny-deployment-agent
+  file="skills/${skill}/SKILL.md"
+  metadata="skills/${skill}/agents/openai.yaml"
+  wrapper="skills/${skill}/scripts/deploy_once.py"
+  tests="skills/${skill}/scripts/test_deploy_once.py"
+  test -f "$file" && test -f "$metadata" && test -x "$wrapper" && test -x "$tests" || {
+    echo "missing deployment-agent skill resource" >&2
+    exit 1
+  }
+  ! grep -F "[TODO" "$file" >/dev/null || {
+    echo "unfinished deployment-agent skill" >&2
+    exit 1
+  }
+  grep -F "name: ${skill}" "$file" >/dev/null || {
+    echo "deployment-agent skill name drift" >&2
+    exit 1
+  }
+  grep -F "default_prompt: \"Use \$${skill}" "$metadata" >/dev/null || {
+    echo "deployment-agent skill metadata drift" >&2
+    exit 1
+  }
+  grep -F "local deployer-workstation test automation" "$file" >/dev/null &&
+    grep -F "not production CI/noninteractive" "$file" >/dev/null || {
+    echo "deployment-agent local-only boundary missing" >&2
+    exit 1
+  }
+}
+
+check_deployment_agent_skill
+
 grep -F "task distribution:prepare" skills/distribute-tiny-cli/SKILL.md >/dev/null || {
   echo "CLI distribution task drift" >&2
   exit 1

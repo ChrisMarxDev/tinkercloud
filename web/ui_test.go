@@ -15,6 +15,8 @@ func TestEmbeddedDesignSystemIsLocalAccessibleAndTokenized(t *testing.T) {
 		"--tiny-canvas:",
 		"--tiny-ink:",
 		"--tiny-primary:",
+		"--tiny-qr-ink:",
+		"--tiny-qr-surface:",
 		"--tiny-motion-fast:",
 		"--tiny-motion-disclosure:",
 		"--tiny-ease-out:",
@@ -23,6 +25,9 @@ func TestEmbeddedDesignSystemIsLocalAccessibleAndTokenized(t *testing.T) {
 		".tiny-button--danger",
 		".tiny-toast",
 		".tiny-dialog",
+		".tiny-dialog--compact",
+		".tiny-qr",
+		".tiny-qr-frame",
 		".tiny-disclosure-card",
 		".tiny-app-filter[hidden]",
 		".tiny-inset",
@@ -68,6 +73,10 @@ func TestEmbeddedInteractionsStayLocalAndPresentationOnly(t *testing.T) {
 		"data-tiny-app-slug",
 		"data-tiny-app-description",
 		"data-tiny-app-status",
+		"canvas[data-tiny-qr]",
+		"initializeqrcodes",
+		"window.atob",
+		"var quiet = 4",
 		"tolocalelowercase",
 		"showing 1 app.",
 	} {
@@ -151,11 +160,17 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 	page := strings.ToLower(string(raw))
 	for _, required := range []string{
 		`href="assets/tinyhost.css?v=1"`,
-		`src="assets/tinyhost.js"`,
+		`src="assets/tinyhost.js?v=1"`,
 		`src="assets/tiny-cloud-mark.svg"`,
 		`class="tiny-skip"`,
+		`method="post" action="/logout"`,
+		`name="csrf"`,
+		`sign out of tinyhost`,
 		`data-state="active"`,
 		`class="tiny-dialog"`,
+		`data-tiny-dialog-open="showcase-qr-dialog"`,
+		`class="tiny-qr"`,
+		`scan with your phone`,
 		`class="tiny-disclosure-card"`,
 		`class="tiny-state tiny-state--loading"`,
 		`class="tiny-state tiny-state--stale"`,
@@ -183,7 +198,10 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`it cannot be restored`,
 		`active deployer allowlist`,
 		`removed addresses are signed out`,
-		`write-only llm connection`,
+		`api keys`,
+		`llm chat`,
+		`api key management is unavailable`,
+		`tinyhost llm enable`,
 		`type="password"`,
 		`never displayed or recovered`,
 		`disable:0123456789abcdef0123456789abcdef`,
@@ -192,10 +210,17 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 			t.Fatalf("showcase missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`, `provider credential value=`} {
+	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`, `provider credential value=`, `display name`} {
 		if strings.Contains(page, forbidden) {
 			t.Fatalf("showcase contains remote or executable dependency %q", forbidden)
 		}
+	}
+	start := strings.Index(page, `<article class="tiny-state tiny-state--unavailable tiny-section__spaced" role="status"><h3>api key management is unavailable</h3>`)
+	if start < 0 {
+		t.Fatal("showcase API-key unavailable state missing")
+	}
+	if end := strings.Index(page[start:], `</article>`); end < 0 || strings.Contains(page[start:start+end], `<input`) || strings.Contains(page[start:start+end], `<button`) || strings.Contains(page[start:start+end], `<form`) {
+		t.Fatal("showcase API-key unavailable state exposes a mutation control")
 	}
 }
 

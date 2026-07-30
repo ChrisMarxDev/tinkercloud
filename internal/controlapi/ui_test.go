@@ -9,9 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/tinyhost/tiny/internal/ratelimit"
+	"github.com/tinyhost/tiny/internal/browseridentity"
 )
 
 type uiAuth struct {
@@ -19,40 +18,8 @@ type uiAuth struct {
 	err   error
 }
 
-func (a uiAuth) AuthenticatePlatform(context.Context, *http.Request) (Actor, error) {
+func (a uiAuth) AuthenticatePlatform(context.Context, http.ResponseWriter, *http.Request) (Actor, error) {
 	return a.actor, a.err
-}
-
-type uiLogin struct {
-	tx, token string
-	err       error
-	email     string
-	channel   LoginChannel
-	requests  int
-}
-
-func (l *uiLogin) RequestOTP(_ context.Context, email string, channel LoginChannel, _ string) (string, error) {
-	l.email = email
-	l.channel = channel
-	l.requests++
-	return l.tx, l.err
-}
-
-func TestPlatformUIRateLimitKeepsGenericLoginResponse(t *testing.T) {
-	now := time.Unix(100, 0)
-	limits := ratelimit.New([]byte("test-key"), ratelimit.Config{Request: ratelimit.Policy{Window: time.Minute, PerIP: 1, PerEmail: 10, PerApp: 10, Global: 10}, Verify: ratelimit.Policy{Window: time.Minute, PerIP: 10, PerEmail: 10, PerApp: 10, Global: 10}, MaxKeys: 100})
-	limits.SetClock(func() time.Time { return now })
-	l := &uiLogin{tx: "otp_tx"}
-	p := Platform{Login: l, RateLimits: limits}
-	first := uiRequest(t, p, http.MethodPost, "/login", "email=a%40example.test")
-	second := uiRequest(t, p, http.MethodPost, "/login", "email=b%40example.test")
-	if first.Code != http.StatusOK || second.Code != http.StatusOK || l.requests != 1 || !strings.Contains(first.Body.String(), "If that address is authorized") || !strings.Contains(second.Body.String(), "If that address is authorized") || strings.Contains(strings.ToLower(second.Body.String()), "rate") {
-		t.Fatalf("unexpected rate response: first=%d second=%d requests=%d body=%q", first.Code, second.Code, l.requests, second.Body.String())
-	}
-}
-func (l *uiLogin) VerifyOTP(_ context.Context, _, _ string, channel LoginChannel) (string, error) {
-	l.channel = channel
-	return l.token, l.err
 }
 
 type uiViews struct {
@@ -92,7 +59,7 @@ func (a *uiActions) DeleteApp(_ context.Context, _ Actor, slug, _ string) error 
 	a.calls = append(a.calls, "delete:"+slug)
 	return a.err
 }
-func (a *uiActions) CreateLLMConnection(_ context.Context, _ Actor, _, _, _ string) error {
+func (a *uiActions) CreateLLMConnection(_ context.Context, _ Actor, _, _ string) error {
 	a.calls = append(a.calls, "llm-create")
 	return a.err
 }
@@ -158,7 +125,7 @@ func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	if w := uiRequest(t, p, http.MethodGet, "/", ""); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/login" {
 		t.Fatalf("anonymous dashboard: %d %q", w.Code, w.Header().Get("Location"))
 	}
-	if w := uiRequest(t, p, http.MethodPost, "/logout", "csrf=x"); w.Code != http.StatusForbidden {
+	if w := uiRequest(t, p, http.MethodPost, "/logout", "csrf=x"); w.Code != http.StatusNotFound {
 		t.Fatalf("anonymous logout: %d", w.Code)
 	}
 	views := &uiViews{value: DashboardView{ActiveDeployerEmails: []string{"deployer@example.test"}}}
@@ -166,6 +133,36 @@ func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != 200 || strings.Contains(w.Body.String(), "deployer@example.test</td>") || views.got.ID != "d" {
 		t.Fatalf("deployer page disclosed operator data: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUIDeployerOverviewRendersOnlyProvidedOwnedAppCards(t *testing.T) {
+	views := &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Status: "active", Access: DashboardAccess{Mode: "private", Revision: 1}}}}}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "deployer", Email: "deployer@example.test", Role: "deployer", Active: true}}, Views: views}
+	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	body := w.Body.String()
+	for _, required := range []string{"Your apps", "owned-app", `action="/logout"`, "Sign out"} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("deployer overview missing %q: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{"Active deployer allowlist", "Recent activity", "LLM chat capability", "LLM chat", "API keys", "Server health", "Access policy", "Create display-once token", "App controls", "Allowed emails"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("deployer overview disclosed operator control %q: %s", forbidden, body)
+		}
+	}
+	if views.got.ID != "deployer" || views.got.Role != "deployer" {
+		t.Fatalf("dashboard read model actor = %#v", views.got)
+	}
+}
+
+func TestPlatformUIDoesNotOwnBrowserLoginOrLogout(t *testing.T) {
+	p := Platform{}
+	for _, path := range []string{"/login", "/login/verify", "/logout"} {
+		w := uiRequest(t, p, http.MethodPost, path, "")
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s status=%d; identity broker must own browser authentication", path, w.Code)
+		}
 	}
 }
 
@@ -182,7 +179,7 @@ func TestPlatformUIOperatorCanReplaceActiveDeployersOnlyWithBrowserGuards(t *tes
 	}
 	var csrf *http.Cookie
 	for _, c := range page.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -218,7 +215,7 @@ func TestPlatformUIActiveDeployerRevisionConflictIsActionable(t *testing.T) {
 	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
 	var csrf *http.Cookie
 	for _, c := range page.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -228,31 +225,6 @@ func TestPlatformUIActiveDeployerRevisionConflictIsActionable(t *testing.T) {
 	w := uiSameOriginRequest(t, p, http.MethodPost, "/deployers/active", "csrf="+url.QueryEscape(csrf.Value)+"&expected_revision=rev&emails=&confirm_broadening=confirm", csrf)
 	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "Deployer list changed") || !strings.Contains(w.Body.String(), "Refresh dashboard") || w.Header().Get("Location") != "" {
 		t.Fatalf("revision conflict: %d %q", w.Code, w.Body.String())
-	}
-}
-
-func TestPlatformUILoginAndControlCookie(t *testing.T) {
-	l := &uiLogin{tx: "otp_tx", token: "tiny_control_secret"}
-	p := Platform{Login: l, Now: func() time.Time { return time.Unix(0, 0) }}
-	w := uiRequest(t, p, http.MethodPost, "/login", "email=person%40example.test")
-	if w.Code != 200 || l.email != "person@example.test" || l.channel != BrowserLoginChannel || !strings.Contains(w.Body.String(), "otp_tx") {
-		t.Fatalf("request: %d %q", w.Code, w.Body.String())
-	}
-	w = uiRequest(t, p, http.MethodPost, "/login/verify", "transaction=otp_tx&code=123456")
-	if w.Code != http.StatusSeeOther || l.channel != BrowserLoginChannel || w.Header().Get("Location") != "/" {
-		t.Fatalf("verify: %d", w.Code)
-	}
-	var control *http.Cookie
-	for _, c := range w.Result().Cookies() {
-		if c.Name == ControlCookieName {
-			control = c
-		}
-	}
-	if control == nil || !control.Secure || !control.HttpOnly || control.SameSite != http.SameSiteLaxMode || control.Path != "/" {
-		t.Fatalf("bad control cookie: %#v", control)
-	}
-	if strings.Contains(w.Body.String(), l.token) {
-		t.Fatal("token rendered")
 	}
 }
 
@@ -266,8 +238,6 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 		`--tiny-canvas:`,
 		`--tiny-primary:`,
 		`TinyUI`,
-		`autocomplete="email"`,
-		`Authorized deployers only`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("login missing design-system contract %q: %s", want, body)
@@ -292,7 +262,7 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 		}},
 	}}
 	p = Platform{
-		Auth:  uiAuth{actor: Actor{ID: "u", Email: "owner@example.test", Role: "deployer", Active: true}},
+		Auth:  uiAuth{actor: Actor{ID: "u", Email: "owner@example.test", Role: "operator", Active: true}},
 		Views: views,
 	}
 	w = uiRequest(t, p, http.MethodGet, "/dashboard", "")
@@ -334,16 +304,30 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 }
 
 func TestPlatformUIDashboardEscapesDescriptionsAndUsesOnlyStableGatewayLink(t *testing.T) {
-	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", Description: `<script>alert("x")</script>`, StableURL: "https://alpha.apps.example.test/", Access: DashboardAccess{Mode: "private", Revision: 1}, Releases: []DashboardRelease{{ID: "d", State: "active", Description: "Immutable summary"}}}}}}}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", Description: `<script>alert("x")</script>`, StableURL: "https://alpha.apps.example.test/", Access: DashboardAccess{Mode: "private", Revision: 1}, Releases: []DashboardRelease{{ID: "d", State: "active", Description: "Immutable summary"}}}}}}}
 	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
 	body := w.Body.String()
-	for _, want := range []string{`data-tiny-app-description="&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;"`, `href="https://alpha.apps.example.test/"`, `target="_blank"`, `rel="noopener noreferrer"`, `aria-label="Open alpha in a new tab"`, `Immutable summary`} {
+	for _, want := range []string{`data-tiny-app-description="&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;"`, `href="https://alpha.apps.example.test/"`, `target="_blank"`, `rel="noopener noreferrer"`, `aria-label="Open alpha in a new tab"`, `aria-label="Show QR code for alpha"`, `data-tiny-dialog-open="qr-alpha"`, `class="tiny-qr"`, `Scan with your phone`, `normal sign-in and access policy still apply`, `Immutable summary`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q: %s", want, body)
 		}
 	}
 	if strings.Contains(body, `<script>alert`) || strings.Contains(body, "release_hash") {
 		t.Fatalf("unsafe dashboard description/link: %s", body)
+	}
+}
+
+func TestPlatformUIDashboardOmitsQRControlWhenStableURLCannotBeEncoded(t *testing.T) {
+	tooLong := "https://" + strings.Repeat("a", 272) + "/"
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", StableURL: tooLong, Access: DashboardAccess{Mode: "private", Revision: 1}}}}}}
+	body := uiRequest(t, p, http.MethodGet, "/dashboard", "").Body.String()
+	if !strings.Contains(body, `aria-label="Open alpha in a new tab"`) {
+		t.Fatalf("dashboard unexpectedly removed the independent stable launch link: %s", body)
+	}
+	for _, forbidden := range []string{`aria-label="Show QR code for alpha"`, `data-tiny-dialog-open="qr-alpha"`, `class="tiny-qr"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("dashboard rendered unsupported QR state %q: %s", forbidden, body)
+		}
 	}
 }
 
@@ -354,8 +338,8 @@ func TestPlatformUIErrorStatesAreStyledAndKeepSafeStatusCodes(t *testing.T) {
 		want               int
 	}{
 		{"not found", http.MethodGet, "/missing", http.StatusNotFound},
-		{"method", http.MethodDelete, "/login", http.StatusMethodNotAllowed},
-		{"logout denied", http.MethodPost, "/logout", http.StatusForbidden},
+		{"method", http.MethodDelete, "/login", http.StatusNotFound},
+		{"logout delegated", http.MethodPost, "/logout", http.StatusNotFound},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := uiRequest(t, p, tc.method, tc.path, "")
@@ -373,7 +357,7 @@ func TestPlatformUIStalePolicyConflictIsStyledAndDoesNotExposeState(t *testing.T
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -382,7 +366,7 @@ func TestPlatformUIStalePolicyConflictIsStyledAndDoesNotExposeState(t *testing.T
 	r.Host = "tiny.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", "https://tiny.test")
-	r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
@@ -397,7 +381,7 @@ func TestPlatformUIRollbackFormRouteIsAbsentEvenWithValidBrowserTrustChecks(t *t
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -409,7 +393,7 @@ func TestPlatformUIRollbackFormRouteIsAbsentEvenWithValidBrowserTrustChecks(t *t
 	r.Host = "tiny.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", "https://tiny.test")
-	r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
@@ -424,15 +408,15 @@ func TestPlatformUICSRFAndSecretRedaction(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
-	if csrf == nil || !csrf.Secure || csrf.HttpOnly || strings.Contains(w.Body.String(), "secret_hash") || strings.Contains(w.Body.String(), "tiny_") {
+	if csrf == nil || !csrf.Secure || !csrf.HttpOnly || strings.Contains(w.Body.String(), "secret_hash") || strings.Contains(w.Body.String(), "tiny_") {
 		t.Fatalf("unsafe dashboard: cookies=%#v body=%s", w.Result().Cookies(), w.Body.String())
 	}
-	control := &http.Cookie{Name: ControlCookieName, Value: "opaque"}
-	if w = uiRequest(t, p, http.MethodPost, "/logout", "csrf="+url.QueryEscape(csrf.Value), control, csrf); w.Code != http.StatusForbidden {
+	control := &http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"}
+	if w = uiRequest(t, p, http.MethodPost, "/logout", "csrf="+url.QueryEscape(csrf.Value), control, csrf); w.Code != http.StatusNotFound {
 		t.Fatalf("originless csrf accepted: %d", w.Code)
 	}
 	r := httptest.NewRequest(http.MethodPost, "https://tiny.test/logout", strings.NewReader("csrf="+url.QueryEscape(csrf.Value)))
@@ -443,14 +427,14 @@ func TestPlatformUICSRFAndSecretRedaction(t *testing.T) {
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
-	if w.Code != http.StatusForbidden {
+	if w.Code != http.StatusNotFound {
 		t.Fatalf("cross-origin csrf accepted: %d", w.Code)
 	}
 	r.Header.Set("Origin", "https://tiny.test")
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
-	if w.Code != http.StatusSeeOther {
-		t.Fatalf("same-origin logout denied: %d", w.Code)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("dashboard unexpectedly handled global logout: %d", w.Code)
 	}
 }
 
@@ -461,14 +445,14 @@ func TestPlatformUIMutationsRequireActorOriginCSRFAndConfirmation(t *testing.T) 
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
 	if csrf == nil {
 		t.Fatal("missing csrf")
 	}
-	control := &http.Cookie{Name: ControlCookieName, Value: "opaque"}
+	control := &http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"}
 	request := func(path, form, origin string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, "https://tiny.test"+path, strings.NewReader(form+"&csrf="+url.QueryEscape(csrf.Value)))
 		r.Host = "tiny.test"
@@ -509,7 +493,7 @@ func TestPlatformUITokenIsDisplayedOnlyByCreateResponse(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -517,7 +501,7 @@ func TestPlatformUITokenIsDisplayedOnlyByCreateResponse(t *testing.T) {
 	r.Host = "tiny.test"
 	r.Header.Set("Origin", "https://tiny.test")
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
@@ -533,7 +517,7 @@ func TestPlatformUITokenIsDisplayedOnlyByCreateResponse(t *testing.T) {
 func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) {
 	access := DashboardAccess{Mode: "private", Revision: 7, Emails: []string{"alice@example.test"}, Domains: []string{"example.test"}}
 	actions := &uiActions{}
-	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", Access: access}}}}, Actions: actions}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Status: "active", Access: access}}}}, Actions: actions}
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != http.StatusOK {
 		t.Fatal(w.Code)
@@ -546,7 +530,7 @@ func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) 
 	}
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -558,7 +542,7 @@ func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) 
 	r.Host = "tiny.test"
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Set("Origin", "https://tiny.test")
-	r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 	r.AddCookie(csrf)
 	w = httptest.NewRecorder()
 	p.ServeHTTP(w, r)
@@ -571,7 +555,7 @@ func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) 
 }
 
 func TestPlatformUIDashboardLabelsEmptyAccessAsOwnerOnly(t *testing.T) {
-	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Access: DashboardAccess{Mode: "private", Revision: 1}}}}}}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "alpha", Access: DashboardAccess{Mode: "private", Revision: 1}}}}}}
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "This app is owner-only: no additional email or domain viewers are allowed.") {
 		t.Fatalf("owner-only dashboard = %d %s", w.Code, w.Body.String())
@@ -581,7 +565,7 @@ func TestPlatformUIDashboardLabelsEmptyAccessAsOwnerOnly(t *testing.T) {
 func TestPlatformUIDashboardUnavailablePolicyIsNotEditableEmptyState(t *testing.T) {
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Role: "deployer", Active: true}}, Views: &uiViews{err: errors.New("policy unavailable")}}
 	w := uiRequest(t, p, http.MethodGet, "/", "")
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "dashboard read model") || strings.Contains(w.Body.String(), "Replace current policy") {
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Your app overview is unavailable.") || strings.Contains(w.Body.String(), "Replace current policy") {
 		t.Fatalf("unavailable dashboard = %d %s", w.Code, w.Body.String())
 	}
 }
@@ -592,7 +576,7 @@ func TestPlatformUIAccessRejectsMissingOrMalformedExpectedRevision(t *testing.T)
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	var csrf *http.Cookie
 	for _, c := range w.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
@@ -602,7 +586,7 @@ func TestPlatformUIAccessRejectsMissingOrMalformedExpectedRevision(t *testing.T)
 		r.Host = "tiny.test"
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		r.Header.Set("Origin", "https://tiny.test")
-		r.AddCookie(&http.Cookie{Name: ControlCookieName, Value: "opaque"})
+		r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: "opaque"})
 		r.AddCookie(csrf)
 		w = httptest.NewRecorder()
 		p.ServeHTTP(w, r)
@@ -617,26 +601,37 @@ func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T
 	profileID := "fedcba9876543210fedcba9876543210"
 	actions := &uiActions{}
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions, Views: &uiViews{value: DashboardView{
-		Apps:           []DashboardApp{{Slug: "alpha", LLMGrant: &LLMGrant{AppSlug: "alpha", ProfileID: profileID, Status: "approved", Revision: 7}}},
-		LLMConnections: []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
-		LLMProfiles:    []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 10}},
+		Apps:                  []DashboardApp{{Slug: "alpha", LLMGrant: &LLMGrant{AppSlug: "alpha", ProfileID: profileID, Status: "approved", Revision: 7}}},
+		LLMKeyManagementReady: true,
+		LLMConnections:        []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
+		LLMProfiles:           []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 10}},
 	}}}
 	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
-	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "Provider credential") || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
+	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "API keys") || !strings.Contains(page.Body.String(), "LLM chat") || strings.Contains(page.Body.String(), `name="display_name"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
 		t.Fatalf("llm UI missing/write-only: %d %s", page.Code, page.Body.String())
 	}
 	var csrf *http.Cookie
 	for _, c := range page.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}
 	if csrf == nil {
 		t.Fatal("csrf missing")
 	}
+	// The create form accepts only the fixed provider and one write-only key;
+	// browser-chosen names and opaque IDs are refused rather than ignored.
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections", url.Values{"csrf": {csrf.Value}, "provider": {"anthropic"}, "secret": {"new-secret"}, "display_name": {"browser name"}}.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+		t.Fatalf("browser display name = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections", url.Values{"csrf": {csrf.Value}, "provider": {"anthropic"}, "secret": {"new-secret"}, "id": {connectionID}}.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+		t.Fatalf("browser connection id = %d %#v", w.Code, actions.calls)
+	}
 	// Rotation has no provider parameter. A submitted provider field is denied
 	// rather than trusted to validate a key for the wrong stored connection.
-	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections/"+connectionID+"/rotate", url.Values{"csrf": {csrf.Value}, "secret": {"new-secret"}, "provider": {"gemini"}}.Encode(), csrf)
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections/"+connectionID+"/rotate", url.Values{"csrf": {csrf.Value}, "secret": {"new-secret"}, "provider": {"gemini"}}.Encode(), csrf)
 	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
 		t.Fatalf("provider-selected rotation = %d %#v", w.Code, actions.calls)
 	}
@@ -654,13 +649,28 @@ func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T
 	}
 }
 
+func TestPlatformUIAPIKeysUnavailableHasNoMutationForm(t *testing.T) {
+	connectionID := "0123456789abcdef0123456789abcdef"
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{
+		LLMConnections: []LLMConnection{{ID: connectionID, DisplayName: "Legacy provider", Provider: "anthropic", Status: "active"}},
+	}}}
+	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	body := w.Body.String()
+	if w.Code != http.StatusOK || !strings.Contains(body, "API key management is unavailable") || !strings.Contains(body, "tinyhost llm enable") || strings.Contains(body, `action="/dashboard/llm/connections"`) {
+		t.Fatalf("unavailable api keys = %d %s", w.Code, body)
+	}
+	if !strings.Contains(body, "Legacy provider") {
+		t.Fatalf("existing safe connection metadata missing: %s", body)
+	}
+}
+
 func TestPlatformUILLMProfileRejectsBrowserChosenIDsAndMalformedBounds(t *testing.T) {
 	actions := &uiActions{}
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions}
 	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
 	var csrf *http.Cookie
 	for _, c := range page.Result().Cookies() {
-		if c.Name == controlCSRFCookie {
+		if c.Name == browseridentity.CSRFCookieName {
 			csrf = c
 		}
 	}

@@ -177,7 +177,7 @@ func TestBuiltSDKAgainstComposedGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = appDatabases.Close() })
-	h := compose.AppPlaneWithPlatformAndBlobsAndCollections(config.Config{PlatformHost: "platform.localhost", AppSuffix: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, &contractBlobs{data: map[string]map[string]contractBlob{}}, persistence.CollectionRepository{Apps: appDatabases}, live.New(live.DefaultLimits()), compose.Login{}, nil)
+	h := compose.AppPlaneWithPlatformAndBlobsAndCollections(config.Config{Domain: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, &contractBlobs{data: map[string]map[string]contractBlob{}}, persistence.CollectionRepository{Apps: appDatabases}, live.New(live.DefaultLimits()), compose.Login{}, nil)
 	// Node resolves the reserved `*.localhost` test suffix to IPv6 loopback.
 	// Keep the listener local while allowing the browser-style fetch URL to
 	// retain a host-derived app name.

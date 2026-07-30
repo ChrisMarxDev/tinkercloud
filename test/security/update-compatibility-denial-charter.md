@@ -13,3 +13,12 @@
   rollback snapshot, replace the binary, restart the service, or mutate schema.
 - Missing compatibility headers remain a temporary V1 migration allowance, not
   evidence that an unknown client is compatible with a future API generation.
+- A supported update, migration, or restart must not delete or recreate an
+  existing operator/deployer identity, change its immutable ID/role/status,
+  detach an app from its owner, or remove/replace the active access-policy
+  revision or rules. Seeded-state regression proves those invariants before and
+  after the supported migration/open path.
+- Existing valid authority remains usable after update unless an explicit,
+  versioned migration contract names that credential class and its required
+  invalidation. Failed candidate verification, migration, replacement, or
+  health never makes a partial or empty control database authoritative.

@@ -9,11 +9,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tinyhost/tiny/internal/appauth"
+	"github.com/tinyhost/tiny/internal/appnamespace"
 	"github.com/tinyhost/tiny/internal/blob"
+	"github.com/tinyhost/tiny/internal/browseridentity"
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/controlapi"
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/jobs"
+	"github.com/tinyhost/tiny/internal/kv"
 	"github.com/tinyhost/tiny/internal/llm"
 	"github.com/tinyhost/tiny/internal/operations"
 	"github.com/tinyhost/tiny/internal/releases"
@@ -25,8 +30,9 @@ import (
 )
 
 type ControlAuthenticator struct {
-	Store *SQLiteStore
-	Clock func() time.Time
+	Store          *SQLiteStore
+	Clock          func() time.Time
+	RevokeChildren func([]AppSessionRef)
 }
 
 func (a ControlAuthenticator) AuthenticateControl(ctx context.Context, r *http.Request) (controlapi.Actor, error) {
@@ -46,6 +52,11 @@ func (a ControlAuthenticator) AuthenticateControl(ctx context.Context, r *http.R
 		// matching idempotent deletion outcome for that state.
 		if scope == "app:delete" {
 			statuses = "'active','suspended','deleting','deleted'"
+		} else if scope == "data:read" {
+			// Owner data inspection remains available while an app is
+			// suspended so a deployer can diagnose it. The service repeats the
+			// owner/status check before opening the app database.
+			statuses = "'active','suspended'"
 		}
 		if err := a.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND status IN ("+statuses+")", slug).Scan(&appID); err != nil {
 			return controlapi.Actor{}, ErrToken
@@ -58,22 +69,36 @@ func (a ControlAuthenticator) AuthenticateControl(ctx context.Context, r *http.R
 	return a.Store.AuthenticateToken(ctx, strings.TrimPrefix(h, "Bearer "), scope, appID, now)
 }
 
-// AuthenticatePlatform deliberately accepts only the host-only control-session
-// cookie. Browser traffic cannot reuse a bearer token, while CLI traffic cannot
-// turn into an ambient browser session.
-func (a ControlAuthenticator) AuthenticatePlatform(ctx context.Context, r *http.Request) (controlapi.Actor, error) {
+// AuthenticatePlatform accepts only the admin-host global identity cookie,
+// rotates it when required, and derives the current dashboard role separately.
+// Browser traffic cannot reuse a bearer token, while app cookies never reach
+// this exact host.
+func (a ControlAuthenticator) AuthenticatePlatform(ctx context.Context, w http.ResponseWriter, r *http.Request) (controlapi.Actor, error) {
 	if a.Store == nil {
 		return controlapi.Actor{}, ErrToken
 	}
-	c, err := r.Cookie(controlapi.ControlCookieName)
+	c, err := r.Cookie(browseridentity.IdentityCookieName)
 	if err != nil || c.Value == "" {
-		return controlapi.Actor{}, ErrToken
+		return controlapi.Actor{}, ErrIdentity
 	}
 	now := time.Now()
 	if a.Clock != nil {
 		now = a.Clock()
 	}
-	return a.Store.AuthenticateControlSession(ctx, c.Value, now)
+	result, err := a.Store.AuthenticateDashboardIdentity(ctx, c.Value, now)
+	if err != nil {
+		if errors.Is(err, ErrIdentity) && result.Identity.ID == "" {
+			http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.IdentityCookieName))
+		}
+		return controlapi.Actor{}, err
+	}
+	if result.ReplacementToken != "" {
+		http.SetCookie(w, browseridentity.IdentityCookie(result.ReplacementToken, result.Identity.ExpiresAt))
+	}
+	if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+		a.RevokeChildren(result.Revoked)
+	}
+	return result.Actor, nil
 }
 func routeScope(m, p string) string {
 	s, _, ok := classifyControlRoute(m, p)
@@ -131,6 +156,17 @@ func classifyControlRoute(m, p string) (string, string, bool) {
 	if len(parts) == 2 && parts[1] == "releases" && m == "GET" {
 		return "app:read", slug, true
 	}
+	// Deployer data administration is a bounded control-plane capability. The
+	// slug is resolved here only to authenticate an app-scoped bearer; the
+	// service repeats owner/status resolution before selecting app-local data.
+	if len(parts) >= 3 && parts[1] == "data" {
+		if m == "GET" {
+			return "data:read", slug, true
+		}
+		if m == "POST" || m == "PUT" || m == "DELETE" {
+			return "data:write", slug, true
+		}
+	}
 	if len(parts) == 1 && m == "DELETE" {
 		return "app:delete", slug, true
 	}
@@ -171,10 +207,97 @@ type ControlService struct {
 	LLMValidator    interface {
 		Validate(context.Context, llm.Provider, []byte) error
 	}
+	// Deployer data repositories remain private app-local persistence adapters.
+	// Control routes receive no filesystem/database selector; dataScope resolves
+	// the immutable app ID from the authenticated deployer's owned slug.
+	DataKV        kv.Repository
+	DataDocuments collections.Repository
+	AppDatabases  *AppDatabaseManager
+	DataEvents    interface {
+		PublishKVChange(context.Context, appauth.DataAuthorizationContext, kv.Mutation)
+		PublishCollectionChange(context.Context, appauth.DataAuthorizationContext, collections.Mutation)
+	}
 }
 
-func (s ControlService) CreateLLMConnection(ctx context.Context, a controlapi.Actor, name, provider, secret string) error {
-	if s.LLM == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || len(secret) == 0 {
+// deployerDataScope is deliberately private to persistence. It is constructed
+// only after a current control bearer and owned application have both been
+// verified, and it is the sole source of an app ID for data repositories.
+type deployerDataScope struct {
+	appID, actorID, slug string
+	auth                 appauth.DataAuthorizationContext
+}
+
+func (s ControlService) dataScope(ctx context.Context, a controlapi.Actor, slug string, write bool) (deployerDataScope, error) {
+	if !a.Active || (a.Role != "deployer" && a.Role != "operator") || s.Store == nil || !releases.ValidSlug(slug) {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	statuses := "('active','suspended')"
+	if write {
+		statuses = "('active')"
+	}
+	var appID string
+	if err := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status IN "+statuses, slug, a.ID).Scan(&appID); err != nil {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	auth := appauth.NewDeployerDataAuthorizationContext(appID, slug, a.ID, "")
+	if auth == nil {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	return deployerDataScope{appID: appID, actorID: a.ID, slug: slug, auth: auth}, nil
+}
+
+// dataMutationIntent creates durable, metadata-only evidence before touching
+// the separate app database. SQLite cannot atomically span the control and app
+// files, so an intent is the fail-closed boundary: when audit persistence is
+// unavailable no data mutation is attempted. Values/document bodies are never
+// stored in control-plane audit metadata.
+func (s ControlService) dataMutationIntent(ctx context.Context, scope deployerDataScope, action, target, requestID, digest string) (fresh, completed bool, err error) {
+	if target == "" || requestID == "" {
+		return false, false, ErrUnavailable
+	}
+	err = s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var existing, metadata, outcome string
+		err := tx.QueryRowContext(ctx, "SELECT target_id,COALESCE(metadata_json,''),outcome FROM audit_events WHERE action=? AND actor_id=? AND request_id=?", action, scope.actorID, requestID).Scan(&existing, &metadata, &outcome)
+		if err == nil {
+			if existing == target && metadata == digest {
+				switch outcome {
+				case "succeeded":
+					completed = true
+					return nil
+				case "attempted":
+					// The app mutation may have committed before the separate
+					// outcome update failed. Let the operation-specific adapter
+					// reconcile only when current app state proves the result.
+					return nil
+				}
+			}
+			return ErrUnavailable
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_kind,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),datetime('now'),'deployer',?,?,?,'attempted','app_data',?,?,?)", scope.actorID, scope.appID, action, target, requestID, digest)
+		fresh = err == nil
+		return err
+	})
+	return fresh, completed, err
+}
+
+func (s ControlService) dataMutationComplete(ctx context.Context, scope deployerDataScope, action, requestID string) error {
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, "UPDATE audit_events SET outcome='succeeded' WHERE action=? AND actor_id=? AND app_id=? AND request_id=? AND outcome='attempted'", action, scope.actorID, scope.appID, requestID)
+		if err != nil {
+			return err
+		}
+		if n, _ := result.RowsAffected(); n != 1 {
+			return ErrUnavailable
+		}
+		return nil
+	})
+}
+
+func (s ControlService) CreateLLMConnection(ctx context.Context, a controlapi.Actor, provider, secret string) error {
+	if s.LLM == nil || s.LLM.Envelope == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || len(secret) == 0 {
 		return ErrUnavailable
 	}
 	p := llm.Provider(provider)
@@ -188,10 +311,24 @@ func (s ControlService) CreateLLMConnection(ctx context.Context, a controlapi.Ac
 	if err != nil {
 		return ErrUnavailable
 	}
-	return s.LLM.CreateConnection(ctx, LLMConnectionInput{ID: id, DisplayName: name, Provider: p, Secret: []byte(secret), KeyVersion: 1, ActorID: a.ID})
+	return s.LLM.CreateConnection(ctx, LLMConnectionInput{ID: id, DisplayName: llmConnectionLabel(p), Provider: p, Secret: []byte(secret), KeyVersion: 1, ActorID: a.ID})
+}
+
+// llmConnectionLabel is server-owned metadata for the small fixed provider
+// set. Browser actors choose the provider and a write-only key, never a
+// display label or opaque connection identifier.
+func llmConnectionLabel(provider llm.Provider) string {
+	switch provider {
+	case llm.ProviderAnthropic:
+		return "Anthropic API key"
+	case llm.ProviderGemini:
+		return "Gemini API key"
+	default:
+		return ""
+	}
 }
 func (s ControlService) RotateLLMConnection(ctx context.Context, a controlapi.Actor, id, secret string) error {
-	if s.LLM == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || id == "" || secret == "" {
+	if s.LLM == nil || s.LLM.Envelope == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || id == "" || secret == "" {
 		return ErrUnavailable
 	}
 	// The connection's original provider is the authority for validation. A
@@ -434,7 +571,7 @@ func (s ControlService) ReplaceActiveDeployers(ctx context.Context, a controlapi
 			if _, e = tx.ExecContext(ctx, "UPDATE users SET status='revoked' WHERE id=?", d.id); e != nil {
 				return e
 			}
-			for _, q := range []string{"UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", "UPDATE sessions SET revoked_at=? WHERE scope='control' AND user_id=? AND revoked_at IS NULL"} {
+			for _, q := range []string{"UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL"} {
 				if _, e = tx.ExecContext(ctx, q, now, d.id); e != nil {
 					return e
 				}
@@ -709,6 +846,10 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		return v, nil
 	}
 	if s.LLM != nil {
+		// This server-derived readiness state is deliberately narrower than the
+		// safe metadata reader. Operators can see a truthful unavailable state
+		// without learning whether an encryption root exists or its value.
+		v.LLMKeyManagementReady = s.LLM.Envelope != nil && s.LLMValidator != nil
 		connections, profiles, grants, err := s.LLM.OperatorViews(ctx)
 		if err != nil {
 			return v, err
@@ -828,7 +969,7 @@ func validDNSSuffix(value string) bool {
 var ErrUnavailable = errors.New("control operation unavailable")
 
 func (s ControlService) CreateApp(ctx context.Context, a controlapi.Actor, slug, key string) error {
-	if !a.Active || key == "" || !releases.ValidSlug(slug) {
+	if !a.Active || key == "" || !appnamespace.Valid(slug) {
 		return ErrUnavailable
 	}
 	if s.WriteGate != nil {
@@ -1286,6 +1427,16 @@ func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, 
 	if e != nil || r.AppID != appID || r.OwnerID != a.ID {
 		return controlapi.ActivationResult{}, ErrUnavailable
 	}
+	// An exact committed replay is a receipt only. In particular it must not
+	// revoke live sessions again; the deployment service delegates this decision
+	// only to durable repository audit/state verification.
+	replayed, e := s.Deployments.ActivationReplay(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key)
+	if e != nil {
+		return controlapi.ActivationResult{}, e
+	}
+	if replayed {
+		return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", Domain: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
+	}
 	e = s.Deployments.Activate(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key)
 	if e != nil {
 		return controlapi.ActivationResult{}, e
@@ -1295,5 +1446,5 @@ func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, 
 	if s.Live != nil {
 		s.Live.Revoke(appID, "")
 	}
-	return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", AppSuffix: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
+	return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", Domain: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
 }

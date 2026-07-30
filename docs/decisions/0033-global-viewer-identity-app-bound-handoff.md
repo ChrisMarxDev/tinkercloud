@@ -1,8 +1,14 @@
 # ADR 0033: Global viewer identity with app-bound handoffs
 
-**Status:** Accepted for V1
+**Status:** App-bound handoff retained; naming and dashboard topology
+superseded by ADR 0051
 
 ## Context
+
+This ADR is retained for the app-bound handoff and host-only child-session
+boundary. Its former platform-host naming and separate dashboard control-cookie
+statements are historical only; ADR 0051 is the current browser-identity and
+domain topology.
 
 ADR 0002 correctly rejected a shared parent-domain app cookie: deployed apps
 are untrusted independent origins and one app must not receive another app’s
@@ -14,10 +20,10 @@ app-specific authorization and browser cookie isolation.
 ## Decision
 
 TinyHost introduces one opaque, server-persisted global viewer identity session
-on the platform host. The host-only `__Host-tiny_identity` cookie proves only a
-viewer email identity; it is distinct from the control-plane cookie and CLI
-bearers, grants no deployer/operator authority, and is never sent to app
-hosts.
+on the exact admin host. The host-only `__Host-tiny_identity` cookie proves
+only a browser email identity; the dashboard separately rechecks current role,
+it grants no app access by itself, and it is never sent to app hosts. CLI
+bearers remain separate.
 
 The platform additionally sets `__Host-tiny_browser`, an opaque 30-day,
 host-only `Secure`/`HttpOnly`/`SameSite=Lax` browser-profile binding. It is not
@@ -33,18 +39,17 @@ The binding remains after global logout or a known-invalid identity-cookie
 cleanup: it groups the browser profile but cannot authenticate it.
 
 An app with no local session starts a server-created, state-bound, one-time
-handoff. The platform host validates the global identity, then the gateway
+handoff. The exact admin host validates the global identity, then the gateway
 rechecks current app policy before grant issuance and again while atomically
 consuming the grant on the exact app callback. A successful exchange creates
 the existing host-only app-local opaque session. The app cookie remains bound
 to one app and is the only credential presented to app requests.
 
-When this broker is configured, it is the sole deployed browser viewer-session
-issuance route. Legacy direct app-host OTP request/verify endpoints are retired
-with generic form/JSON denials; they remain only for an explicit brokerless
-local compatibility harness. This prevents newly issued parentless app
-sessions from escaping global logout and account-switch revocation. Platform
-OTP, verification, account-switch, and logout POSTs require an exact HTTPS
+The broker is the sole browser viewer-session issuance route. Legacy direct
+app-host OTP request/verify endpoints are retired and deny without mutation.
+This prevents newly issued parentless app sessions from escaping global logout
+and account-switch revocation. Platform OTP, verification, account-switch, and
+logout POSTs require an exact HTTPS
 same-origin `Origin` header. Global logout clears the identity cookie and
 closes child live connections only after persistence commits; a persistence
 failure leaves the cookie and live children untouched and reports no success.
@@ -68,8 +73,8 @@ has one active global identity. Switching identity after OTP verification
 revokes the previous global session family and every derived app session;
 per-app logout only revokes its app-local session.
 
-The normative protocol and failure requirements are
-[`specs/api/global-identity-handoff-contract.md`](../../specs/api/global-identity-handoff-contract.md).
+The replacement normative protocol and failure requirements are
+[`specs/api/browser-identity-handoff-contract.md`](../../specs/api/browser-identity-handoff-contract.md).
 
 ## Consequences
 
@@ -83,13 +88,13 @@ The normative protocol and failure requirements are
   child-session linkage. The forward-only migration is additive and never
   mutates legacy app-session revocation state. The new runtime quarantines
   parentless app sessions created before migration 5's persisted application
-  cutoff rather than guessing a parent identity/family; explicit brokerless
-  compatibility sessions created after that cutoff retain app-local semantics.
-  Missing or malformed persisted cutoff/session timestamps deny without
-  mutation. The corrected additive migration retains the one historical
+  cutoff rather than guessing a parent identity/family; any parentless
+  post-cutoff session denies. Missing or malformed persisted cutoff/session
+  timestamps deny without mutation. The corrected additive migration retains the one historical
   destructive-v5 checksum so a binary rollback/update can reopen the database
   without a VPS database mutation. Stale or concurrent non-force OTP completions are
   first-wins: a completion cannot create a second active family after another
   global identity was issued for that identity since its challenge was created.
-- Existing control browser sessions and CLI bearer tokens retain their separate
-  validation paths. Matching email text does not bridge credential authority.
+- CLI bearer tokens retain their separate validation path. The retired control
+  browser session no longer exists; matching email text never bridges role,
+  policy, or bearer authority.

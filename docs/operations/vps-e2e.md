@@ -20,8 +20,8 @@ Prepare:
 - root SSH access using a dedicated key (the suite installs and recovers the
   host as root, while the gateway itself runs as the unprivileged `tinyhost`
   service user);
-- an `A` record for the platform host and an `A` wildcard record for the app
-  suffix, both pointing at the VPS;
+- one wildcard `A` record for `*.<domain>` pointing at the VPS. TinyHost
+  derives `admin.<domain>` for the dashboard and `<slug>.<domain>` for apps;
 - a verified Resend sending domain and API key;
 - distinct operator, deployer, and viewer email addresses, plus an ACME contact
   email; and
@@ -30,8 +30,12 @@ Prepare:
 
 The host must not run Docker, a reverse proxy, or another public service on
 ports 80/443. The acceptance suite is destructive by design and refuses a host
-with existing TinyHost state unless the explicit disposable-host reuse gate
-matches.
+with existing TinyHost configuration, application data, binary, or service
+unit unless the explicit disposable-host reuse gate matches. A fixed
+`/var/lib/tinyhost-acme` directory from an earlier disposable run may remain:
+it is transport cache rather than app state, is revalidated by initialization,
+and avoids needless duplicate certificate issuance. Do not delete that cache
+between clean reruns for the same domain.
 
 ## Repo-local SSH connection files
 
@@ -77,8 +81,7 @@ export TINYHOST_VPS_ACKNOWLEDGE="$TINYHOST_VPS_SSH_TARGET"
 export TINYHOST_VPS_KNOWN_HOSTS_FILE="$PWD/.tiny/vps/known_hosts"
 export TINYHOST_VPS_SSH_IDENTITY_FILE="$PWD/.tiny/vps/id_ed25519"
 
-export TINYHOST_VPS_PLATFORM_HOST='tiny.example.com'
-export TINYHOST_VPS_APP_SUFFIX='apps.example.com'
+export TINYHOST_VPS_DOMAIN='example.com'
 export TINYHOST_VPS_OPERATOR_EMAIL='operator@example.com'
 export TINYHOST_VPS_DEPLOYER_EMAIL='deployer@example.com'
 export TINYHOST_VPS_VIEWER_EMAIL='viewer@example.com'
@@ -126,17 +129,22 @@ With `TINYHOST_VPS_REUSE=1`, it also refuses before offline gates unless
 `TINYHOST_VPS_RELEASE_DIR` is an absolute, existing, caller-owned,
 non-symlink directory; the live suite still verifies the release signature.
 
-The suite confirms the 80/443 listeners belong to TinyHost, deploys a
-randomized smoke archive, denies anonymous HTML/asset/API/WebSocket access
-without its marker, and verifies the allowed viewer's post-OTP app and identity
-access. It also deploys a `features.blobs: true` SDK-equivalent fixture and
+The suite confirms the 80/443 listeners belong to TinyHost, then after deployer
+login lists that deployer's apps and deletes only its four fixed fixture names
+when they are present: `vps-e2e-update-probe`, `vps-e2e-primary`,
+`vps-e2e-isolation`, and `vps-e2e-denied`. It uses a fresh idempotency key for
+each deletion and stops on a list or deletion error; it never deletes an
+unrelated app. It deploys those stable-host fixtures while keeping randomized
+archive markers, denies anonymous HTML/asset/API/WebSocket access without a
+marker, and verifies the allowed viewer's post-OTP app and identity access. It
+also deploys a `features.blobs: true` SDK-equivalent fixture and
 proves capability discovery plus authenticated upload/list/exact binary
 download/delete. It rejects an extra multipart part without catalog mutation,
 proves anonymous and cross-app guessed-ID reads contain no blob bytes, requires
 attachment/private-no-store/nosniff download headers, and checks the bytes
 survive a service restart. It leaves the VPS state available after a failure. For a disposable
 already-initialized host only, set `TINYHOST_VPS_REUSE=1`; the existing
-root-owned suite marker must match the target, platform host, and app suffix.
+root-owned suite marker must match the target and root domain.
 Reuse does not reset or clean up the host. It additionally requires
 `TINYHOST_VPS_RELEASE_DIR` to name a release verified by the installed
 server's pinned release key. Once a fresh active probe app exists, the suite
@@ -151,9 +159,17 @@ that every earlier durable step completed. Setup, credentials, install, local
 service, SSH, or state failures stop immediately; no installer or secret-copy
 step is repeated between readiness attempts.
 
+Clean application-state reruns preserve `/var/lib/tinyhost-acme`. Repeatedly
+deleting it and requesting the same certificate again can exhaust the public
+CA's duplicate-certificate allowance while proving nothing additional about
+TinyHost. Destroy it only when retiring the VPS/domain or deliberately rotating
+that transport state outside the acceptance loop.
+
 [The checked-in VPS smoke app](../../examples/test-apps/vps-smoke/) is a
-manifest fixture and documentation example. The live suite instead creates a
-fresh archive with a randomized slug and marker for each run.
+manifest fixture and documentation example. The live suite creates a fresh
+archive with a randomized marker for every run, but always deploys it to the
+same bounded fixture hostnames so repeat runs reuse their cached exact-host
+certificates.
 
 ## Unattended Resend OTP reading
 

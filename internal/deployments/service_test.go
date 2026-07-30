@@ -12,6 +12,8 @@ import (
 	"github.com/tinyhost/tiny/internal/releases"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -37,6 +39,34 @@ type gates struct{ p, c, probe bool }
 func (g gates) Policy(context.Context, Record) bool      { return g.p }
 func (g gates) Certificate(context.Context, Record) bool { return g.c }
 func (g gates) Probe(context.Context, Record) bool       { return g.probe }
+
+// synchronizedInitialGets forces two activation callers to read the same
+// verified candidate before either can acquire the service app lock.
+type synchronizedInitialGets struct {
+	*MemoryRepository
+	mu      sync.Mutex
+	gets    int
+	seen    chan struct{}
+	release chan struct{}
+}
+
+func (r *synchronizedInitialGets) Get(ctx context.Context, id string) (Record, error) {
+	r.mu.Lock()
+	r.gets++
+	initial := r.gets <= 2
+	if r.gets == 2 {
+		close(r.seen)
+	}
+	r.mu.Unlock()
+	if initial {
+		select {
+		case <-r.release:
+		case <-ctx.Done():
+			return Record{}, ctx.Err()
+		}
+	}
+	return r.MemoryRepository.Get(ctx, id)
+}
 
 func tarGz(name string, data []byte) []byte {
 	var b bytes.Buffer
@@ -211,6 +241,92 @@ func TestActivateGatesAndOwner(t *testing.T) {
 	r, _ := repo.Get(context.Background(), "new")
 	if r.State != releases.Active {
 		t.Fatal(r.State)
+	}
+}
+
+func TestActivateExactCommittedReplaySkipsGatesAndSideEffects(t *testing.T) {
+	repo := &MemoryRepository{Records: map[string]Record{
+		"old": {Deployment: releases.Deployment{ID: "old", AppID: "app", State: releases.Active}, OwnerID: "a"},
+		"new": {Deployment: releases.Deployment{ID: "new", AppID: "app", State: releases.Verified}, OwnerID: "a"},
+	}, Current: map[string]string{"app": "old"}}
+	policyCalls := 0
+	s := &Service{Repo: repo, Gates: GateFuncs{
+		PolicyFunc:      func(context.Context, Record) bool { policyCalls++; return true },
+		CertificateFunc: func(context.Context, Record) bool { return true },
+		ProbeFunc:       func(context.Context, Record) bool { return true },
+	}}
+	if err := s.Activate(context.Background(), Actor{ID: "a", Active: true}, "new", "same-key"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Activate(context.Background(), Actor{ID: "a", Active: true}, "new", "same-key"); err != nil {
+		t.Fatal(err)
+	}
+	if policyCalls != 1 || repo.Records["new"].State != releases.Active || repo.Records["old"].State != releases.Superseded {
+		t.Fatalf("replay reran gates or changed releases: calls=%d records=%#v", policyCalls, repo.Records)
+	}
+	if err := s.Activate(context.Background(), Actor{ID: "a", Active: true}, "new", "different-key"); err == nil {
+		t.Fatal("active deployment accepted with a different activation key")
+	}
+}
+
+func TestActivateConcurrentExactReplayRefetchesAfterAppLock(t *testing.T) {
+	base := &MemoryRepository{Records: map[string]Record{
+		"old": {Deployment: releases.Deployment{ID: "old", AppID: "app", State: releases.Active}, OwnerID: "a"},
+		"new": {Deployment: releases.Deployment{ID: "new", AppID: "app", State: releases.Verified}, OwnerID: "a"},
+	}, Current: map[string]string{"app": "old"}}
+	repo := &synchronizedInitialGets{MemoryRepository: base, seen: make(chan struct{}), release: make(chan struct{})}
+	var policyCalls atomic.Int32
+	s := &Service{Repo: repo, Gates: GateFuncs{
+		PolicyFunc:      func(context.Context, Record) bool { policyCalls.Add(1); return true },
+		CertificateFunc: func(context.Context, Record) bool { return true },
+		ProbeFunc:       func(context.Context, Record) bool { return true },
+	}}
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- s.Activate(context.Background(), Actor{ID: "a", Active: true}, "new", "same-key")
+		}()
+	}
+	close(start)
+	select {
+	case <-repo.seen:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent callers did not both read the initial candidate")
+	}
+	close(repo.release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent exact replay failed: %v", err)
+		}
+	}
+	if policyCalls.Load() != 1 || base.Records["new"].State != releases.Active || base.Current["app"] != "new" {
+		t.Fatalf("stale retry reran activation: gates=%d records=%#v", policyCalls.Load(), base.Records)
+	}
+}
+
+func TestActivateReturnsSafeGateCategories(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		gates gates
+		want  ActivationFailure
+	}{
+		{"policy", gates{false, true, true}, PolicyNotReady},
+		{"certificate", gates{true, false, true}, CertificateNotReady},
+		{"probe", gates{true, true, false}, CandidateProbeFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &MemoryRepository{Records: map[string]Record{"new": {Deployment: releases.Deployment{ID: "new", AppID: "app", State: releases.Verified}, OwnerID: "a"}}, Current: map[string]string{}}
+			if err := (&Service{Repo: repo, Gates: test.gates}).Activate(context.Background(), Actor{ID: "a", Active: true}, "new", "key"); err != test.want {
+				t.Fatalf("error=%v want=%v", err, test.want)
+			}
+		})
 	}
 }
 func TestActivateGateDenialPreservesPointer(t *testing.T) {

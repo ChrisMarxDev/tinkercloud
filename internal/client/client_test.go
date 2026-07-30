@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -208,5 +209,55 @@ func TestTokenLifecycleUsesBoundPathsAndNeverDecodesSecretFromList(t *testing.T)
 	}
 	if len(requests) != 3 || requests[0].URL.EscapedPath() != "/api/v1/apps/demo%2Fname/tokens" || requests[1].Header.Get("Idempotency-Key") != "key" || requests[2].URL.EscapedPath() != "/api/v1/apps/demo%2Fname/tokens/tok_2" || requests[2].Header.Get("Idempotency-Key") != "key2" {
 		t.Fatalf("unexpected paths=%q,%q,%q keys=%q,%q", requests[0].URL.EscapedPath(), requests[1].URL.EscapedPath(), requests[2].URL.EscapedPath(), requests[1].Header.Get("Idempotency-Key"), requests[2].Header.Get("Idempotency-Key"))
+	}
+}
+
+func TestDataClientUsesBoundedControlPathsAndVersions(t *testing.T) {
+	var requests []*http.Request
+	c := New("https://tiny.test", "control-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r)
+		switch r.Method {
+		case "GET":
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"entries":[]}`)), Header: make(http.Header), Request: r}, nil
+		case "PUT":
+			body, _ := io.ReadAll(r.Body)
+			if !strings.Contains(string(body), `"expected_version":4`) || !strings.Contains(string(body), `"value":{"done":true}`) {
+				t.Fatalf("update body = %s", body)
+			}
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"key":"a/b","value":{"done":true},"version":5}`)), Header: make(http.Header), Request: r}, nil
+		default:
+			t.Fatalf("unexpected method %s", r.Method)
+			return nil, nil
+		}
+	})}
+	if _, err := c.ListDataKV(context.Background(), "owned/app", "settings/", "cursor", 10); err != nil {
+		t.Fatal(err)
+	}
+	expected := uint64(4)
+	if _, err := c.SetDataKV(context.Background(), "owned/app", "a/b", json.RawMessage(`{"done":true}`), &expected, "idem"); err != nil {
+		t.Fatal(err)
+	}
+	if len(requests) != 2 || requests[0].URL.EscapedPath() != "/api/v1/apps/owned%2Fapp/data/kv" || requests[0].URL.Query().Get("prefix") != "settings/" || requests[0].URL.Query().Get("cursor") != "cursor" || requests[1].URL.EscapedPath() != "/api/v1/apps/owned%2Fapp/data/kv/a%2Fb" || requests[1].Header.Get("Idempotency-Key") != "idem" || requests[1].Header.Get("Authorization") != "Bearer control-token" {
+		t.Fatalf("unexpected requests: %#v", requests)
+	}
+}
+
+func TestControlClientKeepsQuotaDistinctFromRequestRateLimit(t *testing.T) {
+	for _, test := range []struct {
+		body string
+		want error
+	}{
+		{`{"error":{"code":"quota_exceeded","message":"safe"}}`, ErrQuotaExceeded},
+		{`{"error":{"code":"rate_limited","message":"safe"}}`, ErrRateLimited},
+		{`not-json`, ErrRateLimited},
+	} {
+		c := New("https://tiny.test", "control-token")
+		c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(test.body)), Header: make(http.Header), Request: r}, nil
+		})}
+		if err := c.Do(context.Background(), http.MethodGet, "/api/v1/apps/demo/data/kv", "", nil, nil); !errors.Is(err, test.want) {
+			t.Fatalf("body=%q error=%v want=%v", test.body, err, test.want)
+		}
 	}
 }

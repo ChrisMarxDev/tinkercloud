@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tinyhost/tiny/internal/controlapi"
 	"github.com/tinyhost/tiny/internal/identity"
 )
 
@@ -52,33 +51,11 @@ func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testi
 	defer s.Close()
 	ctx := context.Background()
 	auth := ControlAuthenticator{Store: s}
-	platform := func(raw string) error {
-		r := httptest.NewRequest(http.MethodGet, "https://tiny.test/dashboard", nil)
-		r.AddCookie(&http.Cookie{Name: controlapi.ControlCookieName, Value: raw})
-		_, err := auth.AuthenticatePlatform(ctx, r)
-		return err
-	}
 	bearer := func(raw string) error {
 		r := httptest.NewRequest(http.MethodGet, "/api/v1/apps", nil)
 		r.Header.Set("Authorization", "Bearer "+raw)
 		_, err := auth.AuthenticateControl(ctx, r)
 		return err
-	}
-	outbox := &captureOutbox{}
-	login := ControlLogin{Store: s, HMACKey: []byte("key"), Outbox: outbox}
-	tx, err := login.RequestOTP(ctx, "owner@example.com", controlapi.BrowserLoginChannel, "test")
-	if err != nil || tx == "" || outbox.m.Code == "" {
-		t.Fatal(err)
-	}
-	browser, err := login.VerifyOTP(ctx, tx, outbox.m.Code, controlapi.BrowserLoginChannel)
-	if err != nil || browser == "" {
-		t.Fatal(err)
-	}
-	if err = platform(browser); err != nil {
-		t.Fatalf("browser control session denied: %v", err)
-	}
-	if err = bearer(browser); err == nil {
-		t.Fatal("browser control session accepted as bearer")
 	}
 	cli, err := s.IssueToken(ctx, "u", "", []string{"app:read"}, time.Now().Add(time.Hour))
 	if err != nil {
@@ -86,9 +63,6 @@ func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testi
 	}
 	if err = bearer(cli); err != nil {
 		t.Fatalf("CLI bearer denied: %v", err)
-	}
-	if err = platform(cli); err == nil {
-		t.Fatal("CLI bearer accepted as control cookie")
 	}
 	if _, err = s.DB.Exec("INSERT INTO identities(id,normalized_email,created_at) VALUES('viewer','viewer@example.com',datetime('now'))"); err != nil {
 		t.Fatal(err)
@@ -99,9 +73,6 @@ func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testi
 	}
 	if err = bearer(viewer); err == nil {
 		t.Fatal("app viewer session accepted as bearer")
-	}
-	if err = platform(viewer); err == nil {
-		t.Fatal("app viewer session accepted as control cookie")
 	}
 }
 
@@ -122,5 +93,30 @@ func TestControlAuthenticatorDeleteAllowsSuspendedTargetOnly(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer "+raw)
 	if _, err = auth.AuthenticateControl(context.Background(), r); err == nil {
 		t.Fatal("suspended non-delete route accepted")
+	}
+}
+
+func TestControlAuthenticatorAllowsSuspendedDataReadButNotWrite(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	ctx := context.Background()
+	readToken, err := s.IssueToken(ctx, "u", "b", []string{"data:read"}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeToken, err := s.IssueToken(ctx, "u", "b", []string{"data:write"}, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth := ControlAuthenticator{Store: s}
+	read := httptest.NewRequest(http.MethodGet, "/api/v1/apps/beta/data/kv", nil)
+	read.Header.Set("Authorization", "Bearer "+readToken)
+	if _, err = auth.AuthenticateControl(ctx, read); err != nil {
+		t.Fatalf("suspended data read denied: %v", err)
+	}
+	write := httptest.NewRequest(http.MethodPut, "/api/v1/apps/beta/data/kv/key", nil)
+	write.Header.Set("Authorization", "Bearer "+writeToken)
+	if _, err = auth.AuthenticateControl(ctx, write); err == nil {
+		t.Fatal("suspended data write accepted")
 	}
 }

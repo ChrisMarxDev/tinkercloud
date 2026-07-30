@@ -69,7 +69,10 @@ func certificateReadyWithSchedule(ctx context.Context, host string, c *http.Clie
 }
 
 func certificateReadyOnce(ctx context.Context, host string, c *http.Client) (ready bool, retryable bool) {
-	u := (&url.URL{Scheme: "https", Host: host, Path: "/_tiny/auth/login"}).String()
+	// This must remain a protected endpoint that does not issue an app handoff
+	// or otherwise mutate viewer authentication state. The login route redirects
+	// after an app becomes active, which makes a same-host redeploy impossible.
+	u := (&url.URL{Scheme: "https", Host: host, Path: "/_tiny/api/v1/app"}).String()
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return false, false

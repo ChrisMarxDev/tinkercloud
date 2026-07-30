@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"github.com/tinyhost/tiny/internal/client"
 	"github.com/tinyhost/tiny/internal/config"
 	"github.com/tinyhost/tiny/internal/deployments"
@@ -15,9 +16,76 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// TestBuildHandlerComposesCLILogin proves the actual production composition,
+// rather than a standalone Dispatcher fixture, retains the CLI OTP issuer.
+// A generic login_* transaction is deliberately the dispatcher fail-closed
+// fallback for an unavailable issuer, so accepting it here would mask a
+// deployer-facing login outage after a seemingly healthy server startup.
+func TestBuildHandlerComposesCLILogin(t *testing.T) {
+	root := t.TempDir()
+	store, err := persistence.OpenSQLite(context.Background(), filepath.Join(root, "tiny.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	cfg := config.Config{
+		Domain:        "tiny.test",
+		SessionCookie: "__Host-tiny_app",
+		DataDirectory: root,
+		OTPExpiry:     time.Minute,
+		SessionExpiry: time.Hour,
+		Limits:        config.ResourceLimits{DiskWarningPercent: 80, DiskStopPercent: 99},
+	}
+	h, _, err := buildHandler(cfg, config.Secrets{HMACKey: "test-composed-cli-login-hmac-key"}, store, denyDeploymentGates{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The production service keeps its SQLite handle open before a root-only
+	// recovery command may enable a deployer through a distinct process. Keep
+	// the handler's original store open and use an independently opened store
+	// for the mutation to catch stale WAL snapshots or write-lock mistakes in
+	// that real ordering.
+	recoveryStore, err := persistence.OpenSQLite(context.Background(), filepath.Join(root, "tiny.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recoveryStore.SetDeployerStatus(context.Background(), "deployer@example.com", "active", "seed"); err != nil {
+		recoveryStore.Close()
+		t.Fatal(err)
+	}
+	if err := recoveryStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "https://"+cfg.PlatformHost()+"/api/v1/auth/otp", strings.NewReader(`{"email":"deployer@example.com"}`))
+	req.Host = cfg.PlatformHost()
+	req.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("OTP request status=%d body=%s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Transaction string `json:"transaction"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(result.Transaction, "otp_") {
+		t.Fatalf("composed handler issued fallback transaction %q", result.Transaction)
+	}
+	var count int
+	if err := store.DB.QueryRow(`SELECT COUNT(*) FROM otp_challenges WHERE id=? AND purpose='control' AND control_channel='cli'`, result.Transaction).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("CLI challenge rows=%d", count)
+	}
+}
 
 func seedDeployer(t *testing.T, s *persistence.SQLiteStore, email string) string {
 	t.Helper()
@@ -58,14 +126,14 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 	// The host running this integration test may itself be beyond the production
 	// 90% stop watermark. Exercise the app/control path independently of host
 	// disk pressure; watermark behavior is covered through the injected gate.
-	cfg := config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: "__Host-tiny_app", DataDirectory: root, OTPExpiry: time.Minute, SessionExpiry: time.Hour, Limits: config.ResourceLimits{DiskWarningPercent: 80, DiskStopPercent: 99}}
+	cfg := config.Config{Domain: "apps.tiny.test", SessionCookie: "__Host-tiny_app", DataDirectory: root, OTPExpiry: time.Minute, SessionExpiry: time.Hour, Limits: config.ResourceLimits{DiskWarningPercent: 80, DiskStopPercent: 99}}
 	gates := deployments.GateFuncs{PolicyFunc: func(ctx context.Context, r deployments.Record) bool {
 		return s.CandidatePolicyReady(ctx, r)
 	}, CertificateFunc: func(context.Context, deployments.Record) bool { return true }, ProbeFunc: func(ctx context.Context, r deployments.Record) bool {
 		p, e := verification.ProbeCandidate(ctx, cfg, root, r)
 		return e == nil && p.Passed()
 	}}
-	h, _, err := buildHandler(cfg, config.Secrets{}, s, gates)
+	h, _, err := buildHandler(cfg, config.Secrets{}, s, gates, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +143,7 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 	cl := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, network, addr)
 	}}}
-	r, e := cl.Get("https://" + cfg.PlatformHost + "/api/v1/version")
+	r, e := cl.Get("https://" + cfg.PlatformHost() + "/api/v1/version")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -84,7 +152,7 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 		t.Fatal(r.Status)
 	}
 	token := seedDeployer(t, s, "deployer@example.com")
-	api := client.Client{Base: "https://" + cfg.PlatformHost, Token: token, HTTP: cl}
+	api := client.Client{Base: "https://" + cfg.PlatformHost(), Token: token, HTTP: cl}
 	// A fresh deployer has no app-management prerequisite: the deploy client
 	// creates only a missing app in its own server-scoped list before upload.
 	if e := api.EnsureApp(context.Background(), "demo"); e != nil {

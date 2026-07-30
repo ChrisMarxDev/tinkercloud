@@ -16,7 +16,7 @@ lexicographically first locally verified active app from installed server
 state. It probes `GET /_tiny/api/v1/capabilities` on that app host. The route is
 a stable, gateway-protected API endpoint and must return the existing exact
 `401 not_authorized` JSON evidence for an anonymous request. The updater derives
-the app host from the selected active slug and configured app suffix; it
+the app host from the selected active slug and configured root domain; it
 accepts no caller-controlled app slug, probe host, or path.
 
 When no active app exists, there are no app release bytes or app capabilities

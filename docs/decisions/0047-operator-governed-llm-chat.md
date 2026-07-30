@@ -25,6 +25,15 @@ app authorization context, derives tenancy from it, atomically reserves usage
 and a concurrency slot, invokes only a compiled-in Anthropic or Gemini adapter,
 then reconciles safe token metadata and audit evidence transactionally.
 
+The operator dashboard separates the API-key lifecycle from LLM chat
+configuration. Its fixed-provider create control asks only for Anthropic or
+Gemini and a write-only key; the trusted service derives the opaque connection
+ID and deterministic safe label. Existing labels remain historical metadata.
+Profiles, grants, limits, and usage stay in the LLM chat section. If the
+root-owned credential boundary is unavailable, the API-key section shows only
+the root-only enable-and-restart next step and exposes neither a mutation form
+nor root configuration detail.
+
 The initial host setup generates the capability root in the root-owned service
 credential file. An existing host enables the same boundary with root-only
 `tinyhost llm enable`; it generates the root locally, records only its

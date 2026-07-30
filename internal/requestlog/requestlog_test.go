@@ -47,3 +47,17 @@ func TestServiceRejectsCallerSuppliedPath(t *testing.T) {
 		t.Fatalf("unsafe service log: %s", out.String())
 	}
 }
+
+func TestServiceLogsOnlyFixedCLIIssuerFailureCategory(t *testing.T) {
+	var out bytes.Buffer
+	Service(slog.New(slog.NewJSONHandler(&out, nil)), "cli_otp_issuance_persistence_insert", "failed", 1)
+	got := out.String()
+	for _, forbidden := range []string{"@", "login_", "sqlite", "resend", "transaction"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("issuer diagnostic leaked %q: %s", forbidden, got)
+		}
+	}
+	if !strings.Contains(got, "service.cli_otp_issuance_persistence_insert") || !strings.Contains(got, `"outcome":"failed"`) {
+		t.Fatalf("missing fixed issuer category: %s", got)
+	}
+}

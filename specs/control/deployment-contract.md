@@ -17,9 +17,25 @@ as an app ID or owner ID in deployer-controlled request data.
 | revoke token | `token:revoke` | token owned by actor | `token.revoked` |
 | create deployment | `deploy:create` | owned app | `deployment.created` |
 | activate deployment | `deploy:activate` | owned app + release | `deployment.activated` |
+| inspect managed data | `data:read` | owned app + bounded KV/document selector | request metadata only |
+| mutate managed data | `data:write` | owned active app + one versioned KV/document selector | `app_data.mutated` |
 
-Successful security-sensitive mutations commit their metadata and audit event in
-the same transaction. Audit failure denies the mutation.
+Successful control-database security-sensitive mutations commit their metadata
+and audit event in the same transaction. App-data mutations are different:
+their data lives in a separate private SQLite file, so they require a durable
+control-database audit intent before the app-data mutation. A successful
+app-data commit is followed by an outcome update used for exact idempotent
+replay. An interrupted outcome is reconciled only when current versioned state
+proves the intended result; otherwise it fails closed. This is not a
+cross-database rollback claim. Intent failure denies before the app-data write.
+
+Managed-data commands are capability operations, not deployment commands. The
+route slug is an ownership target only; after exact scope/app-binding/ownership
+validation TinyHost derives the immutable app ID and passes a typed
+deployer-data context to the existing app-data service. These commands never
+accept a database/file selector, SQL, schema, migration, bulk operation, or
+viewer identity. The full API and denial charter live in
+[`../api/deployer-data-contract.md`](../api/deployer-data-contract.md).
 
 ## Archive transport boundary
 
@@ -64,7 +80,9 @@ active deployment pointer in one transaction. The owner remains server-derived
 and implicit; the client never supplies an owner or app ID for this binding.
 
 Before activation, a newly staged app's exact HTTPS origin receives a bounded
-certificate-readiness probe. The server may retry only transient/readiness
+certificate-readiness probe at `/_tiny/api/v1/app`. This is a protected,
+non-mutating endpoint: it must never issue a viewer handoff, set a cookie, or
+otherwise alter authentication state. The server may retry only transient/readiness
 failure within one cancellable 45-second overall budget, with finite attempts
 and bounded individual requests. Each attempt disallows redirects, requires the
 same HTTPS host and a verified TLS chain, and accepts only the normal non-
@@ -85,10 +103,10 @@ never rendered as an empty description. Intermediate uploads that have no
 final manifest may display no description.
 
 The authenticated activation result includes both the protected `url` and the
-server-derived `app_suffix`. A deployer accepts a URL only when it is exactly
-`https://{slug}.{app_suffix}/`; it must not infer the app suffix from the
-control-plane host, because a deployment may use `tiny.example.com` for control
-and `*.apps.example.com` for app traffic.
+server-derived root `domain`. A deployer accepts a URL only when it is exactly
+`https://{slug}.{domain}/`. The dashboard is always the reserved exact host
+`admin.{domain}`; the deployer must use the returned domain rather than derive
+it from a control client URL.
 
 ## Denial charter
 
@@ -109,6 +127,18 @@ preserves the previous active pointer.
   preserve the prior active pointer. The finite retry window applies only to
   certificate/readiness transport failures; it never retries policy, ownership,
   probe, or post-activation evidence.
+- Activation failure responses use only these safe stable codes:
+  `activation_policy_not_ready`, `activation_certificate_not_ready`,
+  `activation_candidate_probe_failed`, `activation_capability_not_ready`, and
+  `activation_commit_failed`. They are conflict responses with the existing
+  gateway request ID echoed in the JSON error envelope. They never disclose a
+  raw TLS, policy, probe, capability, or persistence detail.
+- After a committed activation, an exact replay with the same deployment and
+  activation idempotency key returns the same successful activation receipt.
+  The repository checks durable activation audit evidence before verified-state
+  planning; it must not rerun gates, create a policy revision or audit event,
+  or trigger a live-session side effect. A different key, deployment, app, or
+  durable state is never treated as that replay.
 - Deployer-initiated selection of a previous release is not a V1 control
   command. The CLI, bearer API, and dashboard must deny or omit rollback paths;
   automatic failed-activation preservation remains required.
@@ -118,7 +148,7 @@ preserves the previous active pointer.
   line/paragraph separator, or more than 280 Unicode code points after edge
   trimming is rejected. A dashboard cannot use release metadata to create an
   immutable/raw release URL; its optional launch control targets only the
-  configured stable `https://{slug}.{app_suffix}/` gateway origin, retains
+  configured stable `https://{slug}.{domain}/` gateway origin, retains
   normal gateway authentication, and uses a new-tab `noopener noreferrer`
   navigation.
 - An archive larger than the effective upload limit is rejected and its staging

@@ -19,8 +19,7 @@ invalid values prevent the live run from starting.
 | `TINYHOST_VPS_KNOWN_HOSTS_FILE` | Absolute path to an existing regular file containing the target's trusted host key. |
 | `TINYHOST_VPS_SSH_PORT` | Optional decimal SSH port. |
 | `TINYHOST_VPS_SSH_IDENTITY_FILE` | Optional absolute existing private-key path. |
-| `TINYHOST_VPS_PLATFORM_HOST` | Existing public platform hostname. |
-| `TINYHOST_VPS_APP_SUFFIX` | Existing wildcard app suffix that resolves to the VPS. |
+| `TINYHOST_VPS_DOMAIN` | Existing root domain whose wildcard DNS record resolves to the VPS. The suite derives the dashboard as `admin.<domain>` and every app as `<slug>.<domain>`. |
 | `TINYHOST_VPS_OPERATOR_EMAIL` | Initial operator email used during host initialization. |
 | `TINYHOST_VPS_DEPLOYER_EMAIL` | Email authorized as the deployer used in the control login. |
 | `TINYHOST_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply a distinct identity from the deployer. |
@@ -31,12 +30,12 @@ invalid values prevent the live run from starting.
 | `TINYHOST_RESEND_READER_API_KEY_FILE` | Required by the shipped unattended Resend reader: absolute local mode-`0600`, non-symlink Resend key with sent-email read access. It must never be copied to the VPS. |
 | `TINYHOST_RESEND_OTP_LEDGER_FILE` | Optional absolute local mode-`0600`, non-symlink consumed-message ledger for the shipped reader. Defaults beside the reader key and is never copied to the VPS. |
 | `TINYHOST_VPS_RELEASE_DIR` | Optional absolute verified release directory. If absent, a clean-host run builds and signs a temporary release locally. **Required with reuse**: before any offline gate, the wrapper requires an existing caller-owned non-symlink directory; the live suite verifies it against the installed server's pinned signing key. |
-| `TINYHOST_VPS_REUSE` | Optional exact value `1`; permits an already-initialized disposable host only when its root-owned suite marker exactly matches the platform host, app suffix, and SSH target. |
+| `TINYHOST_VPS_REUSE` | Optional exact value `1`; permits an already-initialized disposable host only when its root-owned suite marker exactly matches the root domain and SSH target. |
 | `TINYHOST_VPS_UNATTENDED_REPORT_DIR` | Optional absolute local mode-`0700` directory for `run-unattended.sh` redacted timestamped status artifacts. Defaults to `.tiny/vps/unattended-reports/`; it is never copied to the VPS. |
 
-The VPS must already have public DNS for the platform host and wildcard app
-suffix, plus a verified Resend sending domain. The suite does not create DNS
-records or retrieve credentials from the VPS.
+The VPS must already have one public wildcard DNS record for `*.<domain>` plus
+a verified Resend sending domain. The suite does not create DNS records or
+retrieve credentials from the VPS.
 
 ## Unattended wrapper
 
@@ -87,8 +86,8 @@ and does not alter the deployed gateway, its database, or its authentication
 flow. It calls only the fixed HTTPS `https://api.resend.com` origin with a
 local reader credential. The reader accepts only an exact recipient, exact
 configured sender, exact `Your sign-in code` subject, a bounded recent
-timestamp, and exactly the configured platform hostname for both deployer and
-viewer global-identity-broker OTP flows, plus the exact
+timestamp, and exactly the derived `admin.<domain>` hostname for both deployer
+and viewer global-identity OTP flows, plus the exact
 TinyHost text body `Your code: NNNN...`. It fetches one matching message and
 records its opaque message ID in a private consumed-ID ledger before emitting
 only the 4--12 digit code on stdout.
@@ -141,11 +140,20 @@ the action and precede the single email argument. `--config` defaults to
 and extra positional arguments fail with a stable typed error without changing
 deployer state. The command delegates email normalization and validation to the
 persistence boundary; its diagnostic output does not disclose paths or secret
-values.
+values. A successful durable mutation refreshes an already-running
+`tinyhost.service` and rechecks active state before it returns success; a
+deliberately inactive service stays inactive. The explicit refresh-failure
+result never claims to reverse the durable mutation.
 
 1. Confirm the explicit gate, acknowledgement, file inputs, strict SSH trust,
-   and a clean host unless `TINYHOST_VPS_REUSE=1` is explicitly supplied with
-   a matching suite marker.
+   and a clean TinyHost configuration/application-data host unless
+   `TINYHOST_VPS_REUSE=1` is explicitly supplied with a matching suite marker.
+   A prior disposable run's fixed `/var/lib/tinyhost-acme` cache is not
+   application state and may remain: initialization must still reject an
+   unsafe or symlinked path, then reuse the ACME account and valid certificates.
+   Clean reruns must not erase this cache merely to retest initialization,
+   because doing so consumes public-CA issuance capacity without improving the
+   application/authentication proof.
 2. Verify supplied release artifacts or build a temporary signed release,
    install it, initialize TinyHost on a clean host (allowing only the bounded
    final-readiness retry defined above), run `tinyhost doctor`, and confirm
@@ -153,31 +161,44 @@ values.
    listener owned by TinyHost. Operator-owned SSH, firewall policy, and
    pre-existing listeners remain outside TinyHost's mutation scope.
 3. Authorize `TINYHOST_VPS_DEPLOYER_EMAIL` locally on the VPS; authenticate
-   that deployer through the control OTP flow.
-4. Create a unique app, restrict its access policy to
+   that deployer through the control OTP flow. Immediately list that
+   deployer's apps and remove only previously listed suite-owned fixture slugs,
+   each with a fresh idempotency key. The complete fixed set is
+   `vps-e2e-update-probe`, `vps-e2e-primary`, `vps-e2e-isolation`, and
+   `vps-e2e-denied`; an absent fixture is not an error, while a list or delete
+   failure is terminal. The suite never deletes an unlisted or unrelated app.
+4. Create the fixed `vps-e2e-primary` app, restrict its access policy to
    `TINYHOST_VPS_VIEWER_EMAIL`, and build the smoke archive with the same
    canonical private `tiny.yaml` allowlist. Warm its normal ACME path and
    deploy that immutable verified release. Activation installs the archive's
    manifest policy atomically, so the archive—not the earlier control request—
    remains the source of the active viewer allowlist.
-5. Before viewer login, deny the generated app's HTML, private asset, current-
+   Redeploy that same immutable archive once to the same app before continuing.
+   The second deployment must activate safely, supersede the prior deployment,
+   retain the archive's private policy, and still pass anonymous gateway denial;
+   no viewer-login handoff may be used as certificate-readiness evidence.
+5. Before viewer login, deny the fixed primary app's HTML, private asset, current-
    viewer API, and WebSocket-upgrade request without returning its random
    marker or completing a WebSocket upgrade.
-6. Authenticate the initial viewer once through the platform-host identity broker,
-   reached from the first app's document login handoff. Verify the platform
-   identity cookie is not sent to the app host, the derived host-only app
-   session returns the generated marker, and `/_tiny/api/v1/me` reports the
-   configured viewer email. Deploy a second allowed app and prove the same
-   browser jar completes its server-created handoff without requesting or
-   reading another viewer OTP; both app hosts must retain distinct app cookies.
+6. Authenticate the initial viewer once at `https://admin.<domain>/login`.
+   Verify that the browser identity cookie is not sent to an app host, then
+   open the first allowed app through its server-created handoff. Its derived
+   host-only app session must return the generated marker and
+   `/_tiny/api/v1/me` must report the configured viewer email. Deploy a second
+   allowed app and prove the same browser jar completes its server-created
+   handoff without requesting or reading another viewer OTP; both app hosts
+   must retain distinct app cookies. Preserve an app path and repeated,
+   percent-encoded query parameters through that handoff exactly. The admin
+   dashboard's role check and each app policy check remain independent.
    A third app that excludes that identity must render the generic broker
    denial without app bytes or an OTP request. Replay the consumed callback and
    send it to the other app host; both must deny without issuing a replacement
-   app session. Prove app-local logout leaves the global identity and the other
-   app usable, then broker-reopen the logged-out app without an OTP. Finally,
-   switch to the configured deployer identity through the denied page; this
-   intentionally separate viewer-purpose OTP revokes the original child
-   sessions before the deployer-only app opens.
+   app session. Prove app-local logout leaves the browser identity and the
+   other app usable, then broker-reopen the logged-out app without an OTP.
+   Finally, a global dashboard logout must revoke the browser identity and all
+   derived app sessions. A later explicit switch to the configured deployer
+   identity must also revoke the original child sessions before the
+   deployer-only app opens.
    The deployed fixture has
    `features.blobs: true` and contains a same-origin SDK-equivalent blob client
    example.

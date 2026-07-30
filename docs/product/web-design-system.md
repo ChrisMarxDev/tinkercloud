@@ -31,6 +31,7 @@ capturing future rules lives in
 | `--tiny-warning` / `--tiny-warning-soft` | Degraded, attention, limits |
 | `--tiny-danger` / `--tiny-danger-soft` | Destructive, failed, blocked |
 | `--tiny-accent-pink` / `--tiny-accent-yellow` | Tiny decorative accents only |
+| `--tiny-qr-ink` / `--tiny-qr-surface` | Scanner-safe QR contrast |
 
 Security meaning always includes text. A green dot alone never means
 “authorized,” and a pink surface alone never means “failed.”
@@ -99,8 +100,9 @@ copy, render it as a field, transfer it in browser-visible state, or imply that
 its persistence through global sign-out means the viewer remains signed in.
 
 Keep scopes explicit in visible labels: the app-host POST action is “Sign out
-of this app,” while the platform-host action is “Use another email” or “Sign
-out of TinyHost apps.” The latter explains that app sessions are signed out.
+of this app,” while the admin-host action is “Use another email” or “Sign out
+of TinyHost.” The latter explains that dashboard identity and app sessions are
+signed out.
 An allowed handoff may display the verified address as escaped text in the auth
 card. A denied app may also show that already-authenticated address beside the
 generic notice and “Use another email” action; it must not reveal allowlist
@@ -122,19 +124,41 @@ and utility-data disclaimers, then progressive disclosure:
   It remains understandable as text without JavaScript and shows unavailable
   data explicitly rather than drawing a zero value.
 
-#### Operator LLM capability controls
+The same top bar stays present for operators and deployers. It identifies the
+server-derived current role and offers one quiet `Sign out of TinyHost` form.
+Sign-out is not cosmetic: the server revokes the global browser identity family
+and all derived app sessions before it clears the identity and CSRF cookies. If
+that durable revocation cannot be completed, the dashboard keeps the current
+cookies and renders an actionable server error instead of pretending the
+browser signed out. It never acts on a CLI or deployment-agent bearer.
 
-Keep external-provider setup as an ordinary server-rendered dashboard section.
-The connection card accepts a display name, provider selection, and one
-write-only password field. It may show only the safe display name, provider
-kind, opaque server-generated ID, and durable status afterwards. Rotation has
-no provider select: TinyHost resolves the connection’s stored provider before
-validating the replacement credential. A profile is a labeled form for a fixed
-model and every limit; grant controls live on the server-rendered target app,
-not in a free-form app-ID field. Use revision fields for profile/grant updates,
-and native exact-target confirmation fields for connection disable and grant
-disable/revoke. Never place credentials, envelopes, provider URLs, or raw
-provider errors in a notice, table, source, or reveal view.
+A deployer sees a deliberately list-only overview containing only
+server-authorized cards for their own apps. The app list is the primary landing
+surface; operator deployer, audit, health-management, provider, and per-app
+control panels are omitted rather than visually disabled. Deployers continue
+to use the scoped Tiny CLI for management actions.
+If that owned-app read model is unavailable, show an explicit unavailable state
+with the safe retry/operator-diagnostic next step; never make an outage look
+like the deployer owns no apps.
+
+#### Operator API-key and LLM chat controls
+
+Keep external-provider setup in a dedicated server-rendered **API keys**
+section before **LLM chat**. The API-key card asks only for a fixed provider
+selection and one write-only password field; it never asks for a display name,
+identifier, URL, or generic secret label. TinyHost derives the label from the
+fixed provider and may show only that safe label, provider kind, opaque
+server-generated ID, and durable status afterwards. When key management is not
+server-ready, show a quiet unavailable card with root-only `tinyhost llm enable`
+and restart guidance instead of any credential mutation control; never show the
+root or configuration reason. Rotation has no provider select: TinyHost resolves
+the connection’s stored provider before validating the replacement credential.
+Keep profiles, grants, limits, and usage in **LLM chat**. A profile is a labeled
+form for a fixed model and every limit; grant controls live on the
+server-rendered target app, not in a free-form app-ID field. Use revision fields
+for profile/grant updates, and native exact-target confirmation fields for key
+disable and grant disable/revoke. Never place credentials, envelopes, provider
+URLs, or raw provider errors in a notice, table, source, or reveal view.
 
 When a dashboard has multiple authorized app cards, a local search plus status
 filter may help scan that already-rendered list. It is deliberately a
@@ -158,8 +182,13 @@ revocation, removal, or cleanup succeeded.
 
 An active app with a configured stable gateway origin may show one compact
 external-launch icon. It is a native link with an accessible label and title,
-opens only `https://{slug}.{app_suffix}/` in a new tab with `noopener noreferrer`,
+opens only `https://{slug}.{domain}/` in a new tab with `noopener noreferrer`,
 and does not imply that it bypasses the app's ordinary authentication policy.
+Beside it, a compact QR action may open a small native dialog for moving the
+same stable URL to a phone. Generate the code locally from that already
+server-derived URL, show the destination as wrapping text, and say that normal
+sign-in and access policy still apply. If the local encoder cannot represent
+the URL, omit the action; never fall back to a remote QR image service.
 Release hashes and immutable release paths are never links.
 Release history is read-only in V1: show immutable metadata without a rollback
 button, form, or client-side approximation. Failed activation preservation is

@@ -16,8 +16,7 @@ import (
 
 // Config contains only non-secret M1 gateway settings.
 type Config struct {
-	PlatformHost                               string
-	AppSuffix                                  string
+	Domain                                     string
 	SessionCookie                              string
 	ListenHTTP, ListenHTTPS, DataDirectory     string
 	ResendAPIKeyRef, HMACKeyRef, LLMRootKeyRef string
@@ -28,6 +27,17 @@ type Config struct {
 	Realtime                                   RealtimeLimits
 	UpdateReleaseBase                          string
 }
+
+func (c Config) PlatformHost() string {
+	domain := normalizeDomain(c.Domain)
+	if domain == "" {
+		return ""
+	}
+	return "admin." + domain
+}
+
+func (c Config) AppSuffix() string { return normalizeDomain(c.Domain) }
+
 type Secrets struct {
 	ResendAPIKey, HMACKey string
 	LLMRootKey            []byte
@@ -197,11 +207,11 @@ func (c Config) RenderYAML() ([]byte, error) {
 	if c.LLMRootKeyRef != "" {
 		secretRefs += "  llm_root_key: " + c.LLMRootKeyRef + "\n"
 	}
-	return []byte(fmt.Sprintf("platform_host: %s\napp_suffix: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\n%semail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.PlatformHost, c.AppSuffix, c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, secretRefs, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
+	return []byte(fmt.Sprintf("domain: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\n%semail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.AppSuffix(), c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, secretRefs, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
 }
 
 func (c Config) Redacted() map[string]string {
-	return map[string]string{"platform_host": c.PlatformHost, "app_suffix": c.AppSuffix, "resend_api_key": "[redacted]", "hmac_key": "[redacted]", "llm_root_key": "[redacted]"}
+	return map[string]string{"domain": c.AppSuffix(), "admin_host": c.PlatformHost(), "resend_api_key": "[redacted]", "hmac_key": "[redacted]", "llm_root_key": "[redacted]"}
 }
 func (c Config) ResolveSecrets(get func(string) string) (Secrets, error) {
 	if c.ResendAPIKeyRef == "" || c.HMACKeyRef == "" {
@@ -242,8 +252,7 @@ func LoadYAML(path string) (Config, error) {
 	}
 	defer f.Close()
 	var raw struct {
-		PlatformHost  string            `yaml:"platform_host"`
-		AppSuffix     string            `yaml:"app_suffix"`
+		Domain        string            `yaml:"domain"`
 		SessionCookie string            `yaml:"session_cookie"`
 		SecretRefs    map[string]string `yaml:"secret_refs"`
 		ListenHTTP    string            `yaml:"listen_http"`
@@ -278,9 +287,8 @@ func LoadYAML(path string) (Config, error) {
 	if err := d.Decode(&struct{}{}); err != io.EOF {
 		return Config{}, fmt.Errorf("invalid config: multiple documents")
 	}
-	c := Config{PlatformHost: raw.PlatformHost, AppSuffix: raw.AppSuffix, SessionCookie: raw.SessionCookie, ListenHTTP: raw.ListenHTTP, ListenHTTPS: raw.ListenHTTPS, DataDirectory: raw.DataDirectory, ResendAPIKeyRef: raw.Email.ResendAPIKey, HMACKeyRef: raw.SecretRefs["hmac_key"], LLMRootKeyRef: raw.SecretRefs["llm_root_key"], EmailFrom: raw.Email.From, ACMEEmail: raw.ACME.Email, ACMECachedir: raw.ACME.CacheDirectory, UpdateReleaseBase: raw.Updates.ReleaseBase, OTPExpiry: raw.OTP.Expiry, OTPMaxAttempts: raw.OTP.MaxAttempts, SessionExpiry: raw.Session.Expiry, Realtime: raw.Realtime, Limits: raw.Limits}
-	c.PlatformHost = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.PlatformHost)), ".")
-	c.AppSuffix = strings.TrimPrefix(strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.AppSuffix)), "."), ".")
+	c := Config{Domain: raw.Domain, SessionCookie: raw.SessionCookie, ListenHTTP: raw.ListenHTTP, ListenHTTPS: raw.ListenHTTPS, DataDirectory: raw.DataDirectory, ResendAPIKeyRef: raw.Email.ResendAPIKey, HMACKeyRef: raw.SecretRefs["hmac_key"], LLMRootKeyRef: raw.SecretRefs["llm_root_key"], EmailFrom: raw.Email.From, ACMEEmail: raw.ACME.Email, ACMECachedir: raw.ACME.CacheDirectory, UpdateReleaseBase: raw.Updates.ReleaseBase, OTPExpiry: raw.OTP.Expiry, OTPMaxAttempts: raw.OTP.MaxAttempts, SessionExpiry: raw.Session.Expiry, Realtime: raw.Realtime, Limits: raw.Limits}
+	c.Domain = normalizeDomain(c.Domain)
 	if err := c.Validate(); err != nil {
 		return Config{}, err
 	}
@@ -296,16 +304,12 @@ func LoadYAML(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
-	c.PlatformHost = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.PlatformHost)), ".")
-	c.AppSuffix = strings.TrimPrefix(strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.AppSuffix)), "."), ".")
-	if c.PlatformHost == "" || c.AppSuffix == "" || c.SessionCookie == "" {
-		return fmt.Errorf("platform host, app suffix, and session cookie are required")
+	c.Domain = normalizeDomain(c.Domain)
+	if !validDomain(c.Domain) || c.SessionCookie == "" {
+		return fmt.Errorf("domain and session cookie are required")
 	}
 	if c.SessionCookie != "__Host-tiny_app" {
 		return fmt.Errorf("app session cookie must use the __Host- contract")
-	}
-	if strings.ContainsAny(c.PlatformHost+c.AppSuffix, "/@ \t\r\n") {
-		return fmt.Errorf("hosts must be DNS names")
 	}
 	if c.UpdateReleaseBase != "" {
 		u, err := url.Parse(c.UpdateReleaseBase)
@@ -316,8 +320,8 @@ func (c Config) Validate() error {
 	if strings.ContainsAny(c.EmailFrom+c.ACMEEmail+c.ListenHTTP+c.ListenHTTPS, "\r\n") {
 		return fmt.Errorf("config values cannot contain control newlines")
 	}
-	if c.PlatformHost == c.AppSuffix || c.EmailFrom == "" || c.ACMEEmail == "" || c.HMACKeyRef == "" || c.ResendAPIKeyRef == "" {
-		return fmt.Errorf("distinct hosts, email from, and hmac reference are required")
+	if c.EmailFrom == "" || c.ACMEEmail == "" || c.HMACKeyRef == "" || c.ResendAPIKeyRef == "" {
+		return fmt.Errorf("email from and hmac reference are required")
 	}
 	if !safePrivateRoot(c.DataDirectory) {
 		return fmt.Errorf("data directory must be absolute")
@@ -344,6 +348,27 @@ func (c Config) Validate() error {
 		return err
 	}
 	return nil
+}
+
+func normalizeDomain(raw string) string {
+	return strings.TrimPrefix(strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), "."), ".")
+}
+
+func validDomain(domain string) bool {
+	if domain == "" || len(domain) > 253 || net.ParseIP(domain) != nil || !strings.Contains(domain, ".") || strings.ContainsAny(domain, "/@:* \t\r\n") {
+		return false
+	}
+	for _, label := range strings.Split(domain, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, char := range label {
+			if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func safePrivateRoot(path string) bool {

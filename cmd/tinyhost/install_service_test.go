@@ -18,8 +18,7 @@ func installServiceFixture(t *testing.T) (root string, cfg config.Config, config
 		t.Fatal(err)
 	}
 	cfg = config.Config{
-		PlatformHost:    "tiny.example.test",
-		AppSuffix:       "apps.tiny.example.test",
+		Domain:          "apps.tiny.example.test",
 		SessionCookie:   "__Host-tiny_app",
 		ListenHTTP:      ":80",
 		ListenHTTPS:     ":443",

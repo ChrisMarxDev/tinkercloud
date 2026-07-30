@@ -23,12 +23,13 @@ Internet ────────▶│ TinyHost public gateway │
 
 There are two logical planes in one process:
 
-- The **control plane** handles setup, operator/deployer sessions, apps,
+- The **control plane** handles setup, operator/deployer roles, apps,
   policies, uploads, releases, tokens, audit, and health.
 - The **app plane** handles app-host resolution, viewer authentication,
   authorization, static content, and app-scoped platform APIs.
 
-They share persistence primitives but not authorization rules or cookies.
+They share one verified browser identity but not authorization rules or
+host-only cookies. CLI and deployment-agent bearers remain separate.
 
 ## Public listener rule
 
@@ -42,10 +43,10 @@ alternate routes, distributed failure modes, and identity-header confusion.
 The gateway classifies traffic using validated host configuration:
 
 ```text
-platform host exactly matches config
+host exactly matches admin.<configured-domain>
   → control-plane router
 
-host is exactly one label beneath configured app suffix
+host is exactly one non-reserved label beneath configured domain
   → app-plane router
 
 anything else
@@ -73,20 +74,21 @@ Request
        ├── JSON key-value store
        ├── lightweight app-scoped blobs
        ├── authenticated WebSocket hub
-       ├── OTP/session endpoints (special pre-auth routes)
+       ├── app handoff/session endpoints (special pre-auth routes)
        └── later: backend proxy
 ```
 
-Authentication endpoints are intentionally reachable before a session exists,
-but they expose no app content. They still require a valid resolved app, generic
-responses, rate limits, current-policy checks, and strict redirect validation.
+The exact admin host is the sole browser OTP broker. App handoff endpoints are
+intentionally reachable before an app session exists, but they expose no app
+content. They still require a valid resolved app, generic responses, rate
+limits, current-policy checks, and strict redirect validation.
 
 ## Control-plane architecture
 
 ```text
 CLI / dashboard request
-  → platform-host router
-  → operator/deployer authentication
+  → exact admin-host router
+  → global browser identity + current role, or CLI/agent bearer
   → role + resource authorization
   → command service
   → transaction + filesystem staging
