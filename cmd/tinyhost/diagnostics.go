@@ -254,7 +254,7 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 	if err != nil || len(b) == 0 || len(b) > maxDoctorCredentialBytes {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
-	resendName, hmacName, err := credentialNames(c)
+	resendName, hmacName, llmName, err := credentialNames(c)
 	if err != nil {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
@@ -263,12 +263,16 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 	if lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
-	if len(lines) != 2 {
+	wantLines := 2
+	if llmName != "" {
+		wantLines = 3
+	}
+	if len(lines) != wantLines {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
 	for _, line := range lines {
 		name, value, ok := strings.Cut(line, "=")
-		if !ok || name == "" || !safeCredentialValue(value) || (name != resendName && name != hmacName) {
+		if !ok || name == "" || !safeCredentialValue(value) || (name != resendName && name != hmacName && name != llmName) {
 			return doctorCredentials{}, errors.New("credential unavailable")
 		}
 		if _, exists := values[name]; exists {
@@ -276,7 +280,7 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 		}
 		values[name] = value
 	}
-	if values[resendName] == "" || len(values[hmacName]) < 32 {
+	if values[resendName] == "" || len(values[hmacName]) < 32 || (llmName != "" && len(values[llmName]) != 64) {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
 	return doctorCredentials{resendAPIKey: values[resendName]}, nil

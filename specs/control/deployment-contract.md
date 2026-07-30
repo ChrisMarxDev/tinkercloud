@@ -72,6 +72,12 @@ redirect readiness status range. Policy, ownership, candidate validation,
 anonymous-denial evidence, and all post-activation checks are never retried or
 weakened by this certificate window.
 
+The deployer client gives upload, status, and activation control requests a
+bounded transport budget longer than the server's 45-second first-host
+readiness gate. The caller's cancellation still wins. A shorter generic
+control-client timeout must not abandon an activation whose readiness gate is
+still legitimately running.
+
 The optional manifest description is immutable release metadata in
 `manifest_json`, not a mutable application field. Finalized deployment metadata
 with a missing or malformed manifest is unavailable to the dashboard; it is
@@ -144,3 +150,23 @@ preserves the previous active pointer.
   `Cache-Control: no-store`, and `X-Content-Type-Options: nosniff`. A 404,
   2xx, redirect, wrong URL/host/scheme, malformed or oversized denial,
   timeout, or transport failure denies CLI success.
+- After the server has returned a successful activation result, the CLI may
+  retry only transient DNS, TLS, connection, timeout, `404`, `502`, `503`, or
+  `504` public-probe outcomes within one finite 45-second budget. Every attempt
+  is anonymous, bounded, exact-origin, and redirect-denying. A wrong
+  URL/host/scheme, redirect, `2xx`, unexpected `401`, malformed or oversized
+  denial, mismatched request ID, or unsafe header is terminal and is never
+  retried into success.
+- Exhausting or cancelling the post-activation public-probe budget does not
+  rewrite committed server state. The CLI returns non-success code
+  `active_but_unverified` with only the server-returned deployment ID,
+  protected URL, literal state `active`, and a stable safe reason category.
+  It never includes a bearer, cookie, raw transport error, response body,
+  response headers, internal path, or policy membership. A failure before a
+  successful activation response remains `deploy_failed` and carries no active
+  receipt.
+- A later `tiny deploy` invocation is a new immutable deployment attempt even
+  when its release hash matches the active release. Hash equality alone never
+  proves activation or policy installation. Activating a same-hash candidate
+  remains valid and atomically supersedes the old deployment, because the
+  candidate may carry a different reviewed access policy.

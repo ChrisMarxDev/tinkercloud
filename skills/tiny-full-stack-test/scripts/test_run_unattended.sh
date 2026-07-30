@@ -54,6 +54,10 @@ grep -qx 'preflight=passed' "$report"
 grep -qx 'offline_reader=passed' "$report"
 grep -qx 'live_vps_acceptance=passed' "$report"
 grep -qx 'result=passed' "$report"
+if grep -Eq 'send-key|reader-key|ledger|203\.0\.113\.10|operator@example' "$report"; then
+  echo "status artifact exposed a local path or input value" >&2
+  exit 1
+fi
 [ "$(grep -c '^go test ./test/vps -run TestVPSAcceptance -count=1 -v$' "$log")" = 1 ]
 [ "$(grep -c '^go test ./test/vps -skip \^TestVPSAcceptance\$ -count=1$' "$log")" = 1 ]
 [ "$(grep -c '^go test ./test/vps ' "$log")" = 2 ]

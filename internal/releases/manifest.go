@@ -23,6 +23,7 @@ type Manifest struct {
 	Description         string
 	Emails, Domains     []string
 	KV, Blobs, Realtime bool
+	LLMChat             bool
 	SPAFallback         string
 	BuildOutput         string
 }
@@ -50,6 +51,11 @@ type rawManifest struct {
 		Blobs    bool `yaml:"blobs"`
 		Realtime bool `yaml:"realtime"`
 	} `yaml:"features"`
+	Capabilities struct {
+		LLM struct {
+			Chat bool `yaml:"chat"`
+		} `yaml:"llm"`
+	} `yaml:"capabilities"`
 	SPA struct {
 		Fallback string `yaml:"fallback"`
 	} `yaml:"spa"`
@@ -98,7 +104,7 @@ func ParseManifest(data []byte) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, ErrManifest
 	}
-	m := Manifest{Version: raw.Version, Name: strings.ToLower(raw.Name), Description: description, KV: raw.Features.KV, Blobs: raw.Features.Blobs, Realtime: raw.Features.Realtime, SPAFallback: raw.SPA.Fallback, BuildOutput: raw.Build.Output}
+	m := Manifest{Version: raw.Version, Name: strings.ToLower(raw.Name), Description: description, KV: raw.Features.KV, Blobs: raw.Features.Blobs, Realtime: raw.Features.Realtime, LLMChat: raw.Capabilities.LLM.Chat, SPAFallback: raw.SPA.Fallback, BuildOutput: raw.Build.Output}
 	if m.BuildOutput == "" {
 		m.BuildOutput = "."
 	}
@@ -191,6 +197,7 @@ func GenerateManifest(m Manifest) ([]byte, error) {
 		raw.Access.Allow.Emails = append([]string(nil), value.Emails...)
 		raw.Access.Allow.Domains = append([]string(nil), value.Domains...)
 		raw.Features.KV, raw.Features.Blobs, raw.Features.Realtime = value.KV, value.Blobs, value.Realtime
+		raw.Capabilities.LLM.Chat = value.LLMChat
 		raw.SPA.Fallback = value.SPAFallback
 		b, err := yaml.Marshal(raw)
 		if err != nil {

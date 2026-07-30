@@ -18,6 +18,7 @@ import (
 
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/ratelimit"
+	"github.com/tinyhost/tiny/internal/releases"
 	webui "github.com/tinyhost/tiny/web"
 )
 
@@ -52,7 +53,16 @@ type UIActions interface {
 	RevokeToken(context.Context, Actor, string, string, string) error
 	SetAppStatus(context.Context, Actor, string, string, string) error
 	DeleteApp(context.Context, Actor, string, string) error
+	CreateLLMConnection(context.Context, Actor, string, string, string) error
+	RotateLLMConnection(context.Context, Actor, string, string) error
+	DisableLLMConnection(context.Context, Actor, string) error
+	CreateLLMProfile(context.Context, Actor, LLMProfileInput) error
+	UpdateLLMProfile(context.Context, Actor, string, LLMProfileInput) error
+	ApproveLLMGrant(context.Context, Actor, string, string, uint64) error
+	SetLLMGrantStatus(context.Context, Actor, string, string, uint64) error
 }
+
+const maxUIFormBytes int64 = 16 << 10
 
 type controlCredentialRevoker interface {
 	RevokeControlCredential(context.Context, string) error
@@ -124,7 +134,72 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		p.errorPage(w, http.StatusServiceUnavailable, "Action unavailable", "TinyHost could not prepare this action. Retry from the dashboard.", "/dashboard", "Return to dashboard")
 		return true
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxUIFormBytes)
+	if err := r.ParseForm(); err != nil {
+		p.errorPage(w, http.StatusBadRequest, "Form needs review", "Use the controls on the dashboard and try again.", "/dashboard", "Return to dashboard")
+		return true
+	}
 	var err error
+	if len(parts) == 3 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "connections" {
+		if a.Role != "operator" {
+			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		name, provider, secret := strings.TrimSpace(r.FormValue("display_name")), r.FormValue("provider"), r.FormValue("secret")
+		if name == "" || len(name) > 128 || strings.ContainsAny(name, "\x00\r\n") || (provider != "anthropic" && provider != "gemini") || len(secret) < 1 || len(secret) > 4096 {
+			p.errorPage(w, http.StatusBadRequest, "Connection needs review", "Use a short display name, a supported provider, and a valid credential.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.CreateLLMConnection(r.Context(), a, name, provider, secret)
+		return p.actionResult(w, r, err, "llm_connection_created")
+	}
+	if len(parts) == 5 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "connections" && parts[4] == "rotate" {
+		if a.Role != "operator" || !safeLLMID(parts[3]) {
+			p.errorPage(w, 403, "Action not authorized", "This request could not be completed.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		secret := r.FormValue("secret")
+		if len(secret) < 1 || len(secret) > 4096 || r.FormValue("provider") != "" {
+			p.errorPage(w, 400, "Connection needs review", "Use a valid replacement credential.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.RotateLLMConnection(r.Context(), a, parts[3], secret)
+		return p.actionResult(w, r, err, "llm_connection_rotated")
+	}
+	if len(parts) == 5 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "connections" && parts[4] == "disable" {
+		if a.Role != "operator" || !safeLLMID(parts[3]) || r.FormValue("confirmation") != "disable:"+parts[3] {
+			p.errorPage(w, 400, "Confirmation required", "Type the exact connection target before disabling it.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.DisableLLMConnection(r.Context(), a, parts[3])
+		return p.actionResult(w, r, err, "llm_connection_disabled")
+	}
+	if len(parts) == 3 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "profiles" {
+		if a.Role != "operator" {
+			p.errorPage(w, 403, "Action not authorized", "This request could not be completed.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		in, ok := parseLLMProfile(r)
+		if !ok || in.ExpectedRevision != 0 {
+			p.errorPage(w, 400, "Profile needs review", "Choose an active connection, model, and all bounded limits.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.CreateLLMProfile(r.Context(), a, in)
+		return p.actionResult(w, r, err, "llm_profile_created")
+	}
+	if len(parts) == 4 && parts[0] == "dashboard" && parts[1] == "llm" && parts[2] == "profiles" {
+		if a.Role != "operator" || !safeLLMID(parts[3]) {
+			p.errorPage(w, 403, "Action not authorized", "This request could not be completed.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		in, ok := parseLLMProfile(r)
+		if !ok || in.ExpectedRevision == 0 {
+			p.errorPage(w, 400, "Profile needs review", "Refresh the dashboard and review every profile limit before saving.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.UpdateLLMProfile(r.Context(), a, parts[3], in)
+		return p.actionResult(w, r, err, "llm_profile_updated")
+	}
 	if len(parts) == 2 && parts[0] == "deployers" && parts[1] == "active" {
 		if a.Role != "operator" {
 			p.errorPage(w, http.StatusForbidden, "Action not authorized", "This request could not be completed. Return to the dashboard and try again.", "/dashboard", "Return to dashboard")
@@ -143,6 +218,31 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 	}
 	slug, action := parts[1], parts[2]
 	switch {
+	case len(parts) == 4 && action == "llm" && parts[3] == "grant":
+		if a.Role != "operator" || !releases.ValidSlug(slug) || !safeLLMID(r.FormValue("profile_id")) {
+			p.errorPage(w, http.StatusBadRequest, "Grant needs review", "Choose a current profile from the dashboard and try again.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		expected, ok := parsePositiveOrZero(r.FormValue("expected_revision"))
+		if !ok {
+			p.errorPage(w, 400, "Grant needs review", "Refresh the dashboard and review the current app grant before saving.", "/dashboard", "Refresh dashboard")
+			return true
+		}
+		err = p.Actions.ApproveLLMGrant(r.Context(), a, slug, r.FormValue("profile_id"), expected)
+		return p.actionResult(w, r, err, "llm_grant_approved")
+	case len(parts) == 5 && action == "llm" && parts[3] == "grant" && (parts[4] == "disable" || parts[4] == "revoke"):
+		if a.Role != "operator" || !releases.ValidSlug(slug) {
+			p.errorPage(w, 403, "Action not authorized", "This request could not be completed.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		expected, ok := parsePositiveOrZero(r.FormValue("expected_revision"))
+		status := parts[4] + "d"
+		if !ok || expected == 0 || r.FormValue("confirmation") != status+":grant:"+slug {
+			p.errorPage(w, 400, "Confirmation required", "Type the exact app grant target before changing it.", "/dashboard", "Return to dashboard")
+			return true
+		}
+		err = p.Actions.SetLLMGrantStatus(r.Context(), a, slug, status, expected)
+		return p.actionResult(w, r, err, "llm_grant_"+status)
 	case len(parts) == 3 && action == "access":
 		v := AccessPolicyInput{Mode: "private"}
 		revision, scan := strconv.ParseUint(r.FormValue("expected_revision"), 10, 64)
@@ -220,11 +320,15 @@ func (p Platform) actionResult(w http.ResponseWriter, r *http.Request, err error
 			p.errorPage(w, http.StatusConflict, "Policy changed", "Someone or a deployment changed this policy. Refresh and review the current revision before retrying.", "/dashboard", "Refresh dashboard")
 			return true
 		}
+		if errors.Is(err, ErrLLMRevision) {
+			p.errorPage(w, http.StatusConflict, "LLM settings changed", "Refresh the dashboard and review the current profile or app grant before trying again.", "/dashboard", "Refresh dashboard")
+			return true
+		}
 		p.errorPage(w, http.StatusForbidden, "Action unavailable", "TinyHost could not complete this action. Return to the dashboard and review the current state.", "/dashboard", "Return to dashboard")
 		return true
 	}
 	location := "/dashboard"
-	if notice == "policy_replaced" {
+	if notice == "policy_replaced" || strings.HasPrefix(notice, "llm_") {
 		location += "?notice=" + notice
 	}
 	http.Redirect(w, r, location, http.StatusSeeOther)
@@ -248,6 +352,68 @@ func splitFormList(s string) []string {
 	return items
 }
 
+// safeLLMID admits only opaque IDs issued by TinyHost. Browser forms never
+// create IDs and routes cannot be used to select arbitrary database rows.
+func safeLLMID(value string) bool {
+	if len(value) != 32 {
+		return false
+	}
+	for _, c := range value {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func parsePositiveOrZero(value string) (uint64, bool) {
+	if value == "" || len(value) > 20 {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(value, 10, 64)
+	return v, err == nil
+}
+
+func parseLLMProfile(r *http.Request) (LLMProfileInput, bool) {
+	input := LLMProfileInput{ConnectionID: r.FormValue("connection_id"), Model: strings.TrimSpace(r.FormValue("model"))}
+	if !safeLLMID(input.ConnectionID) || input.Model == "" || len(input.Model) > 128 || strings.ContainsAny(input.Model, "\x00\r\n") {
+		return LLMProfileInput{}, false
+	}
+	intField := func(name string, destination *int) bool {
+		value := r.FormValue(name)
+		if value == "" || len(value) > 12 {
+			return false
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 {
+			return false
+		}
+		*destination = parsed
+		return true
+	}
+	int64Field := func(name string, destination *int64) bool {
+		value := r.FormValue(name)
+		if value == "" || len(value) > 16 {
+			return false
+		}
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed < 1 {
+			return false
+		}
+		*destination = parsed
+		return true
+	}
+	if !intField("max_messages", &input.MaxMessages) || !intField("max_message_bytes", &input.MaxMessageBytes) || !intField("max_input_bytes", &input.MaxInputBytes) || !intField("max_output_tokens", &input.MaxOutputTokens) || !int64Field("timeout_ms", &input.TimeoutMS) || !intField("viewer_requests", &input.ViewerRequests) || !intField("app_requests", &input.AppRequests) || !int64Field("rate_window_ms", &input.RateWindowMS) || !intField("concurrency_limit", &input.ConcurrencyLimit) || !intField("monthly_token_limit", &input.MonthlyTokenLimit) {
+		return LLMProfileInput{}, false
+	}
+	revision, ok := parsePositiveOrZero(r.FormValue("expected_revision"))
+	if !ok {
+		return LLMProfileInput{}, false
+	}
+	input.ExpectedRevision = revision
+	return input, true
+}
+
 func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 	a, ok := p.actor(r)
 	if !ok {
@@ -264,8 +430,25 @@ func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	notice := ""
-	if r.URL.Query().Get("notice") == "policy_replaced" {
+	switch r.URL.Query().Get("notice") {
+	case "policy_replaced":
 		notice = "Access policy replaced. Review the current revision and additional viewers below."
+	case "llm_connection_created":
+		notice = "Provider connection verified and stored. Its credential remains write-only."
+	case "llm_connection_rotated":
+		notice = "Provider credential verified and rotated. The replacement remains write-only."
+	case "llm_connection_disabled":
+		notice = "Provider connection disabled. Future calls using it are denied."
+	case "llm_profile_created":
+		notice = "LLM profile created with its fixed limits."
+	case "llm_profile_updated":
+		notice = "LLM profile limits updated."
+	case "llm_grant_approved":
+		notice = "LLM chat grant approved for the selected app."
+	case "llm_grant_disabled":
+		notice = "LLM chat grant disabled. Future calls are denied."
+	case "llm_grant_revoked":
+		notice = "LLM chat grant revoked. Future calls are denied."
 	}
 	p.render(w, "dashboard.html", dashboardPage{Actor: a, View: v, CSRF: csrf, Notice: notice})
 }

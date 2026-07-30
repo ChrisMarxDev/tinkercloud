@@ -1,0 +1,270 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1151"
+  height="928"
+  viewBox="0 0 1151 928"
+  fill="none"
+  role="img"
+  aria-labelledby="title description"
+  shape-rendering="geometricPrecision"
+>
+  <title id="title">Tinkerbox cloud in an open box</title>
+  <desc id="description">
+    A cream cloud with two vertical eyes sits inside an open purple box,
+    rendered in a friendly three-quarter perspective.
+  </desc>
+
+  <defs>
+    <radialGradient id="backgroundFill" cx="0" cy="0" r="1"
+      gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(573 438) rotate(90) scale(646 799)">
+      <stop stop-color="#F7F8F3"/>
+      <stop offset="1" stop-color="#ECEEE8"/>
+    </radialGradient>
+
+    <linearGradient id="outlineFill" x1="355" y1="102" x2="876" y2="903"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2A165A"/>
+      <stop offset="1" stop-color="#21104E"/>
+    </linearGradient>
+
+    <linearGradient id="lidFill" x1="382" y1="140" x2="880" y2="429"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5B4EB2"/>
+      <stop offset="1" stop-color="#4C409D"/>
+    </linearGradient>
+
+    <linearGradient id="topFill" x1="291" y1="355" x2="887" y2="472"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B418E"/>
+      <stop offset="1" stop-color="#3F357B"/>
+    </linearGradient>
+
+    <linearGradient id="frontFill" x1="244" y1="461" x2="753" y2="859"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5A4BAD"/>
+      <stop offset="1" stop-color="#5141A2"/>
+    </linearGradient>
+
+    <linearGradient id="sideFill" x1="851" y1="425" x2="956" y2="831"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#49418C"/>
+      <stop offset="1" stop-color="#3E347B"/>
+    </linearGradient>
+
+    <linearGradient id="cloudFill" x1="465" y1="153" x2="707" y2="425"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5EDD0"/>
+      <stop offset="1" stop-color="#ECE1B8"/>
+    </linearGradient>
+
+    <linearGradient id="cloudDepthFill" x1="509" y1="302" x2="734" y2="462"
+      gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DDCB98"/>
+      <stop offset="1" stop-color="#C9B279"/>
+    </linearGradient>
+
+  </defs>
+
+  <!-- This layer can be removed when a transparent logo asset is needed. -->
+  <rect id="background" width="1151" height="928" fill="url(#backgroundFill)"/>
+
+  <g id="tinkerbox-mark">
+    <!-- Open lid: a single rounded panel behind the cloud and box opening. -->
+    <path
+      d="
+        M 355 102
+        L 925 141
+        C 956 143 976 162 984 192
+        L 1022 345
+        C 1029 372 1018 392 995 406
+        L 818 507
+        L 349 458
+        L 344 328
+        L 313 157
+        C 306 126 324 100 355 102
+        Z
+      "
+      fill="url(#outlineFill)"
+    />
+
+    <path
+      d="
+        M 360 140
+        L 915 179
+        C 938 181 950 193 956 216
+        L 980 349
+        L 808 449
+        L 378 413
+        L 351 157
+        C 349 146 352 139 360 140
+        Z
+      "
+      fill="url(#lidFill)"
+    />
+
+    <!-- Box shell. The dark silhouette creates every shared border once. -->
+    <path
+      d="
+        M 357 315
+        L 995 359
+        C 1014 360 1025 372 1025 391
+        L 1025 733
+        C 1025 782 1003 811 962 835
+        L 844 893
+        C 831 900 814 902 796 900
+        L 235 853
+        C 196 850 173 822 173 783
+        L 173 443
+        C 173 422 181 411 195 402
+        L 343 320
+        C 348 317 352 315 357 315
+        Z
+      "
+      fill="url(#outlineFill)"
+    />
+
+    <!-- Recessed opening visible on both sides of the cloud. -->
+    <path
+      d="
+        M 258 411
+        L 358 352
+        L 944 392
+        L 809 459
+        Z
+      "
+      fill="url(#topFill)"
+    />
+
+    <!-- Front inset panel. -->
+    <path
+      d="
+        M 210 447
+        L 798 495
+        L 798 860
+        L 241 818
+        C 222 817 210 804 210 785
+        Z
+      "
+      fill="url(#frontFill)"
+    />
+
+    <!-- Right inset panel. -->
+    <path
+      d="
+        M 835 491
+        L 988 400
+        L 988 735
+        C 988 758 978 774 958 786
+        L 835 853
+        Z
+      "
+      fill="url(#sideFill)"
+    />
+
+    <!--
+      Cloud construction:
+      1. Two dark silhouettes form one continuous outer rim.
+      2. A shifted gold copy forms the lower/right extrusion.
+      3. The cream face sits flush on top with no internal outline.
+    -->
+    <g id="cloud">
+      <path
+        d="
+          M 474 257
+          C 474 191 522 138 588 138
+          C 642 138 681 181 681 237
+          C 681 257 677 277 669 293
+          C 688 270 714 256 744 256
+          C 783 256 812 287 812 327
+          C 812 380 771 425 720 426
+          L 426 403
+          C 396 384 378 356 378 325
+          C 378 284 408 252 447 252
+          C 457 252 466 254 474 257
+          Z
+        "
+        fill="url(#outlineFill)"
+        stroke="url(#outlineFill)"
+        stroke-width="68"
+        stroke-linejoin="round"
+      />
+
+      <path
+        d="
+          M 484 285
+          C 484 219 532 166 598 166
+          C 652 166 691 209 691 265
+          C 691 285 687 305 679 321
+          C 698 298 728 284 764 284
+          C 806 284 833 316 833 358
+          C 833 408 803 437 765 455
+          L 436 431
+          C 406 412 388 384 388 353
+          C 388 312 418 280 457 280
+          C 467 280 476 282 484 285
+          Z
+        "
+        fill="url(#outlineFill)"
+        stroke="url(#outlineFill)"
+        stroke-width="34"
+        stroke-linejoin="round"
+      />
+
+      <path
+        d="
+          M 484 285
+          C 484 219 532 166 598 166
+          C 652 166 691 209 691 265
+          C 691 285 687 305 679 321
+          C 698 298 728 284 764 284
+          C 806 284 833 316 833 358
+          C 833 408 803 437 765 455
+          L 436 431
+          C 406 412 388 384 388 353
+          C 388 312 418 280 457 280
+          C 467 280 476 282 484 285
+          Z
+        "
+        fill="url(#cloudDepthFill)"
+      />
+
+      <path
+        d="
+          M 474 257
+          C 474 191 522 138 588 138
+          C 642 138 681 181 681 237
+          C 681 257 677 277 669 293
+          C 688 270 714 256 744 256
+          C 783 256 812 287 812 327
+          C 812 380 771 425 720 426
+          L 426 403
+          C 396 384 378 356 378 325
+          C 378 284 408 252 447 252
+          C 457 252 466 254 474 257
+          Z
+        "
+        fill="url(#cloudFill)"
+      />
+
+      <rect x="530" y="279" width="32" height="95" rx="16"
+        fill="#21104F"/>
+      <rect x="605" y="281" width="33" height="95" rx="16.5"
+        fill="#21104F"/>
+    </g>
+  </g>
+
+  <!-- Small four-point glint from the lower-right of the reference. -->
+  <path
+    d="
+      M 1029 778
+      C 1033 794 1042 803 1058 807
+      C 1042 811 1033 820 1029 836
+      C 1025 820 1016 811 1000 807
+      C 1016 803 1025 794 1029 778
+      Z
+    "
+    fill="#FAFBF7"
+    fill-opacity="0.86"
+  />
+</svg>

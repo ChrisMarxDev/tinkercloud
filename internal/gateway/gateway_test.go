@@ -181,7 +181,7 @@ func TestHostClassificationFailsClosed(t *testing.T) {
 }
 func TestRouteRegistryCoversClasses(t *testing.T) {
 	r := gateway.Registry()
-	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppOTPRequest, gateway.AppOTPVerify, gateway.AppLogout, gateway.AppIdentityCallback, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Blobs, gateway.Live, gateway.ProtectedStatic} {
+	for _, class := range []gateway.Endpoint{gateway.Reserved, gateway.AppLogin, gateway.AppOTPRequest, gateway.AppOTPVerify, gateway.AppLogout, gateway.AppIdentityCallback, gateway.CurrentUser, gateway.AppInfo, gateway.Capabilities, gateway.KV, gateway.Collections, gateway.Blobs, gateway.Live, gateway.ProtectedStatic} {
 		if r[class] == "" {
 			t.Fatalf("route class %d missing", class)
 		}

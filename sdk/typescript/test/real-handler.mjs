@@ -43,10 +43,21 @@ const tiny = createTiny({ fetch: realFetch, origin });
 const user = await tiny.user.current();
 assert.equal(user.identity.email, "viewer@example.com");
 assert.equal(user.app.slug, "alpha");
-assert.deepEqual(await tiny.app.info(), { slug: "alpha", features: { kv: true, blobs: true, realtime: true } });
-assert.deepEqual((await tiny.capabilities.list()).capabilities.map((c) => c.name), ["user", "kv", "blobs", "live"]);
+assert.deepEqual(await tiny.app.info(), { slug: "alpha", features: { kv: true, db: true, blobs: true, realtime: true, llm_chat: false } });
+assert.deepEqual((await tiny.capabilities.list()).capabilities.map((c) => c.name), ["user", "kv", "db", "blobs", "live"]);
 
 assert.equal(await tiny.kv.get("items/a"), null);
+
+const tasks = tiny.db.collection("tasks");
+const task = await tasks.create({ title: "Ship", done: false });
+assert.equal(task.version, 1);
+assert.deepEqual((await tasks.get(task.id)).data, { title: "Ship", done: false });
+const changedTask = await tasks.update(task.id, { title: "Ship", done: true }, { expectedVersion: task.version });
+assert.equal(changedTask.version, 2);
+const taskSnapshot = await tasks.list();
+assert.equal(taskSnapshot.revision, 2);
+assert.deepEqual(taskSnapshot.documents.map((entry) => entry.id), [task.id]);
+assert.deepEqual(await tasks.delete(task.id, { expectedVersion: changedTask.version }), { deleted: true });
 
 const file = new Blob(["hello"], { type: "text/plain" });
 Object.defineProperty(file, "name", { value: "notes.txt" });

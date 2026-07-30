@@ -57,6 +57,7 @@ var numericCode = regexp.MustCompile(`^[0-9]{4,12}$`)
 var rootTarget = regexp.MustCompile(`^root@(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?|\[[0-9A-Fa-f:]+\])$`)
 var dnsName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 var emailName = regexp.MustCompile(`^[a-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$`)
+var legacyUpdateManifestFlag = regexp.MustCompile(`(?m)^(?:flag provided but not defined: -release-manifest|unknown flag: --release-manifest)\s*$`)
 
 // Config intentionally separates SSH arguments. In particular, SSH_TARGET is
 // not a shell fragment and no mode disables host-key verification.
@@ -119,9 +120,12 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		if !filepath.IsAbs(c.ReleaseDir) {
 			return Config{}, errors.New("release directory must be absolute")
 		}
-		if st, e := os.Stat(c.ReleaseDir); e != nil || !st.IsDir() {
+		if st, e := os.Lstat(c.ReleaseDir); e != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
 			return Config{}, errors.New("release directory unavailable")
 		}
+	}
+	if c.Reuse && c.ReleaseDir == "" {
+		return Config{}, errors.New("reuse requires an explicit release directory")
 	}
 	if !dnsName.MatchString(strings.ToLower(c.PlatformHost)) || !dnsName.MatchString(strings.ToLower(c.AppSuffix)) || strings.EqualFold(c.PlatformHost, c.AppSuffix) || strings.HasSuffix(strings.ToLower(c.PlatformHost), "."+strings.ToLower(c.AppSuffix)) {
 		return Config{}, errors.New("platform and app suffix must be distinct DNS names")
@@ -361,9 +365,6 @@ func (s *Suite) Run(ctx context.Context) error {
 	if runtime.GOOS == "windows" {
 		return errors.New("VPS E2E build host must provide Go cross compilation")
 	}
-	if err := s.cleanGuard(ctx); err != nil {
-		return err
-	}
 	if s.Config.Reuse && s.Config.ReleaseDir == "" {
 		return errors.New("reuse requires TINYHOST_VPS_RELEASE_DIR so the current build can be verified and health-gated")
 	}
@@ -382,6 +383,11 @@ func (s *Suite) Run(ctx context.Context) error {
 	}
 	prepared, err := prepareRelease(ctx, dir, s.Config.ReleaseDir)
 	if err != nil {
+		return err
+	}
+	// Verify supplied reuse evidence locally before opening the SSH trust
+	// boundary. A remote marker alone never authorizes an unverified update.
+	if err := s.cleanGuard(ctx); err != nil {
 		return err
 	}
 	release := prepared.dir
@@ -408,20 +414,22 @@ func (s *Suite) Run(ctx context.Context) error {
 	if err = s.remote(ctx, "mkdir", "-p", remoteDir+"/packaging/systemd"); err != nil {
 		return err
 	}
-	files := []struct{ local, remote string }{
+	files := []stagedFile{
 		{filepath.Join(release, "tinyhost-linux-amd64"), remoteDir + "/tinyhost-linux-amd64"},
 		{filepath.Join(release, "tinyhost-linux-amd64.metadata.json"), remoteDir + "/tinyhost-linux-amd64.metadata.json"},
 		{filepath.Join(release, "tinyhost-linux-amd64.signature"), remoteDir + "/tinyhost-linux-amd64.signature"},
 	}
 	if !s.Config.Reuse {
 		files = append(files,
-			struct{ local, remote string }{prepared.publicKey, remoteDir + "/packaging/release-public-key.pem"},
-			struct{ local, remote string }{repoPath("packaging", "install.sh"), remoteDir + "/packaging/install.sh"},
-			struct{ local, remote string }{repoPath("packaging", "systemd", "tinyhost.service"), remoteDir + "/packaging/systemd/tinyhost.service"},
-			struct{ local, remote string }{s.Config.ResendKeyFile, remoteDir + "/resend.key"},
-			struct{ local, remote string }{hmac, remoteDir + "/hmac.key"},
-			struct{ local, remote string }{markerPath, remoteDir + "/marker"},
+			stagedFile{prepared.publicKey, remoteDir + "/packaging/release-public-key.pem"},
+			stagedFile{repoPath("packaging", "install.sh"), remoteDir + "/packaging/install.sh"},
+			stagedFile{repoPath("packaging", "systemd", "tinyhost.service"), remoteDir + "/packaging/systemd/tinyhost.service"},
+			stagedFile{s.Config.ResendKeyFile, remoteDir + "/resend.key"},
+			stagedFile{hmac, remoteDir + "/hmac.key"},
+			stagedFile{markerPath, remoteDir + "/marker"},
 		)
+	} else {
+		files = append(files, reuseUpdateFiles(release, remoteDir)...)
 	}
 	for _, v := range files {
 		if err = s.copy(ctx, v.local, v.remote); err != nil {
@@ -480,6 +488,18 @@ func repoPath(parts ...string) string {
 
 type preparedRelease struct {
 	dir, publicKey string
+}
+
+type stagedFile struct{ local, remote string }
+
+// reuseUpdateFiles names only signed, public release evidence. Reuse never
+// recopies provider credentials, HMAC material, or a test signing authority.
+func reuseUpdateFiles(release, remoteDir string) []stagedFile {
+	return []stagedFile{
+		{filepath.Join(release, "release-manifest.json"), remoteDir + "/release-manifest.json"},
+		{filepath.Join(release, "release-manifest.json.metadata.json"), remoteDir + "/release-manifest.json.metadata.json"},
+		{filepath.Join(release, "release-manifest.json.signature"), remoteDir + "/release-manifest.json.signature"},
+	}
 }
 
 // prepareRelease verifies the complete immutable release before returning its
@@ -627,6 +647,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err = s.anonymousDenied(ctx, appHost, marker); err != nil {
 		return err
 	}
+	if err = s.anonymousLLMChatDenied(ctx, appHost); err != nil {
+		return err
+	}
 	// The first app signs the browser in through the platform-host identity
 	// broker. It is the only OTP used for the initial cross-app access traversal;
 	// the second allowed app must not need one. A later, explicit account-switch
@@ -635,17 +658,33 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err != nil {
 		return err
 	}
+	// Collections deliberately share the same app-private database as KV. This
+	// is gateway evidence, not a database inspection: every request uses the
+	// viewer's host-only cookie and never supplies an app identity.
+	collectionID, err := s.exerciseCollections(ctx, viewer, appHost)
+	if err != nil {
+		return err
+	}
+	if err := s.anonymousCollectionDenied(ctx, appHost, collectionID); err != nil {
+		return err
+	}
 	if err := s.anonymousBlobDenied(ctx, appHost, blobID); err != nil {
 		return err
 	}
 	if err := s.remote(ctx, "systemctl", "restart", "tinyhost.service"); err != nil {
-		return fmt.Errorf("restart service for blob durability check: %w", err)
+		return fmt.Errorf("restart service for app-data durability check: %w", err)
 	}
 	if err := s.verifyBlobPersistsAfterRestart(ctx, viewer, appHost, blobID); err != nil {
 		return err
 	}
+	if err := s.verifyCollectionPersistsAfterRestart(ctx, viewer, appHost, collectionID); err != nil {
+		return err
+	}
 	secondHost, err := s.crossAppBlobDenied(ctx, c, slug, appHost, blobID, viewer)
 	if err != nil {
+		return err
+	}
+	if err := s.crossAppCollectionDenied(ctx, viewer, secondHost, collectionID); err != nil {
 		return err
 	}
 	if err := s.replayedAndWrongAppHandoffsDeny(ctx, viewer, appHost, secondHost, firstCallback, firstState, marker); err != nil {
@@ -654,6 +693,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	// Delete while the original viewer session remains available; the following
 	// global account switch intentionally revokes every child app session.
 	if err := s.deleteBlobAndVerify(ctx, viewer, appHost, blobID); err != nil {
+		return err
+	}
+	if err := s.deleteCollectionAndVerify(ctx, viewer, appHost, collectionID); err != nil {
 		return err
 	}
 	if err := s.appLocalLogoutAndBrokerReopen(ctx, viewer, appHost, secondHost, marker); err != nil {
@@ -700,14 +742,50 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 		"--signature", remoteDir+"/tinyhost-linux-amd64.signature"); err != nil {
 		return fmt.Errorf("reuse release is not trusted by installed server: %w", err)
 	}
-	return s.remote(ctx, "/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
-		"--binary", remoteDir+"/tinyhost-linux-amd64",
-		"--metadata", remoteDir+"/tinyhost-linux-amd64.metadata.json",
-		"--signature", remoteDir+"/tinyhost-linux-amd64.signature",
-		"--release-manifest", remoteDir+"/release-manifest.json",
-		"--release-manifest-metadata", remoteDir+"/release-manifest.json.metadata.json",
-		"--release-manifest-signature", remoteDir+"/release-manifest.json.signature",
-		"--app-slug", probeSlug)
+	newArgs := []string{"/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
+		"--binary", remoteDir + "/tinyhost-linux-amd64",
+		"--metadata", remoteDir + "/tinyhost-linux-amd64.metadata.json",
+		"--signature", remoteDir + "/tinyhost-linux-amd64.signature",
+		"--release-manifest", remoteDir + "/release-manifest.json",
+		"--release-manifest-metadata", remoteDir + "/release-manifest.json.metadata.json",
+		"--release-manifest-signature", remoteDir + "/release-manifest.json.signature",
+		"--app-slug", probeSlug}
+	if out, err := s.remoteRun(ctx, newArgs...); err != nil {
+		// Only the precise old CLI flag rejection may use the legacy argv. Any
+		// verification, health, transport, or other update failure remains final.
+		if !legacyUpdateManifestFlag.Match(bytes.TrimSpace(out)) {
+			return remoteError(err, out)
+		}
+		legacyArgs := []string{"/usr/local/bin/tinyhost", "update", "--config", "/etc/tinyhost/config.yaml",
+			"--binary", remoteDir + "/tinyhost-linux-amd64",
+			"--metadata", remoteDir + "/tinyhost-linux-amd64.metadata.json",
+			"--signature", remoteDir + "/tinyhost-linux-amd64.signature",
+			"--app-slug", probeSlug}
+		if legacyOut, legacyErr := s.remoteRun(ctx, legacyArgs...); legacyErr != nil {
+			return remoteError(legacyErr, legacyOut)
+		}
+	}
+	// Update itself restarts and health-gates its candidate. Confirm the
+	// installed current binary's doctor/version check before creating the LLM
+	// root; this prevents a compatibility fallback from masking a bad replace.
+	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "doctor", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+		return fmt.Errorf("doctor after reuse update: %w", err)
+	}
+	// Reuse exercises the explicit migration path for hosts initialized before
+	// the LLM capability root existed. This remains a root-local operation:
+	// the suite never reads the root or credentials, and the command never
+	// prints them. A restart and normal doctor prove the updated service can use
+	// the newly provisioned root without making a provider call.
+	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "llm", "enable", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+		return fmt.Errorf("enable LLM root after trusted reuse update: %w", err)
+	}
+	if err := s.remote(ctx, "systemctl", "restart", "tinyhost.service"); err != nil {
+		return fmt.Errorf("restart after LLM root enable: %w", err)
+	}
+	if err := s.remote(ctx, "/usr/local/bin/tinyhost", "doctor", "--config", "/etc/tinyhost/config.yaml"); err != nil {
+		return fmt.Errorf("doctor after LLM root enable: %w", err)
+	}
+	return nil
 }
 
 func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSlug, firstHost, blobID string, viewer *http.Client) (string, error) {
@@ -1043,9 +1121,11 @@ export async function blobSmoke(file) {
 			return nil, 0, "", e
 		}
 	}
-	features := ""
+	// The black-box fixture deliberately opts into the data primitives that it
+	// probes. The browser never selects a database, app ID, or storage path.
+	features := "features:\n  kv: true\n  realtime: true\n"
 	if blobs {
-		features = "features:\n  blobs: true\n"
+		features += "  blobs: true\n"
 	}
 	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\n" + features + "access:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
 	if e = os.WriteFile(filepath.Join(d, "tiny.yaml"), manifest, 0644); e != nil {
@@ -1410,6 +1490,255 @@ func expectBlobCapability(ctx context.Context, h *http.Client, host string) erro
 		}
 	}
 	return errors.New("blob capability is absent from discovery")
+}
+
+// Collection acceptance uses only the public, same-origin app API. In
+// particular, the caller cannot select an app, SQLite file, or namespace: the
+// gateway derives all three from the verified app hostname and viewer session.
+func expectCollectionCapability(ctx context.Context, h *http.Client, host string) error {
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/_tiny/api/v1/capabilities"), nil)
+	if err != nil {
+		return err
+	}
+	assertNoAppSelector(r, host)
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	defer x.Body.Close()
+	var out struct {
+		Capabilities []struct {
+			Name string `json:"name"`
+		} `json:"capabilities"`
+	}
+	if x.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&out) != nil {
+		return errors.New("collection capability discovery failed")
+	}
+	gotDB := false
+	for _, c := range out.Capabilities {
+		if c.Name == "db" {
+			gotDB = true
+		}
+		if c.Name == "llm.chat" {
+			return errors.New("ungranted llm.chat appeared in capability discovery")
+		}
+	}
+	if !gotDB {
+		return errors.New("collection capability is absent from discovery")
+	}
+	// The fixture never requests a chat grant. A valid viewer must receive the
+	// protected capability-unavailable response, not the anonymous gateway
+	// denial, and no provider detail may appear.
+	if err := assertLLMChatDenied(ctx, h, host, http.StatusForbidden); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Suite) anonymousLLMChatDenied(ctx context.Context, host string) error {
+	return assertLLMChatDenied(ctx, s.httpClient(), host, http.StatusUnauthorized)
+}
+
+func assertLLMChatDenied(ctx context.Context, h *http.Client, host string, wantStatus int) error {
+	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/llm/chat", strings.NewReader(`{"messages":[{"role":"user","content":"no grant"}]}`))
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if x.StatusCode != wantStatus || bytes.Contains(bytes.ToLower(body), []byte("provider")) {
+		return fmt.Errorf("LLM invocation was not safely denied: status=%d", x.StatusCode)
+	}
+	return nil
+}
+
+type vpsCollectionDocument struct {
+	ID      string          `json:"id"`
+	Data    json.RawMessage `json:"data"`
+	Version uint64          `json:"version"`
+}
+
+func collectionRequest(ctx context.Context, method, host, path string, body io.Reader) (*http.Request, error) {
+	r, err := http.NewRequestWithContext(ctx, method, appURL(host, path), body)
+	if err != nil {
+		return nil, err
+	}
+	if method != http.MethodGet {
+		r.Header.Set("Origin", "https://"+host)
+		r.Header.Set("Content-Type", "application/json")
+	}
+	assertNoAppSelector(r, host)
+	return r, nil
+}
+
+func assertNoAppSelector(r *http.Request, host string) {
+	if !strings.EqualFold(r.URL.Host, host) || r.URL.Query().Get("app") != "" || r.URL.Query().Get("app_id") != "" || r.URL.Query().Get("database") != "" {
+		panic("VPS collection fixture must not select app or database")
+	}
+}
+
+func (s *Suite) exerciseCollections(ctx context.Context, h *http.Client, host string) (string, error) {
+	if err := expectCollectionCapability(ctx, h, host); err != nil {
+		return "", err
+	}
+	r, err := collectionRequest(ctx, http.MethodPost, host, "/_tiny/api/v1/db/tasks", strings.NewReader(`{"data":{"title":"persist across restart","done":false}}`))
+	if err != nil {
+		return "", err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return "", err
+	}
+	var created vpsCollectionDocument
+	decodeErr := json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&created)
+	x.Body.Close()
+	if x.StatusCode != http.StatusCreated || decodeErr != nil || created.ID == "" || created.Version != 1 || !bytes.Contains(created.Data, []byte("persist across restart")) {
+		return "", errors.New("collection create did not return an authoritative document")
+	}
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(created.ID), nil)
+	if err != nil {
+		return "", err
+	}
+	x, err = h.Do(r)
+	if err != nil {
+		return "", err
+	}
+	var fetched vpsCollectionDocument
+	decodeErr = json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&fetched)
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK || decodeErr != nil || fetched.ID != created.ID || fetched.Version != 1 {
+		return "", errors.New("collection get did not return the created document")
+	}
+	r, err = collectionRequest(ctx, http.MethodPut, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(created.ID), strings.NewReader(`{"data":{"title":"persist across restart","done":true},"expected_version":1}`))
+	if err != nil {
+		return "", err
+	}
+	x, err = h.Do(r)
+	if err != nil {
+		return "", err
+	}
+	var updated vpsCollectionDocument
+	decodeErr = json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&updated)
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK || decodeErr != nil || updated.ID != created.ID || updated.Version != 2 || !bytes.Contains(updated.Data, []byte(`"done":true`)) {
+		return "", errors.New("collection optimistic update did not succeed")
+	}
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks?snapshot=1", nil)
+	if err != nil {
+		return "", err
+	}
+	x, err = h.Do(r)
+	if err != nil {
+		return "", err
+	}
+	var snapshot struct {
+		Documents []vpsCollectionDocument `json:"documents"`
+		Revision  uint64                  `json:"revision"`
+	}
+	decodeErr = json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&snapshot)
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK || decodeErr != nil || snapshot.Revision < 2 || len(snapshot.Documents) != 1 || snapshot.Documents[0].ID != created.ID || snapshot.Documents[0].Version != 2 {
+		return "", errors.New("collection snapshot did not prove list/current-state semantics")
+	}
+	return created.ID, nil
+}
+
+func (s *Suite) anonymousCollectionDenied(ctx context.Context, host, id string) error {
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	x, err := s.httpClient().Do(r)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if x.StatusCode != http.StatusUnauthorized || bytes.Contains(body, []byte("persist across restart")) {
+		return fmt.Errorf("anonymous collection request leaked state: status=%d", x.StatusCode)
+	}
+	return nil
+}
+
+func (s *Suite) verifyCollectionPersistsAfterRestart(ctx context.Context, h *http.Client, host, id string) error {
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	var got vpsCollectionDocument
+	decodeErr := json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&got)
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK || decodeErr != nil || got.ID != id || got.Version != 2 || !bytes.Contains(got.Data, []byte(`"done":true`)) {
+		return errors.New("collection state did not persist through service restart")
+	}
+	return nil
+}
+
+func (s *Suite) crossAppCollectionDenied(ctx context.Context, h *http.Client, host, id string) error {
+	r, err := collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if x.StatusCode != http.StatusNotFound || bytes.Contains(body, []byte("persist across restart")) {
+		return fmt.Errorf("cross-app collection read leaked state: status=%d", x.StatusCode)
+	}
+	return nil
+}
+
+func (s *Suite) deleteCollectionAndVerify(ctx context.Context, h *http.Client, host, id string) error {
+	r, err := collectionRequest(ctx, http.MethodDelete, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), strings.NewReader(`{"expected_version":2}`))
+	if err != nil {
+		return err
+	}
+	x, err := h.Do(r)
+	if err != nil {
+		return err
+	}
+	var deleted struct {
+		Deleted bool `json:"deleted"`
+	}
+	decodeErr := json.NewDecoder(io.LimitReader(x.Body, 1<<20)).Decode(&deleted)
+	x.Body.Close()
+	if x.StatusCode != http.StatusOK || decodeErr != nil || !deleted.Deleted {
+		return errors.New("collection delete did not succeed")
+	}
+	r, err = collectionRequest(ctx, http.MethodGet, host, "/_tiny/api/v1/db/tasks/"+url.PathEscape(id), nil)
+	if err != nil {
+		return err
+	}
+	x, err = h.Do(r)
+	if err != nil {
+		return err
+	}
+	io.Copy(io.Discard, io.LimitReader(x.Body, 1<<20))
+	x.Body.Close()
+	if x.StatusCode != http.StatusNotFound {
+		return errors.New("deleted collection document remained readable")
+	}
+	return nil
 }
 
 func blobList(ctx context.Context, h *http.Client, host string) ([]struct {

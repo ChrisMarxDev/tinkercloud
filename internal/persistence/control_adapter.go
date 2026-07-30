@@ -14,6 +14,7 @@ import (
 	"github.com/tinyhost/tiny/internal/deployments"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/jobs"
+	"github.com/tinyhost/tiny/internal/llm"
 	"github.com/tinyhost/tiny/internal/operations"
 	"github.com/tinyhost/tiny/internal/releases"
 	"net/http"
@@ -166,6 +167,114 @@ type ControlService struct {
 	// not consulted by access changes, token revocation, or app suspension.
 	WriteGate       operations.WriteGate
 	AppsPerDeployer int
+	LLM             *LLMRepository
+	LLMValidator    interface {
+		Validate(context.Context, llm.Provider, []byte) error
+	}
+}
+
+func (s ControlService) CreateLLMConnection(ctx context.Context, a controlapi.Actor, name, provider, secret string) error {
+	if s.LLM == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || len(secret) == 0 {
+		return ErrUnavailable
+	}
+	p := llm.Provider(provider)
+	if p != llm.ProviderAnthropic && p != llm.ProviderGemini {
+		return ErrUnavailable
+	}
+	if err := s.LLMValidator.Validate(ctx, p, []byte(secret)); err != nil {
+		return ErrUnavailable
+	}
+	id, err := newLLMID()
+	if err != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.CreateConnection(ctx, LLMConnectionInput{ID: id, DisplayName: name, Provider: p, Secret: []byte(secret), KeyVersion: 1, ActorID: a.ID})
+}
+func (s ControlService) RotateLLMConnection(ctx context.Context, a controlapi.Actor, id, secret string) error {
+	if s.LLM == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || id == "" || secret == "" {
+		return ErrUnavailable
+	}
+	// The connection's original provider is the authority for validation. A
+	// browser never submits a provider selector during rotation, preventing a
+	// credential from being validated against a different provider than the one
+	// that will later receive it.
+	p, err := s.LLM.ConnectionProvider(ctx, id)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if s.LLMValidator.Validate(ctx, p, []byte(secret)) != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.RotateConnection(ctx, id, []byte(secret), 1, a.ID)
+}
+func (s ControlService) DisableLLMConnection(ctx context.Context, a controlapi.Actor, id string) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" {
+		return ErrUnavailable
+	}
+	return s.LLM.DisableConnectionAs(ctx, id, a.ID)
+}
+
+func (s ControlService) CreateLLMProfile(ctx context.Context, a controlapi.Actor, in controlapi.LLMProfileInput) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" {
+		return ErrUnavailable
+	}
+	id, err := newLLMID()
+	if err != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.CreateProfile(ctx, llmProfileInput(id, a.ID, in))
+}
+
+func (s ControlService) UpdateLLMProfile(ctx context.Context, a controlapi.Actor, id string, in controlapi.LLMProfileInput) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" || id == "" || in.ExpectedRevision == 0 {
+		return ErrUnavailable
+	}
+	return s.LLM.UpdateProfile(ctx, llmProfileInput(id, a.ID, in), in.ExpectedRevision)
+}
+
+func llmProfileInput(id, actor string, in controlapi.LLMProfileInput) LLMProfileInput {
+	return LLMProfileInput{ID: id, ConnectionID: in.ConnectionID, Model: in.Model, ActorID: actor, Limits: llm.Limits{MaxMessages: in.MaxMessages, MaxMessageBytes: in.MaxMessageBytes, MaxInputBytes: in.MaxInputBytes, MaxOutputTokens: in.MaxOutputTokens, Timeout: time.Duration(in.TimeoutMS) * time.Millisecond, ViewerRequests: in.ViewerRequests, AppRequests: in.AppRequests, RateWindow: time.Duration(in.RateWindowMS) * time.Millisecond}, ConcurrencyLimit: in.ConcurrencyLimit, MonthlyTokenLimit: in.MonthlyTokenLimit}
+}
+
+func (s ControlService) ApproveLLMGrant(ctx context.Context, a controlapi.Actor, slug, profileID string, expected uint64) error {
+	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || profileID == "" {
+		return ErrUnavailable
+	}
+	appID, err := s.appIDForLLMGrant(ctx, slug)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if expected > 0 {
+		var status string
+		if err := s.Store.DB.QueryRowContext(ctx, `SELECT status FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&status); err != nil {
+			return controlapi.ErrLLMRevision
+		}
+		if status == "revoked" {
+			return ErrUnavailable
+		}
+	}
+	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: "approved"}, expected)
+}
+
+func (s ControlService) SetLLMGrantStatus(ctx context.Context, a controlapi.Actor, slug, status string, expected uint64) error {
+	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || (status != "disabled" && status != "revoked") || expected == 0 {
+		return ErrUnavailable
+	}
+	appID, err := s.appIDForLLMGrant(ctx, slug)
+	if err != nil {
+		return ErrUnavailable
+	}
+	var profileID string
+	if err := s.Store.DB.QueryRowContext(ctx, `SELECT profile_id FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&profileID); err != nil {
+		return controlapi.ErrLLMRevision
+	}
+	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: status}, expected)
+}
+
+func (s ControlService) appIDForLLMGrant(ctx context.Context, slug string) (string, error) {
+	var appID string
+	err := s.Store.DB.QueryRowContext(ctx, `SELECT id FROM applications WHERE slug=? AND status IN ('active','suspended')`, slug).Scan(&appID)
+	return appID, err
 }
 
 // AppDataPurger owns only server-derived private byte paths. It deliberately
@@ -174,11 +283,23 @@ type ControlService struct {
 type AppDataPurger struct {
 	DataRoot    string
 	Store       *SQLiteStore
+	Apps        *AppDatabaseManager
 	BlobCleanup interface{ Reconcile(context.Context) error }
 }
 
 func (p AppDataPurger) Purge(ctx context.Context, appID string) error {
 	if err := jobs.RemoveAppReleases(p.DataRoot, appID); err != nil {
+		return err
+	}
+	appDatabases := p.Apps
+	if appDatabases == nil {
+		var err error
+		appDatabases, err = NewAppDatabaseManager(p.DataRoot, AppDatabaseManagerOptions{MaxOpen: 1})
+		if err != nil {
+			return err
+		}
+	}
+	if err := appDatabases.Remove(appID); err != nil {
 		return err
 	}
 	cleanup := p.BlobCleanup
@@ -586,6 +707,36 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 	}
 	if a.Role != "operator" {
 		return v, nil
+	}
+	if s.LLM != nil {
+		connections, profiles, grants, err := s.LLM.OperatorViews(ctx)
+		if err != nil {
+			return v, err
+		}
+		activeConnections := make(map[string]bool, len(connections))
+		for _, x := range connections {
+			v.LLMConnections = append(v.LLMConnections, controlapi.LLMConnection{ID: x.ID, DisplayName: x.DisplayName, Provider: x.Provider, Status: x.Status})
+			activeConnections[x.ID] = x.Status == "active"
+		}
+		for _, x := range profiles {
+			// The dashboard read model, not template filtering, determines which
+			// profiles may be selected for a new app grant.
+			if x.Status != "active" || !activeConnections[x.ConnectionID] {
+				continue
+			}
+			v.LLMProfiles = append(v.LLMProfiles, controlapi.LLMProfile{ID: x.ID, ConnectionID: x.ConnectionID, Model: x.Model, Status: x.Status, Revision: x.Revision, MaxMessages: x.Limits.MaxMessages, MaxMessageBytes: x.Limits.MaxMessageBytes, MaxInputBytes: x.Limits.MaxInputBytes, MaxOutputTokens: x.Limits.MaxOutputTokens, TimeoutMS: x.Limits.Timeout.Milliseconds(), ViewerRequests: x.Limits.ViewerRequests, AppRequests: x.Limits.AppRequests, RateWindowMS: x.Limits.RateWindow.Milliseconds(), ConcurrencyLimit: x.ConcurrencyLimit, MonthlyTokenLimit: x.MonthlyTokenLimit})
+		}
+		grantsBySlug := make(map[string]controlapi.LLMGrant, len(grants))
+		for _, x := range grants {
+			grant := controlapi.LLMGrant{AppSlug: x.AppSlug, ProfileID: x.ProfileID, Status: x.Status, Revision: x.Revision, UsedTokens: x.UsedTokens, ReservedTokens: x.ReservedTokens, InFlight: x.InFlight}
+			v.LLMGrants = append(v.LLMGrants, grant)
+			grantsBySlug[x.AppSlug] = grant
+		}
+		for i := range v.Apps {
+			if grant, ok := grantsBySlug[v.Apps[i].Slug]; ok {
+				v.Apps[i].LLMGrant = &grant
+			}
+		}
 	}
 	users, err := s.Store.DB.QueryContext(ctx, "SELECT normalized_email FROM users WHERE role='deployer' AND status='active' ORDER BY normalized_email LIMIT 101")
 	if err != nil {
@@ -995,6 +1146,12 @@ func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug,
 		// Delete children explicitly. SQLite foreign keys are intentionally
 		// restrictive, so this list is also a reviewable ownership inventory.
 		for _, statement := range []string{
+			// LLM usage and reservations refer to both the app and a profile. They
+			// must go before the grant and application row; connection/profile
+			// records are operator-owned and intentionally remain reusable.
+			"DELETE FROM llm_reservations WHERE app_id=?",
+			"DELETE FROM llm_usage WHERE app_id=?",
+			"DELETE FROM app_capability_grants WHERE app_id=?",
 			"DELETE FROM deployment_files WHERE deployment_id IN (SELECT id FROM deployments WHERE app_id=?)",
 			"DELETE FROM deployments WHERE app_id=?",
 			"DELETE FROM access_rules WHERE app_id=?",
@@ -1002,7 +1159,6 @@ func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug,
 			"DELETE FROM otp_challenges WHERE app_id=?",
 			"DELETE FROM sessions WHERE app_id=?",
 			"DELETE FROM api_tokens WHERE app_id=?",
-			"DELETE FROM app_kv WHERE app_id=?",
 			"DELETE FROM app_quota_usage WHERE app_id=?",
 			"DELETE FROM app_blobs WHERE app_id=?",
 			"DELETE FROM identity_handoffs WHERE app_id=?",

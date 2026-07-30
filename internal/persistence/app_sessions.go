@@ -58,6 +58,7 @@ func (s *SQLiteStore) ResolveActive(ctx context.Context, slug string) (apps.App,
 	a.KVEnabled = m.KV
 	a.BlobsEnabled = m.Blobs
 	a.RealtimeEnabled = m.Realtime
+	a.LLMChatRequested = m.LLMChat
 	return a, nil
 }
 

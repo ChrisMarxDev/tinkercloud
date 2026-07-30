@@ -22,6 +22,7 @@ type AuthorizationContext interface {
 	KVEnabled() bool
 	BlobsEnabled() bool
 	RealtimeEnabled() bool
+	LLMChatRequested() bool
 	Identity() identity.Identity
 	SessionID() string
 	PolicyRevision() uint64
@@ -45,6 +46,7 @@ func (c authorizationContext) SPAFallback() bool           { return c.app.SPAFal
 func (c authorizationContext) KVEnabled() bool             { return c.app.KVEnabled }
 func (c authorizationContext) BlobsEnabled() bool          { return c.app.BlobsEnabled }
 func (c authorizationContext) RealtimeEnabled() bool       { return c.app.RealtimeEnabled }
+func (c authorizationContext) LLMChatRequested() bool      { return c.app.LLMChatRequested }
 func (c authorizationContext) Identity() identity.Identity { return c.session.Identity }
 func (c authorizationContext) SessionID() string           { return c.session.ID }
 func (c authorizationContext) PolicyRevision() uint64      { return c.revision }

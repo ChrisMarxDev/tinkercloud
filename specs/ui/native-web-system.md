@@ -199,6 +199,18 @@ Before a styled happy path is accepted, tests must prove:
    states that removed addresses are signed out and cannot deploy. The form
    never renders credential/provider detail; server-side role, CSRF, origin,
    revision, collision, audit, and idempotency denials prevent mutation.
+21. Operator LLM controls expose only safe connection metadata, fixed profile
+    bounds, grant state, and aggregate usage. Provider credentials and their
+    encrypted envelopes are write-only: no dashboard, form value, notice,
+    audit row, error, source, or reveal path may render them. Connection and
+    profile identifiers are server-generated opaque values; create forms have
+    no identifier fields, and app grant targets come from a server-rendered
+    app route rather than a browser-supplied app ID. Credential rotation never
+    accepts a provider selector: the server resolves the existing connection's
+    provider before validating the replacement. Profile/grant writes carry the
+    current revision; disabling a connection or disabling/revoking a grant
+    requires a visible exact-target confirmation plus the normal operator,
+    same-origin, and CSRF checks.
 
 ## Accessibility contract
 
@@ -235,6 +247,10 @@ Before a styled happy path is accepted, tests must prove:
   the visible status exactly.
 - Motion is smooth in both directions, preserves keyboard focus and native
   semantics, and is effectively disabled under `prefers-reduced-motion`.
+- Write-only credential fields use native password controls with an explicit
+  statement that the value cannot be displayed or recovered. Every LLM limit
+  has a visible label and numeric input mode; malformed or stale submissions
+  produce a server-rendered safe error, not optimistic browser state.
 
 ## Non-goals
 

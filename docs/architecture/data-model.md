@@ -113,9 +113,6 @@ feature without changing release identity.
 ## App capabilities
 
 ```text
-app_kv
-  app_id, key, value_json, version, size_bytes, created_at, updated_at
-
 app_blobs
   id, app_id, state, display_name, content_type, size_bytes, content_hash,
   created_by_identity_id, created_at, updated_at
@@ -124,8 +121,10 @@ app_quota_usage
   app_id, metric, used, limit, measured_at
 ```
 
-The `app_kv` primary key is `(app_id, key)`. Repository APIs
-bind it from `AuthorizationContext`.
+Each app-local `apps/{immutable-app-id}/data.db` contains an `app_kv` table
+whose primary key is `key`. Repository APIs derive its database from
+`AuthorizationContext`; the control database deliberately has no app KV table
+after the pre-release destructive transition.
 
 The blob catalog is also app-scoped. Only `ready` rows are listable/readable;
 `staging` and `deleting` rows are recovery state. Byte-store keys are derived

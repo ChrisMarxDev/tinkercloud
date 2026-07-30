@@ -71,9 +71,10 @@ and manifest enabled without probing endpoints.
 
 `subscribe()` and `unsubscribe()` are explicit, local intent for the connected
 channel: call `subscribe()` before `connect()` (or while connected) to receive
-events, and `unsubscribe()` when the UI no longer needs them. They do not make
-events durable, ordered, or replayable. After reconnect, read current KV state
-again before rendering.
+events, and `unsubscribe()` when the UI no longer needs them. Managed KV and
+collection listeners share one SDK-owned app socket; explicit named channels
+remain independent. They do not make events durable, ordered, or replayable.
+After reconnect, read current KV or collection state again before rendering.
 
 ## Transport
 

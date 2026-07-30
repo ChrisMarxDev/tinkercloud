@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -48,7 +47,14 @@ func IdempotencyKey() (string, error) {
 var ErrDeploymentEvidence = errors.New("deployment verification incomplete")
 var ErrAppUnavailable = errors.New("app is unavailable to this deployer")
 
-const maxAnonymousDenyEvidenceBytes int64 = 32 << 10
+const (
+	maxAnonymousDenyEvidenceBytes int64 = 32 << 10
+	deploymentRequestTimeout            = 60 * time.Second
+	publicProbeBudget                   = 45 * time.Second
+	publicProbeAttemptTimeout           = 5 * time.Second
+	publicProbeRetryDelay               = time.Second
+	publicProbeMaxAttempts              = 10
+)
 
 var gatewayRequestID = regexp.MustCompile(`^req_[0-9a-f]{24}$`)
 
@@ -71,6 +77,14 @@ type DefaultServerStore interface {
 type Client struct {
 	Base, Token string
 	HTTP        *http.Client
+
+	// These private controls keep production retry bounds fixed while allowing
+	// package tests to exercise retries without sleeping for real-world DNS/TLS
+	// propagation windows.
+	publicProbeBudget         time.Duration
+	publicProbeAttemptTimeout time.Duration
+	publicProbeRetryDelay     time.Duration
+	publicProbeMaxAttempts    int
 }
 
 // AppSummary is deliberately ownership-scoped: the control API only returns
@@ -222,7 +236,15 @@ func New(base, token string) Client {
 		}
 		return nil
 	}
-	return Client{Base: base, Token: token, HTTP: h}
+	return Client{
+		Base:                      base,
+		Token:                     token,
+		HTTP:                      h,
+		publicProbeBudget:         publicProbeBudget,
+		publicProbeAttemptTimeout: publicProbeAttemptTimeout,
+		publicProbeRetryDelay:     publicProbeRetryDelay,
+		publicProbeMaxAttempts:    publicProbeMaxAttempts,
+	}
 }
 
 type Prompt interface{ Ask(string) (string, error) }
@@ -243,6 +265,41 @@ type DeploymentResult struct {
 
 var ErrDeploymentFailed = errors.New("deployment failed")
 
+// DeploymentEvidenceReason is a deliberately small, safe category suitable for
+// CLI output. It never includes a raw URL error, response body, header, policy
+// detail, path, bearer, or cookie.
+type DeploymentEvidenceReason string
+
+const (
+	EvidenceActivationIncomplete DeploymentEvidenceReason = "activation_evidence_incomplete"
+	EvidencePublicProbeCancelled DeploymentEvidenceReason = "public_probe_cancelled"
+	EvidencePublicProbeInvalid   DeploymentEvidenceReason = "public_probe_invalid_response"
+	EvidencePublicProbeNotReady  DeploymentEvidenceReason = "public_probe_not_ready"
+	EvidencePublicProbeTransport DeploymentEvidenceReason = "public_probe_transport"
+	EvidencePublicProbeURL       DeploymentEvidenceReason = "public_probe_untrusted_url"
+)
+
+// ActiveButUnverifiedError means the server returned a successful activation,
+// but the deployer-side independent public proof did not complete. Callers must
+// not report success, but they may safely show this activation receipt.
+type ActiveButUnverifiedError struct {
+	Deployment DeploymentResult
+	Reason     DeploymentEvidenceReason
+}
+
+func (e *ActiveButUnverifiedError) Error() string {
+	return "active deployment public verification incomplete"
+}
+func (e *ActiveButUnverifiedError) Unwrap() error { return ErrDeploymentEvidence }
+
+type publicVerificationError struct {
+	reason    DeploymentEvidenceReason
+	retryable bool
+}
+
+func (e *publicVerificationError) Error() string { return string(e.reason) }
+func (e *publicVerificationError) Unwrap() error { return ErrDeploymentEvidence }
+
 func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size int64, key string) (DeploymentResult, error) {
 	if slug == "" || key == "" || size < 0 {
 		return DeploymentResult{}, ErrDeploymentFailed
@@ -259,10 +316,7 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 	setCompatibilityHeaders(req)
 	req.Header.Set("Idempotency-Key", key)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	h := c.HTTP
-	if h == nil {
-		h = http.DefaultClient
-	}
+	h := c.deploymentHTTPClient()
 	res, e := h.Do(req)
 	if e != nil {
 		return DeploymentResult{}, e
@@ -288,11 +342,13 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 			return DeploymentResult{}, e
 		}
 		var activated DeploymentResult
-		if e = c.Do(ctx, "POST", "/api/v1/apps/"+url.PathEscape(slug)+"/deployments/"+url.PathEscape(deploymentID)+"/activate", k, nil, &activated); e != nil {
+		deploymentClient := c
+		deploymentClient.HTTP = h
+		if e = deploymentClient.Do(ctx, "POST", "/api/v1/apps/"+url.PathEscape(slug)+"/deployments/"+url.PathEscape(deploymentID)+"/activate", k, nil, &activated); e != nil {
 			return DeploymentResult{}, e
 		}
 		if e = c.verifyPublicDeployment(ctx, slug, activated); e != nil {
-			return DeploymentResult{}, e
+			return activated, activeButUnverified(activated, e)
 		}
 		return activated, nil
 	}
@@ -326,7 +382,7 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 		}
 		if out.State == "active" {
 			if e = c.verifyPublicDeployment(ctx, slug, out.DeploymentResult); e != nil {
-				return DeploymentResult{}, e
+				return out.DeploymentResult, activeButUnverified(out.DeploymentResult, e)
 			}
 			return out.DeploymentResult, nil
 		}
@@ -347,43 +403,107 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 // deployer client's bearer token or cookie jar.
 func (c Client) verifyPublicDeployment(ctx context.Context, slug string, result DeploymentResult) error {
 	if err := result.Verified(); err != nil {
-		return err
+		return publicEvidenceError(EvidenceActivationIncomplete, false)
 	}
 	probeURL, err := expectedAppURL(slug, result.AppSuffix, result.URL)
 	if err != nil {
-		return publicEvidenceError("unexpected protected URL")
+		return publicEvidenceError(EvidencePublicProbeURL, false)
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	budget := c.publicProbeBudget
+	if budget <= 0 {
+		budget = publicProbeBudget
+	}
+	attempts := c.publicProbeMaxAttempts
+	if attempts <= 0 {
+		attempts = publicProbeMaxAttempts
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	req, err := http.NewRequestWithContext(probeCtx, http.MethodGet, probeURL.String(), nil)
+
+	var last *publicVerificationError
+	for attempt := 0; attempt < attempts; attempt++ {
+		if probeCtx.Err() != nil {
+			return publicEvidenceError(EvidencePublicProbeCancelled, false)
+		}
+		err = c.probePublicDeploymentOnce(probeCtx, probeURL)
+		if err == nil {
+			return nil
+		}
+		if !errors.As(err, &last) || !last.retryable {
+			return err
+		}
+		if attempt == attempts-1 {
+			return last
+		}
+		delay := c.publicProbeRetryDelay
+		if delay <= 0 {
+			delay = publicProbeRetryDelay
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-probeCtx.Done():
+			timer.Stop()
+			return publicEvidenceError(EvidencePublicProbeCancelled, false)
+		case <-timer.C:
+		}
+	}
+	return last
+}
+
+func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL) error {
+	attemptTimeout := c.publicProbeAttemptTimeout
+	if attemptTimeout <= 0 {
+		attemptTimeout = publicProbeAttemptTimeout
+	}
+	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, probeURL.String(), nil)
 	if err != nil {
-		return publicEvidenceError("invalid protected URL request")
+		return publicEvidenceError(EvidencePublicProbeURL, false)
 	}
 	// The zero values are intentional assertions for custom transports as well
 	// as documentation for future callers: a platform deployer token must never
 	// cross onto an untrusted app origin.
 	req.Header.Del("Authorization")
 	req.Header.Del("Cookie")
-	h := c.anonymousHTTPClient()
-	resp, err := h.Do(req)
-	if err != nil || resp == nil || resp.Body == nil || resp.Request == nil || resp.Request.URL == nil {
-		return publicEvidenceError("protected URL transport")
+	resp, err := c.anonymousHTTPClient().Do(req)
+	if resp != nil && resp.Body != nil {
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
-	if resp.Request.URL.String() != req.URL.String() || resp.StatusCode != http.StatusUnauthorized || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
-		return publicEvidenceError("protected URL denial status or headers")
+	if err != nil {
+		if resp != nil && resp.StatusCode >= 300 && resp.StatusCode < 400 {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
+		return publicEvidenceError(EvidencePublicProbeTransport, true)
+	}
+	if resp == nil || resp.Body == nil || resp.Request == nil || resp.Request.URL == nil {
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
+	}
+	if resp.Request.URL.String() != req.URL.String() {
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
+	}
+	if resp != nil && (resp.StatusCode == http.StatusNotFound ||
+		resp.StatusCode == http.StatusBadGateway ||
+		resp.StatusCode == http.StatusServiceUnavailable ||
+		resp.StatusCode == http.StatusGatewayTimeout) {
+		return publicEvidenceError(EvidencePublicProbeNotReady, true)
+	}
+	if resp.StatusCode != http.StatusUnauthorized ||
+		resp.Header.Get("Cache-Control") != "no-store" ||
+		resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	contentType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil || contentType != "application/json" {
-		return publicEvidenceError("protected URL denial content type")
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAnonymousDenyEvidenceBytes+1))
 	if err != nil || int64(len(body)) > maxAnonymousDenyEvidenceBytes {
-		return publicEvidenceError("protected URL denial body")
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	var envelope map[string]json.RawMessage
 	if err = json.Unmarshal(body, &envelope); err != nil || len(envelope) != 1 {
-		return publicEvidenceError("protected URL denial envelope")
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	var denial struct {
 		Code      string `json:"code"`
@@ -392,22 +512,28 @@ func (c Client) verifyPublicDeployment(ctx context.Context, slug string, result 
 	}
 	raw, ok := envelope["error"]
 	if !ok || json.Unmarshal(raw, &denial) != nil {
-		return publicEvidenceError("protected URL denial fields")
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
-	if denial.Code != "not_authorized" || denial.Message != "This request is not authorized." {
-		return publicEvidenceError("protected URL denial shape")
-	}
-	if !gatewayRequestID.MatchString(denial.RequestID) {
-		return publicEvidenceError("protected URL denial request ID")
-	}
-	if denial.RequestID != resp.Header.Get("X-Request-ID") {
-		return publicEvidenceError("protected URL denial request ID header")
+	if denial.Code != "not_authorized" ||
+		denial.Message != "This request is not authorized." ||
+		!gatewayRequestID.MatchString(denial.RequestID) ||
+		denial.RequestID != resp.Header.Get("X-Request-ID") {
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	return nil
 }
 
-func publicEvidenceError(reason string) error {
-	return fmt.Errorf("%s: %w", reason, ErrDeploymentEvidence)
+func publicEvidenceError(reason DeploymentEvidenceReason, retryable bool) error {
+	return &publicVerificationError{reason: reason, retryable: retryable}
+}
+
+func activeButUnverified(result DeploymentResult, err error) error {
+	reason := EvidenceActivationIncomplete
+	var verification *publicVerificationError
+	if errors.As(err, &verification) {
+		reason = verification.reason
+	}
+	return &ActiveButUnverifiedError{Deployment: result, Reason: reason}
 }
 
 func expectedAppURL(slug, suffix, raw string) (*url.URL, error) {
@@ -434,10 +560,26 @@ func (c Client) anonymousHTTPClient() *http.Client {
 	anonymous.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return errors.New("deployment probe redirect denied")
 	}
-	if anonymous.Timeout <= 0 || anonymous.Timeout > 15*time.Second {
-		anonymous.Timeout = 15 * time.Second
+	attemptTimeout := c.publicProbeAttemptTimeout
+	if attemptTimeout <= 0 {
+		attemptTimeout = publicProbeAttemptTimeout
+	}
+	if anonymous.Timeout <= 0 || anonymous.Timeout > attemptTimeout {
+		anonymous.Timeout = attemptTimeout
 	}
 	return &anonymous
+}
+
+func (c Client) deploymentHTTPClient() *http.Client {
+	base := c.HTTP
+	if base == nil {
+		base = http.DefaultClient
+	}
+	deployment := *base
+	if deployment.Timeout <= 0 || deployment.Timeout < deploymentRequestTimeout {
+		deployment.Timeout = deploymentRequestTimeout
+	}
+	return &deployment
 }
 
 func (r DeploymentResult) Verified() error {

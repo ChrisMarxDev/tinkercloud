@@ -181,7 +181,7 @@ values.
    The deployed fixture has
    `features.blobs: true` and contains a same-origin SDK-equivalent blob client
    example.
-7. With that real viewer session, discover `blobs`, reject a multipart upload
+7. With that real viewer session, discover `blobs` and `db`; reject a multipart upload
    containing a second part without changing the catalog, then upload, list,
    download, and delete one binary fixture. Download bytes must be exact and
    have attachment, `private, no-store`, and `nosniff` headers. Anonymous and
@@ -192,11 +192,27 @@ values.
    blob bytes and attachment, `private, no-store`, and `nosniff` headers before
    the delete assertion. Redirects, denials, all other statuses, wrong bytes,
    and wrong headers fail immediately.
-8. In reuse mode, after a newly active probe app exists, copy no new secrets
-   and invoke only `tinyhost verify-artifact` followed by the supported local
-   signed `tinyhost update` path. It verifies the candidate against the
-   installed binary's pinned key, uses the normal rollback/health gates, and
-   never re-runs init or removes existing host state. A temporary E2E signing
+8. Using the same host-derived viewer session, create, get, optimistic-update,
+   list with `snapshot=1`, and delete a JSON document through
+   `/_tiny/api/v1/db/{collection}`. The fixture has `features.kv` and
+   `features.realtime` enabled, but sends no database, app, or viewer selector.
+   Prove an anonymous request denies with no document bytes, a second allowed
+   app cannot read a guessed document ID, and the updated document survives the
+   service restart before deletion. Capability discovery must include `db` and
+   omit ungranted `llm.chat`; an attempted chat call without a manifest request
+   or operator grant denies without provider detail.
+9. In reuse mode, after a newly active probe app exists, copy only the signed
+   release evidence (including its signed release manifest), invoke
+   `tinyhost verify-artifact` followed by the supported local signed
+   `tinyhost update` path. The candidate must first pass full local
+   release-manifest verification. Only an exact old-updater rejection of the
+   `--release-manifest` flag may retry with the legacy signed
+   binary/metadata/signature argv; verification, health, transport, or any
+   other failure is terminal. After replacement, require normal `tinyhost
+   doctor` (including its current-version check), then once run root-only
+   `tinyhost llm enable`, restart `tinyhost.service`, and run normal
+   `tinyhost doctor`. Never call a provider or read/print the LLM root,
+   re-run init, or remove existing host state. A temporary E2E signing
    authority is therefore forbidden with reuse.
 
 On any failed step, the suite exits non-zero and leaves the VPS state in place

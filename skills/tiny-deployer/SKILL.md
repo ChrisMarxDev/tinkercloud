@@ -24,9 +24,21 @@ deployer token, OTP, provider secret, database credential, app ID, or viewer ID
 in chat, argv, source code, `tiny.yaml`, browser storage, logs, or output.
 
 V1 is private-only. The app owner is always an implicit viewer. There is no
-public mode. KV and blobs are utility-grade data on one VPS; losing the VPS can
-lose them. Realtime is app-scoped, in-memory, best-effort notification with no
-history, replay, ordering, or delivery guarantee.
+public mode. Each app has its own private SQLite data file for KV and bounded
+JSON document collections; blobs and that data are utility-grade state on one
+VPS, so losing the VPS can lose them. Realtime is app-scoped, in-memory,
+best-effort notification with no history, replay, ordering, or delivery
+guarantee. Live collection events are freshness hints: recover current state
+with a snapshot after first connect, reconnect, visibility recovery, and every
+hint.
+
+`llm.chat`, when an operator grants it, is a narrow server-side capability.
+Capability discovery is absent until the app requests it and the operator grant
+is active. If present, treat its disclosure as a notice that prompt content is
+sent to an operator-selected external AI provider; discovery limits are safe
+current bounds, not a promise that a later request will be admitted.
+Provider credentials, connection IDs, model names, and upstream URLs never
+enter app code, browser storage, the deployer manifest, or the SDK request.
 
 Start from the requested outcome. Inspect trusted local and server state, reuse
 verified values, and choose a secure default before asking anything. Ask only
@@ -183,6 +195,68 @@ await tiny.kv.delete(saved.key, {
 Handle `TinyVersionConflictError` by rereading current state and reconciling;
 do not blindly overwrite another viewer's change.
 
+#### Reactive document collections
+
+Use a collection for small app-owned JSON records rather than inventing a
+browser database, raw SQL endpoint, or a per-viewer backend. The platform
+assigns opaque `doc_...` IDs. Collection names are bounded lowercase names;
+documents must be JSON objects; mutations use optimistic versions.
+
+```ts
+const tasks = tiny.db.collection<{ title: string; done: boolean }>("tasks");
+const task = await tasks.create({ title: "Ship", done: false });
+await tasks.update(task.id, { ...task.data, done: true }, {
+  expectedVersion: task.version,
+});
+
+const stop = tasks.subscribe({
+  onSnapshot: ({ documents }) => render(documents),
+  onUpdate: () => void refreshUI(),
+  onStatus: (status) => showConnectionState(status),
+});
+// Cleanup: stop()
+```
+
+Subscriptions deliberately reconcile through snapshots. Managed KV and
+collection listeners from one Tiny client share one socket; cleanup removes
+only that listener, while explicit `tiny.live.channel(name)` remains a separate
+application channel. Do not treat a socket event as a database row, expect
+replay/history/ordering, or use the collection API as arbitrary SQL, joins,
+server functions, or a high-volume event log.
+
+#### Operator-governed LLM chat
+
+An app can request chat only when its reviewed manifest enables
+`capabilities.llm.chat: true` **and** the operator grants a fixed approved
+profile to that app. The app sends only its bounded chat request:
+
+```ts
+const answer = await tiny.llm.chat.complete({
+  messages: [{ role: "user", content: "Summarize this checklist." }],
+});
+```
+
+There is no API key, provider choice, model selector, endpoint, system-secret
+field, streaming socket, or direct provider SDK. Show capability, quota, rate,
+and temporary-unavailability failures safely; do not retry blindly or expose
+provider error bodies.
+
+#### Local development
+
+Use the built-in loopback preview for normal app work:
+
+```sh
+tiny dev
+```
+
+It serves the manifest build output (or the supplied directory), stores local
+state under `.tiny/local/`, and prints a conspicuous local development
+identity. It emulates current viewer/app information, KV, document collections,
+and their live freshness hints on `localhost` only. It deliberately does **not**
+emulate login, deployment, access policy, blobs, operator LLM connections, or
+`llm.chat`; never use it as production authorization evidence. Stop it with
+Ctrl-C. A real deploy still needs the normal HTTPS anonymous-denial proof.
+
 #### Blobs
 
 Blobs are immutable, app-shared attachments with opaque server-issued IDs:
@@ -280,6 +354,10 @@ features:
   blobs: false
   realtime: true
 
+capabilities:
+  llm:
+    chat: false
+
 spa:
   fallback: index.html
 ```
@@ -339,6 +417,15 @@ Treat any deploy error, redirect, TLS failure, timeout, `2xx` anonymous app
 response, malformed denial envelope, or missing denial evidence as failure.
 Never send the deployer bearer or browser cookies to the app origin to test
 anonymous access. Do not weaken TLS or substitute a local preview.
+
+The CLI retries only bounded transient first-host DNS, TLS, transport, and
+gateway-readiness failures. If it returns `active_but_unverified`, do not claim
+success and do not immediately upload another identical release: report the
+returned deployment ID, protected URL, and safe reason, then independently
+recheck the exact URL. This outcome means server activation committed but the
+CLI's anonymous public proof did not complete. Redirects, public `2xx`,
+wrong-origin URLs, malformed denials, and unsafe headers remain terminal and
+are never retryable.
 
 After CLI success, verify the authenticated viewer path only if the environment
 allows it without exposing credentials. Do not claim a viewer check that was

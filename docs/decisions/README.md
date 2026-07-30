@@ -46,6 +46,8 @@
 | [0044](0044-signed-distribution-compatibility-manifest.md) | Signed distribution compatibility manifest | Accepted for distribution preparation |
 | [0045](0045-separate-maintainer-distribution-skills.md) | Separate maintainer skills for CLI and SDK distribution | Accepted for distribution preparation |
 | [0046](0046-github-beta-release-channel.md) | GitHub prereleases are the pre-rename beta channel | Accepted for beta distribution |
+| [0047](0047-operator-governed-llm-chat.md) | Operator-governed encrypted LLM chat capability | Accepted for post-V1 L1/L2 |
+| [0048](0048-per-app-sqlite-collections.md) | Per-app SQLite databases and bounded document collections | Accepted |
 
 ## Decision rule
 

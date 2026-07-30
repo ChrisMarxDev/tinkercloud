@@ -40,8 +40,8 @@ func (r ResourceControls) ConfigureDeployments(service *deployments.Service) {
 	service.AttemptLimit = r.Limits.DeploymentAttemptsPerHour
 }
 
-func (r ResourceControls) KVRepository(store *persistence.SQLiteStore) persistence.KVRepository {
-	return persistence.KVRepository{Store: store, WriteGate: r.Gate}
+func (r ResourceControls) KVRepository(apps *persistence.AppDatabaseManager) persistence.KVRepository {
+	return persistence.KVRepository{Apps: apps, WriteGate: r.Gate}
 }
 func (r ResourceControls) BlobRepository(store *persistence.SQLiteStore) *persistence.BlobRepository {
 	return &persistence.BlobRepository{Store: store, Bytes: blob.LocalStore{Root: store.DataRoot}, WriteGate: r.Gate}

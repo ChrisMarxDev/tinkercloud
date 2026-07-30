@@ -52,8 +52,9 @@ filesystem calls.
 For TinyHost, a storage implementation is lightweight only when all of these
 remain true:
 
-- production still consists of one `tinyhost` process, one SQLite database, one
-  private data directory, and one systemd service;
+- production still consists of one `tinyhost` process, one embedded SQLite
+  engine with a control database plus isolated app-local data files, one private
+  data directory, and one systemd service;
 - installation requires no FUSE/kernel extension, mount unit, extra package,
   daemon, listener, provider account, storage credential, or separate health,
   upgrade, and restart lifecycle;

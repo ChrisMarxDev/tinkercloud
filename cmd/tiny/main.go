@@ -23,13 +23,20 @@ import (
 )
 
 type result struct {
-	Valid bool      `json:"valid"`
-	Name  string    `json:"name,omitempty"`
-	Error *cliError `json:"error,omitempty"`
+	Valid      bool               `json:"valid"`
+	Name       string             `json:"name,omitempty"`
+	Deployment *deploymentReceipt `json:"deployment,omitempty"`
+	Error      *cliError          `json:"error,omitempty"`
 }
 type cliError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+type deploymentReceipt struct {
+	ID           string                          `json:"deployment_id,omitempty"`
+	URL          string                          `json:"url,omitempty"`
+	State        string                          `json:"state"`
+	Verification client.DeploymentEvidenceReason `json:"verification"`
 }
 
 func main() {
@@ -121,6 +128,9 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	if len(args) == 1 && args[0] == "version" {
 		fmt.Fprintln(stdout, "tiny "+client.BuildVersion)
 		return 0
+	}
+	if len(args) >= 1 && args[0] == "dev" {
+		return runDev(args[1:], *jsonOutput, stdout, stderr)
 	}
 	if len(args) >= 1 && args[0] == "host" {
 		return runHost(args[1:], *jsonOutput, stdout, stderr)
@@ -404,6 +414,22 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		}
 		out, e := deployer.Deploy(context.Background(), m.Name, archive, archiveSize(archive), key)
 		if e != nil {
+			var active *client.ActiveButUnverifiedError
+			if errors.As(e, &active) {
+				writeTo(stdout, stderr, *jsonOutput, result{
+					Deployment: &deploymentReceipt{
+						ID:           active.Deployment.DeploymentID,
+						URL:          active.Deployment.URL,
+						State:        "active",
+						Verification: active.Reason,
+					},
+					Error: &cliError{
+						"active_but_unverified",
+						"Deployment is active, but public verification is incomplete.",
+					},
+				})
+				return 1
+			}
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be verified."}})
 			return 1
 		}
@@ -1177,6 +1203,16 @@ func writeTo(stdout, stderr io.Writer, j bool, r result) {
 	}
 	if r.Error != nil {
 		fmt.Fprintln(stderr, r.Error.Message)
+		if r.Deployment != nil {
+			if r.Deployment.ID != "" {
+				fmt.Fprintf(stderr, "Deployment: %s\n", r.Deployment.ID)
+			}
+			fmt.Fprintf(stderr, "State: %s\n", r.Deployment.State)
+			if r.Deployment.URL != "" {
+				fmt.Fprintf(stderr, "URL: %s\n", r.Deployment.URL)
+			}
+			fmt.Fprintf(stderr, "Verification: %s\n", r.Deployment.Verification)
+		}
 		return
 	}
 	fmt.Fprintf(stdout, "Manifest valid: %s\n", r.Name)

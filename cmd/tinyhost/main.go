@@ -18,6 +18,9 @@ import (
 	"github.com/tinyhost/tiny/internal/email"
 	"github.com/tinyhost/tiny/internal/jobs"
 	"github.com/tinyhost/tiny/internal/live"
+	"github.com/tinyhost/tiny/internal/llm"
+	"github.com/tinyhost/tiny/internal/llm/anthropic"
+	"github.com/tinyhost/tiny/internal/llm/gemini"
 	"github.com/tinyhost/tiny/internal/operations"
 	"github.com/tinyhost/tiny/internal/persistence"
 	"github.com/tinyhost/tiny/internal/ratelimit"
@@ -139,6 +142,21 @@ func (h hostResolver) ActiveAppHost(host string) bool {
 type resendCredential struct{ key string }
 
 func (c resendCredential) ResendAPIKey() string { return c.key }
+
+// llmCredentialValidator selects only a compiled-in provider validator. It
+// has no caller-controlled URL, header, or transport path.
+type llmCredentialValidator struct {
+	providers map[llm.Provider]llm.CredentialValidator
+}
+
+func (v llmCredentialValidator) Validate(ctx context.Context, provider llm.Provider, credential []byte) error {
+	validator, ok := v.providers[provider]
+	if !ok || validator == nil {
+		return errors.New("llm provider unavailable")
+	}
+	return validator.ValidateCredential(ctx, credential)
+}
+
 func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates) (http.Handler, *live.Hub, error) {
 	hub := live.New(live.DefaultLimits())
 	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
@@ -160,20 +178,46 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	// seam intentionally reaches only growth paths, never static reads or
 	// revocation handlers.
 	resources, _ := compose.NewResourceControls(c, operations.StaticDiskSource{Path: c.DataDirectory})
+	appDatabases, err := persistence.NewAppDatabaseManager(c.DataDirectory, persistence.AppDatabaseManagerOptions{})
+	if err != nil {
+		return nil, hub, err
+	}
 	deploy := &deployments.Service{Repo: persistence.DeploymentRepository{Store: store}, Root: c.DataDirectory, Gates: gates}
 	resources.ConfigureDeployments(deploy)
 	if err := deploy.RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: c.DataDirectory}); err != nil {
 		return nil, hub, err
 	}
 	blobs := resources.BlobRepository(store)
+	var llmRepository *persistence.LLMRepository
+	var llmService *llm.Service
+	var llmValidator llmCredentialValidator
+	if len(secrets.LLMRootKey) == 32 {
+		envelope, e := llm.NewAESGCMEnvelope(secrets.LLMRootKey)
+		if e != nil {
+			return nil, hub, e
+		}
+		repository := persistence.LLMRepository{Store: store, Envelope: envelope}
+		llmRepository = &repository
+		anthropicAdapter, geminiAdapter := anthropic.New(nil), gemini.New(nil)
+		llmService = llm.New(repository, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: anthropicAdapter, llm.ProviderGemini: geminiAdapter})
+		llmValidator = llmCredentialValidator{providers: map[llm.Provider]llm.CredentialValidator{llm.ProviderAnthropic: anthropicAdapter, llm.ProviderGemini: geminiAdapter}}
+	}
+	deploy.CapabilityReady = func(ctx context.Context, record deployments.Record) bool {
+		// A release which does not request the capability retains the existing
+		// activation behavior. A requesting release must have a currently active
+		// operator binding before it can replace the prior active release.
+		return !record.Manifest.LLMChat || llmRepository != nil && llmRepository.Available(ctx, record.AppID)
+	}
 	controlAuth := persistence.ControlAuthenticator{Store: store}
 	controlService := persistence.ControlService{
 		Store:          store,
 		Live:           hub,
 		BlobCleanup:    blobs,
-		AppDataCleanup: persistence.AppDataPurger{DataRoot: c.DataDirectory, Store: store, BlobCleanup: blobs},
+		AppDataCleanup: persistence.AppDataPurger{DataRoot: c.DataDirectory, Store: store, Apps: appDatabases, BlobCleanup: blobs},
 		Deployments:    deploy,
 		AppSuffix:      c.AppSuffix,
+		LLM:            llmRepository,
+		LLMValidator:   llmValidator,
 	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
@@ -181,7 +225,9 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	if err := blobs.Reconcile(context.Background()); err != nil {
 		return nil, hub, err
 	}
-	return compose.AppPlaneWithPlatformAndBlobs(c, store, liveSessions, store, resources.KVRepository(store), blobs, hub, login, platform), hub, nil
+	appKV := persistence.KVRepository{Apps: appDatabases, WriteGate: resources.Gate}
+	documents := persistence.CollectionRepository{Apps: appDatabases, WriteGate: resources.Gate}
+	return compose.AppPlaneWithPlatformAndBlobsCollectionsAndLLM(c, store, liveSessions, store, appKV, blobs, documents, hub, login, platform, llmService), hub, nil
 }
 
 var effectiveUID = os.Geteuid
@@ -276,6 +322,11 @@ func run(args []string, out, errout *os.File) error {
 		return errors.New("tinyhost: usage")
 	}
 	switch args[0] {
+	case "llm":
+		if len(args) < 2 || args[1] != "enable" {
+			return errors.New("tinyhost: invalid_arguments")
+		}
+		return runLLMEnable(args[2:], out)
 	case "install-service":
 		return runInstallService(args[1:])
 	case "update":

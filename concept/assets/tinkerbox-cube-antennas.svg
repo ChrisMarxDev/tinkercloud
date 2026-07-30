@@ -1,0 +1,134 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1024"
+  height="1024"
+  viewBox="0 0 1024 1024"
+  fill="none"
+  role="img"
+  aria-labelledby="title description"
+  shape-rendering="geometricPrecision"
+>
+  <title id="title">Tinkerbox cube mascot</title>
+  <desc id="description">
+    A friendly rounded purple box in three-quarter view with a blue side,
+    two short antennae, cream eyes, and a small smile.
+  </desc>
+
+  <!--
+    Flat oblique construction:
+
+      front vector = (500, 35)
+      depth vector = (160, -85)
+      body vector  = (0, 370)
+
+    Tangent points on every exposed corner are derived from these three
+    vectors, keeping the top, front, and side in one consistent perspective.
+  -->
+
+  <!-- Rounded top plane. -->
+  <path
+    d="
+      M 380 267.8
+      L 800 297.2
+      Q 840 300 805 318.6
+      L 715 366.4
+      Q 680 385 640 382.2
+      L 220 352.8
+      Q 180 350 215 331.4
+      L 305 283.6
+      Q 340 265 380 267.8
+      Z
+    "
+    fill="#6336E2"
+  />
+
+  <!-- Rounded right depth plane. -->
+  <path
+    d="
+      M 680 385
+      L 805 318.6
+      Q 840 300 840 350
+      L 840 620
+      Q 840 670 805 688.6
+      L 680 755
+      Z
+    "
+    fill="#0A7FF5"
+  />
+
+  <!-- The antennae emerge from the top and tuck behind the front plane. -->
+  <g>
+    <path
+      d="
+        M 348 350
+        L 326 271
+        Q 322 258 335 255
+        L 356 251
+        Q 368 249 372 262
+        L 394 341
+        Q 398 354 385 357
+        L 364 361
+        Q 352 363 348 350
+        Z
+      "
+      fill="#1B0D50"
+    />
+    <circle cx="341" cy="252" r="38" fill="#6336E2"/>
+
+    <path
+      d="
+        M 685 365
+        L 710 286
+        Q 714 273 727 277
+        L 748 283
+        Q 760 287 756 300
+        L 731 379
+        Q 727 392 714 388
+        L 693 382
+        Q 681 378 685 365
+        Z
+      "
+      fill="#1B0D50"
+    />
+    <circle cx="745" cy="279" r="38" fill="#6336E2"/>
+  </g>
+
+  <!-- Dominant rounded front plane. -->
+  <path
+    d="
+      M 230 353.5
+      L 630 381.5
+      Q 680 385 680 435
+      L 680 705
+      Q 680 755 630 751.5
+      L 230 723.5
+      Q 180 720 180 670
+      L 180 400
+      Q 180 350 230 353.5
+      Z
+    "
+    fill="#2B0B79"
+  />
+
+  <!-- Friendly face. -->
+  <g fill="#FFF8E7">
+    <rect x="360" y="501" width="52" height="62" rx="17"/>
+    <rect x="460" y="508" width="52" height="62" rx="17"/>
+  </g>
+
+  <path
+    d="
+      M 410 597
+      C 416 608 425 614 436 615
+      C 447 616 457 609 463 598
+      C 467 591 475 589 482 593
+      C 489 597 491 606 487 613
+      C 477 632 458 642 436 641
+      C 414 640 395 629 385 610
+      C 381 603 383 594 390 590
+      C 397 586 406 590 410 597
+      Z
+    "
+    fill="#FFF8E7"
+  />
+</svg>

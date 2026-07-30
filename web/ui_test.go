@@ -183,12 +183,16 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`it cannot be restored`,
 		`active deployer allowlist`,
 		`removed addresses are signed out`,
+		`write-only llm connection`,
+		`type="password"`,
+		`never displayed or recovered`,
+		`disable:0123456789abcdef0123456789abcdef`,
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("showcase missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`} {
+	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`, `provider credential value=`} {
 		if strings.Contains(page, forbidden) {
 			t.Fatalf("showcase contains remote or executable dependency %q", forbidden)
 		}

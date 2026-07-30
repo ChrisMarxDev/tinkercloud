@@ -205,9 +205,14 @@ Activate(deploymentID):
 
 ### `verification`
 
-Runs post-activation probes through the real public gateway. If a probe fails,
-the release manager restores the previous deployment and marks the candidate
-failed. It verifies at least anonymous HTML, asset, API, and unknown-host denial.
+The server runs candidate policy/static-denial evidence before its atomic
+activation. The deployer CLI then independently probes the exact real public
+HTTPS gateway without credentials. Transient first-host DNS, TLS, transport,
+and readiness outcomes receive a bounded retry; unsafe or contradictory
+responses fail immediately. Because this independent proof follows the
+committed activation, an exhausted probe returns a non-success
+`active_but_unverified` receipt instead of claiming that the server restored
+the previous release.
 
 ### `certificates`
 
@@ -237,10 +242,10 @@ always taken from the authorization context.
 Set(ctx AuthorizationContext, key Key, value JSONValue, expectedVersion?):
     require ctx.App.Features.KV
     validate key, value, expectedVersion, quota
+    -- executed against ctx's server-derived app-local SQLite database
     UPDATE app_kv
        SET value=?, version=version+1
-     WHERE application_id=ctx.App.ID
-       AND key=?
+     WHERE key=?
        AND version matches expectedVersion
 ```
 

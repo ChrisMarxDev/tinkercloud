@@ -15,11 +15,14 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/tinyhost/tiny/internal/appauth"
 	"github.com/tinyhost/tiny/internal/blob"
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/compatibility"
 	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/tinyhost/tiny/internal/llm"
 )
 
 const apiPrefix = "/_tiny/api/v1"
@@ -36,20 +39,31 @@ type Blobs interface {
 	List(context.Context, appauth.AuthorizationContext, string, int) (blob.ListResult, error)
 	Delete(context.Context, appauth.AuthorizationContext, string) (bool, error)
 }
+type Collections interface {
+	Create(context.Context, appauth.AuthorizationContext, string, json.RawMessage) (collections.Document, collections.Mutation, error)
+	Get(context.Context, appauth.AuthorizationContext, string, string) (*collections.Document, error)
+	Update(context.Context, appauth.AuthorizationContext, string, string, json.RawMessage, *uint64) (collections.Document, collections.Mutation, error)
+	Delete(context.Context, appauth.AuthorizationContext, string, string, *uint64) (bool, collections.Mutation, error)
+	List(context.Context, appauth.AuthorizationContext, string, string, int) (collections.ListResult, error)
+	Snapshot(context.Context, appauth.AuthorizationContext, string) (collections.Snapshot, error)
+}
 type Dispatcher struct {
 	KV           KV
 	Blobs        Blobs
+	Collections  Collections
 	BlobMaxBytes int64
 	Capabilities []Capability
 	AppSlug      func(appauth.AuthorizationContext) string
 	// Origin is injected by composition. Production uses exact HTTPS origin;
 	// in-memory HTTP harnesses must opt in explicitly rather than weakening it.
 	Origin func(*http.Request) bool
+	LLM    *llm.Service
 }
 type Capability struct {
-	Name    string         `json:"name"`
-	Version int            `json:"version"`
-	Limits  map[string]int `json:"limits,omitempty"`
+	Name       string         `json:"name"`
+	Version    int            `json:"version"`
+	Limits     map[string]int `json:"limits,omitempty"`
+	Disclosure string         `json:"disclosure,omitempty"`
 }
 
 // Dispatch is the gateway registration seam. It rejects malformed and unknown
@@ -75,7 +89,22 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 	case path == apiPrefix+"/capabilities" && r.Method == http.MethodGet:
 		caps := []Capability{}
 		for _, c := range d.Capabilities {
+			if c.Name == "llm.chat" {
+				if d.LLM == nil {
+					continue
+				}
+				discovery, available := d.LLM.Discovery(r.Context(), auth)
+				if !available {
+					continue
+				}
+				// Ignore static composition defaults for this capability. The
+				// active profile supplies the only browser-visible limits.
+				c.Limits, c.Disclosure = discovery.Limits, discovery.Disclosure
+			}
 			if c.Name == "kv" && !auth.KVEnabled() {
+				continue
+			}
+			if c.Name == "db" && (!auth.KVEnabled() || d.Collections == nil) {
 				continue
 			}
 			if c.Name == "live" && !auth.RealtimeEnabled() {
@@ -91,8 +120,12 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 		d.list(auth, w, r)
 	case strings.HasPrefix(path, apiPrefix+"/kv/"):
 		d.key(auth, w, r)
+	case path == apiPrefix+"/db" || strings.HasPrefix(path, apiPrefix+"/db/"):
+		d.collection(auth, w, r)
 	case path == apiPrefix+"/blobs":
 		d.blobListOrUpload(auth, w, r)
+	case path == apiPrefix+"/llm/chat" && r.Method == http.MethodPost:
+		d.llmChat(auth, w, r)
 	case strings.HasPrefix(path, apiPrefix+"/blobs/"):
 		d.blobObject(auth, w, r)
 	default:
@@ -118,7 +151,290 @@ func (d Dispatcher) app(auth appauth.AuthorizationContext, w http.ResponseWriter
 		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", auth.RequestID())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"slug": d.AppSlug(auth), "features": map[string]bool{"kv": auth.KVEnabled(), "blobs": auth.BlobsEnabled() && d.Blobs != nil, "realtime": auth.RealtimeEnabled()}})
+	writeJSON(w, http.StatusOK, map[string]any{"slug": d.AppSlug(auth), "features": map[string]bool{"kv": auth.KVEnabled(), "db": auth.KVEnabled() && d.Collections != nil, "blobs": auth.BlobsEnabled() && d.Blobs != nil, "realtime": auth.RealtimeEnabled(), "llm_chat": d.LLM != nil && auth.LLMChatRequested()}})
+}
+func (d Dispatcher) llmChat(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) {
+	if d.LLM == nil {
+		CapabilityUnavailable(w, auth.RequestID())
+		return
+	}
+	if !d.sameOrigin(r) {
+		writeError(w, 403, "not_authorized", "This request is not authorized.", auth.RequestID())
+		return
+	}
+	body, ok := decodeLLMRequest(w, r, auth)
+	if !ok {
+		writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+		return
+	}
+	request := llm.Request{MaxOutputTokens: body.MaxOutputTokens, Messages: make([]llm.Message, len(body.Messages))}
+	for i, m := range body.Messages {
+		request.Messages[i] = llm.Message{Role: m.Role, Content: m.Content}
+	}
+	out, err := d.LLM.Complete(r.Context(), auth, request)
+	if err != nil {
+		d.err(w, auth, err)
+		return
+	}
+	writeJSON(w, 200, llmWireResponse{Message: llmWireMessage{out.Message.Role, out.Message.Content}, Usage: llmWireUsage{out.Usage.InputTokens, out.Usage.OutputTokens}, FinishReason: out.FinishReason, RequestID: out.RequestID})
+}
+
+type llmWireMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+type llmWireUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+type llmWireResponse struct {
+	Message      llmWireMessage `json:"message"`
+	Usage        llmWireUsage   `json:"usage"`
+	FinishReason string         `json:"finish_reason"`
+	RequestID    string         `json:"request_id"`
+}
+type llmWireRequest struct {
+	Messages        []llmWireMessage
+	MaxOutputTokens int
+}
+
+func decodeLLMRequest(w http.ResponseWriter, r *http.Request, a appauth.AuthorizationContext) (llmWireRequest, bool) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		return llmWireRequest{}, false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 66<<10)
+	raw, e := io.ReadAll(r.Body)
+	// encoding/json replaces invalid UTF-8 while decoding strings. Reject it
+	// before any JSON work so malformed raw input cannot reach a repository.
+	if e != nil || !utf8.Valid(raw) {
+		return llmWireRequest{}, false
+	}
+	outer, ok := uniqueJSONObject(raw)
+	if !ok || outer["messages"] == nil || len(outer) > 2 {
+		return llmWireRequest{}, false
+	}
+	for k := range outer {
+		if k != "messages" && k != "max_output_tokens" {
+			return llmWireRequest{}, false
+		}
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(outer["messages"], &items) != nil {
+		return llmWireRequest{}, false
+	}
+	out := llmWireRequest{Messages: make([]llmWireMessage, len(items))}
+	for i, item := range items {
+		m, ok := uniqueJSONObject(item)
+		if !ok || len(m) != 2 || m["role"] == nil || m["content"] == nil || json.Unmarshal(m["role"], &out.Messages[i].Role) != nil || json.Unmarshal(m["content"], &out.Messages[i].Content) != nil {
+			return llmWireRequest{}, false
+		}
+		for k := range m {
+			if k != "role" && k != "content" {
+				return llmWireRequest{}, false
+			}
+		}
+	}
+	if outer["max_output_tokens"] != nil && json.Unmarshal(outer["max_output_tokens"], &out.MaxOutputTokens) != nil {
+		return llmWireRequest{}, false
+	}
+	return out, true
+}
+func uniqueJSONObject(raw []byte) (map[string]json.RawMessage, bool) {
+	d := json.NewDecoder(strings.NewReader(string(raw)))
+	token, e := d.Token()
+	if e != nil || token != json.Delim('{') {
+		return nil, false
+	}
+	out := map[string]json.RawMessage{}
+	for d.More() {
+		key, e := d.Token()
+		if e != nil {
+			return nil, false
+		}
+		k, ok := key.(string)
+		if !ok || out[k] != nil {
+			return nil, false
+		}
+		var v json.RawMessage
+		if d.Decode(&v) != nil {
+			return nil, false
+		}
+		out[k] = v
+	}
+	token, e = d.Token()
+	if e != nil || token != json.Delim('}') {
+		return nil, false
+	}
+	var trailing any
+	return out, d.Decode(&trailing) == io.EOF
+}
+
+func (d Dispatcher) collection(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) {
+	// Collections intentionally share the existing V1 KV grant. This avoids a
+	// new manifest/authorization flag while retaining a hard pre-repository
+	// denial for disabled app storage.
+	if !auth.KVEnabled() {
+		CapabilityUnavailable(w, auth.RequestID())
+		return
+	}
+	if d.Collections == nil {
+		d.err(w, auth, errors.New("unavailable"))
+		return
+	}
+	raw := strings.TrimPrefix(r.URL.EscapedPath(), apiPrefix+"/db/")
+	if raw == r.URL.EscapedPath() || raw == "" {
+		writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+		return
+	}
+	parts := strings.Split(raw, "/")
+	if len(parts) > 2 || parts[0] == "" {
+		writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+		return
+	}
+	collection, err := url.PathUnescape(parts[0])
+	if err != nil || !collections.ValidCollection(collection) {
+		writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+		return
+	}
+	if len(parts) == 1 {
+		d.collectionRoot(auth, w, r, collection)
+		return
+	}
+	id, err := url.PathUnescape(parts[1])
+	if err != nil || !collections.ValidDocumentID(id) {
+		writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+		return
+	}
+	d.collectionDocument(auth, w, r, collection, id)
+}
+
+func (d Dispatcher) collectionRoot(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request, collection string) {
+	switch r.Method {
+	case http.MethodGet:
+		q := r.URL.Query()
+		for key, values := range q {
+			if (key != "cursor" && key != "limit" && key != "snapshot") || len(values) != 1 {
+				writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+				return
+			}
+		}
+		if snapshot := q.Get("snapshot"); snapshot != "" {
+			if snapshot != "1" || q.Get("cursor") != "" || q.Get("limit") != "" {
+				writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+				return
+			}
+			out, err := d.Collections.Snapshot(r.Context(), auth, collection)
+			if err != nil {
+				d.err(w, auth, err)
+				return
+			}
+			if out.Documents == nil {
+				out.Documents = []collections.Document{}
+			}
+			writeJSON(w, 200, map[string]any{"documents": out.Documents, "revision": out.Revision})
+			return
+		}
+		if cursor := q.Get("cursor"); cursor != "" && !collections.ValidDocumentID(cursor) {
+			writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+			return
+		}
+		limit := 100
+		if q.Get("limit") != "" {
+			n, err := strconv.Atoi(q.Get("limit"))
+			if err != nil {
+				writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+				return
+			}
+			limit = n
+		}
+		out, err := d.Collections.List(r.Context(), auth, collection, q.Get("cursor"), limit)
+		if err != nil {
+			d.err(w, auth, err)
+			return
+		}
+		if out.Documents == nil {
+			out.Documents = []collections.Document{}
+		}
+		writeJSON(w, 200, map[string]any{"documents": out.Documents, "revision": out.Revision, "next_cursor": out.NextCursor})
+	case http.MethodPost:
+		if !d.sameOrigin(r) {
+			writeError(w, 403, "not_authorized", "This request is not authorized.", auth.RequestID())
+			return
+		}
+		var body struct {
+			Data json.RawMessage `json:"data"`
+		}
+		if !decode(w, r, auth, &body) {
+			return
+		}
+		doc, _, err := d.Collections.Create(r.Context(), auth, collection, body.Data)
+		if err != nil {
+			d.err(w, auth, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, doc)
+	default:
+		w.Header().Set("Allow", "GET, POST")
+		writeError(w, 405, "validation_failed", "The request is invalid.", auth.RequestID())
+	}
+}
+
+func (d Dispatcher) collectionDocument(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request, collection, id string) {
+	switch r.Method {
+	case http.MethodGet:
+		if r.URL.RawQuery != "" {
+			writeError(w, 400, "validation_failed", "The request is invalid.", auth.RequestID())
+			return
+		}
+		doc, err := d.Collections.Get(r.Context(), auth, collection, id)
+		if err != nil {
+			d.err(w, auth, err)
+			return
+		}
+		if doc == nil {
+			writeError(w, 404, "not_found", "This resource is not available.", auth.RequestID())
+			return
+		}
+		writeJSON(w, 200, doc)
+	case http.MethodPut:
+		if !d.sameOrigin(r) {
+			writeError(w, 403, "not_authorized", "This request is not authorized.", auth.RequestID())
+			return
+		}
+		var body struct {
+			Data            json.RawMessage `json:"data"`
+			ExpectedVersion *uint64         `json:"expected_version"`
+		}
+		if !decode(w, r, auth, &body) {
+			return
+		}
+		doc, _, err := d.Collections.Update(r.Context(), auth, collection, id, body.Data, body.ExpectedVersion)
+		if err != nil {
+			d.err(w, auth, err)
+			return
+		}
+		writeJSON(w, 200, doc)
+	case http.MethodDelete:
+		if !d.sameOrigin(r) {
+			writeError(w, 403, "not_authorized", "This request is not authorized.", auth.RequestID())
+			return
+		}
+		var body struct {
+			ExpectedVersion *uint64 `json:"expected_version"`
+		}
+		if !decode(w, r, auth, &body) {
+			return
+		}
+		deleted, _, err := d.Collections.Delete(r.Context(), auth, collection, id, body.ExpectedVersion)
+		if err != nil {
+			d.err(w, auth, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"deleted": deleted})
+	default:
+		w.Header().Set("Allow", "GET, PUT, DELETE")
+		writeError(w, 405, "validation_failed", "The request is invalid.", auth.RequestID())
+	}
 }
 
 func (d Dispatcher) blobListOrUpload(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) {
@@ -427,6 +743,12 @@ func (d Dispatcher) err(w http.ResponseWriter, a appauth.AuthorizationContext, e
 		writeError(w, 400, "validation_failed", "The request is invalid.", a.RequestID())
 	case errors.Is(err, kv.ErrCapabilityUnavailable):
 		writeError(w, http.StatusForbidden, "capability_unavailable", "This capability is unavailable.", a.RequestID())
+	case errors.Is(err, collections.ErrVersionConflict):
+		writeError(w, 409, "version_conflict", "The document changed. Read it and try again.", a.RequestID())
+	case errors.Is(err, collections.ErrQuotaExceeded), errors.Is(err, collections.ErrSnapshotTooLarge):
+		writeError(w, 429, "quota_exceeded", "The app storage limit was reached.", a.RequestID())
+	case errors.Is(err, collections.ErrInvalidCollection), errors.Is(err, collections.ErrInvalidDocument), errors.Is(err, collections.ErrInvalidDocumentID), errors.Is(err, collections.ErrInvalidListLimit):
+		writeError(w, 400, "validation_failed", "The request is invalid.", a.RequestID())
 	case errors.Is(err, blob.ErrCapabilityUnavailable):
 		writeError(w, http.StatusForbidden, "capability_unavailable", "This capability is unavailable.", a.RequestID())
 	case errors.Is(err, blob.ErrQuotaExceeded):
@@ -435,6 +757,18 @@ func (d Dispatcher) err(w http.ResponseWriter, a appauth.AuthorizationContext, e
 		writeError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again shortly.", a.RequestID())
 	case errors.Is(err, blob.ErrInvalidID), errors.Is(err, blob.ErrInvalidList), errors.Is(err, blob.ErrInvalidMetadata):
 		writeError(w, 400, "validation_failed", "The request is invalid.", a.RequestID())
+	case errors.Is(err, llm.ErrUnauthorized):
+		writeError(w, http.StatusUnauthorized, "not_authenticated", "This request is not authenticated.", a.RequestID())
+	case errors.Is(err, llm.ErrCapabilityUnavailable):
+		CapabilityUnavailable(w, a.RequestID())
+	case errors.Is(err, llm.ErrInvalidRequest):
+		writeError(w, 400, "invalid_request", "The request is invalid.", a.RequestID())
+	case errors.Is(err, llm.ErrRateLimited):
+		writeError(w, 429, "rate_limited", "Too many requests. Try again shortly.", a.RequestID())
+	case errors.Is(err, llm.ErrQuotaExhausted):
+		writeError(w, 429, "quota_exhausted", "The app usage limit was reached.", a.RequestID())
+	case errors.Is(err, llm.ErrCancelled):
+		writeError(w, 499, "cancelled", "The request was cancelled.", a.RequestID())
 	default:
 		writeError(w, 503, "temporarily_unavailable", "TinyHost is temporarily unavailable.", a.RequestID())
 	}

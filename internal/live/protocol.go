@@ -11,12 +11,13 @@ var ErrInvalidFrame = errors.New("invalid live frame")
 // bytes then validates before calling Connection; no RFC6455 implementation is
 // included in the domain package.
 type ClientFrame struct {
-	V       int             `json:"v"`
-	Type    string          `json:"type"`
-	Channel string          `json:"channel,omitempty"`
-	Event   string          `json:"event,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	Prefix  string          `json:"prefix,omitempty"`
+	V          int             `json:"v"`
+	Type       string          `json:"type"`
+	Channel    string          `json:"channel,omitempty"`
+	Event      string          `json:"event,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	Prefix     string          `json:"prefix,omitempty"`
+	Collection string          `json:"collection,omitempty"`
 }
 
 func ParseClientFrame(raw []byte, payloadLimit int) (ClientFrame, error) {
@@ -29,8 +30,12 @@ func ParseClientFrame(raw []byte, payloadLimit int) (ClientFrame, error) {
 		if !validChannel(f.Channel) {
 			return ClientFrame{}, ErrInvalidFrame
 		}
-	case "subscribe_kv":
+	case "subscribe_kv", "unsubscribe_kv":
 		if len(f.Prefix) > 256 {
+			return ClientFrame{}, ErrInvalidFrame
+		}
+	case "subscribe_collection", "unsubscribe_collection":
+		if !validCollection(f.Collection) {
 			return ClientFrame{}, ErrInvalidFrame
 		}
 	case "publish":

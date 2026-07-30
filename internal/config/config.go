@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -15,19 +16,22 @@ import (
 
 // Config contains only non-secret M1 gateway settings.
 type Config struct {
-	PlatformHost                           string
-	AppSuffix                              string
-	SessionCookie                          string
-	ListenHTTP, ListenHTTPS, DataDirectory string
-	ResendAPIKeyRef, HMACKeyRef            string
-	EmailFrom, ACMEEmail, ACMECachedir     string
-	OTPExpiry, SessionExpiry               time.Duration
-	OTPMaxAttempts                         int
-	Limits                                 ResourceLimits
-	Realtime                               RealtimeLimits
-	UpdateReleaseBase                      string
+	PlatformHost                               string
+	AppSuffix                                  string
+	SessionCookie                              string
+	ListenHTTP, ListenHTTPS, DataDirectory     string
+	ResendAPIKeyRef, HMACKeyRef, LLMRootKeyRef string
+	EmailFrom, ACMEEmail, ACMECachedir         string
+	OTPExpiry, SessionExpiry                   time.Duration
+	OTPMaxAttempts                             int
+	Limits                                     ResourceLimits
+	Realtime                                   RealtimeLimits
+	UpdateReleaseBase                          string
 }
-type Secrets struct{ ResendAPIKey, HMACKey string }
+type Secrets struct {
+	ResendAPIKey, HMACKey string
+	LLMRootKey            []byte
+}
 
 // ResourceLimits are the intentionally small V1 growth controls. Zero-valued
 // limits are normalized to Defaults so upgrading an existing installation does
@@ -189,17 +193,29 @@ func (c Config) RenderYAML() ([]byte, error) {
 	}
 	l := c.EffectiveLimits()
 	r := c.EffectiveRealtimeLimits()
-	return []byte(fmt.Sprintf("platform_host: %s\napp_suffix: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\nsecret_refs:\n  hmac_key: %s\nemail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.PlatformHost, c.AppSuffix, c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, c.HMACKeyRef, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
+	secretRefs := "secret_refs:\n  hmac_key: " + c.HMACKeyRef + "\n"
+	if c.LLMRootKeyRef != "" {
+		secretRefs += "  llm_root_key: " + c.LLMRootKeyRef + "\n"
+	}
+	return []byte(fmt.Sprintf("platform_host: %s\napp_suffix: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\n%semail:\n  from: %s\n  resend_api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.PlatformHost, c.AppSuffix, c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, secretRefs, c.EmailFrom, c.ResendAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
 }
 
 func (c Config) Redacted() map[string]string {
-	return map[string]string{"platform_host": c.PlatformHost, "app_suffix": c.AppSuffix, "resend_api_key": "[redacted]", "hmac_key": "[redacted]"}
+	return map[string]string{"platform_host": c.PlatformHost, "app_suffix": c.AppSuffix, "resend_api_key": "[redacted]", "hmac_key": "[redacted]", "llm_root_key": "[redacted]"}
 }
 func (c Config) ResolveSecrets(get func(string) string) (Secrets, error) {
 	if c.ResendAPIKeyRef == "" || c.HMACKeyRef == "" {
 		return Secrets{}, fmt.Errorf("missing secret reference")
 	}
 	s := Secrets{}
+	if c.LLMRootKeyRef != "" {
+		raw := get(strings.TrimPrefix(c.LLMRootKeyRef, "env:"))
+		decoded, err := hex.DecodeString(raw)
+		if err != nil || len(decoded) != 32 {
+			return Secrets{}, fmt.Errorf("invalid llm root secret")
+		}
+		s.LLMRootKey = decoded
+	}
 	for _, x := range []struct {
 		ref string
 		dst *string
@@ -262,7 +278,7 @@ func LoadYAML(path string) (Config, error) {
 	if err := d.Decode(&struct{}{}); err != io.EOF {
 		return Config{}, fmt.Errorf("invalid config: multiple documents")
 	}
-	c := Config{PlatformHost: raw.PlatformHost, AppSuffix: raw.AppSuffix, SessionCookie: raw.SessionCookie, ListenHTTP: raw.ListenHTTP, ListenHTTPS: raw.ListenHTTPS, DataDirectory: raw.DataDirectory, ResendAPIKeyRef: raw.Email.ResendAPIKey, HMACKeyRef: raw.SecretRefs["hmac_key"], EmailFrom: raw.Email.From, ACMEEmail: raw.ACME.Email, ACMECachedir: raw.ACME.CacheDirectory, UpdateReleaseBase: raw.Updates.ReleaseBase, OTPExpiry: raw.OTP.Expiry, OTPMaxAttempts: raw.OTP.MaxAttempts, SessionExpiry: raw.Session.Expiry, Realtime: raw.Realtime, Limits: raw.Limits}
+	c := Config{PlatformHost: raw.PlatformHost, AppSuffix: raw.AppSuffix, SessionCookie: raw.SessionCookie, ListenHTTP: raw.ListenHTTP, ListenHTTPS: raw.ListenHTTPS, DataDirectory: raw.DataDirectory, ResendAPIKeyRef: raw.Email.ResendAPIKey, HMACKeyRef: raw.SecretRefs["hmac_key"], LLMRootKeyRef: raw.SecretRefs["llm_root_key"], EmailFrom: raw.Email.From, ACMEEmail: raw.ACME.Email, ACMECachedir: raw.ACME.CacheDirectory, UpdateReleaseBase: raw.Updates.ReleaseBase, OTPExpiry: raw.OTP.Expiry, OTPMaxAttempts: raw.OTP.MaxAttempts, SessionExpiry: raw.Session.Expiry, Realtime: raw.Realtime, Limits: raw.Limits}
 	c.PlatformHost = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.PlatformHost)), ".")
 	c.AppSuffix = strings.TrimPrefix(strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.AppSuffix)), "."), ".")
 	if err := c.Validate(); err != nil {

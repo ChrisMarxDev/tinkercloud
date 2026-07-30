@@ -11,6 +11,7 @@ import (
 
 	"github.com/tinyhost/tiny/internal/appauth"
 	"github.com/tinyhost/tiny/internal/capabilities"
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/kv"
 )
 
@@ -35,14 +36,17 @@ type Transport interface {
 	Close(code int, reason string)
 }
 type Envelope struct {
-	V       int             `json:"v"`
-	Type    string          `json:"type"`
-	Channel string          `json:"channel,omitempty"`
-	Event   string          `json:"event,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	Key     string          `json:"key,omitempty"`
-	Version uint64          `json:"version,omitempty"`
-	Deleted bool            `json:"deleted,omitempty"`
+	V          int             `json:"v"`
+	Type       string          `json:"type"`
+	Channel    string          `json:"channel,omitempty"`
+	Event      string          `json:"event,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	Key        string          `json:"key,omitempty"`
+	ID         string          `json:"id,omitempty"`
+	Collection string          `json:"collection,omitempty"`
+	Version    uint64          `json:"version,omitempty"`
+	Revision   uint64          `json:"revision,omitempty"`
+	Deleted    bool            `json:"deleted,omitempty"`
 }
 type connection struct {
 	auth                   appauth.AuthorizationContext
@@ -50,6 +54,7 @@ type connection struct {
 	transport              Transport
 	subscriptions          map[string]struct{}
 	kvPrefixes             map[string]struct{}
+	collections            map[string]struct{}
 }
 type Hub struct {
 	mu          sync.Mutex
@@ -65,6 +70,22 @@ func New(l Limits) *Hub {
 }
 func validChannel(v string) bool {
 	return v != "" && len([]byte(v)) <= 128 && !strings.HasPrefix(v, "_tiny") && !strings.ContainsRune(v, '\x00')
+}
+func validCollection(v string) bool {
+	if len(v) < 1 || len(v) > 64 || !(v[0] >= 'a' && v[0] <= 'z' || v[0] >= '0' && v[0] <= '9') {
+		return false
+	}
+	last := v[len(v)-1]
+	if !(last >= 'a' && last <= 'z' || last >= '0' && last <= '9') {
+		return false
+	}
+	for i := 1; i < len(v)-1; i++ {
+		c := v[i]
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 func (h *Hub) Attach(auth appauth.AuthorizationContext, t Transport) (*Connection, error) {
 	app, id, session, err := capabilities.Scope(auth)
@@ -88,7 +109,7 @@ func (h *Hub) Attach(auth appauth.AuthorizationContext, t Transport) (*Connectio
 	if appCount >= h.limits.ConnectionsPerApp || viewerCount >= h.limits.ConnectionsPerViewer {
 		return nil, ErrLimit
 	}
-	c := &connection{auth: auth, app: app, identity: id, session: session, transport: t, subscriptions: map[string]struct{}{}, kvPrefixes: map[string]struct{}{}}
+	c := &connection{auth: auth, app: app, identity: id, session: session, transport: t, subscriptions: map[string]struct{}{}, kvPrefixes: map[string]struct{}{}, collections: map[string]struct{}{}}
 	h.connections[c] = struct{}{}
 	return &Connection{hub: h, inner: c}, nil
 }
@@ -107,7 +128,7 @@ func (c *Connection) Subscribe(channel string) error {
 	if _, ok := c.hub.connections[c.inner]; !ok {
 		return ErrClosed
 	}
-	if len(c.inner.subscriptions)+len(c.inner.kvPrefixes) >= c.hub.limits.SubscriptionsPerConnection {
+	if len(c.inner.subscriptions)+len(c.inner.kvPrefixes)+len(c.inner.collections) >= c.hub.limits.SubscriptionsPerConnection {
 		return ErrLimit
 	}
 	c.inner.subscriptions[channel] = struct{}{}
@@ -131,10 +152,52 @@ func (c *Connection) SubscribeKV(prefix string) error {
 	if _, ok := c.hub.connections[c.inner]; !ok {
 		return ErrClosed
 	}
-	if len(c.inner.subscriptions)+len(c.inner.kvPrefixes) >= c.hub.limits.SubscriptionsPerConnection {
+	if len(c.inner.subscriptions)+len(c.inner.kvPrefixes)+len(c.inner.collections) >= c.hub.limits.SubscriptionsPerConnection {
 		return ErrLimit
 	}
 	c.inner.kvPrefixes[prefix] = struct{}{}
+	return nil
+}
+func (c *Connection) UnsubscribeKV(prefix string) error {
+	if len([]byte(prefix)) > 256 || strings.ContainsRune(prefix, '\x00') {
+		return ErrInvalidChannel
+	}
+	c.hub.mu.Lock()
+	defer c.hub.mu.Unlock()
+	if _, ok := c.hub.connections[c.inner]; !ok {
+		return ErrClosed
+	}
+	delete(c.inner.kvPrefixes, prefix)
+	return nil
+}
+func (c *Connection) SubscribeCollection(collection string) error {
+	if !validCollection(collection) {
+		return ErrInvalidChannel
+	}
+	c.hub.mu.Lock()
+	defer c.hub.mu.Unlock()
+	if _, ok := c.hub.connections[c.inner]; !ok {
+		return ErrClosed
+	}
+	if _, exists := c.inner.collections[collection]; exists {
+		return nil
+	}
+	if len(c.inner.subscriptions)+len(c.inner.kvPrefixes)+len(c.inner.collections) >= c.hub.limits.SubscriptionsPerConnection {
+		return ErrLimit
+	}
+	c.inner.collections[collection] = struct{}{}
+	return nil
+}
+func (c *Connection) UnsubscribeCollection(collection string) error {
+	if !validCollection(collection) {
+		return ErrInvalidChannel
+	}
+	c.hub.mu.Lock()
+	defer c.hub.mu.Unlock()
+	if _, ok := c.hub.connections[c.inner]; !ok {
+		return ErrClosed
+	}
+	delete(c.inner.collections, collection)
 	return nil
 }
 func (c *Connection) Publish(ctx context.Context, channel, event string, payload json.RawMessage) error {
@@ -188,6 +251,32 @@ func (h *Hub) PublishKVChange(ctx context.Context, auth appauth.AuthorizationCon
 			if strings.HasPrefix(m.Key, prefix) {
 				targets = append(targets, c)
 				break
+			}
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range targets {
+		if c.transport.Send(ctx, e) != nil {
+			h.close(c, 1013, "slow consumer")
+		}
+	}
+}
+
+// PublishCollectionChange satisfies collections.ChangeSink. It is called only
+// after the app-local SQLite transaction commits, so it is a freshness hint
+// rather than an uncommitted or durable event.
+func (h *Hub) PublishCollectionChange(ctx context.Context, auth appauth.AuthorizationContext, m collections.Mutation) {
+	app, _, _, err := capabilities.Scope(auth)
+	if err != nil {
+		return
+	}
+	e := Envelope{V: 1, Type: "collection.changed", Collection: m.Collection, ID: m.ID, Version: m.Version, Revision: m.Revision, Deleted: m.Deleted}
+	h.mu.Lock()
+	targets := make([]*connection, 0)
+	for c := range h.connections {
+		if c.app == app {
+			if _, ok := c.collections[m.Collection]; ok {
+				targets = append(targets, c)
 			}
 		}
 	}

@@ -24,6 +24,11 @@ const MaxBody = 1 << 20
 var ErrPolicyRevision = errors.New("policy revision conflict")
 var ErrDeployerRevision = errors.New("deployer allowlist revision conflict")
 
+// ErrLLMRevision deliberately carries no profile, grant, provider, or
+// persistence detail to a browser. It only tells the control UI to reload its
+// server-derived safe read model before an operator retries a mutation.
+var ErrLLMRevision = errors.New("llm capability revision conflict")
+
 type Actor struct {
 	ID, Email, Role string
 	// CredentialID is server-derived from the bearer row and is used only by
@@ -130,12 +135,49 @@ type DashboardView struct {
 	ActiveDeployerRevision string
 	Audit                  []DashboardAudit
 	Health                 []DashboardHealth
+	LLMConnections         []LLMConnection
+	LLMProfiles            []LLMProfile
+	LLMGrants              []LLMGrant
+}
+type LLMConnection struct{ ID, DisplayName, Provider, Status string }
+type LLMProfile struct {
+	ID, ConnectionID, Model, Status string
+	Revision                        uint64
+	MaxMessages, MaxMessageBytes    int
+	MaxInputBytes, MaxOutputTokens  int
+	TimeoutMS                       int64
+	ViewerRequests, AppRequests     int
+	RateWindowMS                    int64
+	ConcurrencyLimit                int
+	MonthlyTokenLimit               int
+}
+type LLMGrant struct {
+	AppSlug, ProfileID, Status           string
+	Revision                             uint64
+	UsedTokens, ReservedTokens, InFlight int
 }
 type DashboardApp struct {
 	Slug, Status, Description, StableURL string
 	Access                               DashboardAccess
 	Releases                             []DashboardRelease
 	Tokens                               []DashboardToken
+	// LLMGrant is a credential-free operator-only read model. It is attached
+	// to the app rather than selected from a browser-provided app identifier.
+	LLMGrant *LLMGrant
+}
+
+// LLMProfileInput contains only operator-selected safe profile limits. IDs for
+// profiles are generated server-side; an operator may choose only an existing
+// server-rendered connection ID.
+type LLMProfileInput struct {
+	ConnectionID, Model                         string
+	MaxMessages, MaxMessageBytes, MaxInputBytes int
+	MaxOutputTokens                             int
+	TimeoutMS                                   int64
+	ViewerRequests, AppRequests                 int
+	RateWindowMS                                int64
+	ConcurrencyLimit, MonthlyTokenLimit         int
+	ExpectedRevision                            uint64
 }
 type DashboardAccess struct {
 	Mode     string

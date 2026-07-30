@@ -92,6 +92,34 @@ func (a *uiActions) DeleteApp(_ context.Context, _ Actor, slug, _ string) error 
 	a.calls = append(a.calls, "delete:"+slug)
 	return a.err
 }
+func (a *uiActions) CreateLLMConnection(_ context.Context, _ Actor, _, _, _ string) error {
+	a.calls = append(a.calls, "llm-create")
+	return a.err
+}
+func (a *uiActions) RotateLLMConnection(_ context.Context, _ Actor, id, _ string) error {
+	a.calls = append(a.calls, "llm-rotate:"+id)
+	return a.err
+}
+func (a *uiActions) DisableLLMConnection(_ context.Context, _ Actor, id string) error {
+	a.calls = append(a.calls, "llm-disable:"+id)
+	return a.err
+}
+func (a *uiActions) CreateLLMProfile(_ context.Context, _ Actor, _ LLMProfileInput) error {
+	a.calls = append(a.calls, "llm-profile-create")
+	return a.err
+}
+func (a *uiActions) UpdateLLMProfile(_ context.Context, _ Actor, id string, _ LLMProfileInput) error {
+	a.calls = append(a.calls, "llm-profile-update:"+id)
+	return a.err
+}
+func (a *uiActions) ApproveLLMGrant(_ context.Context, _ Actor, slug, profile string, revision uint64) error {
+	a.calls = append(a.calls, "llm-grant-approve:"+slug+":"+profile+":"+strconv.FormatUint(revision, 10))
+	return a.err
+}
+func (a *uiActions) SetLLMGrantStatus(_ context.Context, _ Actor, slug, status string, revision uint64) error {
+	a.calls = append(a.calls, "llm-grant-"+status+":"+slug+":"+strconv.FormatUint(revision, 10))
+	return a.err
+}
 
 func (v *uiViews) Dashboard(_ context.Context, a Actor) (DashboardView, error) {
 	v.got = a
@@ -581,5 +609,75 @@ func TestPlatformUIAccessRejectsMissingOrMalformedExpectedRevision(t *testing.T)
 		if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
 			t.Fatalf("revision %q = %d %#v", revision, w.Code, actions.calls)
 		}
+	}
+}
+
+func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T) {
+	connectionID := "0123456789abcdef0123456789abcdef"
+	profileID := "fedcba9876543210fedcba9876543210"
+	actions := &uiActions{}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions, Views: &uiViews{value: DashboardView{
+		Apps:           []DashboardApp{{Slug: "alpha", LLMGrant: &LLMGrant{AppSlug: "alpha", ProfileID: profileID, Status: "approved", Revision: 7}}},
+		LLMConnections: []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
+		LLMProfiles:    []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 10}},
+	}}}
+	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "Provider credential") || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
+		t.Fatalf("llm UI missing/write-only: %d %s", page.Code, page.Body.String())
+	}
+	var csrf *http.Cookie
+	for _, c := range page.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("csrf missing")
+	}
+	// Rotation has no provider parameter. A submitted provider field is denied
+	// rather than trusted to validate a key for the wrong stored connection.
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections/"+connectionID+"/rotate", url.Values{"csrf": {csrf.Value}, "secret": {"new-secret"}, "provider": {"gemini"}}.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+		t.Fatalf("provider-selected rotation = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections/"+connectionID+"/rotate", url.Values{"csrf": {csrf.Value}, "secret": {"new-secret"}}.Encode(), csrf)
+	if w.Code != http.StatusSeeOther || strings.Join(actions.calls, ",") != "llm-rotate:"+connectionID {
+		t.Fatalf("safe rotation = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/connections/"+connectionID+"/disable", url.Values{"csrf": {csrf.Value}, "confirmation": {"disable:wrong"}}.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 1 {
+		t.Fatalf("disable confirmation = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/apps/alpha/llm/grant/revoke", url.Values{"csrf": {csrf.Value}, "expected_revision": {"7"}, "confirmation": {"revoked:grant:alpha"}}.Encode(), csrf)
+	if w.Code != http.StatusSeeOther || strings.Join(actions.calls, ",") != "llm-rotate:"+connectionID+",llm-grant-revoked:alpha:7" {
+		t.Fatalf("grant revoke = %d %#v", w.Code, actions.calls)
+	}
+}
+
+func TestPlatformUILLMProfileRejectsBrowserChosenIDsAndMalformedBounds(t *testing.T) {
+	actions := &uiActions{}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions}
+	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	var csrf *http.Cookie
+	for _, c := range page.Result().Cookies() {
+		if c.Name == controlCSRFCookie {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("csrf missing")
+	}
+	form := url.Values{"csrf": {csrf.Value}, "expected_revision": {"0"}, "connection_id": {"browser-chosen"}, "model": {"model"}, "max_messages": {"2"}, "max_message_bytes": {"10"}, "max_input_bytes": {"20"}, "max_output_tokens": {"4"}, "timeout_ms": {"1000"}, "viewer_requests": {"1"}, "app_requests": {"1"}, "rate_window_ms": {"1000"}, "concurrency_limit": {"1"}, "monthly_token_limit": {"10"}}
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", form.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
+		t.Fatalf("untrusted connection id = %d %#v", w.Code, actions.calls)
+	}
+}
+
+func TestPlatformUILLMSuccessNoticesAreSafeAndCredentialFree(t *testing.T) {
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Views: &uiViews{}}
+	w := uiRequest(t, p, http.MethodGet, "/dashboard?notice=llm_connection_rotated", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "credential verified and rotated") || strings.Contains(w.Body.String(), "secret-value") {
+		t.Fatalf("llm notice = %d %s", w.Code, w.Body.String())
 	}
 }

@@ -218,10 +218,16 @@ Before the CLI returns the protected URL, it separately reaches that exact
 server-derived `https://{slug}.{app_suffix}/` host anonymously through the
 real HTTP/TLS transport. It accepts only the composed gateway's bounded 401
 denial envelope; this client-side gate never sends the deployer token or
-cookies to the app host and rejects 404, redirect, public content, malformed
-evidence, and transport/TLS failure. The suffix is activation evidence rather
-than an inference from the control-plane host, so `tiny.example.com` and
-`*.apps.example.com` remain supported.
+cookies to the app host. Transient first-host DNS, TLS, transport, 404, and
+gateway-readiness outcomes receive a finite retry; redirects, public content,
+wrong origins, malformed denials, and unsafe headers fail immediately. The
+activation request budget exceeds the server's bounded 45-second certificate
+gate while caller cancellation still wins. If independent evidence remains
+incomplete after activation, the CLI returns non-success
+`active_but_unverified` with only the safe deployment ID, URL, state, and
+reason, rather than hiding a committed release behind `deploy_failed`. The
+suffix is activation evidence rather than an inference from the control-plane
+host, so `tiny.example.com` and `*.apps.example.com` remain supported.
 
 The human first-app path now includes the dependency-free, owner-only Tiny
 Ritual sample and a short Markdown setup guide. A regression parses its real
@@ -246,18 +252,20 @@ Exit gate:
 - restart at each transition recovers deterministically;
 - CLI refuses success when an anonymous probe retrieves content.
 
-## M4 — SDK, KV, lightweight blobs, and realtime
+## M4 — SDK, per-app data, lightweight blobs, and realtime
 
 Outcome: a static app can identify the viewer, persist scoped JSON values and
-bounded files, and react to app events immediately.
+bounded documents/files, and react to app events immediately.
 
 Components:
 
 - current-user API;
 - bounded V1 JSON KV model with versions, prefix listing, and quotas;
+- bounded JSON document collections with optimistic versions and snapshots;
 - bounded app-scoped blob upload, download, list, metadata, and delete backed
   by the private local data directory;
-- single-node in-memory realtime hub with custom channels and KV change events;
+- single-node in-memory realtime hub with custom channels plus KV and collection
+  change hints;
 - first-class TypeScript/browser SDK and capability discovery;
 - CSP/CORS/CSRF browser tests.
 
@@ -277,16 +285,60 @@ JSR artifact, and exported SDK version synchronized. The npm tarball has an
 exact file allowlist and must install and import in an offline clean consumer;
 registry publication remains blocked pending namespace ownership.
 
-Evidence implemented: the public SDK gallery contains four deployable private
-apps covering current viewer/app information, capability discovery, every V1
-KV operation, bounded cursors, optimistic concurrency, cancellation, typed
-error presentation, KV change subscriptions, and custom live channel
-connect/on/publish/status/close. Their local build copies the checked SDK ESM
-into each release; a temporary-release contract rejects unresolved package
-imports, remote executable assets, client-selected app identity, and
-credential-like browser configuration. Every live flow rereads current KV
-after events, reconnects, and visible-tab recovery rather than claiming replay
-or delivery history.
+Evidence implemented: the public SDK gallery contains six deployable private
+apps. The V1 examples cover current viewer/app information, capability
+discovery, every V1 KV operation, bounded cursors, optimistic concurrency,
+cancellation, typed error presentation, KV change subscriptions, and custom
+live channel connect/on/publish/status/close; Reactive Collections and LLM Chat
+exercise the implemented collection slice and post-V1 L1/L2 extension. Their
+local build copies the checked SDK ESM into each release; a temporary-release
+contract rejects unresolved package imports, remote executable assets,
+client-selected app identity, and credential-like browser configuration.
+Realtime examples reconcile current durable state after events, reconnects,
+and visible-tab recovery rather than claiming replay or delivery history.
+
+### Implemented M4 slice — per-app SQLite and reactive collections
+
+Outcome: KV and bounded JSON documents use normal embedded SQLite without a
+database daemon, shared app-data writer, remote database authority, or browser
+SQL surface.
+
+Decision and contract:
+
+- ADR [`0048`](../decisions/0048-per-app-sqlite-collections.md) keeps the
+  existing `modernc.org/sqlite` engine and separates `tinyhost.db` control state
+  from `apps/{immutable-app-id}/data.db` app state;
+- [`specs/capabilities/collections-contract.md`](../../specs/capabilities/collections-contract.md)
+  defines server-issued document IDs, optimistic versions, bounded lists and
+  snapshots, quotas, and post-commit freshness hints; and
+- the pre-release migration removes the legacy control-database `app_kv` table.
+  Production composition has no shared-control-database KV fallback.
+
+Evidence implemented:
+
+- the bounded in-process app database manager validates server-derived immutable
+  IDs before path construction, lazily migrates app files, limits open handles,
+  closes idle handles, and removes only the selected app database during hard
+  deletion;
+- KV and collection repositories use the selected app-local database, and
+  isolation, traversal, stale-write, quota, concurrent-limit,
+  failed-transaction, and deletion tests fail closed;
+- collection create/get/update/delete/list/snapshot routes, SDK
+  `tiny.db.collection(...)`, optimistic conflicts, and app-scoped
+  `collection.changed` hints are implemented; reconnect and tab visibility
+  recover from authoritative snapshots rather than event replay;
+- the Reactive Collections example and SDK tests cover the typed surface; and
+- `tiny dev` uses project-local normal SQLite and supports the local subset of
+  viewer/app information, KV, collections, and live freshness hints while
+  refusing non-loopback listeners. It explicitly excludes production auth,
+  deployment, blobs, LLM/provider calls, and deployment protection evidence.
+
+Remaining release evidence:
+
+- the exact updated build still needs the root-run disposable-VPS acceptance
+  pass for two-app KV/collection isolation, restart persistence, anonymous
+  denial, and app deletion. The checked-in VPS harness covers these steps, but
+  an unrun harness is not live VPS evidence.
 
 ### Implemented M4 slice — lightweight app-scoped blobs
 
@@ -304,9 +356,10 @@ Contract and decision:
   TinyHost skills move together;
 - the implementation uses a narrow internal streaming blob-store interface and
   a private standard-library local adapter; and
-- the deployment shape remains one server process, one SQLite database, one
-  private data directory, and one systemd service—no Go CDK, FUSE, rclone,
-  s3fs, Mountpoint, MinIO, remote driver, extra package, or listener.
+- the deployment shape remains one server process, one embedded SQLite engine,
+  one control database plus isolated app-local database files, one private data
+  directory, and one systemd service—no Go CDK, FUSE, rclone, s3fs, Mountpoint,
+  MinIO, remote driver, extra package, or listener.
 
 Evidence implemented:
 
@@ -573,6 +626,44 @@ first VPN-only mode; central SSO remains a separate later candidate. This work
 is not authorized to weaken the M5 public proof and is not scheduled ahead of
 the committed V1 blob slice.
 
+## Implemented post-V1 extension — operator-governed LLM chat
+
+Outcome: an operator can keep an Anthropic or Gemini key behind TinyHost,
+approve one bounded profile for an app, and let an authorized viewer use
+provider-neutral non-streaming chat without exposing a secret, provider URL,
+connection, model selector, or app identifier.
+
+Implemented L1/L2 evidence:
+
+- ADR [`0047`](../decisions/0047-operator-governed-llm-chat.md) and the
+  [`llm.chat` contract](../../specs/capabilities/llm-chat-contract.md) define the
+  post-V1 secret, grant, quota, destination, audit, and denial boundaries;
+- the control database stores authenticated encrypted connection envelopes,
+  profiles, grants, conservative token reservations, usage, and redacted audit
+  evidence while the encryption root remains in the root-owned service
+  credential boundary;
+- root-local enablement, write-only operator connection/rotation controls,
+  profile/grant controls, activation gating, safe discovery, fixed Anthropic
+  and Gemini adapters, the protected app route, SDK
+  `tiny.llm.chat.complete`, and a deployable example are implemented;
+- local unit, persistence, provider-conformance, UI, SDK, and composed
+  real-listener tests cover two-app isolation, revocation, strict input,
+  rate/quota/concurrency admission, conservative ambiguous outcomes, redirects,
+  cancellation, and secret/prompt/completion leakage; and
+- `tiny dev` deliberately reports no LLM capability and performs no provider
+  call, because emulating grants, spend, and secret handling would misrepresent
+  production authorization.
+
+This implementation does not expand the locked V1 release. L3 streaming,
+tools, embeddings, files, arbitrary provider options, generic authenticated
+HTTP, and provider-owned conversation history remain deferred. The exact signed
+build passed the root-run disposable-VPS suite on 2026-07-29, including
+root-local LLM enablement, restart/doctor checks, capability omission, anonymous
+401, and authenticated ungranted 403 behavior without contacting a provider.
+Dedicated low-value real-provider smoke tests remain pending; local
+fake-provider, real-listener, and no-provider VPS evidence must not be reported
+as real-provider evidence.
+
 ## Later post-V1 candidates
 
 Rank only after usage evidence:
@@ -584,4 +675,5 @@ Rank only after usage evidence:
 5. Temporary invitations/groups.
 6. Backend runtime (separate security concept).
 7. Operator backup and disaster recovery.
-8. Operator-governed LLM and internal-service capability broker.
+8. Internal/Jira/data-warehouse capability adapters behind separately approved
+   narrow grants.

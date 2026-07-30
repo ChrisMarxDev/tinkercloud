@@ -37,6 +37,7 @@ resend-api-key
 **/node_modules/
 sdk/typescript/dist/
 examples/sdk-apps/*/dist/
+live_examples/
 *.tgz
 npm-debug.log*
 

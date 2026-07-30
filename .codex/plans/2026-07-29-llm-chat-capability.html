@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost LLM Chat Capability — Review Plan</title>
+  <style>
+    :root{color-scheme:light;--bg:#f3f6f1;--panel:#fff;--soft:#edf3e9;--ink:#182116;--muted:#61705f;--line:#d5dfd1;--brand:#367a2a;--warn:#936600;--danger:#a3352c}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    main{width:min(1100px,calc(100% - 28px));margin:auto;padding:28px 0 56px}header,section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:14px}
+    h1{margin:0;font-size:clamp(28px,5vw,46px);line-height:1.05}h2{margin:0 0 12px;font-size:21px}h3{margin:18px 0 8px}p{margin:8px 0}.meta,.tools,.grid{display:flex;gap:10px;flex-wrap:wrap}.meta{margin-top:14px}.chip{background:var(--soft);border-radius:999px;padding:5px 10px;color:var(--muted);font-weight:650}
+    .decision{border-color:#e7ca76;background:#fff9e7}.risk{border-left:4px solid var(--danger)}.card{flex:1 1 280px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:14px}
+    table{width:100%;border-collapse:collapse;display:block;overflow:auto}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{color:var(--muted);font-size:12px;text-transform:uppercase}
+    pre{overflow:auto;background:#11180f;color:#eff7ec;border-radius:9px;padding:14px}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    ul,ol{padding-left:22px}.review{display:grid;grid-template-columns:auto 1fr;gap:8px;margin:7px 0;padding:9px;border:1px solid var(--line);border-radius:8px}.review input{margin-top:4px}
+    .section-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.tools label{color:var(--muted);font-size:13px}select,textarea,button{font:inherit}select,textarea{border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}select{padding:5px 8px}textarea{width:100%;min-height:70px;padding:9px;margin-top:12px}button{border:0;border-radius:999px;background:var(--brand);color:#fff;font-weight:750;padding:10px 16px;cursor:pointer}.export{min-height:190px}
+    a{color:var(--brand)}@media(max-width:650px){.section-head{display:block}.tools{margin-top:8px}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p>Implementation review · 2026-07-29 · TinyHost</p>
+    <h1>Operator-governed LLM chat</h1>
+    <p>Plan one provider-neutral chat capability in which an operator connects
+      Anthropic or Gemini, approves an app binding, and browser apps receive
+      bounded chat results without receiving provider credentials.</p>
+    <div class="meta"><span class="chip">Post-V1</span><span class="chip">Impact 5/5</span><span class="chip">Complexity 5/5</span><span class="chip">Principles 1, 3, 4, 10, 12, 13</span></div>
+  </header>
+
+  <section class="decision">
+    <h2>Decision needed</h2>
+    <p>The recommended sequence is secret/grant foundation, non-streaming
+      completion, then streaming. Provider order is Anthropic first, Gemini
+      second behind the same conformance suite.</p>
+    <label><input type="radio" name="provider" value="Anthropic then Gemini (recommended)" checked> Anthropic then Gemini (recommended)</label><br>
+    <label><input type="radio" name="provider" value="Both adapters in parallel"> Both adapters in the first coding slice</label><br>
+    <label><input type="radio" name="provider" value="Gemini then Anthropic"> Gemini then Anthropic</label>
+  </section>
+
+  <section data-section="Goal and Scope">
+    <div class="section-head"><h2>Goal and Scope</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <label class="review"><input type="checkbox" checked><span>Operator adds or rotates a write-only Anthropic/Gemini key and defines a fixed model/limit profile.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Deployer requests logical <code>llm.chat</code>; operator approves a per-app binding.</span></label>
+    <label class="review"><input type="checkbox" checked><span>SDK adds <code>tiny.llm.chat.complete</code>; streaming follows as an additive slice.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Exclude raw keys, generic HTTP, caller-selected providers/models, tools, files, embeddings, images, search, agents, and TinyHost-owned chat history.</span></label>
+    <textarea placeholder="Reviewer notes for goal and scope"></textarea>
+  </section>
+
+  <section data-section="Touched Files and Classes">
+    <div class="section-head"><h2>Touched Files and Classes</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <table><thead><tr><th>Area</th><th>Planned files/modules</th></tr></thead><tbody>
+      <tr><td>Contracts</td><td><code>specs/capabilities/llm-chat-contract.md</code>, manifest/HTTP/security contracts, ADR 0047</td></tr>
+      <tr><td>Domain</td><td><code>internal/llm/</code> common request types, validation, state, admission, reservations, service, errors</td></tr>
+      <tr><td>Adapters</td><td>Compiled-in Anthropic and Gemini clients with fixed destinations and shared conformance tests</td></tr>
+      <tr><td>Trust seam</td><td><code>apps.App</code>, sealed <code>AuthorizationContext</code>, protected gateway endpoint, <code>appapi.Dispatcher</code>, composition</td></tr>
+      <tr><td>Persistence</td><td>Migration 0006 and <code>internal/persistence/llm.go</code> for encrypted connections, profiles, grants, usage reservations</td></tr>
+      <tr><td>Control UI</td><td>Write-only operator connection/profile/grant actions in existing embedded native UI; no new listener</td></tr>
+      <tr><td>SDK/examples</td><td><code>sdk/typescript/src/index.ts</code>, tests, private chat example, canonical and copied role skills</td></tr>
+    </tbody></table>
+    <textarea placeholder="Reviewer notes for files and modules"></textarea>
+  </section>
+
+  <section data-section="Logic and Data Flow">
+    <div class="section-head"><h2>Logic and Data Flow</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <pre>SDK POST /_tiny/api/v1/llm/chat
+→ gateway derives app/viewer and issues sealed AuthorizationContext
+→ strict route/origin/version/body validation
+→ resolve active app grant and fixed operator profile
+→ atomically reserve worst-case token budget + concurrency
+→ decrypt key for one fixed-destination provider call
+→ normalize bounded response
+→ reconcile actual usage + append payload-free audit
+→ return common chat response or stable typed error</pre>
+    <label class="review"><input type="checkbox" checked><span>No caller input selects app, viewer, connection, provider, URL, headers, API key, or arbitrary model.</span></label>
+    <label class="review"><input type="checkbox" checked><span>No automatic provider retries in the first slice; ambiguous spend stays conservatively reserved.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Prompts and completions are never persisted or logged by TinyHost.</span></label>
+    <textarea placeholder="Reviewer notes for data flow"></textarea>
+  </section>
+
+  <section data-section="State Model">
+    <div class="section-head"><h2>State Model</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <div class="grid">
+      <div class="card"><h3>Connection</h3><p><code>validating → active ↔ disabled → revoked</code>. Rotation validates and atomically activates a new credential version.</p></div>
+      <div class="card"><h3>Grant</h3><p><code>requested → approved ↔ disabled → revoked</code>. Current server state is read on every invocation.</p></div>
+      <div class="card"><h3>Invocation</h3><p><code>admitted → reserved → calling → succeeded | failed | cancelled | ambiguous</code>.</p></div>
+      <div class="card"><h3>Chat controller</h3><p><code>checking → ready → sending → complete | typed failure | cancelled</code>. Prior messages stay visible.</p></div>
+    </div>
+    <p>Server truth owns credentials, grants, profiles, quota, and safe usage.
+      The app owns any conversation history, optionally using existing KV.</p>
+    <textarea placeholder="Reviewer notes for state ownership"></textarea>
+  </section>
+
+  <section data-section="UI States and Transitions">
+    <div class="section-head"><h2>UI States and Transitions</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <label class="review"><input type="checkbox" checked><span>Operator UI: empty connections, validating/busy, active, validation failed, rotating, disabled, revoked, stale revision, and dependency unavailable.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Key input is write-only; list/detail/error views never render the submitted value or provider body.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Chat example: capability checking, ready empty/history, sending with cancel and stable response area, completed, rate limited, quota exhausted, unavailable, cancelled.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Disable/revoke confirmations name the exact connection or app grant and describe next-request effect.</span></label>
+    <textarea placeholder="Reviewer notes for UI states"></textarea>
+  </section>
+
+  <section data-section="Backend and Database Changes">
+    <div class="section-head"><h2>Backend and Database Changes</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <p>Migration 0006 is expected to add <code>provider_connections</code>,
+      <code>llm_chat_profiles</code>, <code>app_capability_grants</code>, and
+      payload-free <code>llm_usage</code> reservation/counter state.</p>
+    <label class="review"><input type="checkbox" checked><span>Ciphertext may live in SQLite; the capability encryption root remains in the existing root-owned/systemd credential boundary.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Activation fails closed when a requested logical capability lacks an approved binding; the prior release remains active.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Rollback cannot downgrade credentials to plaintext or silently reactivate revoked state.</span></label>
+    <textarea placeholder="Reviewer notes for backend and persistence"></textarea>
+  </section>
+
+  <section data-section="Tests and Verification">
+    <div class="section-head"><h2>Tests and Verification</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <label class="review"><input type="checkbox" checked><span>Deny anonymous, wrong-app, revoked, disabled, malformed, over-limit, exhausted-budget, caller-selected-provider/model, and redirect attempts before outbound work.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Unit and provider conformance tests for strict mappings, bounds, cancellation, response validation, and redaction.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Real gateway + SQLite + two-app integration matrix with fake outbound providers and rotate/revoke/budget races.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Failure injection: SQLite busy, missing encryption root, provider TLS/timeout/malformed/oversized response, audit failure, and interruption around reservation.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Secret and payload leakage scans across logs, audit, metrics, diagnostics, bundles, SDK output, fixtures, and UI.</span></label>
+    <textarea placeholder="Reviewer notes for tests"></textarea>
+  </section>
+
+  <section class="risk" data-section="Risks and Seams to Watch">
+    <div class="section-head"><h2>Risks and Seams to Watch</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <label class="review"><input type="checkbox" checked><span>Authorized viewers can create spend: require per-viewer/app limits and atomic worst-case reservation.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Provider drift fails unavailable behind conformance-tested adapters; unknown response fields do not silently change semantics.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Prompt injection may affect output but can never affect TinyHost authorization, destinations, headers, credentials, or grants.</span></label>
+    <label class="review"><input type="checkbox" checked><span>Streaming disconnects create usage ambiguity; do not promise exact currency spend or release reservations optimistically.</span></label>
+    <textarea placeholder="Reviewer notes for risks"></textarea>
+  </section>
+
+  <section data-section="Open Decisions">
+    <div class="section-head"><h2>Open Decisions</h2><div class="tools"><label>Status <select><option>Approve</option><option>Revise</option><option>Defer</option><option>Reject</option></select></label></div></div>
+    <table><thead><tr><th>Decision</th><th>Recommended default</th></tr></thead><tbody>
+      <tr><td>Model selection</td><td>Operator-fixed profile; caller may only reduce output-token limit.</td></tr>
+      <tr><td>Budget unit</td><td>Input/output tokens, not currency.</td></tr>
+      <tr><td>Secret entry</td><td>Write-only protected operator UI; root-only replacement for recovery.</td></tr>
+      <tr><td>System instruction</td><td>Omit initially; add a revisioned profile field only with evidence.</td></tr>
+      <tr><td>Streaming</td><td>Third slice after non-streaming accounting/security evidence.</td></tr>
+    </tbody></table>
+    <textarea placeholder="Reviewer notes for decisions"></textarea>
+  </section>
+
+  <section>
+    <h2>Export review</h2>
+    <p>Generate a concise instruction to hand back to Codex.</p>
+    <button id="export">Generate and copy review</button>
+    <textarea id="result" class="export" aria-label="Exported review"></textarea>
+  </section>
+</main>
+<script>
+  document.getElementById("export").addEventListener("click", async () => {
+    const lines = ["Proceed with the LLM chat capability plan, with these review results:"];
+    const provider = document.querySelector('input[name="provider"]:checked');
+    lines.push("Provider order: " + (provider ? provider.value : "not selected"));
+    document.querySelectorAll("[data-section]").forEach(section => {
+      const title = section.dataset.section;
+      const status = section.querySelector("select")?.value || "Approve";
+      const included = [...section.querySelectorAll('.review input[type="checkbox"]:checked')]
+        .map(input => input.closest(".review").innerText.trim());
+      const excluded = [...section.querySelectorAll('.review input[type="checkbox"]:not(:checked)')]
+        .map(input => input.closest(".review").innerText.trim());
+      const notes = section.querySelector("textarea")?.value.trim();
+      lines.push("", title + ": " + status);
+      if (included.length) lines.push("Approved/included: " + included.join(" | "));
+      if (excluded.length) lines.push("Changed/rejected: " + excluded.join(" | "));
+      if (notes) lines.push("Notes: " + notes);
+    });
+    const result = document.getElementById("result");
+    result.value = lines.join("\n");
+    try { await navigator.clipboard.writeText(result.value); } catch (_) {}
+  });
+</script>
+</body>
+</html>

@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -262,7 +264,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if *platformHost == "" || *appSuffix == "" || *emailFrom == "" || *acmeEmail == "" {
 			return errors.New("tinyhost: config_values_required")
 		}
-		cfg = config.Config{PlatformHost: *platformHost, AppSuffix: *appSuffix, SessionCookie: "__Host-tiny_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: *acmeEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINYHOST_HMAC_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
+		cfg = config.Config{PlatformHost: *platformHost, AppSuffix: *appSuffix, SessionCookie: "__Host-tiny_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: *acmeEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINYHOST_HMAC_KEY", LLMRootKeyRef: "env:TINYHOST_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
 		if err := cfg.Validate(); err != nil {
 			return errors.New("tinyhost: config_invalid")
 		}
@@ -426,11 +428,19 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 		if len(hmac) < 32 {
 			return errors.New("tinyhost: hmac_invalid")
 		}
-		resendName, hmacName, err := credentialNames(cfg)
+		resendName, hmacName, llmName, err := credentialNames(cfg)
 		if err != nil {
 			return err
 		}
-		if err = writeAtomicPrivate(credentialPath, []byte(resendName+"="+resend+"\n"+hmacName+"="+hmac+"\n")); err != nil {
+		credential := resendName + "=" + resend + "\n" + hmacName + "=" + hmac + "\n"
+		if llmName != "" {
+			root := make([]byte, 32)
+			if _, err = rand.Read(root); err != nil {
+				return errors.New("tinyhost: llm_root_generation_failed")
+			}
+			credential += llmName + "=" + hex.EncodeToString(root) + "\n"
+		}
+		if err = writeAtomicPrivate(credentialPath, []byte(credential)); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -447,7 +457,7 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 	return nil
 }
 
-func credentialNames(cfg config.Config) (string, string, error) {
+func credentialNames(cfg config.Config) (string, string, string, error) {
 	name := func(ref string) (string, bool) {
 		v, ok := strings.CutPrefix(ref, "env:")
 		if !ok || v == "" {
@@ -462,13 +472,20 @@ func credentialNames(cfg config.Config) (string, string, error) {
 	}
 	resend, ok := name(cfg.ResendAPIKeyRef)
 	if !ok {
-		return "", "", errors.New("tinyhost: unsafe_secret_reference")
+		return "", "", "", errors.New("tinyhost: unsafe_secret_reference")
 	}
 	hmac, ok := name(cfg.HMACKeyRef)
 	if !ok || resend == hmac {
-		return "", "", errors.New("tinyhost: unsafe_secret_reference")
+		return "", "", "", errors.New("tinyhost: unsafe_secret_reference")
 	}
-	return resend, hmac, nil
+	if cfg.LLMRootKeyRef == "" {
+		return resend, hmac, "", nil
+	}
+	llm, ok := name(cfg.LLMRootKeyRef)
+	if !ok || llm == resend || llm == hmac {
+		return "", "", "", errors.New("tinyhost: unsafe_secret_reference")
+	}
+	return resend, hmac, llm, nil
 }
 
 func ensurePrivateDirectory(path string) error {

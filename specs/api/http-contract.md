@@ -251,12 +251,15 @@ cannot select any of them. Frames use a versioned JSON envelope:
 { "v": 1, "type": "subscribe", "channel": "reviews" }
 ```
 
-Supported V1 operations are subscribe/unsubscribe, bounded publish to a custom
-app channel, and subscribe to KV changes by prefix. Policy, session, or app
-revocation closes affected connections. Connections, subscriptions, frame
-sizes, publish rates, and outbound queues are limited. Delivery is best-effort:
-there is no persistence, history, replay, ordering guarantee, or resume cursor.
-After reconnect, clients reread current KV state.
+Supported V1 operations are subscribe/unsubscribe and bounded publish to a
+custom app channel, plus `subscribe_kv`/`unsubscribe_kv` by prefix and
+`subscribe_collection`/`unsubscribe_collection` by collection name. The typed
+unsubscribe frames remove server subscription state immediately. Policy,
+session, or app revocation closes affected connections. Connections,
+subscriptions, frame sizes, publish rates, and outbound queues are limited.
+Delivery is best-effort: there is no persistence, history, replay, ordering
+guarantee, or resume cursor. After reconnect, clients reread current KV or
+collection state.
 
 ## Platform host: authentication and control
 
@@ -282,7 +285,13 @@ PUT  /api/v1/apps/{slug}/access
 
 The CLI may combine create/upload/activate into `tiny deploy`, but the server
 states remain observable. An async deployment response returns IDs and a status
-URL; “ready” is returned only after security probes and TLS readiness.
+URL; “ready” is returned only after security probes and TLS readiness. The
+client's successful activation response is authoritative for the committed
+`active` state. Independent public-gateway evidence still gates CLI success; if
+that bounded anonymous proof remains incomplete after activation, the CLI
+returns the distinct non-success `active_but_unverified` receipt defined by the
+control and deployment contract rather than collapsing it into
+`deploy_failed`.
 
 ## Cookie split
 

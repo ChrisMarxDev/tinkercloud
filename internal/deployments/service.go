@@ -142,8 +142,12 @@ type Service struct {
 	Root         string
 	WriteGate    operations.WriteGate
 	AttemptLimit int
-	Now          func() time.Time
-	locks        sync.Map
+	// CapabilityReady is an optional activation gate for manifest-requested
+	// platform capabilities. It runs before the immutable release pointer is
+	// committed, so an unavailable operator grant preserves the old release.
+	CapabilityReady func(context.Context, Record) bool
+	Now             func() time.Time
+	locks           sync.Map
 }
 
 func (s *Service) lock(app string) func() {
@@ -308,7 +312,10 @@ func (s *Service) Activate(ctx context.Context, a Actor, id, requestID string) e
 	if e != nil {
 		return e
 	}
-	if !s.Gates.Policy(ctx, r) || !s.Gates.Certificate(ctx, r) {
+	// A release which declares a protected external capability must not become
+	// active merely because composition forgot to supply its verifier. This is
+	// intentionally stricter than optional non-LLM capability behavior.
+	if !s.Gates.Policy(ctx, r) || !s.Gates.Certificate(ctx, r) || (r.Manifest.LLMChat && (s.CapabilityReady == nil || !s.CapabilityReady(ctx, r))) {
 		return releases.ErrTransition
 	}
 	if !s.Gates.Probe(ctx, r) {

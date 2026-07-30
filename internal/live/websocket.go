@@ -108,6 +108,21 @@ func (a WebSocketAdapter) Upgrade(ctx context.Context, auth appauth.Authorizatio
 				_ = c.Close(websocket.StatusPolicyViolation, "denied")
 				return
 			}
+		case "unsubscribe_kv":
+			if conn.UnsubscribeKV(f.Prefix) != nil {
+				_ = c.Close(websocket.StatusPolicyViolation, "denied")
+				return
+			}
+		case "subscribe_collection":
+			if conn.SubscribeCollection(f.Collection) != nil {
+				_ = c.Close(websocket.StatusPolicyViolation, "denied")
+				return
+			}
+		case "unsubscribe_collection":
+			if conn.UnsubscribeCollection(f.Collection) != nil {
+				_ = c.Close(websocket.StatusPolicyViolation, "denied")
+				return
+			}
 		case "publish":
 			current := now()
 			cutoff := current.Add(-time.Second)

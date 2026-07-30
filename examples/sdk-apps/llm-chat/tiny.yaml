@@ -1,0 +1,8 @@
+version: 1
+name: llm-chat
+description: A private, operator-approved chat interface with bounded local-only conversation context.
+build:
+  output: dist
+capabilities:
+  llm:
+    chat: true

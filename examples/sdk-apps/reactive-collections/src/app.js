@@ -1,0 +1,10 @@
+// @ts-check
+import { tiny, TinyVersionConflictError } from "@tinyhost/sdk";
+import { describeTinyError } from "../../shared/errors.js";
+const tasks=tiny.db.collection("tasks"); let current=[];
+const list=/** @type {HTMLUListElement} */(document.querySelector("#tasks")),empty=/** @type {HTMLElement} */(document.querySelector("#empty")),notice=/** @type {HTMLElement} */(document.querySelector("#notice")),status=/** @type {HTMLElement} */(document.querySelector("#status"));
+function fail(e){const d=describeTinyError(e);notice.textContent=`${d.title}: ${d.message}`;notice.hidden=false}
+function render(){list.textContent="";empty.hidden=current.length>0;for(const task of current){const li=document.createElement("li");li.className="list-item";const done=document.createElement("input");done.type="checkbox";done.checked=task.data.done===true;done.onchange=async()=>{try{await tasks.update(task.id,{...task.data,done:done.checked},{expectedVersion:task.version})}catch(e){fail(e);if(e instanceof TinyVersionConflictError) await refresh()}};const title=document.createElement("strong");title.textContent=String(task.data.title);const remove=document.createElement("button");remove.className="button button-quiet button-danger";remove.textContent="Delete";remove.onclick=async()=>{try{await tasks.delete(task.id,{expectedVersion:task.version})}catch(e){fail(e)}};li.append(done,title,remove);list.append(li)}}
+async function refresh(){const page=await tasks.list();current=page.documents;render()}
+/** @type {HTMLFormElement} */(document.querySelector("#form")).addEventListener("submit",async e=>{e.preventDefault();const input=/** @type {HTMLInputElement} */(document.querySelector("#title"));try{await tasks.create({title:input.value,done:false});input.value=""}catch(e){fail(e)}});
+tasks.subscribe({onSnapshot:s=>{current=s.documents;render()},onStatus:s=>status.textContent=s==="connected"?"Live and current":s==="reconnecting"?"Reconnecting — rereading state":"Connecting",onError:fail});

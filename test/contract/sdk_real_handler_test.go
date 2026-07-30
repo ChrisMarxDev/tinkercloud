@@ -23,6 +23,7 @@ import (
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/kv"
 	"github.com/tinyhost/tiny/internal/live"
+	"github.com/tinyhost/tiny/internal/persistence"
 	"github.com/tinyhost/tiny/internal/policies"
 	"github.com/tinyhost/tiny/internal/sessions"
 )
@@ -171,7 +172,12 @@ func TestBuiltSDKAgainstComposedGateway(t *testing.T) {
 		"alpha-id": {AppID: "alpha-id", OwnerIdentityID: "viewer", Valid: true},
 		"beta-id":  {AppID: "beta-id", OwnerIdentityID: "viewer", Valid: true},
 	}}
-	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{PlatformHost: "platform.localhost", AppSuffix: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, &contractBlobs{data: map[string]map[string]contractBlob{}}, live.New(live.DefaultLimits()), compose.Login{}, nil)
+	appDatabases, err := persistence.NewAppDatabaseManager(t.TempDir(), persistence.AppDatabaseManagerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = appDatabases.Close() })
+	h := compose.AppPlaneWithPlatformAndBlobsAndCollections(config.Config{PlatformHost: "platform.localhost", AppSuffix: "localhost", SessionCookie: sessions.AppCookieName}, appsRepo, compose.MemorySessions{Store: store}, policy, &contractKV{data: map[string]map[string]kv.Entry{}}, &contractBlobs{data: map[string]map[string]contractBlob{}}, persistence.CollectionRepository{Apps: appDatabases}, live.New(live.DefaultLimits()), compose.Login{}, nil)
 	// Node resolves the reserved `*.localhost` test suffix to IPv6 loopback.
 	// Keep the listener local while allowing the browser-style fetch URL to
 	// retain a host-derived app name.

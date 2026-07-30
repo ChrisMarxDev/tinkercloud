@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinyHost — Reactive Collections</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
+    <p class="eyebrow">Implemented M4 app-platform slice</p>
+    <h1>Save a document once. Keep every open app current.</h1>
+    <p class="lede">Give deployers Shopify Quick-style collection CRUD and
+      subscriptions without introducing a remote database, a second service,
+      or durable WebSocket history.</p>
+    <p class="promise">SQLite owns current state; sockets announce committed
+      change; the SDK reconciles after every gap.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="value">
+        <p class="eyebrow">Reason and value</p>
+        <h2>Make the correct realtime pattern the easiest pattern</h2>
+        <p>TinyHost already combined durable versioned KV with ephemeral
+          app-scoped WebSocket hints, but app authors had to compose reads,
+          prefixes, reconnect recovery, and rendering themselves. The
+          implemented collection API makes polls, checklists, comments,
+          dashboards, and shared tools reliable by default while preserving the
+          existing single-process architecture.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">4 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">5 / 5</span></div>
+      </section>
+    </div>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>App-scoped named collections containing bounded JSON documents.</li>
+          <li>Create, get, update, delete, and bounded list operations.</li>
+          <li>Server-issued document IDs and explicit document versions.</li>
+          <li>Snapshot subscriptions with optional create/update/delete callbacks.</li>
+          <li>Automatic initial load, reconnect reconciliation, and visibility recovery.</li>
+          <li>Raw KV and custom live channels remain available as lower-level primitives.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No browser SQL, schemas, migrations, joins, or arbitrary queries.</li>
+          <li>No direct SQLite, Turso, or database credential in app code.</li>
+          <li>No durable event replay or ordered message-stream promise.</li>
+          <li>No second database service, remote authority, or multi-node design.</li>
+          <li>No client-selected app or viewer identity.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="experience">
+      <p class="eyebrow">Creator experience</p>
+      <h2>Quick-like intent, TinyHost recovery semantics</h2>
+      <pre>const tasks = tiny.db.collection("tasks");
+
+await tasks.create({ title: "Ship it", done: false });
+
+const stop = tasks.subscribe({
+  onSnapshot: (snapshot) =&gt; render(snapshot.documents),
+  onCreate: (document) =&gt; animateIn(document),
+  onDelete: (id) =&gt; animateOut(id),
+  onStatus: (status) =&gt; showSyncStatus(status),
+});</pre>
+      <p>The snapshot is authoritative. Per-change callbacks are conveniences
+        derived by comparing reconciled snapshots and are never presented as a
+        durable event log.</p>
+    </section>
+
+    <section id="implementation">
+      <p class="eyebrow">Implemented shape</p>
+      <h2>Commit first, notify second, reconcile always</h2>
+      <pre>authorized collection mutation
+  → one SQLite transaction updates app-scoped document + collection revision
+  → commit succeeds
+  → in-process change sink publishes bounded collection.changed hint
+  → app-scoped WebSocket hub fans out to matching subscribers
+  → SDK reloads or incrementally verifies current collection state
+  → reconnect or tab resume forces a fresh snapshot</pre>
+      <p>Each server-derived app owns a private
+        <code>apps/{immutable-app-id}/data.db</code>. Its
+        <code>app_documents</code> rows are keyed by collection and document ID,
+        with a monotonic per-collection revision updated in the same
+        transaction. The control database contains no shared app-data table and
+        request composition has no legacy KV fallback. Subscribe
+        before loading the initial snapshot; queue hints received during that
+        load; repeat reconciliation until no newer hint remains.</p>
+      <p>The current service-level change sink already runs after successful
+        repository mutation and retains the server-derived authorization
+        context. Keep that explicit seam. A generic SQLite update hook fires
+        per connection with weaker commit semantics, while a durable CDC table
+        adds cursor, retention, and cleanup work that this single-process design
+        does not need.</p>
+    </section>
+
+    <div class="grid">
+      <section class="half caution" id="deny">
+        <p class="eyebrow">Deny-path charter</p>
+        <ul>
+          <li>Anonymous, cross-app, revoked, and capability-disabled reads, writes, and subscriptions fail before document access.</li>
+          <li>Malformed names, IDs, JSON, versions, cursors, and oversized documents are rejected.</li>
+          <li>Failed or rolled-back transactions emit no hint.</li>
+          <li>Slow consumers close without blocking writers or other viewers.</li>
+          <li>Reconnect never treats an event gap as an empty collection.</li>
+        </ul>
+      </section>
+      <section class="half" id="rollout">
+        <p class="eyebrow">Implementation evidence</p>
+        <ol>
+          <li>Contract, limits, app-local schema, repository, and negative tests implemented.</li>
+          <li>Authorized CRUD and committed-change sink implemented.</li>
+          <li>Collection subscriptions and reconnect reconciliation implemented.</li>
+          <li>Typed SDK, example, skills, and loopback <code>tiny dev</code> subset implemented.</li>
+          <li>The exact signed build passed the two-app live VPS matrix, including restart persistence, cross-app denial, deletion, and global identity/session transitions.</li>
+          <li>Only then consider richer filters or query shapes.</li>
+        </ol>
+      </section>
+    </div>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Remaining scope</p>
+      <ul>
+        <li>Keep the checked-in disposable-VPS matrix as the release regression for restart persistence, isolation, denial, and deletion.</li>
+        <li>Keep richer filters and query shapes deferred until bounded list/snapshot usage proves they are necessary.</li>
+      </ul>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Build the behavior; do not replace SQLite to obtain it</h2>
+      <p><strong>Do:</strong> Add a small collection model and make
+        synchronization an SDK responsibility over committed SQLite state and
+        the existing app-scoped WebSocket hub.</p>
+      <p><strong>Don’t:</strong> Move to Turso or another database merely for a
+        change listener. Reconsider CDC or replication only if TinyHost later
+        gains multiple writers, multiple server processes, or remote replicas.</p>
+    </section>
+  </main>
+  <footer><p>Implemented locally and verified with the exact signed build on the disposable VPS.</p></footer>
+</body>
+</html>

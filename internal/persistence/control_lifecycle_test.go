@@ -69,10 +69,14 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 	defer s.Close()
 	seedActiveRelease(t, s)
 	for _, statement := range []string{
+		"INSERT INTO provider_connections(id,display_name,provider_kind,credential_envelope,credential_key_version,status,created_at,updated_at) VALUES('conn','test','anthropic',X'01',1,'active',datetime('now'),datetime('now'))",
+		"INSERT INTO llm_chat_profiles(id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,monthly_token_limit,status,revision,created_at,updated_at) VALUES('profile','conn','test',1,1,1,1,1000,1,1,1000,1,1,'active',1,datetime('now'),datetime('now'))",
+		"INSERT INTO app_capability_grants(app_id,capability,version,profile_id,status,revision,created_at,updated_at) VALUES('a','llm.chat',1,'profile','approved',1,datetime('now'),datetime('now'))",
+		"INSERT INTO llm_usage(app_id,profile_id,period_start,used_tokens,reserved_tokens,in_flight,updated_at) VALUES('a','profile','2026-07-01T00:00:00Z',0,1,1,datetime('now'))",
+		"INSERT INTO llm_reservations(id,app_id,profile_id,identity_id,period_start,reserved_tokens,status,created_at) VALUES('reservation','a','profile','i','2026-07-01T00:00:00Z',1,'calling',datetime('now'))",
 		"INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))",
 		"INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_at) VALUES('rule','a',1,'email','viewer@example.com',datetime('now'))",
 		"INSERT INTO otp_challenges(id,app_id,purpose,normalized_email,code_hash,expires_at,attempts,created_at) VALUES('otp','a','viewer','viewer@example.com',X'01',datetime('now','+1 hour'),0,datetime('now'))",
-		"INSERT INTO app_kv(app_id,key,value_json,version,size_bytes,created_at,updated_at) VALUES('a','k','{}',1,2,datetime('now'),datetime('now'))",
 		"INSERT INTO app_quota_usage(app_id,metric,used,limit_value,measured_at) VALUES('a','blob_bytes',1,2,datetime('now'))",
 		"INSERT INTO app_blobs(id,app_id,state,display_name,content_type,size_bytes,content_hash,created_by_identity_id,created_at,updated_at) VALUES('blb_0123456789abcdef0123456789abcdef','a','ready','x','text/plain',1,'hash','i',datetime('now'),datetime('now'))",
 		"INSERT INTO identity_handoffs(id,app_id,state_hash,return_path,force_login,expires_at,created_at) VALUES('handoff','a',randomblob(32),'/',0,datetime('now','+1 hour'),datetime('now'))",
@@ -99,6 +103,9 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 	}
 	for _, statement := range []string{
 		"SELECT COUNT(*) FROM applications WHERE id='a'",
+		"SELECT COUNT(*) FROM llm_reservations WHERE app_id='a'",
+		"SELECT COUNT(*) FROM llm_usage WHERE app_id='a'",
+		"SELECT COUNT(*) FROM app_capability_grants WHERE app_id='a'",
 		"SELECT COUNT(*) FROM api_tokens WHERE app_id='a'",
 		"SELECT COUNT(*) FROM sessions WHERE app_id='a'",
 		"SELECT COUNT(*) FROM deployment_files WHERE deployment_id='d'",
@@ -106,7 +113,6 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 		"SELECT COUNT(*) FROM access_rules WHERE app_id='a'",
 		"SELECT COUNT(*) FROM access_policies WHERE app_id='a'",
 		"SELECT COUNT(*) FROM otp_challenges WHERE app_id='a'",
-		"SELECT COUNT(*) FROM app_kv WHERE app_id='a'",
 		"SELECT COUNT(*) FROM app_quota_usage WHERE app_id='a'",
 		"SELECT COUNT(*) FROM app_blobs WHERE app_id='a'",
 		"SELECT COUNT(*) FROM identity_handoffs WHERE app_id='a'",

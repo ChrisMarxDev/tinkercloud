@@ -23,6 +23,10 @@ features:
   blobs: true
   realtime: true
 
+capabilities:
+  llm:
+    chat: true
+
 spa:
   fallback: index.html
 ```
@@ -56,6 +60,11 @@ spa:
 - `features.blobs` opts the app into the V1 lightweight app-shared blob
   capability. It does not name a bucket, path, provider, endpoint, or
   credential. Missing or `false` means blob routes deny before storage access.
+- `capabilities.llm.chat: true` requests only the logical provider-neutral chat
+  capability. It cannot name a connection, provider, model, endpoint, header,
+  key, or grant. Deployment and invocation remain unavailable until the
+  operator has approved a current app/profile binding; disabling either side
+  denies the next request.
 
 ## Local creation and deploy-first onboarding
 
@@ -98,14 +107,14 @@ fallback files are rejected.
 - Empty optional fields are valid; every interactive input is bounded and each
   prompt exists only for required ambiguity or explicit edit intent.
 
-`features` is the V1 spelling for built-in capabilities. A later manifest
-version may add operator-approved external capability bindings. Those bindings
-name grants or aliases, never raw credentials:
+`features` remains the spelling for local built-in primitives. `capabilities`
+requests operator-governed external operations without selecting their
+credential or implementation:
 
 ```yaml
 capabilities:
   llm:
-    grant: staff-llm
+    chat: true
 ```
 
 ## Precedence

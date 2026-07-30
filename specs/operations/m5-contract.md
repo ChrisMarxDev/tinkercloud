@@ -29,6 +29,12 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 
 - Init advances idempotent named steps only after each adapter reports durable
   success; an interrupted step remains retryable.
+- An existing host enables the LLM encryption root only through local-root
+  `tinyhost llm enable`. It creates or verifies the root-owned credential entry
+  without revealing it, writes only the environment reference to config, then
+  requires a service restart. A subsequent root-only `doctor` validates the
+  credential shape without provider use beyond its existing read-only Resend
+  dependency check.
 - Init is root-only and non-interactive. It validates an explicit host
   allowlist of Ubuntu 24.04 LTS/amd64 and Ubuntu 26.04 LTS/amd64, NTP, and
   exclusive 80/443 availability before creating the service identity or

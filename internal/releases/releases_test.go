@@ -13,13 +13,13 @@ func TestActivationRequiresAllEvidence(t *testing.T) {
 }
 
 func TestGenerateManifestIsDeterministicAndRoundTrips(t *testing.T) {
-	m := Manifest{Version: 1, Name: "demo", Description: "Useful dashboard", BuildOutput: "dist", Emails: []string{"Zebra@example.com", "alice@example.com"}, Domains: []string{"Example.com"}, KV: true, Realtime: true, SPAFallback: "index.html"}
+	m := Manifest{Version: 1, Name: "demo", Description: "Useful dashboard", BuildOutput: "dist", Emails: []string{"Zebra@example.com", "alice@example.com"}, Domains: []string{"Example.com"}, KV: true, Realtime: true, LLMChat: true, SPAFallback: "index.html"}
 	first, err := GenerateManifest(m)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parsed, err := ParseManifest(first)
-	if err != nil || parsed.Name != "demo" || len(parsed.Emails) != 2 || parsed.Emails[0] != "Zebra@example.com" {
+	if err != nil || parsed.Name != "demo" || len(parsed.Emails) != 2 || parsed.Emails[0] != "Zebra@example.com" || !parsed.LLMChat {
 		t.Fatalf("parsed=%#v err=%v", parsed, err)
 	}
 	second, err := GenerateManifest(parsed)
@@ -28,10 +28,21 @@ func TestGenerateManifestIsDeterministicAndRoundTrips(t *testing.T) {
 	}
 }
 func TestManifestRejectsPublicAndUnknown(t *testing.T) {
-	for _, in := range []string{"version: 1\nname: demo\naccess:\n  mode: public\n", "version: 1\nname: demo\nwat: true\n"} {
+	for _, in := range []string{
+		"version: 1\nname: demo\naccess:\n  mode: public\n",
+		"version: 1\nname: demo\nwat: true\n",
+		"version: 1\nname: demo\ncapabilities:\n  llm:\n    chat: true\n    model: caller-selected\n",
+		"version: 1\nname: demo\ncapabilities:\n  llm:\n    provider: attacker\n",
+	} {
 		if _, err := ParseManifest([]byte(in)); err == nil {
 			t.Fatalf("accepted %q", in)
 		}
+	}
+}
+func TestManifestAcceptsLogicalLLMChatRequestOnly(t *testing.T) {
+	m, err := ParseManifest([]byte("version: 1\nname: chat\ncapabilities:\n  llm:\n    chat: true\n"))
+	if err != nil || !m.LLMChat {
+		t.Fatalf("manifest=%+v err=%v", m, err)
 	}
 }
 func TestManifestAcceptsCanonicalAccessRules(t *testing.T) {

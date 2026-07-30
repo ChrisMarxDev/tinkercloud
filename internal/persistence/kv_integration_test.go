@@ -2,12 +2,22 @@ package persistence
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/tinyhost/tiny/internal/kv"
 	"github.com/tinyhost/tiny/internal/operations"
 	"sync"
 	"testing"
 )
+
+func newKVRepository(t *testing.T, limits kv.Limits, gate operations.WriteGate) (KVRepository, *AppDatabaseManager) {
+	t.Helper()
+	apps, err := NewAppDatabaseManager(t.TempDir(), AppDatabaseManagerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return KVRepository{Apps: apps, Limits: limits, WriteGate: gate}, apps
+}
 
 type stoppedKVGate struct{}
 
@@ -16,9 +26,8 @@ func (stoppedKVGate) AllowWrite(context.Context, operations.WriteKind) error {
 }
 
 func TestSQLiteKVIsolationAndVersioning(t *testing.T) {
-	s := seeded(t)
-	defer s.Close()
-	r := KVRepository{Store: s}
+	r, apps := newKVRepository(t, kv.Limits{}, nil)
+	defer apps.Close()
 	ctx := context.Background()
 	a, e := r.Set(ctx, "a", "p/one", []byte(`1`), nil)
 	if e != nil {
@@ -46,9 +55,8 @@ func TestSQLiteKVIsolationAndVersioning(t *testing.T) {
 	}
 }
 func TestSQLiteKVConcurrentExpectedOneWinner(t *testing.T) {
-	s := seeded(t)
-	defer s.Close()
-	r := KVRepository{Store: s}
+	r, apps := newKVRepository(t, kv.Limits{}, nil)
+	defer apps.Close()
 	e, _ := r.Set(context.Background(), "a", "x", []byte(`1`), nil)
 	var wg sync.WaitGroup
 	wins := 0
@@ -71,9 +79,8 @@ func TestSQLiteKVConcurrentExpectedOneWinner(t *testing.T) {
 }
 func ptr(x uint64) *uint64 { return &x }
 func TestSQLiteKVQuotaAndList(t *testing.T) {
-	s := seeded(t)
-	defer s.Close()
-	r := KVRepository{Store: s, Limits: kv.Limits{KeyBytes: 10, ValueBytes: 10, KeysPerApp: 2, TotalBytesPerApp: 4, ListLimit: 2}}
+	r, apps := newKVRepository(t, kv.Limits{KeyBytes: 10, ValueBytes: 10, KeysPerApp: 2, TotalBytesPerApp: 4, ListLimit: 2}, nil)
+	defer apps.Close()
 	ctx := context.Background()
 	if _, e := r.Set(ctx, "a", "a", []byte(`1`), nil); e != nil {
 		t.Fatal(e)
@@ -108,9 +115,9 @@ func TestSQLiteKVQuotaAndList(t *testing.T) {
 }
 
 func TestSQLiteKVListEmptyPageHasNonNilEntries(t *testing.T) {
-	s := seeded(t)
-	defer s.Close()
-	list, err := (KVRepository{Store: s}).List(context.Background(), "a", "missing/", "", 1)
+	r, apps := newKVRepository(t, kv.Limits{}, nil)
+	defer apps.Close()
+	list, err := r.List(context.Background(), "a", "missing/", "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,9 +127,8 @@ func TestSQLiteKVListEmptyPageHasNonNilEntries(t *testing.T) {
 }
 
 func TestKVRepositoryDiskStopDeniesMutationsButNotReads(t *testing.T) {
-	s := seeded(t)
-	defer s.Close()
-	r := KVRepository{Store: s, WriteGate: stoppedKVGate{}}
+	r, apps := newKVRepository(t, kv.Limits{}, stoppedKVGate{})
+	defer apps.Close()
 	if _, err := r.Set(context.Background(), "a", "key", []byte(`1`), nil); !errors.Is(err, operations.ErrWriteDisabled) {
 		t.Fatal(err)
 	}
@@ -131,5 +137,12 @@ func TestKVRepositoryDiskStopDeniesMutationsButNotReads(t *testing.T) {
 	}
 	if got, err := r.Get(context.Background(), "a", "key"); err != nil || got != nil {
 		t.Fatal(got, err)
+	}
+}
+
+func TestKVRepositoryWithoutAppDatabaseManagerFailsClosed(t *testing.T) {
+	r := KVRepository{}
+	if _, err := r.Get(context.Background(), "app", "key"); !errors.Is(err, sql.ErrConnDone) {
+		t.Fatalf("missing app database manager err=%v", err)
 	}
 }

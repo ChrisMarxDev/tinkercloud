@@ -22,9 +22,21 @@ deployer token, OTP, provider secret, database credential, app ID, or viewer ID
 in chat, argv, source code, `tiny.yaml`, browser storage, logs, or output.
 
 V1 is private-only. The app owner is always an implicit viewer. There is no
-public mode. KV and blobs are utility-grade data on one VPS; losing the VPS can
-lose them. Realtime is app-scoped, in-memory, best-effort notification with no
-history, replay, ordering, or delivery guarantee.
+public mode. Each app has its own private SQLite data file for KV and bounded
+JSON document collections; blobs and that data are utility-grade state on one
+VPS, so losing the VPS can lose them. Realtime is app-scoped, in-memory,
+best-effort notification with no history, replay, ordering, or delivery
+guarantee. Live collection events are freshness hints: recover current state
+with a snapshot after first connect, reconnect, visibility recovery, and every
+hint.
+
+`llm.chat`, when an operator grants it, is a narrow server-side capability.
+Capability discovery is absent until the app requests it and the operator grant
+is active. If present, treat its disclosure as a notice that prompt content is
+sent to an operator-selected external AI provider; discovery limits are safe
+current bounds, not a promise that a later request will be admitted.
+Provider credentials, connection IDs, model names, and upstream URLs never
+enter app code, browser storage, the deployer manifest, or the SDK request.
 
 Start from the requested outcome. Inspect trusted local and server state, reuse
 verified values, and choose a secure default before asking anything. Ask only
@@ -85,13 +97,29 @@ app content is exposed.
    wrong attachment/private-no-store/nosniff headers fails immediately. Never
    query the VPS filesystem, SQLite, or logs to substitute for this gateway
    evidence.
-7. Reuse never re-initializes or wipes the VPS. It requires an explicit local
+7. Treat document collections as the same kind of gateway evidence: deploy a
+   fixture with `features.kv` and `features.realtime`, discover `db`, then
+   create/get/optimistic-update/list with `snapshot=1`/delete one document at
+   `/_tiny/api/v1/db/{collection}`. The request must contain no app, database,
+   or viewer selector. Prove anonymous denial with no document bytes, guessed
+   cross-app ID denial, and the updated document after the bounded service
+   restart readiness proof. A fixture with no LLM manifest request/grant must
+   omit `llm.chat` from discovery and deny direct chat invocation without
+   provider details. Do not substitute a VPS database/filesystem inspection.
+8. Reuse never re-initializes or wipes the VPS. It requires an explicit local
    `TINYHOST_VPS_RELEASE_DIR`; verify it through the installed server's pinned
    key and use only `tinyhost update` with its active-app health gate. The
    unattended wrapper fails before offline gates unless this is an absolute,
-   existing, caller-owned non-symlink directory. A
+   existing, caller-owned non-symlink directory. After the trusted update,
+   require `tinyhost doctor`'s current-version check before root-only
+   `tinyhost llm enable`, then restart `tinyhost.service` and run doctor
+   again. A legacy updater retry is permitted only for its exact rejection of
+   `--release-manifest`, and uses only signed binary/metadata/signature after
+   full local release-manifest verification; every other update failure is
+   terminal. Never read or print the LLM root, call a provider, copy new
+   secrets, re-run init, or clean existing host state. A
    temporary test signing key cannot update a reused host.
-8. For one noninteractive run using already-exported environment, invoke only
+9. For one noninteractive run using already-exported environment, invoke only
    the checked-in wrapper. It runs the offline gates before exactly one live
    pass. Its offline VPS package gate explicitly skips `^TestVPSAcceptance$`,
    requires the shipped local Resend reader and strict SSH inputs, and
@@ -103,7 +131,7 @@ app content is exposed.
    skills/tiny-full-stack-test/scripts/run-unattended.sh
    ```
 
-9. For a terminal-guided run, execute one deliberate acceptance pass only:
+10. For a terminal-guided run, execute one deliberate acceptance pass only:
 
    ```bash
    go test ./test/vps -run TestVPSAcceptance -count=1 -v

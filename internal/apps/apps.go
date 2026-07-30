@@ -22,10 +22,10 @@ type App struct {
 	// ReleaseEvidence is database-derived metadata for the currently active
 	// immutable release. Resolving an app intentionally does not inspect this
 	// path: the static dispatcher verifies it only after authorization.
-	ReleaseEvidence                          releases.FileManifest
-	Status                                   Status
-	SPAFallback                              bool
-	KVEnabled, BlobsEnabled, RealtimeEnabled bool
+	ReleaseEvidence                                            releases.FileManifest
+	Status                                                     Status
+	SPAFallback                                                bool
+	KVEnabled, BlobsEnabled, RealtimeEnabled, LLMChatRequested bool
 }
 
 var ErrNotFound = errors.New("app not found")

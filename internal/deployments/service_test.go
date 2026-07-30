@@ -226,6 +226,28 @@ func TestActivateGateDenialPreservesPointer(t *testing.T) {
 	}
 }
 
+func TestActivateLLMRequestRequiresCurrentCapabilityBinding(t *testing.T) {
+	repo := &MemoryRepository{Records: map[string]Record{}, Current: map[string]string{}}
+	old := Record{Deployment: releases.Deployment{ID: "old", AppID: "app", State: releases.Active}, OwnerID: "owner", Manifest: releases.Manifest{Name: "app"}}
+	next := Record{Deployment: releases.Deployment{ID: "next", AppID: "app", State: releases.Verified}, OwnerID: "owner", Manifest: releases.Manifest{Name: "app", LLMChat: true}}
+	repo.Records[old.ID], repo.Records[next.ID], repo.Current["app"] = old, next, old.ID
+	service := &Service{Repo: repo, Gates: gates{true, true, true}}
+	if err := service.Activate(context.Background(), Actor{ID: "owner", Active: true}, "next", "request-nil"); err == nil {
+		t.Fatal("requested llm capability activated without a verifier")
+	}
+	service.CapabilityReady = func(context.Context, Record) bool { return false }
+	if err := service.Activate(context.Background(), Actor{ID: "owner", Active: true}, "next", "request"); err == nil {
+		t.Fatal("requested llm capability activated without an approved binding")
+	}
+	if repo.Current["app"] != "old" || repo.Records["old"].State != releases.Active || repo.Records["next"].State != releases.Verified {
+		t.Fatalf("activation mutated state: %#v", repo)
+	}
+	service.CapabilityReady = func(context.Context, Record) bool { return true }
+	if err := service.Activate(context.Background(), Actor{ID: "owner", Active: true}, "next", "request-two"); err != nil || repo.Current["app"] != "next" {
+		t.Fatalf("approved binding did not activate: %v %#v", err, repo)
+	}
+}
+
 func TestActivateCommitFailurePreservesPreviousRelease(t *testing.T) {
 	repo := &MemoryRepository{
 		Records: map[string]Record{

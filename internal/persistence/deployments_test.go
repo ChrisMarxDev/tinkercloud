@@ -203,13 +203,13 @@ func TestDeploymentCommitActivationReplacement(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
 	r := DeploymentRepository{Store: s}
-	a := deployments.Record{Deployment: releases.Deployment{ID: "a1", AppID: "a", State: releases.Verified}, OwnerID: "u", IdempotencyKey: "a1", Manifest: manifest("a")}
+	a := deployments.Record{Deployment: releases.Deployment{ID: "a1", AppID: "a", State: releases.Verified, ReleaseHash: "same-release-hash"}, OwnerID: "u", IdempotencyKey: "a1", Manifest: manifest("a")}
 	_ = r.Create(context.Background(), a)
 	if e := r.CommitActivation(context.Background(), a, nil, "k1"); e != nil {
 		t.Fatal(e)
 	}
 	old, _ := r.Active(context.Background(), "a")
-	b := deployments.Record{Deployment: releases.Deployment{ID: "b1", AppID: "a", State: releases.Verified}, OwnerID: "u", IdempotencyKey: "b1", Manifest: manifest("a")}
+	b := deployments.Record{Deployment: releases.Deployment{ID: "b1", AppID: "a", State: releases.Verified, ReleaseHash: "same-release-hash"}, OwnerID: "u", IdempotencyKey: "b1", Manifest: manifest("a")}
 	_ = r.Create(context.Background(), b)
 	if e := r.CommitActivation(context.Background(), b, old, "k2"); e != nil {
 		t.Fatal(e)

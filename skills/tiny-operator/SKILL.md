@@ -24,9 +24,21 @@ deployer token, OTP, provider secret, database credential, app ID, or viewer ID
 in chat, argv, source code, `tiny.yaml`, browser storage, logs, or output.
 
 V1 is private-only. The app owner is always an implicit viewer. There is no
-public mode. KV and blobs are utility-grade data on one VPS; losing the VPS can
-lose them. Realtime is app-scoped, in-memory, best-effort notification with no
-history, replay, ordering, or delivery guarantee.
+public mode. Each app has its own private SQLite data file for KV and bounded
+JSON document collections; blobs and that data are utility-grade state on one
+VPS, so losing the VPS can lose them. Realtime is app-scoped, in-memory,
+best-effort notification with no history, replay, ordering, or delivery
+guarantee. Live collection events are freshness hints: recover current state
+with a snapshot after first connect, reconnect, visibility recovery, and every
+hint.
+
+`llm.chat`, when an operator grants it, is a narrow server-side capability.
+Capability discovery is absent until the app requests it and the operator grant
+is active. If present, treat its disclosure as a notice that prompt content is
+sent to an operator-selected external AI provider; discovery limits are safe
+current bounds, not a promise that a later request will be admitted.
+Provider credentials, connection IDs, model names, and upstream URLs never
+enter app code, browser storage, the deployer manifest, or the SDK request.
 
 Start from the requested outcome. Inspect trusted local and server state, reuse
 verified values, and choose a secure default before asking anything. Ask only
@@ -72,6 +84,16 @@ Keep provider and TinyHost secrets in root-owned mode-0600 credential files or
 systemd credentials. Never accept them in argv, ordinary YAML, chat, browser
 state, shell history, logs, or audit. Run the gateway as the unprivileged
 `tinyhost` service identity with only the narrow bind capability for 80/443.
+
+If offering `llm.chat`, configure it as an operator-owned capability adapter:
+create a named Anthropic or Gemini connection with a write-only provider key,
+define a fixed approved model/profile and bounded quotas, then grant that
+profile explicitly to selected apps. The browser receives only TinyHost's
+same-origin response; it never receives the provider key, connection ID,
+provider endpoint, raw provider error, arbitrary model choice, or an outbound
+proxy. Removing a grant or connection must deny the next request. The local
+`tiny dev` emulator deliberately excludes LLM capability calls, so verify the
+real adapter through its normal protected gateway tests.
 
 Use `tinyhost status` for offline state and `sudo tinyhost doctor` for checks
 that may read root credentials. Initialization is complete only after the exact

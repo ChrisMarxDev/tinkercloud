@@ -33,6 +33,11 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	appDatabases, err := persistence.NewAppDatabaseManager(store.DataRoot, persistence.AppDatabaseManagerOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer appDatabases.Close()
 	seedBlobApp(t, store, "app-a", "alpha", true)
 	seedBlobApp(t, store, "app-b", "beta", true)
 	seedBlobApp(t, store, "app-c", "charlie", false)
@@ -53,7 +58,7 @@ func TestBlobGatewayTwoAppMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	repo := &persistence.BlobRepository{Store: store, Bytes: blob.LocalStore{Root: store.DataRoot}}
-	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: sessions.AppCookieName}, store, store, store, persistence.KVRepository{Store: store}, repo, live.New(live.DefaultLimits()), compose.Login{}, nil)
+	h := compose.AppPlaneWithPlatformAndBlobs(config.Config{PlatformHost: "tiny.test", AppSuffix: "apps.tiny.test", SessionCookie: sessions.AppCookieName}, store, store, store, persistence.KVRepository{Apps: appDatabases}, repo, live.New(live.DefaultLimits()), compose.Login{}, nil)
 	server := httptest.NewServer(h)
 	defer server.Close()
 	client := server.Client()

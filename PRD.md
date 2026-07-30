@@ -154,7 +154,8 @@ can be established through local test and release evidence.
 - One `tinyhost` Go server/operator binary.
 - Hetzner-first systemd installation on a clean dedicated Ubuntu 24.04 LTS or
   Ubuntu 26.04 LTS x86-64 VPS.
-- One SQLite database in WAL mode.
+- One embedded SQLite engine in WAL mode, with one control database and one
+  physically isolated data database per app.
 - One private data directory containing immutable releases and keys.
 - Embedded migrations, login/admin/deployer UI, and local assets.
 - Automatic per-host ACME certificates.
@@ -197,9 +198,11 @@ can be established through local test and release evidence.
 - Current app information and capability discovery.
 - Current viewer identity.
 - Rudimentary app-scoped JSON key-value storage.
+- Bounded app-scoped JSON document collections with optimistic versions,
+  snapshots, and best-effort live change hints.
 - Lightweight app-scoped blob storage with bounded upload, download, list,
   metadata, and delete operations backed by the private local data directory.
-- App-scoped WebSocket channels and KV change events.
+- App-scoped WebSocket channels plus KV and collection change events.
 - Typed errors, versions, limits, cancellation, and compiled examples.
 - No SDK secret, database credential, app ID, viewer token, or deployer token.
 
@@ -698,6 +701,13 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-DEPLOY-008:** Upload and activation MUST support idempotency.
 - **FR-DEPLOY-009:** The CLI MUST NOT report success until public gateway probes
   verify anonymous denial.
+- **FR-DEPLOY-010:** Client deployment requests MUST allow the server's bounded
+  first-host readiness budget to finish. After a successful activation, the CLI
+  MAY retry only transient public DNS, TLS, transport, or gateway-readiness
+  failures within a finite budget. If independent public evidence remains
+  incomplete, it MUST return a distinct non-success `active_but_unverified`
+  outcome with the safe deployment ID, protected URL, and reason category; it
+  MUST NOT conceal the active release behind a generic deployment failure.
 
 ### 8.8 Static runtime
 
@@ -721,7 +731,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-SDK-002:** The core SDK MUST be browser-first TypeScript, ESM,
   framework-neutral, tree-shakeable, and dependency-light.
 - **FR-SDK-003:** The SDK MUST expose current user, app information, capability
-  discovery, KV, blobs, and live channels.
+  discovery, KV, document collections, blobs, and live channels.
 - **FR-SDK-004:** The SDK MUST use same-origin relative endpoints.
 - **FR-SDK-005:** The SDK MUST NOT accept an app ID or any database/provider/
   platform secret.
@@ -742,7 +752,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-KV-002:** Keys MUST be UTF-8 strings with explicit length and character
   constraints. Values MUST be JSON.
 - **FR-KV-003:** App ID MUST come from `AuthorizationContext`.
-- **FR-KV-004:** Every primary/unique lookup MUST begin with app ID.
+- **FR-KV-004:** Every operation MUST select the app-local database from the
+  server-derived app ID before performing a key lookup.
 - **FR-KV-005:** Key count, prefix/list bounds, value size, total app storage,
   and request rates MUST be limited.
 - **FR-KV-006:** Mutations MUST support optimistic concurrency/versioning.
@@ -754,6 +765,23 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   string, or database-file concepts.
 - **FR-KV-010:** V1 persistence MUST be described as utility-grade, not
   business-critical durability.
+
+### 8.10a Document collection capability
+
+- **FR-DB-001:** The SDK MUST expose `tiny.db.collection(name)` with bounded
+  create, get, update, delete, list, snapshot, and subscription behavior.
+- **FR-DB-002:** Collection names, document IDs, JSON object bytes, documents
+  per collection, active collections, total app bytes, list pages, and
+  snapshots MUST be bounded.
+- **FR-DB-003:** Document IDs are server-assigned; app/database/viewer selectors
+  and raw SQL or schema operations are never accepted from the browser.
+- **FR-DB-004:** Mutations and collection revisions commit atomically in the
+  server-derived app-local database and support optimistic versions.
+- **FR-DB-005:** A committed mutation may emit only a best-effort freshness
+  hint. Initial connect, reconnect, and every hint recover from a current
+  bounded snapshot rather than replay.
+- **FR-DB-006:** Anonymous, malformed, cross-app, revoked, over-quota, and stale
+  writes MUST fail before returning or changing document state.
 
 ### 8.11 Realtime capability
 
@@ -771,7 +799,7 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-LIVE-007:** The hub MUST be in-memory and single-node in V1 with no event
   history, replay, ordering across publishers, or delivery guarantee.
 - **FR-LIVE-008:** Clients MUST recover from disconnect by reading current KV
-  state and resubscribing; events are hints, not durable state.
+  or collection state and resubscribing; events are hints, not durable state.
 - **FR-LIVE-009:** Unknown/reserved channels and malformed messages MUST fail
   closed without terminating unrelated app connections.
 - **FR-LIVE-010:** Origin, session, policy, and channel tests MUST cover the
@@ -815,8 +843,9 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   narrow internal blob-store interface. FUSE mounts, a second storage server,
   remote object stores, provider credentials, and cloud durability claims are
   excluded from V1. Blob support MUST preserve the production shape of one
-  `tinyhost` process, one SQLite database, one private data directory, and one
-  systemd service.
+  `tinyhost` process, one embedded SQLite engine, one control database plus
+  isolated app-local data files, one private data directory, and one systemd
+  service.
 
 ### 8.13 Admin and deployer web UI
 
@@ -1096,7 +1125,6 @@ identity_sessions
 identity_handoffs
 deployments
 deployment_files
-app_kv
 app_quota_usage
 audit_events
 outbox
@@ -1118,7 +1146,9 @@ Required constraints:
   mutating its `revoked_at`; post-cutoff explicitly brokerless sessions retain
   their app-local semantics and malformed cutoff/session timestamps deny;
 - deployment belongs to exactly one app;
-- KV primary key begins with app ID;
+- the control database contains no app KV or document payloads;
+- each app-local database is selected only from the server-derived immutable
+  app ID and contains key-scoped KV plus collection/document primary keys;
 - token secret hash is unique and plaintext is never persisted;
 - audit metadata follows action-specific redacted schemas.
 
@@ -1365,8 +1395,10 @@ logs/audit.
 
 - Go modular monolith.
 - Standard `net/http`, `html/template`, `embed`, `crypto`, and context patterns.
-- `modernc.org/sqlite` preferred for a CGO-free spike; final choice requires
-  concurrency, migration, backup-free update recovery, and security evidence.
+- Accepted CGO-free `modernc.org/sqlite` engine, with one WAL control database
+  plus lazily opened WAL app-local databases. ADR 0048 and executable
+  concurrency, migration, interruption, isolation, and deletion evidence own
+  this choice.
 - Direct Resend HTTP adapter.
 - ACME implementation selected through the M0 spike.
 - CLI uses the standard library unless a small framework materially improves
@@ -1477,21 +1509,22 @@ Deliver:
 Exit: `tiny deploy` returns a working protected URL; attack corpus and
 interruption recovery pass.
 
-### M4 — SDK, KV, lightweight blobs, and realtime
+### M4 — SDK, per-app data, lightweight blobs, and realtime
 
 Deliver:
 
 - current viewer/app;
 - capability discovery;
-- rudimentary versioned JSON KV;
+- versioned JSON KV in a physically isolated app-local SQLite database;
+- bounded JSON document collections with optimistic versions and snapshots;
 - bounded app-scoped blob upload, download, list, metadata, and delete backed by
   the private local data directory;
-- in-memory app-scoped WebSocket channels and KV change events;
+- in-memory app-scoped WebSocket channels plus KV and collection change hints;
 - TypeScript SDK and examples;
 - generic platform skill followed by self-contained specialized skill copies.
 
-Exit: two-app KV/blob/live isolation, quotas/conflicts, partial-write and
-storage-disagreement recovery, reconnect/current-state recovery, revocation
+Exit: two-app KV/document/blob/live isolation, quotas/conflicts, partial-write
+and storage-disagreement recovery, reconnect/current-state recovery, revocation
 disconnects, browser security, SDK compatibility, and skill tasks pass.
 
 ### M5 — Operable Hetzner-first release
@@ -1523,20 +1556,28 @@ TinyHost topology. They add a service/mount lifecycle and weaker filesystem
 semantics without changing the gateway authorization, SQLite metadata, quota,
 or reconciliation work TinyHost must perform itself.
 
-### 21.2 Later candidates
+### 21.2 Implemented post-V1 extension
+
+The first operator-governed LLM capability is implemented as an explicitly
+post-V1 extension. It provides encrypted write-only Anthropic/Gemini
+connections, fixed operator profiles, app grants, bounded non-streaming
+`llm.chat`, quota/rate/concurrency enforcement, safe capability discovery, and
+provider-neutral SDK support. It does not expand the locked V1 release claim;
+streaming and broader provider capabilities remain future work.
+
+### 21.3 Later candidates
 
 Rank after usage evidence:
 
 1. Direct S3-compatible blob-store adapter if local-disk limits become real.
 2. Durable realtime history/replay or multi-node fan-out if usage demands it.
-3. Operator-governed LLM capability.
-4. Central SSO exchange.
-5. Wildcard DNS-provider adapters.
-6. Temporary invitations and groups.
-7. Internal/Jira/data-warehouse capability adapters.
-8. Operator backups and disaster recovery.
-9. Deployer-selected rollback to a prior immutable application release.
-10. Backend runtime only through a separate security concept.
+3. Central SSO exchange.
+4. Wildcard DNS-provider adapters.
+5. Temporary invitations and groups.
+6. Internal/Jira/data-warehouse capability adapters.
+7. Operator backups and disaster recovery.
+8. Deployer-selected rollback to a prior immutable application release.
+9. Backend runtime only through a separate security concept.
 
 Future provider access follows:
 
@@ -1566,7 +1607,7 @@ runtimes.
 
 ### D2 — V1 public data APIs
 
-Expose deliberately small KV and blob APIs:
+Expose deliberately small KV, document-collection, and blob APIs:
 
 ```ts
 await tiny.kv.set("poll/options", options);
@@ -1574,17 +1615,28 @@ const current = await tiny.kv.get("poll/options");
 const page = await tiny.kv.list({ prefix: "poll/", limit: 100 });
 await tiny.kv.delete("poll/options", { expectedVersion: current.version });
 
+const tasks = tiny.db.collection("tasks");
+const task = await tasks.create({ title: "Review", done: false });
+await tasks.update(
+  task.id,
+  { title: "Review", done: true },
+  { expectedVersion: task.version },
+);
+const currentTasks = await tasks.list();
+
 const stored = await tiny.blobs.upload(file);
 const downloaded = await tiny.blobs.get(stored.id);
 const blobs = await tiny.blobs.list({ limit: 100 });
 await tiny.blobs.delete(stored.id);
 ```
 
-Values are JSON, mutations are versioned, and list is prefix/cursor/limit
-bounded. There are no collections, schemas, joins, filters, or arbitrary
-queries in V1. Blob IDs are opaque and server-issued; names are display metadata
-only. Blobs are app-shared, immutable after upload, attachment-oriented on
-download, local-disk backed, and cursor/size/count/quota bounded.
+KV values are JSON and document values are bounded JSON objects. Mutations are
+versioned; KV lists use prefix/cursor/limit and document lists use
+collection/cursor/limit. There are no app-defined database schemas, joins,
+filters, arbitrary queries, or raw SQL in V1. Blob IDs and document IDs are
+opaque and server-issued; blob names are display metadata only. Blobs are
+app-shared, immutable after upload, attachment-oriented on download, local-disk
+backed, and cursor/size/count/quota bounded.
 
 ### D3 — Public apps
 
@@ -1737,16 +1789,19 @@ operator-controlled production authority before the first stable release.
 - [ ] Cross-app HTTP/service/repository matrix passes.
 - [ ] Restart/interruption recovery is deterministic for every durable state.
 
-### SDK, KV, lightweight blobs, and realtime
+### SDK, per-app data, lightweight blobs, and realtime
 
 - [ ] App can read viewer/app/capability information through the SDK.
 - [ ] KV supports app-scoped get/set/delete/prefix-list, version conflicts, and
       enforced limits.
+- [ ] Document collections support bounded CRUD, snapshots, optimistic
+      conflicts, and reconnect recovery from current app-local state.
 - [ ] Blobs support app-scoped upload/get/list/delete with opaque IDs, bounded
       local storage, attachment downloads, and partial-write recovery.
 - [ ] Cross-app, revoked, disk-stop, and metadata/storage disagreement blob
       tests expose zero unauthorized or uncertain bytes.
-- [ ] Authenticated sockets support app channels and KV change events.
+- [ ] Authenticated sockets support app channels plus KV and collection change
+      events.
 - [ ] Revocation closes affected live connections; reconnect recovers through
       a KV read, never replay.
 - [ ] SDK cannot select app identity or receive secrets.

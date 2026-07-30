@@ -696,6 +696,40 @@ func TestDeployCreatesMissingManifestVerifiesSavedBearerAndArchivesOnlyOutput(t 
 	}
 }
 
+func TestDeployReportsActiveButUnverifiedReceipt(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tiny.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var archiveNames, calls []string
+	base := successfulDeployTransport(t, "saved-token", &archiveNames, &calls)
+	transport := tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Host == "demo.tiny.example" {
+			return jsonResponse(r, http.StatusOK, `<html>unsafe public response</html>`), nil
+		}
+		return base.RoundTrip(r)
+	})
+	deps := runnerDeps{
+		store:     client.MemoryStore{"https://tiny.example": "saved-token"},
+		newClient: tokenClient(transport),
+	}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tiny.example", "deploy", project}, &out, &stderr, deps)
+	want := "{\"valid\":false,\"deployment\":{\"deployment_id\":\"deployment\",\"url\":\"https://demo.tiny.example/\",\"state\":\"active\",\"verification\":\"public_probe_invalid_response\"},\"error\":{\"code\":\"active_but_unverified\",\"message\":\"Deployment is active, but public verification is incomplete.\"}}\n"
+	if code != 1 || stderr.Len() != 0 || out.String() != want {
+		t.Fatalf("code=%d out=%q stderr=%q", code, out.String(), stderr.String())
+	}
+	if strings.Contains(out.String(), "unsafe public response") || strings.Contains(out.String(), "saved-token") {
+		t.Fatal("unsafe public evidence or credential leaked")
+	}
+}
+
 func TestDeployUnauthorizedBearerUsesOTPAndStoresOnlyVerifiedReplacement(t *testing.T) {
 	project := t.TempDir()
 	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {

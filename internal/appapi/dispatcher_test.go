@@ -1,6 +1,7 @@
 package appapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,8 +12,10 @@ import (
 
 	"github.com/tinyhost/tiny/internal/appauth"
 	"github.com/tinyhost/tiny/internal/apps"
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/kv"
+	"github.com/tinyhost/tiny/internal/llm"
 	"github.com/tinyhost/tiny/internal/policies"
 	"github.com/tinyhost/tiny/internal/sessions"
 )
@@ -32,12 +35,129 @@ func authForKV(t *testing.T, appID string, enabled bool) appauth.AuthorizationCo
 	}
 	return a
 }
+func authForLLM(t *testing.T, appID string) appauth.AuthorizationContext {
+	t.Helper()
+	v := identity.Identity{ID: "viewer", Email: "v@example.com"}
+	s := sessions.NewMemoryStore()
+	token, _, _ := s.Create(appID, v, time.Now().Add(time.Hour))
+	a, e := appauth.Authorizer{Sessions: s, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{appID: {AppID: appID, OwnerIdentityID: "viewer", Valid: true}}}}.Authorize(context.Background(), apps.App{ID: appID, LLMChatRequested: true}, token, "req_safe")
+	if e != nil {
+		t.Fatal(e)
+	}
+	return a
+}
+
+type llmRepoSpy struct{ calls int }
+
+func (s *llmRepoSpy) AdmissionLimits(context.Context, string) (llm.Limits, error) {
+	return llm.Limits{MaxMessages: 4, MaxMessageBytes: 100, MaxInputBytes: 200, MaxOutputTokens: 10, Timeout: time.Second, ViewerRequests: 10, AppRequests: 10, RateWindow: time.Minute}, nil
+}
+func (s *llmRepoSpy) Admit(_ context.Context, app, viewer string, input, output int, _ time.Time) (llm.Binding, error) {
+	s.calls++
+	return llm.Binding{AppID: app, ProfileID: "p", ConnectionID: "c", Credential: []byte("secret"), Provider: llm.ProviderAnthropic, Model: "m", ReservationID: "r", ReservedTokens: input + 10, Limits: llm.Limits{MaxMessages: 4, MaxMessageBytes: 100, MaxInputBytes: 200, MaxOutputTokens: 10, Timeout: time.Second, ViewerRequests: 10, AppRequests: 10, RateWindow: time.Minute}}, nil
+}
+func (s *llmRepoSpy) Reconcile(context.Context, llm.Binding, llm.Usage, llm.Outcome, time.Time) error {
+	return nil
+}
+
+type llmAdapterSpy struct{}
+
+func (llmAdapterSpy) Complete(context.Context, llm.Binding, llm.Request) (llm.Response, error) {
+	return llm.Response{Message: llm.MessageResponse{Role: "assistant", Content: "ok"}, Usage: llm.Usage{InputTokens: 1, OutputTokens: 2}, FinishReason: "stop"}, nil
+}
+func TestLLMChatWireContractAndStrictJSON(t *testing.T) {
+	repo := &llmRepoSpy{}
+	s := llm.New(repo, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: llmAdapterSpy{}})
+	d := Dispatcher{LLM: s, Origin: func(*http.Request) bool { return true }}
+	a := authForLLM(t, "a")
+	w := request(d, a, http.MethodPost, "/_tiny/api/v1/llm/chat", `{"messages":[{"role":"user","content":"hi"}],"max_output_tokens":3}`, true)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"input_tokens":1`) || strings.Contains(w.Body.String(), "InputTokens") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodPost, "/_tiny/api/v1/llm/chat", `{"messages":[],"messages":[]}`, true)
+	if w.Code != 400 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	raw := []byte(`{"messages":[{"role":"user","content":"`)
+	raw = append(raw, 0xff)
+	raw = append(raw, []byte(`"}]}`)...)
+	r := httptest.NewRequest(http.MethodPost, "/_tiny/api/v1/llm/chat", bytes.NewReader(raw))
+	r.Host = "example.com"
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Origin", "http://example.com")
+	w = httptest.NewRecorder()
+	d.Dispatch(a, w, r)
+	if w.Code != http.StatusBadRequest || repo.calls != 1 {
+		t.Fatalf("invalid utf8 status=%d durable admissions=%d body=%s", w.Code, repo.calls, w.Body.String())
+	}
+}
+
+func TestLLMDiscoveryExposesOnlyEffectiveSafeLimits(t *testing.T) {
+	d := Dispatcher{Capabilities: []Capability{{Name: "llm.chat", Version: 1, Limits: map[string]int{"model": 99}}}, LLM: llm.New(&llmRepoSpy{}, nil)}
+	w := request(d, authForLLM(t, "a"), http.MethodGet, "/_tiny/api/v1/capabilities", "", false)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"disclosure"`) || !strings.Contains(w.Body.String(), `"max_output_tokens":10`) || strings.Contains(w.Body.String(), `"model":99`) {
+		t.Fatalf("discovery=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, authFor(t, "a"), http.MethodGet, "/_tiny/api/v1/capabilities", "", false)
+	if strings.Contains(w.Body.String(), "llm.chat") {
+		t.Fatalf("unrequested llm leaked into discovery: %s", w.Body.String())
+	}
+}
 
 type listSpy struct{ calls int }
 
 func (s *listSpy) Get(context.Context, appauth.AuthorizationContext, string) (*kv.Entry, error) {
 	s.calls++
 	return nil, nil
+}
+
+type collectionSpy struct {
+	calls int
+	doc   collections.Document
+}
+
+func (s *collectionSpy) Create(_ context.Context, _ appauth.AuthorizationContext, collection string, data json.RawMessage) (collections.Document, collections.Mutation, error) {
+	s.calls++
+	s.doc = collections.Document{ID: "doc_abcdefghijklmnopqrstuv", Data: data, Version: 1, CreatedAt: time.Unix(1, 0).UTC(), UpdatedAt: time.Unix(1, 0).UTC()}
+	return s.doc, collections.Mutation{Collection: collection, ID: s.doc.ID, Version: 1, Revision: 1}, nil
+}
+func (s *collectionSpy) Get(context.Context, appauth.AuthorizationContext, string, string) (*collections.Document, error) {
+	s.calls++
+	if s.doc.ID == "" {
+		return nil, nil
+	}
+	doc := s.doc
+	return &doc, nil
+}
+func (s *collectionSpy) Update(_ context.Context, _ appauth.AuthorizationContext, collection, id string, data json.RawMessage, expected *uint64) (collections.Document, collections.Mutation, error) {
+	s.calls++
+	if expected != nil && *expected != s.doc.Version {
+		return collections.Document{}, collections.Mutation{}, collections.ErrVersionConflict
+	}
+	s.doc.Data, s.doc.Version, s.doc.UpdatedAt = data, s.doc.Version+1, time.Unix(2, 0).UTC()
+	return s.doc, collections.Mutation{Collection: collection, ID: id, Version: s.doc.Version, Revision: 2}, nil
+}
+func (s *collectionSpy) Delete(_ context.Context, _ appauth.AuthorizationContext, collection, id string, expected *uint64) (bool, collections.Mutation, error) {
+	s.calls++
+	if expected != nil && *expected != s.doc.Version {
+		return false, collections.Mutation{}, collections.ErrVersionConflict
+	}
+	s.doc = collections.Document{}
+	return true, collections.Mutation{Collection: collection, ID: id, Version: 3, Deleted: true, Revision: 3}, nil
+}
+func (s *collectionSpy) List(context.Context, appauth.AuthorizationContext, string, string, int) (collections.ListResult, error) {
+	s.calls++
+	if s.doc.ID == "" {
+		return collections.ListResult{Documents: []collections.Document{}, Revision: 0}, nil
+	}
+	return collections.ListResult{Documents: []collections.Document{s.doc}, Revision: s.doc.Version}, nil
+}
+func (s *collectionSpy) Snapshot(context.Context, appauth.AuthorizationContext, string) (collections.Snapshot, error) {
+	s.calls++
+	if s.doc.ID == "" {
+		return collections.Snapshot{Documents: []collections.Document{}}, nil
+	}
+	return collections.Snapshot{Collection: "tasks", Documents: []collections.Document{s.doc}, Revision: s.doc.Version}, nil
 }
 func (s *listSpy) Set(context.Context, appauth.AuthorizationContext, string, json.RawMessage, *uint64) (kv.Entry, error) {
 	s.calls++
@@ -107,6 +227,45 @@ func TestDisabledKVListDeniedBeforeDispatcher(t *testing.T) {
 	}
 	if spy.calls != 0 {
 		t.Fatalf("disabled list reached dispatcher capability %d times", spy.calls)
+	}
+}
+
+func TestCollectionRoutesAreProtectedStrictAndVersioned(t *testing.T) {
+	spy := &collectionSpy{}
+	d := Dispatcher{Collections: spy}
+	a := authFor(t, "a")
+	w := request(d, a, http.MethodPost, "/_tiny/api/v1/db/tasks", `{"data":{"title":"one"}}`, true)
+	if w.Code != http.StatusCreated || !strings.Contains(w.Body.String(), `"doc_abcdefghijklmnopqrstuv"`) {
+		t.Fatalf("create=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/tasks?cursor=x", "", false)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid cursor=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/Tasks", "", false)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid collection=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodPut, "/_tiny/api/v1/db/tasks/doc_abcdefghijklmnopqrstuv", `{"data":{"title":"two"},"expected_version":9}`, true)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("stale write=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodGet, "/_tiny/api/v1/db/tasks?snapshot=1", "", false)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"documents"`) {
+		t.Fatalf("snapshot=%d %s", w.Code, w.Body.String())
+	}
+	w = request(d, a, http.MethodPost, "/_tiny/api/v1/db/tasks", `{"data":{}}`, false)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("origin denial=%d", w.Code)
+	}
+}
+
+func TestDisabledCollectionDoesNotReachRepository(t *testing.T) {
+	spy := &collectionSpy{}
+	d := Dispatcher{Collections: spy}
+	w := request(d, authForKV(t, "a", false), http.MethodGet, "/_tiny/api/v1/db/tasks", "", false)
+	if w.Code != http.StatusForbidden || spy.calls != 0 {
+		t.Fatalf("status=%d calls=%d body=%s", w.Code, spy.calls, w.Body.String())
 	}
 }
 

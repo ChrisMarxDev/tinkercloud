@@ -9,21 +9,23 @@
 <body>
   <header>
     <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
-    <p class="eyebrow">Rank 8 · Directional post-V1 feature</p>
-    <h1>Use operator capabilities without revealing operator secrets.</h1>
-    <p class="lede">Let apps invoke governed LLM, Jira, or internal-service
-      operations through TinyHost while credentials stay on the server.</p>
-    <p class="promise">Invoke a grant; never deliver a secret to browser code.</p>
+    <p class="eyebrow">Implemented post-V1 L1/L2 capability</p>
+    <h1>Give private apps chat, not API keys.</h1>
+    <p class="lede">Let an operator connect Anthropic or Gemini, approve one app
+      binding, and give deployers a small provider-neutral chat API while every
+      credential stays behind TinyHost.</p>
+    <p class="promise">Invoke an approved chat profile; never deliver a secret,
+      provider URL, or unrestricted model selector to browser code.</p>
   </header>
   <main>
     <div class="grid">
       <section class="two-thirds" id="value">
         <p class="eyebrow">Reason and value</p>
-        <h2>Turn shared organizational access into safe building blocks</h2>
-        <p>Operators already possess useful service credentials. Narrow
-          server-side adapters could make them available to staff-built apps
-          without handing deployers keys, duplicating backend code, or exposing
-          unrestricted outbound access.</p>
+        <h2>Make a useful chat UI possible without adding an app backend</h2>
+        <p>Operators already possess LLM credentials, while deployers need only
+          a safe chat operation. A narrow server-side adapter removes repeated
+          backend work without handing keys to static bundles, viewers, or
+          deployers and without creating unrestricted outbound access.</p>
       </section>
       <section class="third">
         <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
@@ -35,10 +37,10 @@
       <section class="half">
         <p class="eyebrow">Scope</p>
         <ul>
-          <li>Operator-managed encrypted connections.</li>
-          <li>Explicit app grants, operations, resource scopes, and budgets.</li>
-          <li>Narrow typed SDK adapters beginning with one LLM provider.</li>
-          <li>Outbound destination control, quotas, redaction, and audit.</li>
+          <li>Write-only Anthropic and Gemini connections encrypted at rest.</li>
+          <li>One operator-approved model profile and grant per app.</li>
+          <li>Implemented bounded <code>tiny.llm.chat.complete</code>; streaming remains deferred L3.</li>
+          <li>Fixed destinations, token reservations, rate limits, redaction, and safe usage audit.</li>
           <li>Immediate disable and secret rotation without redeploy.</li>
         </ul>
       </section>
@@ -48,41 +50,43 @@
           <li>No raw secret delivery to static apps.</li>
           <li>No unrestricted authenticated HTTP proxy.</li>
           <li>No arbitrary shell or unreviewed in-process plugins.</li>
-          <li>No external provider adapter in V1.</li>
+          <li>No tools, embeddings, files, images, web search, or stored chat history in the first slice.</li>
+          <li>Not part of the locked V1 release or its acceptance claim.</li>
         </ul>
       </section>
     </div>
     <section id="implementation">
-      <p class="eyebrow">Implementation sketch</p>
+      <p class="eyebrow">Implemented L1/L2 pipeline</p>
       <h2>Server-side invocation pipeline</h2>
-      <pre>tiny.llm.generate(request)
+      <pre>tiny.llm.chat.complete({ messages })
   → authenticate viewer + resolve app
-  → load effective capability grant
-  → validate operation, budget, and payload
-  → resolve encrypted operator connection
-  → call allowlisted provider adapter
-  → redact, audit, and return bounded result</pre>
-      <p><a href="../../docs/product/capability-broker.md">Detailed capability
-        concept</a> · <a href="../../docs/decisions/0008-sdk-and-capability-boundary.md">Security boundary ADR</a></p>
+  → load current operator-approved app grant
+  → validate payload and atomically reserve token budget
+  → decrypt the bound connection for one call
+  → call a fixed Anthropic or Gemini destination
+  → reconcile usage, audit safe metadata, return a common result</pre>
+      <p><a href="../../docs/product/llm-chat-capability-plan.md">LLM chat
+        implementation plan</a> · <a href="../../docs/product/capability-broker.md">General capability
+        direction</a> · <a href="../../docs/decisions/0008-sdk-and-capability-boundary.md">Security boundary ADR</a></p>
     </section>
     <section id="questions" class="caution">
-      <p class="eyebrow">Open questions</p>
+      <p class="eyebrow">Remaining evidence and scope</p>
       <ul>
-        <li>Grant scope: deployer, app, viewer, or combinations?</li>
-        <li>Cost budgets and human confirmation for consequential operations?</li>
-        <li>First adapter: LLM generation or an internal schema-bound API?</li>
-        <li>How can custom adapters preserve single-binary simplicity?</li>
+        <li>The exact signed build passed the disposable-VPS no-provider matrix: enablement, restart/doctor, capability omission, anonymous 401, and authenticated ungranted 403.</li>
+        <li>Run dedicated low-value Anthropic and Gemini smoke calls without retaining credential or payload data.</li>
+        <li>Keep streaming in L3 until usage justifies its cancellation and accounting complexity.</li>
       </ul>
     </section>
     <section id="decision" class="decision">
       <p class="eyebrow">Do or don’t</p>
-      <h2>Preserve the direction; defer implementation</h2>
-      <p><strong>Do:</strong> Design SDK capability discovery now so the future
-        extension is natural and high value.</p>
-      <p><strong>Don’t:</strong> Implement secrets or provider calls until the
-        gateway, SDK, KV, realtime, quotas, audit, and operator grants are proven.</p>
+      <h2>Keep L1/L2 narrow; defer streaming</h2>
+      <p><strong>Do:</strong> Preserve the implemented secret/grant foundation
+        and non-streaming common chat contract, then collect the remaining
+        real-provider evidence.</p>
+      <p><strong>Don’t:</strong> let the browser select a connection, provider
+        host, arbitrary model, headers, or raw provider request shape.</p>
     </section>
   </main>
-  <footer><p>Directional feature; keep behind a separate post-V1 security gate.</p></footer>
+  <footer><p>Post-V1 L1/L2 implemented and VPS-tested without a provider · L3 streaming and real-provider evidence pending.</p></footer>
 </body>
 </html>

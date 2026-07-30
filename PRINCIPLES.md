@@ -44,9 +44,11 @@ activation. Failure preserves the last known-good release.
 ## 8. One operator should understand the server
 
 The production shape is intentionally small: one self-contained `tinyhost`
-server binary, one database, one data directory, and one service on a dedicated
+server binary, one embedded SQLite engine, one control database plus isolated
+app-local database files, one data directory, and one service on a dedicated
 VPS. The deployer-facing `tiny` binary is a separate, smaller distribution.
-Operational simplicity is part of the security model.
+There is no database daemon, remote database authority, or second persistence
+system. Operational simplicity is part of the security model.
 
 ## 9. Non-technical deployers get narrow power
 

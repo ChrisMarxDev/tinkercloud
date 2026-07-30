@@ -87,7 +87,9 @@ const (
 	AppInfo
 	Capabilities
 	KV
+	Collections
 	Blobs
+	LLMChat
 	Live
 	ProtectedStatic
 )
@@ -113,8 +115,12 @@ func ClassifyRoute(method, p string) Endpoint {
 			return Capabilities
 		case strings.HasPrefix(p, "/_tiny/api/v1/kv"):
 			return KV
+		case p == "/_tiny/api/v1/db" || strings.HasPrefix(p, "/_tiny/api/v1/db/"):
+			return Collections
 		case p == "/_tiny/api/v1/blobs" || strings.HasPrefix(p, "/_tiny/api/v1/blobs/"):
 			return Blobs
+		case method == "POST" && p == "/_tiny/api/v1/llm/chat":
+			return LLMChat
 		case method == "GET" && p == "/_tiny/ws/v1":
 			return Live
 		}
@@ -123,7 +129,7 @@ func ClassifyRoute(method, p string) Endpoint {
 	return ProtectedStatic
 }
 func Registry() map[Endpoint]string {
-	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", AppIdentityCallback: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Blobs: "protected", Live: "protected", ProtectedStatic: "protected"}
+	return map[Endpoint]string{Reserved: "deny", AppLogin: "pre-auth", AppOTPRequest: "pre-auth", AppOTPVerify: "pre-auth", AppLogout: "pre-auth", AppIdentityCallback: "pre-auth", CurrentUser: "protected", AppInfo: "protected", Capabilities: "protected", KV: "protected", Collections: "protected", Blobs: "protected", LLMChat: "protected", Live: "protected", ProtectedStatic: "protected"}
 }
 
 // ProtectedDispatcher is the only extension point for protected app surfaces.

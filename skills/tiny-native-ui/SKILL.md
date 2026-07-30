@@ -81,6 +81,14 @@ the control-plane mark, stylesheet, or chrome.
   broadening checkbox. State that removed emails are signed out and cannot
   deploy; keep revision, authorization, collision, idempotency, audit, CSRF,
   and origin checks on the typed server path.
+- Operator-managed external-capability credentials use native password fields
+  and are strictly write-only: do not add a reveal, value echo, recovery, or
+  provider-URL display. Connection/profile IDs are server-generated, so create
+  forms never ask for one. For credential rotation, omit a provider select and
+  derive the provider server-side from the existing connection. App capability
+  grant forms are nested under the server-rendered app target; revision fields
+  protect profile/grant changes, and disable/revoke actions show an exact-target
+  confirmation field.
 - Escape user-controlled text through `html/template`. Never introduce unsafe
   HTML injection to make a component convenient.
 - Keep the server self-contained and the dependency surface narrow.

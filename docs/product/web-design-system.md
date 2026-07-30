@@ -122,6 +122,20 @@ and utility-data disclaimers, then progressive disclosure:
   It remains understandable as text without JavaScript and shows unavailable
   data explicitly rather than drawing a zero value.
 
+#### Operator LLM capability controls
+
+Keep external-provider setup as an ordinary server-rendered dashboard section.
+The connection card accepts a display name, provider selection, and one
+write-only password field. It may show only the safe display name, provider
+kind, opaque server-generated ID, and durable status afterwards. Rotation has
+no provider select: TinyHost resolves the connection’s stored provider before
+validating the replacement credential. A profile is a labeled form for a fixed
+model and every limit; grant controls live on the server-rendered target app,
+not in a free-form app-ID field. Use revision fields for profile/grant updates,
+and native exact-target confirmation fields for connection disable and grant
+disable/revoke. Never place credentials, envelopes, provider URLs, or raw
+provider errors in a notice, table, source, or reveal view.
+
 When a dashboard has multiple authorized app cards, a local search plus status
 filter may help scan that already-rendered list. It is deliberately a
 progressive presentation aid: controls are hidden until the local helper is

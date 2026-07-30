@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/tinyhost/tiny/internal/appauth"
 	"github.com/tinyhost/tiny/internal/apps"
+	"github.com/tinyhost/tiny/internal/collections"
 	"github.com/tinyhost/tiny/internal/identity"
 	"github.com/tinyhost/tiny/internal/kv"
 	"github.com/tinyhost/tiny/internal/policies"
@@ -71,8 +72,73 @@ func TestKVEventAndReservedChannelDenied(t *testing.T) {
 	if len(t1.sent) != 1 {
 		t.Fatal("missing kv event")
 	}
+	if err := c.UnsubscribeKV("x/"); err != nil {
+		t.Fatal(err)
+	}
+	h.PublishKVChange(context.Background(), a, kv.Mutation{Key: "x/b", Version: 2})
+	if len(t1.sent) != 1 {
+		t.Fatal("unsubscribed KV listener still received an event")
+	}
 	if err := c.Subscribe("_tiny"); err == nil {
 		t.Fatal("reserved accepted")
+	}
+}
+
+func TestCollectionChangeIsAppScopedAndClosesSlowConsumers(t *testing.T) {
+	h := New(DefaultLimits())
+	aTransport, bTransport, slowTransport := &transport{}, &transport{}, &failingTransport{}
+	authA := authorized(t, "a")
+	connectionA, err := h.Attach(authA, aTransport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectionB, err := h.Attach(authorized(t, "b"), bTransport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slow, err := h.Attach(authA, slowTransport)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, connection := range []*Connection{connectionA, connectionB, slow} {
+		if err := connection.SubscribeCollection("tasks"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.PublishCollectionChange(context.Background(), authA, collections.Mutation{Collection: "tasks", ID: "doc_abcdefghijklmnopqrstuv", Version: 1, Revision: 1})
+	if len(aTransport.sent) != 1 || len(bTransport.sent) != 0 {
+		t.Fatalf("collection cross-app delivery: a=%d b=%d", len(aTransport.sent), len(bTransport.sent))
+	}
+	got := aTransport.sent[0]
+	if got.Type != "collection.changed" || got.ID != "doc_abcdefghijklmnopqrstuv" || got.Revision != 1 {
+		t.Fatalf("collection envelope=%#v", got)
+	}
+	if !slowTransport.closed {
+		t.Fatal("slow collection subscriber was not closed")
+	}
+	if err := connectionA.UnsubscribeCollection("tasks"); err != nil {
+		t.Fatal(err)
+	}
+	h.PublishCollectionChange(context.Background(), authA, collections.Mutation{Collection: "tasks", ID: "doc_bcdefghijklmnopqrstuvw", Version: 1, Revision: 2})
+	if len(aTransport.sent) != 1 {
+		t.Fatal("unsubscribed collection listener still received an event")
+	}
+}
+
+func TestCollectionSubscriptionIsIdempotentAndBounded(t *testing.T) {
+	h := New(Limits{ConnectionsPerApp: 5, ConnectionsPerViewer: 5, SubscriptionsPerConnection: 1, PayloadBytes: 1024})
+	c, err := h.Attach(authorized(t, "a"), &transport{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SubscribeCollection("tasks"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SubscribeCollection("tasks"); err != nil {
+		t.Fatalf("idempotent collection subscription: %v", err)
+	}
+	if err := c.SubscribeCollection("notes"); err != ErrLimit {
+		t.Fatalf("unbounded collection subscriptions: %v", err)
 	}
 }
 

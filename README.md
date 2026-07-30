@@ -78,6 +78,8 @@ The supported server workflow and its prerequisites are documented in
 17. [Complete deployer flow](concept/flows/deployer.html)
 18. [Conversation decision compact](docs/product/conversation-decisions-2026-07.md)
 19. [Flow necessity audit](docs/product/flow-necessity-audit-2026-07.md)
+20. [Local app development with `tiny dev`](docs/getting-started/local-emulator.md)
+21. [Implemented post-V1 LLM chat capability](docs/product/llm-chat-capability-plan.md)
 
 ## Deployer quick start
 
@@ -95,6 +97,22 @@ project, asks only about ambiguous required state, and creates a missing
 `tiny.yaml` as a reviewed receipt. Use `tiny init .` to create the manifest
 ahead of time. Later commands reuse the saved default server and verified CLI
 bearer; `tiny logout` revokes and removes that local bearer.
+
+## Local app development
+
+Run `tiny dev` from a static app project for a loopback-only development
+server with project-local SQLite state:
+
+```sh
+tiny dev
+```
+
+The supported local subset includes current viewer/app information, KV,
+bounded document collections, collection snapshot recovery, and live KV and
+collection change hints. It deliberately excludes production login, policy,
+deployment, blobs, TLS/protection proof, and LLM/provider capabilities. Local
+success is development evidence only; a real deployment must still pass the
+gateway, activation, and anonymous-denial gates.
 
 ## Repository shape
 
@@ -133,9 +151,11 @@ local, redacted health (SQLite integrity, disk, permissions, clock, service,
 listeners, version, and update rollback state). `sudo tinyhost doctor`
 additionally performs bounded DNS, TLS, and read-only Resend credential checks
 using the root-only systemd credential file; it never sends mail or prints
-secrets, credential paths/references, or provider response bodies. Updates require a pinned signed artifact plus explicit public-health
-and anonymous-denial probe URLs; the service is restarted after installation
-and restored automatically if any gate fails.
+secrets, credential paths/references, or provider response bodies. Updates use
+the configured signed release source, derive public-health and
+anonymous-denial evidence from installed state, restart the service, and
+restore the prior version automatically if any gate fails. An alternate release
+source is an explicit advanced override.
 
 ## Working vocabulary
 
@@ -157,8 +177,8 @@ and restored automatically if any gate fails.
 - V1 is a modular Go monolith distributed as one self-contained `tinyhost`
   server binary plus a separate small `tiny` deployer CLI.
 - V1 supports static apps, current-user/capability APIs, a deliberately small
-  JSON key-value store, lightweight app-shared local blobs, and ephemeral
-  app-scoped realtime channels.
+  JSON key-value store, bounded reactive JSON document collections, lightweight
+  app-shared local blobs, and ephemeral app-scoped realtime channels.
 - The TypeScript client SDK is a first-class V1 product surface, not an optional
   wrapper around raw HTTP.
 - Remote blob backends, public object URLs, and durable or multi-node realtime
@@ -167,13 +187,19 @@ and restored automatically if any gate fails.
   are not V1 work.
 - The first deployment targets are clean, dedicated Hetzner Cloud Ubuntu 24.04
   LTS and Ubuntu 26.04 LTS x86-64 VPS instances.
-- SQLite, the local filesystem, Resend, and automatic per-host TLS are the
-  default operational dependencies.
+- Normal embedded SQLite, the local filesystem, Resend, and automatic per-host
+  TLS are the default operational dependencies. One control database owns
+  authorization and platform state; each app has a physically isolated
+  `apps/{immutable-app-id}/data.db` for KV and document collections.
 - App-scoped opaque sessions are preferred over shared parent-domain cookies.
 - Backups are an advanced feature, not V1 scope. Signed self-updates still keep
   a narrow local rollback snapshot for upgrade recovery.
-- Future LLM and internal-service integrations are server-side capability
-  adapters. Operator secrets never enter deployed browser code.
+- The first operator-governed LLM chat capability is an implemented post-V1
+  extension: encrypted write-only Anthropic/Gemini connections, app grants,
+  bounded non-streaming `tiny.llm.chat.complete`, quotas, audit, and SDK
+  support. It does not expand locked V1; streaming and broader provider
+  integrations remain deferred. Operator secrets never enter deployed browser
+  code.
 
 ## License
 

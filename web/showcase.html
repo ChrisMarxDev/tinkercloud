@@ -356,6 +356,14 @@
         </div>
       </section>
 
+      <section class="tiny-section" aria-labelledby="llm-showcase-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">Write-only LLM connection</h2></div><p>Safe metadata is visible; provider credentials never return to the page.</p></div>
+        <div class="tiny-grid tiny-grid--2">
+          <article class="tiny-card tiny-stack"><div><h3>Add a provider connection</h3><p class="tiny-card__meta">The credential is encrypted after verification and cannot be shown again.</p></div><label class="tiny-field"><span class="tiny-label">Display name</span><input class="tiny-input" value="Team provider"></label><label class="tiny-field"><span class="tiny-label">Provider</span><select class="tiny-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tiny-field"><span class="tiny-label">Provider credential</span><input class="tiny-input tiny-mono" type="password" autocomplete="new-password"><span class="tiny-help">Write-only. Never displayed or recovered.</span></label><button class="tiny-button tiny-button--primary" type="button">Verify and add connection</button></article>
+          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>Team provider</h3><p class="tiny-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tiny-status" data-state="active">active</span></div><details class="tiny-details"><summary>Disable connection</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future chat calls using this connection will be denied.</p><label class="tiny-field"><span class="tiny-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tiny-input tiny-mono" autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="button">Disable connection</button></div></details></article>
+        </div>
+      </section>
+
       <p class="tiny-footer-note">Open source. Your VPS. Your tiny cloud.</p>
     </main>
   </div>

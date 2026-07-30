@@ -1,3 +1,33 @@
+{{define "llm-profile-limits-new"}}
+  <label class="tiny-field"><span class="tiny-label">Model</span><input class="tiny-input tiny-mono" name="model" maxlength="128" required placeholder="claude-sonnet-4-20250514"></label>
+  <div class="tiny-grid tiny-grid--2">
+    <label class="tiny-field"><span class="tiny-label">Messages per request</span><input class="tiny-input tiny-mono" name="max_messages" inputmode="numeric" value="16" required></label>
+    <label class="tiny-field"><span class="tiny-label">Bytes per message</span><input class="tiny-input tiny-mono" name="max_message_bytes" inputmode="numeric" value="16384" required></label>
+    <label class="tiny-field"><span class="tiny-label">Input bytes per request</span><input class="tiny-input tiny-mono" name="max_input_bytes" inputmode="numeric" value="65536" required></label>
+    <label class="tiny-field"><span class="tiny-label">Maximum output tokens</span><input class="tiny-input tiny-mono" name="max_output_tokens" inputmode="numeric" value="1024" required></label>
+    <label class="tiny-field"><span class="tiny-label">Timeout (milliseconds)</span><input class="tiny-input tiny-mono" name="timeout_ms" inputmode="numeric" value="30000" required></label>
+    <label class="tiny-field"><span class="tiny-label">Viewer requests per window</span><input class="tiny-input tiny-mono" name="viewer_requests" inputmode="numeric" value="30" required></label>
+    <label class="tiny-field"><span class="tiny-label">App requests per window</span><input class="tiny-input tiny-mono" name="app_requests" inputmode="numeric" value="120" required></label>
+    <label class="tiny-field"><span class="tiny-label">Rate window (milliseconds)</span><input class="tiny-input tiny-mono" name="rate_window_ms" inputmode="numeric" value="60000" required></label>
+    <label class="tiny-field"><span class="tiny-label">Concurrent calls</span><input class="tiny-input tiny-mono" name="concurrency_limit" inputmode="numeric" value="4" required></label>
+    <label class="tiny-field"><span class="tiny-label">Monthly token limit</span><input class="tiny-input tiny-mono" name="monthly_token_limit" inputmode="numeric" value="100000" required></label>
+  </div>
+{{end}}
+{{define "llm-profile-limits-existing"}}
+  <label class="tiny-field"><span class="tiny-label">Model</span><input class="tiny-input tiny-mono" name="model" maxlength="128" value="{{.Model}}" required></label>
+  <div class="tiny-grid tiny-grid--2">
+    <label class="tiny-field"><span class="tiny-label">Messages per request</span><input class="tiny-input tiny-mono" name="max_messages" inputmode="numeric" value="{{.MaxMessages}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Bytes per message</span><input class="tiny-input tiny-mono" name="max_message_bytes" inputmode="numeric" value="{{.MaxMessageBytes}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Input bytes per request</span><input class="tiny-input tiny-mono" name="max_input_bytes" inputmode="numeric" value="{{.MaxInputBytes}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Maximum output tokens</span><input class="tiny-input tiny-mono" name="max_output_tokens" inputmode="numeric" value="{{.MaxOutputTokens}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Timeout (milliseconds)</span><input class="tiny-input tiny-mono" name="timeout_ms" inputmode="numeric" value="{{.TimeoutMS}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Viewer requests per window</span><input class="tiny-input tiny-mono" name="viewer_requests" inputmode="numeric" value="{{.ViewerRequests}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">App requests per window</span><input class="tiny-input tiny-mono" name="app_requests" inputmode="numeric" value="{{.AppRequests}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Rate window (milliseconds)</span><input class="tiny-input tiny-mono" name="rate_window_ms" inputmode="numeric" value="{{.RateWindowMS}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Concurrent calls</span><input class="tiny-input tiny-mono" name="concurrency_limit" inputmode="numeric" value="{{.ConcurrencyLimit}}" required></label>
+    <label class="tiny-field"><span class="tiny-label">Monthly token limit</span><input class="tiny-input tiny-mono" name="monthly_token_limit" inputmode="numeric" value="{{.MonthlyTokenLimit}}" required></label>
+  </div>
+{{end}}
 {{define "content"}}
 <div class="tiny-shell">
   <header class="tiny-topbar">
@@ -175,6 +205,39 @@
                   </div>
                 </details>
 
+                {{if eq $.Actor.Role "operator"}}
+                  <details class="tiny-details">
+                    <summary>LLM chat grant</summary>
+                    <div class="tiny-details__body tiny-stack">
+                      {{if .LLMGrant}}
+                        <div class="tiny-notice" role="status"><p><strong>{{.LLMGrant.Status}}</strong> grant using profile <code>{{.LLMGrant.ProfileID}}</code>. This month: {{.LLMGrant.UsedTokens}} used, {{.LLMGrant.ReservedTokens}} reserved, {{.LLMGrant.InFlight}} in flight.</p></div>
+                      {{else}}
+                        <p class="tiny-card__meta">No LLM chat grant exists for this app.</p>
+                      {{end}}
+                      {{if and .LLMGrant (eq .LLMGrant.Status "revoked")}}
+                        <div class="tiny-notice tiny-notice--warning" role="status"><p>This grant is revoked and cannot be reactivated from this dashboard.</p></div>
+                      {{else if $.View.LLMProfiles}}
+                        <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/llm/grant">
+                          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                          <input type="hidden" name="expected_revision" value="{{if .LLMGrant}}{{.LLMGrant.Revision}}{{else}}0{{end}}">
+                          <label class="tiny-field" for="llm-profile-{{$app.Slug}}"><span class="tiny-label">Approved profile</span><select class="tiny-select tiny-mono" id="llm-profile-{{$app.Slug}}" name="profile_id">{{range $.View.LLMProfiles}}{{if eq .Status "active"}}<option value="{{.ID}}" {{if $app.LLMGrant}}{{if eq $app.LLMGrant.ProfileID .ID}}selected{{end}}{{end}}>{{.Model}} · {{.ID}}</option>{{end}}{{end}}</select><span class="tiny-help">This explicitly grants the selected fixed provider profile to {{.Slug}}.</span></label>
+                          <button class="tiny-button tiny-button--primary" type="submit">Approve LLM chat grant</button>
+                        </form>
+                      {{else}}
+                        <p class="tiny-card__meta">Create an active LLM profile below before granting this app access.</p>
+                      {{end}}
+                      {{if .LLMGrant}}
+                        <div class="tiny-danger-zone tiny-stack">
+                          <h3>Restrict this app grant</h3>
+                          <p class="tiny-card__meta">Disable is the temporary pause: an operator can approve it again later. Revocation is terminal for this app and cannot be undone from the dashboard.</p>
+                          <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/llm/grant/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.LLMGrant.Revision}}"><label class="tiny-field"><span class="tiny-label">Type <code>disabled:grant:{{.Slug}}</code></span><input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off"></label><button class="tiny-button tiny-button--secondary" type="submit">Disable LLM chat grant</button></form>
+                          <form class="tiny-stack" method="post" action="/apps/{{.Slug}}/llm/grant/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.LLMGrant.Revision}}"><label class="tiny-field"><span class="tiny-label">Type <code>revoked:grant:{{.Slug}}</code></span><input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="submit">Revoke LLM chat grant</button></form>
+                        </div>
+                      {{end}}
+                    </div>
+                  </details>
+                {{end}}
+
                 <details class="tiny-details">
                   <summary>App controls</summary>
                   <div class="tiny-details__body tiny-stack">
@@ -235,6 +298,49 @@
           <label class="tiny-choice"><input class="tiny-checkbox" type="checkbox" name="confirm_broadening" value="confirm"><span>I confirm that adding any email grants deployment authority.</span></label>
           <div><button class="tiny-button tiny-button--primary" type="submit">Save active deployers</button></div>
         </form>
+      </section>
+
+      <section class="tiny-section" aria-labelledby="llm-title">
+        <div class="tiny-section-header"><div><p class="tiny-eyebrow">Operator only</p><h2 id="llm-title">LLM chat capability</h2></div><p>Provider credentials are encrypted and write-only. App content is sent to the approved external provider.</p></div>
+        <div class="tiny-grid tiny-grid--2">
+          <article class="tiny-card tiny-stack">
+            <div><h3>Add provider connection</h3><p class="tiny-card__meta">TinyHost verifies the credential before storing its encrypted envelope. The credential cannot be shown again.</p></div>
+            <form class="tiny-stack" method="post" action="/dashboard/llm/connections">
+              <input type="hidden" name="csrf" value="{{.CSRF}}">
+              <label class="tiny-field" for="llm-connection-name"><span class="tiny-label">Display name</span><input class="tiny-input" id="llm-connection-name" name="display_name" maxlength="128" required autocomplete="off" placeholder="Team Anthropic"></label>
+              <label class="tiny-field" for="llm-connection-provider"><span class="tiny-label">Provider</span><select class="tiny-select" id="llm-connection-provider" name="provider"><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
+              <label class="tiny-field" for="llm-connection-secret"><span class="tiny-label">Provider credential</span><input class="tiny-input tiny-mono" id="llm-connection-secret" type="password" name="secret" maxlength="4096" required autocomplete="new-password"><span class="tiny-help">Stored only as an encrypted envelope. It is never rendered or returned.</span></label>
+              <button class="tiny-button tiny-button--primary" type="submit">Verify and add connection</button>
+            </form>
+          </article>
+          <article class="tiny-card tiny-stack">
+            <div><h3>Create chat profile</h3><p class="tiny-card__meta">A profile fixes one model and every per-call, rate, concurrency, and monthly-token bound.</p></div>
+            {{if .View.LLMConnections}}
+            <form class="tiny-stack" method="post" action="/dashboard/llm/profiles">
+              <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="0">
+              <label class="tiny-field" for="llm-profile-connection"><span class="tiny-label">Active connection</span><select class="tiny-select tiny-mono" id="llm-profile-connection" name="connection_id">{{range .View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}">{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>
+              {{template "llm-profile-limits-new"}}
+              <button class="tiny-button tiny-button--primary" type="submit">Create profile</button>
+            </form>
+            {{else}}<p class="tiny-card__meta">Add an active provider connection before creating a profile.</p>{{end}}
+          </article>
+        </div>
+
+        {{if .View.LLMConnections}}
+        <div class="tiny-grid tiny-grid--2 tiny-section__spaced">
+          {{range .View.LLMConnections}}
+          <article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>{{.DisplayName}}</h3><p class="tiny-card__meta">{{.Provider}} · <code>{{.ID}}</code></p></div><span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span></div>
+            <details class="tiny-details"><summary>Rotate credential</summary><div class="tiny-details__body tiny-stack"><p class="tiny-card__meta">TinyHost verifies the replacement against this connection’s stored provider. Provider selection cannot be changed here.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/rotate"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Replacement credential</span><input class="tiny-input tiny-mono" type="password" name="secret" maxlength="4096" required autocomplete="new-password"></label><button class="tiny-button tiny-button--primary" type="submit">Verify and rotate credential</button></form></div></details>
+            {{if eq .Status "active"}}<details class="tiny-details"><summary>Disable connection</summary><div class="tiny-details__body tiny-danger-zone tiny-stack"><p class="tiny-card__meta">Future calls using profiles on this connection will be denied.</p><form class="tiny-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tiny-field"><span class="tiny-label">Type <code>disable:{{.ID}}</code></span><input class="tiny-input tiny-mono" name="confirmation" required autocomplete="off"></label><button class="tiny-button tiny-button--danger" type="submit">Disable connection</button></form></div></details>{{end}}
+          </article>
+          {{end}}
+        </div>
+        {{end}}
+
+        {{if .View.LLMProfiles}}
+          <div class="tiny-section-header tiny-section__spaced"><div><p class="tiny-eyebrow">Fixed bounds</p><h3>Chat profiles</h3></div></div>
+          <div class="tiny-grid tiny-grid--2">{{range .View.LLMProfiles}}{{$profile := .}}<article class="tiny-card tiny-stack"><div class="tiny-card__header"><div><h3>{{.Model}}</h3><p class="tiny-card__meta">Profile <code>{{.ID}}</code> · connection <code>{{.ConnectionID}}</code></p></div><span class="tiny-status" data-state="{{.Status}}">{{.Status}}</span></div><details class="tiny-details"><summary>Edit profile limits</summary><div class="tiny-details__body"><form class="tiny-stack" method="post" action="/dashboard/llm/profiles/{{.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.Revision}}"><label class="tiny-field"><span class="tiny-label">Active connection</span><select class="tiny-select tiny-mono" name="connection_id">{{range $.View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}" {{if eq $profile.ConnectionID .ID}}selected{{end}}>{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>{{template "llm-profile-limits-existing" .}}<button class="tiny-button tiny-button--primary" type="submit">Save profile limits</button></form></div></details></article>{{end}}</div>
+        {{end}}
       </section>
 
       <section class="tiny-section" aria-labelledby="audit-title">

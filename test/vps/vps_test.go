@@ -57,6 +57,30 @@ func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 		t.Fatal(c.Target)
 	}
 }
+
+func TestReuseConfigRequiresRealLocalReleaseDirectory(t *testing.T) {
+	v := configEnv(t)
+	v["TINYHOST_VPS_REUSE"] = "1"
+	if _, err := LoadConfig(env(v)); err == nil {
+		t.Fatal("reuse accepted without a release directory")
+	}
+	release := filepath.Join(t.TempDir(), "release")
+	if err := os.Mkdir(release, 0755); err != nil {
+		t.Fatal(err)
+	}
+	v["TINYHOST_VPS_RELEASE_DIR"] = release
+	if _, err := LoadConfig(env(v)); err != nil {
+		t.Fatalf("reuse rejected real release directory: %v", err)
+	}
+	link := filepath.Join(t.TempDir(), "release-link")
+	if err := os.Symlink(release, link); err != nil {
+		t.Fatal(err)
+	}
+	v["TINYHOST_VPS_RELEASE_DIR"] = link
+	if _, err := LoadConfig(env(v)); err == nil {
+		t.Fatal("reuse accepted symlinked release directory")
+	}
+}
 func TestSSHAndSCPUseStrictHostKeyArguments(t *testing.T) {
 	c := Config{Target: "root@host", KnownHosts: "/safe/known_hosts", Port: "2222", IdentityFile: "/safe/key"}
 	s := Suite{Config: c}
@@ -336,6 +360,130 @@ func TestCleanGuardRejectsExistingHostAndReuseIsExplicit(t *testing.T) {
 		t.Fatal("reuse should verify only its marker before mutation")
 	}
 }
+
+func TestReuseUpdateEnablesLLMRootThenRestartsAndDoctors(t *testing.T) {
+	f := &calls{}
+	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: f}
+	if err := s.applyReuseUpdate(context.Background(), "/stage", "update-probe"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.got) != 6 {
+		t.Fatalf("remote command count=%d, want 6", len(f.got))
+	}
+	joined := make([]string, len(f.got))
+	for i, call := range f.got {
+		joined[i] = strings.Join(call, " ")
+	}
+	for i, want := range []string{
+		"verify-artifact",
+		"'update'",
+		"'doctor'",
+		"'llm' 'enable'",
+		"'systemctl' 'restart' 'tinyhost.service'",
+		"'doctor'",
+	} {
+		if !strings.Contains(joined[i], want) {
+			t.Fatalf("command %d = %q, want %q", i, joined[i], want)
+		}
+	}
+	if got := f.got[1][len(f.got[1])-1]; !strings.Contains(got, "'--release-manifest'") {
+		t.Fatalf("new updater unexpectedly omitted manifest evidence: %q", got)
+	}
+	if got := f.got[2][len(f.got[2])-1]; !strings.Contains(got, "'doctor'") {
+		t.Fatalf("new updater did not doctor before LLM enable: %q", got)
+	}
+	// remote wraps the root-local argv in the fixed SSH transport. Assert the
+	// final remote command rather than falsely requiring the transport wrapper
+	// to disappear from the runner trace.
+	if got, want := f.got[3][len(f.got[3])-1], "'/usr/local/bin/tinyhost' 'llm' 'enable' '--config' '/etc/tinyhost/config.yaml'"; got != want {
+		t.Fatalf("LLM enable remote argv = %q, want exact root-local argv %q", got, want)
+	}
+}
+
+type updateCompatibilityRunner struct {
+	got                   [][]string
+	rejectNew, failLegacy bool
+	genericReject         bool
+}
+
+func (r *updateCompatibilityRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	r.got = append(r.got, append([]string{name}, args...))
+	remote := args[len(args)-1]
+	if strings.Contains(remote, "'update'") && strings.Contains(remote, "'--release-manifest'") {
+		if r.genericReject {
+			return []byte("tinyhost: verification_failed\n"), errors.New("exit status 2")
+		}
+		if r.rejectNew {
+			return []byte("flag provided but not defined: -release-manifest\n"), errors.New("exit status 2")
+		}
+	}
+	if strings.Contains(remote, "'update'") && !strings.Contains(remote, "'--release-manifest'") && r.failLegacy {
+		return []byte("tinyhost: verification_failed\n"), errors.New("exit status 2")
+	}
+	return nil, nil
+}
+
+func TestReuseUpdateUsesLegacyOnlyForExactOldManifestFlagRejection(t *testing.T) {
+	r := &updateCompatibilityRunner{rejectNew: true}
+	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: r}
+	if err := s.applyReuseUpdate(context.Background(), "/stage", "update-probe"); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.got) != 7 {
+		t.Fatalf("remote command count=%d, want 7", len(r.got))
+	}
+	newUpdate, legacyUpdate := r.got[1][len(r.got[1])-1], r.got[2][len(r.got[2])-1]
+	if !strings.Contains(newUpdate, "'--release-manifest'") || strings.Contains(legacyUpdate, "'--release-manifest'") {
+		t.Fatalf("compatibility update argv new=%q legacy=%q", newUpdate, legacyUpdate)
+	}
+	if !strings.Contains(r.got[3][len(r.got[3])-1], "'doctor'") || !strings.Contains(r.got[4][len(r.got[4])-1], "'llm' 'enable'") {
+		t.Fatalf("legacy update did not doctor before LLM enable: %#v", r.got)
+	}
+}
+
+func TestReuseUpdateRejectsNonLegacyAndLegacyUpdateFailures(t *testing.T) {
+	for name, runner := range map[string]*updateCompatibilityRunner{
+		"new updater verification failure":    {genericReject: true},
+		"legacy updater verification failure": {rejectNew: true, failLegacy: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: runner}
+			if err := s.applyReuseUpdate(context.Background(), "/stage", "update-probe"); err == nil {
+				t.Fatal("unsafe update failure was accepted")
+			}
+			for _, call := range runner.got {
+				if strings.Contains(call[len(call)-1], "'llm' 'enable'") || strings.Contains(call[len(call)-1], "'systemctl' 'restart'") {
+					t.Fatalf("failure continued into LLM lifecycle: %#v", runner.got)
+				}
+			}
+		})
+	}
+}
+
+func TestReuseUpdateStagesOnlySignedManifestEvidence(t *testing.T) {
+	files := reuseUpdateFiles("/release", "/stage")
+	if len(files) != 3 {
+		t.Fatalf("reuse manifest files=%d, want 3", len(files))
+	}
+	for _, want := range []string{
+		"/release/release-manifest.json:/stage/release-manifest.json",
+		"/release/release-manifest.json.metadata.json:/stage/release-manifest.json.metadata.json",
+		"/release/release-manifest.json.signature:/stage/release-manifest.json.signature",
+	} {
+		found := false
+		for _, file := range files {
+			if file.local+":"+file.remote == want {
+				found = true
+			}
+			if strings.Contains(file.local, "resend") || strings.Contains(file.local, "hmac") || strings.Contains(file.local, "key") {
+				t.Fatalf("reuse staged secret-like input: %#v", file)
+			}
+		}
+		if !found {
+			t.Fatalf("missing reuse evidence %q", want)
+		}
+	}
+}
 func TestHiddenTransactionAndMarkerDenial(t *testing.T) {
 	if got := hiddenValue(`<input name="transaction" value="otp_x">`, "transaction"); got != "otp_x" {
 		t.Fatal(got)
@@ -515,7 +663,7 @@ func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 		t.Fatalf("archive A: bytes=%d size=%d marker=%q err=%v", len(a), sizeA, markerA, err)
 	}
 	m := smokeManifest(t, a)
-	if m.Name != "vps-smoke-a" || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
+	if m.Name != "vps-smoke-a" || !m.KV || !m.Realtime || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
 		t.Fatalf("smoke policy = %#v", m)
 	}
 	_, _, markerB, err := smokeArchive("vps-smoke-b", viewer)
