@@ -8,7 +8,13 @@ mkdir -p "$tmp/allow" "$tmp/deny"
 
 printf '%s\n' '-----BEGIN PUBLIC KEY-----' >"$tmp/allow/release-public-key.pem"
 printf '%s\n' 'sk-test-placeholder-abcdefghijklmnopqrstuvwxyz' >"$tmp/allow/placeholder.txt"
-"$root/scripts/scan-secrets.sh" "$tmp/allow/release-public-key.pem" "$tmp/allow/placeholder.txt" >/dev/null
+type_field='password: '
+type_name='URLPatternComponentResult;'
+printf '%s%s\n' "$type_field" "$type_name" >"$tmp/allow/type-declaration.ts"
+"$root/scripts/scan-secrets.sh" \
+  "$tmp/allow/release-public-key.pem" \
+  "$tmp/allow/placeholder.txt" \
+  "$tmp/allow/type-declaration.ts" >/dev/null
 
 private_prefix='-----BEGIN '
 private_suffix='PRIVATE KEY-----'
@@ -20,6 +26,13 @@ fi
 printf '%s%s\n' 'ghp_' 'abcdefghijklmnopqrstuvwxyz0123456789AB' >"$tmp/deny/token.txt"
 if "$root/scripts/scan-secrets.sh" "$tmp/deny/token.txt" >/dev/null 2>&1; then
   echo "live token was accepted by secret scan" >&2
+  exit 1
+fi
+credential_prefix='password: '
+credential_value='abcdefghijklmnopqrstuvwxyzabcdefgh'
+printf '%s%s\n' "$credential_prefix" "$credential_value" >"$tmp/deny/credential.txt"
+if "$root/scripts/scan-secrets.sh" "$tmp/deny/credential.txt" >/dev/null 2>&1; then
+  echo "credential assignment was accepted by secret scan" >&2
   exit 1
 fi
 

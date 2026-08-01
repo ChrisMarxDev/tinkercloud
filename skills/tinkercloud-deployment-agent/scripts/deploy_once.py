@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 EMAIL = re.compile(r"\A[^\s@]+@[^\s@]+\.[^\s@]+\Z")
 HOST = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
+LOCAL_AUTOMATION_DEPLOYER_DOMAIN = "christopher-marx.de"
 TIMEOUT_SECONDS = 120
 MAX_JSON_OUTPUT_BYTES = 32 * 1024
 FORBIDDEN_CREDENTIAL_ENV = ("TINKER_TOKEN", "TINKER_OTP")
@@ -205,10 +206,13 @@ def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
     def validate_inputs() -> tuple[Path, Path, str, str, str]:
         if any(os.environ.get(name) for name in FORBIDDEN_CREDENTIAL_ENV):
             fail("credential environment input is forbidden")
-        tinker, app = Path(tinker_raw), Path(app_raw)
-        if not tinker.is_absolute() or not app.is_absolute() or not EMAIL.fullmatch(email_raw.lower()):
-            fail("required input is invalid")
         email = email_raw.lower()
+        if (not EMAIL.fullmatch(email) or
+                email.rsplit("@", 1)[1] != LOCAL_AUTOMATION_DEPLOYER_DOMAIN):
+            fail("required input is invalid")
+        tinker, app = Path(tinker_raw), Path(app_raw)
+        if not tinker.is_absolute() or not app.is_absolute():
+            fail("required input is invalid")
         private_regular(tinker, executable=True)
         owned_directory(app)
         private_regular(app / "tinker.yaml")

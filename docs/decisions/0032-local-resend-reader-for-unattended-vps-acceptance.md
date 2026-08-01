@@ -13,8 +13,12 @@ would weaken the gateway boundary and turn an acceptance test into a bypass.
 
 Use a local-only, dependency-free Resend sent-email reader as the optional
 `TINKERCLOUD_VPS_OTP_COMMAND`. It receives the purpose, exact identity, and
-hostname from the existing black-box harness, reads a local mode-`0600`
-full-access reader key, calls a fixed HTTPS Resend API origin, and emits only
+hostname from the existing black-box harness. Before it reads a local
+mode-`0600` full-access reader key or ledger, or contacts Resend, the identity's
+normalized recipient domain must be exactly `christopher-marx.de`; subdomains
+and lookalikes deny. This local test credential guard does not change normal
+Tinkercloud human-login eligibility. It then calls a fixed HTTPS Resend API
+origin, and emits only
 the one exact Tinkercloud OTP that passes recipient, sender, subject, recent-time,
 hostname-shape, body, and consumed-message checks.
 
@@ -35,4 +39,7 @@ sent-email read permission, then rotate or narrow it afterwards.
   so it is local-only, restrictive-file-mode, revocable, and excluded from Git.
 - Reusing that full-access key for the disposable VPS test temporarily broadens
   the VPS credential; it is a test convenience, not the recommended posture.
+- The reader cannot be used with a local-automation recipient outside the exact
+  `christopher-marx.de` domain, even when that identity is otherwise eligible
+  for normal Tinkercloud login.
 - Ambiguity and provider failure stop the test rather than selecting a code.

@@ -21,6 +21,13 @@ release proof. It receives only the CLI path, HTTPS server, deployer email, and
 app directory as arguments. Keys, OTPs, and bearers never enter arguments,
 output, project files, or a VPS.
 
+Before any CLI/app path check, saved-credential inspection, reader/key access,
+or network action, the wrapper normalizes the requested deployer email and
+requires its domain to equal exactly `christopher-marx.de`. It rejects
+subdomains, suffix lookalikes, the hyphenless domain, and unrelated domains.
+This restriction is only on the opt-in local wrapper, not on direct CLI use,
+saved CLI credentials, or normal Tinkercloud human login.
+
 This wrapper is explicitly not production CI/noninteractive deployment-agent
 authentication. That authority continues to require a separately provisioned
 app-scoped deployer token. The wrapper neither creates nor scopes such a token.
@@ -30,6 +37,7 @@ app-scoped deployer token. The wrapper neither creates nor scopes such a token.
 - Controlled local tests can reuse the real login and deployment boundaries
   without an auth bypass.
 - A malformed identity, provider/reader failure, compatibility error, unsafe
-  path, timeout, or incomplete deploy proof stops the one attempt.
+  path, timeout, incomplete deploy proof, or disallowed requested deployer
+  domain stops the one attempt before any credential reuse or network action.
 - Production automation does not receive a human's implicit local credential
   write or interactive OTP path.

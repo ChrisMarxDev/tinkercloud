@@ -32,7 +32,7 @@ class ReaderTests(unittest.TestCase):
         os.environ.clear(); os.environ.update(self.old); self.temp.cleanup()
 
     def row(self, identifier="msg_123", **changes):
-        row = {"id": identifier, "from": "tinker@example.test", "to": ["viewer@example.test"], "subject": "Your sign-in code", "created_at": "2026-07-27T11:59:30Z"}
+        row = {"id": identifier, "from": "tinker@example.test", "to": ["viewer@christopher-marx.de"], "subject": "Your sign-in code", "created_at": "2026-07-27T11:59:30Z"}
         row.update(changes)
         return row
 
@@ -40,31 +40,56 @@ class ReaderTests(unittest.TestCase):
         def request(url, _key):
             if url == reader.LIST_URL: return {"data": [self.row()]}
             self.assertEqual(url, reader.API_ORIGIN + "/emails/msg_123")
-            return {"from": "tinker@example.test", "to": ["viewer@example.test"], "subject": "Your sign-in code", "text": "Your code: 123456"}
-        argv = ["reader", "viewer", "viewer@example.test", "admin.example.test"]
+            return {"from": "tinker@example.test", "to": ["viewer@christopher-marx.de"], "subject": "Your sign-in code", "text": "Your code: 123456"}
+        argv = ["reader", "viewer", "viewer@christopher-marx.de", "admin.example.test"]
         self.assertEqual(reader.read_once(argv, self.now, request), "123456")
         self.assertEqual(reader.load_ledger(self.ledger), {"msg_123"})
         with self.assertRaises(reader.ReaderError): reader.read_once(argv, self.now, request)
 
     def test_denies_ambiguous_stale_and_wrong_recipient_messages(self):
-        self.assertEqual(reader.candidates({"data": [self.row("one"), self.row("two")]}, "viewer@example.test", "tinker@example.test", self.now, set()), ["one", "two"])
-        self.assertEqual(reader.candidates({"data": [self.row(created_at="2026-07-27T11:50:00Z"), self.row("wrong", to=["other@example.test"])]}, "viewer@example.test", "tinker@example.test", self.now, set()), [])
+        self.assertEqual(reader.candidates({"data": [self.row("one"), self.row("two")]}, "viewer@christopher-marx.de", "tinker@example.test", self.now, set()), ["one", "two"])
+        self.assertEqual(reader.candidates({"data": [self.row(created_at="2026-07-27T11:50:00Z"), self.row("wrong", to=["other@example.test"])]}, "viewer@christopher-marx.de", "tinker@example.test", self.now, set()), [])
 
     def test_denies_non_exact_text_and_unsafe_key_file(self):
-        with self.assertRaises(reader.ReaderError): reader.extract_code({"from": "tinker@example.test", "to": ["viewer@example.test"], "subject": "Your sign-in code", "text": "Your code: 123456\nextra"}, "viewer@example.test", "tinker@example.test")
+        with self.assertRaises(reader.ReaderError): reader.extract_code({"from": "tinker@example.test", "to": ["viewer@christopher-marx.de"], "subject": "Your sign-in code", "text": "Your code: 123456\nextra"}, "viewer@christopher-marx.de", "tinker@example.test")
         self.key.chmod(0o644)
         with self.assertRaises(reader.ReaderError): reader.read_key()
 
     def test_accepts_platform_host_for_global_viewer_broker_only(self):
-        self.assertEqual(reader.validate_request(["reader", "viewer", "viewer@example.test", "admin.example.test"])[2], "admin.example.test")
+        self.assertEqual(reader.validate_request(["reader", "viewer", "viewer@christopher-marx.de", "admin.example.test"])[2], "admin.example.test")
+
+    def test_accepts_exact_recipient_domain_case_insensitively(self):
+        request = ["reader", "deployer", "Dev@CHRISTOPHER-MARX.DE", "admin.example.test"]
+        self.assertEqual(reader.validate_request(request)[1], "dev@christopher-marx.de")
+
+    def test_denies_non_exact_recipient_domain_before_local_or_provider_access(self):
+        for email in ("dev@christophermarx.de", "dev@evilchristopher-marx.de", "dev@sub.christopher-marx.de", "dev@christopher-marx.de.example", "dev@example.test"):
+            accessed = []
+            def forbidden_key():
+                accessed.append("key")
+                self.fail("invalid recipient must not read the key")
+            def forbidden_ledger():
+                accessed.append("ledger")
+                self.fail("invalid recipient must not read the ledger")
+            def forbidden_provider(_url, _key):
+                accessed.append("provider")
+                self.fail("invalid recipient must not call the provider")
+            original_key, original_ledger = reader.read_key, reader.ledger_path
+            reader.read_key, reader.ledger_path = forbidden_key, forbidden_ledger
+            try:
+                with self.assertRaises(reader.ReaderError):
+                    reader.read_once(["reader", "viewer", email, "admin.example.test"], self.now, forbidden_provider)
+            finally:
+                reader.read_key, reader.ledger_path = original_key, original_ledger
+            self.assertEqual(accessed, [])
 
     def test_denies_endpoint_override_and_non_platform_hostname(self):
         with self.assertRaises(reader.ReaderError): reader.fetch_json("https://example.test/emails", "re_abcdefgh12345678")
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "two.labels.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "deployer", "viewer@example.test", "slug.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "slug.example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "example.test"])
-        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@example.test", "other.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@christopher-marx.de", "two.labels.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "deployer", "viewer@christopher-marx.de", "slug.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@christopher-marx.de", "slug.example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@christopher-marx.de", "example.test"])
+        with self.assertRaises(reader.ReaderError): reader.validate_request(["reader", "viewer", "viewer@christopher-marx.de", "other.example.test"])
 
     def test_denies_redirect_without_exposing_provider_body(self):
         def redirect(_request, _timeout):
@@ -98,7 +123,7 @@ class ReaderTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "tinkercloud Resend OTP reader failed\n")
 
     def test_detail_recipient_comparison_is_case_normalized(self):
-        self.assertEqual(reader.extract_code({"from": "tinker@example.test", "to": ["VIEWER@EXAMPLE.TEST"], "subject": "Your sign-in code", "text": "Your code: 123456"}, "viewer@example.test", "tinker@example.test"), "123456")
+        self.assertEqual(reader.extract_code({"from": "tinker@example.test", "to": ["VIEWER@CHRISTOPHER-MARX.DE"], "subject": "Your sign-in code", "text": "Your code: 123456"}, "viewer@christopher-marx.de", "tinker@example.test"), "123456")
 
     def test_parses_resend_short_offset_timestamp_shapes(self):
         self.assertEqual(reader.parse_time("2026-07-27 12:34:56.12345+00"), dt.datetime(2026, 7, 27, 12, 34, 56, 123450, tzinfo=dt.timezone.utc))

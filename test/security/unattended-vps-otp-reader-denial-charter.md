@@ -6,6 +6,10 @@ trust boundary. Before reporting unattended VPS acceptance ready, prove that:
 - the reader is invoked only with `deployer|viewer EMAIL HOSTNAME`, validates
   the hostname against configured platform/app shape, and never accepts an app
   ID or viewer identity from a provider message;
+- before reading a reader key or ledger or making a provider request, the
+  local automation denies every recipient whose normalized domain is not
+  exactly `christopher-marx.de`, including subdomains and suffix lookalikes;
+  this guard does not alter normal Tinkercloud human login;
 - a missing, relative, symlinked, non-regular, non-owner, or non-`0600` reader
   key or consumed-ID ledger fails before any provider request;
 - the reader uses only the fixed HTTPS Resend origin; no environment, argument,

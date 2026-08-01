@@ -10,7 +10,8 @@ It deliberately completes the normal human deployer's OTP login and stores the
 ordinary local CLI credential. It is not production CI/noninteractive
 deployment-agent authentication: that path requires a separately provisioned,
 app-scoped deployer token and must not use this wrapper or an interactive OTP.
-It grants no authority beyond the exact deployer's saved CLI credential.
+It accepts requested deployer identities only in the local automation domain
+`christopher-marx.de`; normal CLI and human login policy are not restricted.
 
 ## Boundary
 
@@ -61,13 +62,19 @@ wrapper invocation still consumes this workflow's one allowed attempt. If that
 permission cannot be obtained, stop and report the environment limitation
 without invoking the wrapper.
 
-The wrapper runs `tinker whoami --json` against the explicit server. It reuses a
-saved credential only when the response is exact valid JSON and its identity
-exactly matches the requested deployer email. A missing/invalid saved login or
-a different exact identity triggers one `tinker login --force`; the wrapper sends
-the email to the normal CLI prompt and obtains the OTP only through
+Before checking any CLI/app path, reading reader configuration, or calling the
+CLI, the wrapper lowercases the requested email and requires its domain to be
+exactly `christopher-marx.de`. It rejects subdomains, suffix lookalikes, the
+hyphenless domain, and all unrelated domains. The wrapper then runs `tinker
+whoami --json` against the explicit server. It reuses a saved credential only
+when the response is exact valid JSON and its identity exactly matches the
+requested deployer email. A missing/invalid saved login or a different exact
+identity triggers one `tinker login --force`; the wrapper sends the email to the
+normal CLI prompt and obtains the OTP only through
 `skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py`. It then proves the
-exact identity again with `whoami --json`.
+exact identity again with `whoami --json`. This local-wrapper restriction does
+not affect a saved CLI credential used directly or Tinkercloud's normal
+human-login policy.
 
 It performs exactly one `tinker deploy --json` and accepts it only when the safe
 JSON success result confirms the CLI's built-in fresh anonymous HTTPS denial

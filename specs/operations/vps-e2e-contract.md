@@ -83,8 +83,12 @@ HTTP endpoints, or logs.
 mail-reader for unattended acceptance. It is not part of Tinkercloud production
 and does not alter the deployed gateway, its database, or its authentication
 flow. It calls only the fixed HTTPS `https://api.resend.com` origin with a
-local reader credential. The reader accepts only an exact recipient, exact
-configured sender, exact `Your sign-in code` subject, a bounded recent
+local reader credential. Before reading the key or ledger or making a provider
+request, it accepts a deployer or viewer recipient only when its normalized
+domain is exactly `christopher-marx.de`; subdomains and lookalikes deny. This
+local-automation constraint does not restrict normal Tinkercloud human login.
+It then accepts only an exact recipient, exact configured sender, exact
+`Your sign-in code` subject, a bounded recent
 timestamp, and exactly the derived `admin.<domain>` hostname for both deployer
 and viewer global-identity OTP flows, plus the exact
 Tinkercloud text body `Your code: NNNN...`. It fetches one matching message and

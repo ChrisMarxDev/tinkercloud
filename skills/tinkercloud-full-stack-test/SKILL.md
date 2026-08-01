@@ -71,7 +71,9 @@ app content is exposed.
    sender values; the runner derives `admin.<domain>` and `<slug>.<domain>`.
    The reader receives only `deployer|viewer EMAIL HOST`; both V1 OTP purposes
    must use exactly `admin.<domain>` because the global browser identity owner
-   owns the flow. It must print only a 4--12 digit code.
+   owns the flow. Local automation accepts a recipient only when its normalized
+   domain is exactly `christopher-marx.de`; this is not a production login
+   restriction. It must print only a 4--12 digit code.
 5. Require `TINKERCLOUD_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINKERCLOUD_VPS_REUSE=1` marker gating. Never
    weaken SSH trust or introduce an OTP/auth bypass. A clean rerun may remove

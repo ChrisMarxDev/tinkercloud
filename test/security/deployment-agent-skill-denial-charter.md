@@ -7,6 +7,11 @@ app-scoped deployer token and never a prompt or implicit credential write.
 
 Before a successful test deployment, prove these denials:
 
+- The requested deployer email is normalized and its domain must equal exactly
+  `christopher-marx.de`. A subdomain, suffix lookalike, hyphenless domain, or
+  unrelated domain denies before any CLI/app path check, `whoami`, reader/key
+  access, login, or deploy—even if a saved credential for that wrong-domain
+  identity is otherwise exact. Case variation of the exact domain is allowed.
 - A relative, symlinked, non-owned, missing, or non-directory CLI/app path is
   rejected before a CLI or reader invocation.
 - A missing deployer email, app directory, `tinker.yaml`, or HTTPS platform URL
@@ -32,6 +37,7 @@ Before a successful test deployment, prove these denials:
   no retry uploads another release.
 
 The deterministic fake-CLI/fake-reader test must cover exact-identity reuse
-without OTP, wrong-identity forced login, redacted OTP output, login failure
-blocking deploy, deployment failure, and unsafe/missing inputs. It runs without
-network access or live mutation.
+without OTP, wrong-identity forced login, wrong-domain saved-identity denial
+before all CLI actions, redacted OTP output, login failure blocking deploy,
+deployment failure, and unsafe/missing inputs. It runs without network access
+or live mutation.

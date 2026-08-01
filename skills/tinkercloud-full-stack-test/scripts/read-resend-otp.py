@@ -29,6 +29,7 @@ MESSAGE_ID = re.compile(r"\A[A-Za-z0-9_-]{1,200}\Z")
 HOST = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
 EMAIL = re.compile(r"\A[^\s@]+@[^\s@]+\.[^\s@]+\Z")
 TIMESTAMP = re.compile(r"\A\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)\Z")
+AUTOMATION_RECIPIENT_DOMAIN = "christopher-marx.de"
 
 
 class ReaderError(Exception):
@@ -163,7 +164,9 @@ def validate_request(argv: list[str]) -> tuple[str, str, str, str]:
     sender = os.environ.get("TINKERCLOUD_VPS_EMAIL_FROM", "")
     domain = os.environ.get("TINKERCLOUD_VPS_DOMAIN", "").lower()
     platform = "admin." + domain
-    if not EMAIL.fullmatch(email) or not EMAIL.fullmatch(sender) or not HOST.fullmatch(hostname):
+    if not EMAIL.fullmatch(email) or email.rsplit("@", 1)[1] != AUTOMATION_RECIPIENT_DOMAIN:
+        fail("invalid reader invocation")
+    if not EMAIL.fullmatch(sender) or not HOST.fullmatch(hostname):
         fail("invalid reader invocation")
     if not HOST.fullmatch(domain) or not HOST.fullmatch(platform):
         fail("invalid reader configuration")
