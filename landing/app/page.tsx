@@ -7,6 +7,7 @@ import {
   CaretDown,
   CheckCircle,
   Circle,
+  CloudArrowUp,
   Code,
   Database,
   Diamond,
@@ -66,6 +67,16 @@ const essentials = [
     icon: Code,
     title: "Client SDK",
     body: "One small, typed browser SDK.",
+  },
+  {
+    icon: CloudArrowUp,
+    title: "Blob storage",
+    body: "Private, app-scoped files with bounded uploads.",
+  },
+  {
+    icon: Sparkle,
+    title: "LLM capability",
+    body: "Operator-governed AI access without browser secrets.",
   },
 ];
 
@@ -189,9 +200,8 @@ export default function Home() {
             <CheckCircle size={34} weight="fill" aria-hidden="true" />
           </div>
         </div>
-      </section>
 
-      <section className="how" id="how-it-works" aria-labelledby="how-title">
+      <div className="how" id="how-it-works" aria-labelledby="how-title">
         <Flourishes area="how" />
         <div className="section-heading">
           <p className="eyebrow">How it works</p>
@@ -221,7 +231,8 @@ export default function Home() {
             );
           })}
         </ol>
-      </section>
+      </div>
+    </section>
 
       <section className="essentials" aria-labelledby="essentials-title">
         <Flourishes area="essentials" />

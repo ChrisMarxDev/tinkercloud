@@ -638,7 +638,7 @@ h2 {
 
 .essential-list {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .essential-list article {
@@ -648,6 +648,10 @@ h2 {
 }
 
 .essential-list article:first-child {
+  border-left: 0;
+}
+
+.essential-list article:nth-child(3n + 1) {
   border-left: 0;
 }
 
@@ -905,6 +909,10 @@ footer {
     padding-top: 20px;
   }
 
+  .flow-arrow {
+    display: none;
+  }
+
   .steps {
     max-width: 620px;
     gap: 36px;
@@ -924,7 +932,7 @@ footer {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .essential-list article:nth-child(3) {
+  .essential-list article:nth-child(odd) {
     border-left: 0;
   }
 
