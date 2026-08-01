@@ -1,0 +1,439 @@
+{{define "llm-profile-limits-new"}}
+  <label class="tinker-field"><span class="tinker-label">Model</span><input class="tinker-input tinker-mono" name="model" maxlength="128" required placeholder="claude-sonnet-4-20250514"></label>
+  <div class="tinker-grid tinker-grid--2">
+    <label class="tinker-field"><span class="tinker-label">Messages per request</span><input class="tinker-input tinker-mono" name="max_messages" inputmode="numeric" value="16" required></label>
+    <label class="tinker-field"><span class="tinker-label">Bytes per message</span><input class="tinker-input tinker-mono" name="max_message_bytes" inputmode="numeric" value="16384" required></label>
+    <label class="tinker-field"><span class="tinker-label">Input bytes per request</span><input class="tinker-input tinker-mono" name="max_input_bytes" inputmode="numeric" value="65536" required></label>
+    <label class="tinker-field"><span class="tinker-label">Maximum output tokens</span><input class="tinker-input tinker-mono" name="max_output_tokens" inputmode="numeric" value="1024" required></label>
+    <label class="tinker-field"><span class="tinker-label">Timeout (milliseconds)</span><input class="tinker-input tinker-mono" name="timeout_ms" inputmode="numeric" value="30000" required></label>
+    <label class="tinker-field"><span class="tinker-label">Viewer requests per window</span><input class="tinker-input tinker-mono" name="viewer_requests" inputmode="numeric" value="30" required></label>
+    <label class="tinker-field"><span class="tinker-label">App requests per window</span><input class="tinker-input tinker-mono" name="app_requests" inputmode="numeric" value="120" required></label>
+    <label class="tinker-field"><span class="tinker-label">Rate window (milliseconds)</span><input class="tinker-input tinker-mono" name="rate_window_ms" inputmode="numeric" value="60000" required></label>
+    <label class="tinker-field"><span class="tinker-label">Concurrent calls</span><input class="tinker-input tinker-mono" name="concurrency_limit" inputmode="numeric" value="4" required></label>
+    <label class="tinker-field"><span class="tinker-label">Monthly token limit</span><input class="tinker-input tinker-mono" name="monthly_token_limit" inputmode="numeric" value="100000" required></label>
+  </div>
+{{end}}
+{{define "llm-profile-limits-existing"}}
+  <label class="tinker-field"><span class="tinker-label">Model</span><input class="tinker-input tinker-mono" name="model" maxlength="128" value="{{.Model}}" required></label>
+  <div class="tinker-grid tinker-grid--2">
+    <label class="tinker-field"><span class="tinker-label">Messages per request</span><input class="tinker-input tinker-mono" name="max_messages" inputmode="numeric" value="{{.MaxMessages}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Bytes per message</span><input class="tinker-input tinker-mono" name="max_message_bytes" inputmode="numeric" value="{{.MaxMessageBytes}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Input bytes per request</span><input class="tinker-input tinker-mono" name="max_input_bytes" inputmode="numeric" value="{{.MaxInputBytes}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Maximum output tokens</span><input class="tinker-input tinker-mono" name="max_output_tokens" inputmode="numeric" value="{{.MaxOutputTokens}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Timeout (milliseconds)</span><input class="tinker-input tinker-mono" name="timeout_ms" inputmode="numeric" value="{{.TimeoutMS}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Viewer requests per window</span><input class="tinker-input tinker-mono" name="viewer_requests" inputmode="numeric" value="{{.ViewerRequests}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">App requests per window</span><input class="tinker-input tinker-mono" name="app_requests" inputmode="numeric" value="{{.AppRequests}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Rate window (milliseconds)</span><input class="tinker-input tinker-mono" name="rate_window_ms" inputmode="numeric" value="{{.RateWindowMS}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Concurrent calls</span><input class="tinker-input tinker-mono" name="concurrency_limit" inputmode="numeric" value="{{.ConcurrencyLimit}}" required></label>
+    <label class="tinker-field"><span class="tinker-label">Monthly token limit</span><input class="tinker-input tinker-mono" name="monthly_token_limit" inputmode="numeric" value="{{.MonthlyTokenLimit}}" required></label>
+  </div>
+{{end}}
+{{define "content"}}
+<div class="tinker-shell">
+  <header class="tinker-topbar">
+    <a class="tinker-brand" href="/dashboard" aria-label="Tinkercloud dashboard">
+      <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+      <span>tinkercloud</span>
+    </a>
+    <div class="tinker-topbar__account">
+      <div class="tinker-account">
+        <strong>{{.Actor.Email}}</strong>
+        <span>{{.Actor.Role}}</span>
+      </div>
+      <form class="tinker-inline-form" method="post" action="/logout">
+        <input type="hidden" name="csrf" value="{{.CSRF}}">
+        <button class="tinker-button tinker-button--quiet tinker-button--small" type="submit">Sign out of Tinkercloud</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="tinker-main" id="main">
+    <div class="tinker-page-heading">
+      <div class="tinker-page-heading__copy">
+        {{if eq .Actor.Role "operator"}}
+          <p class="tinker-eyebrow">Private by default</p>
+          <h1>Your Tinkercloud.</h1>
+          <p>Apps, access, releases, and server health—kept small enough to understand.</p>
+        {{else}}
+          <p class="tinker-eyebrow">Deployer overview</p>
+          <h1>Your apps.</h1>
+          <p>Only the apps you own are shown here. Use the Tinker CLI to deploy and manage them.</p>
+        {{end}}
+      </div>
+      <span class="tinker-status" data-state="active">Control plane active</span>
+    </div>
+
+    <div class="tinker-notice tinker-notice--warning" role="status">
+      <p>
+        <strong>Replaceable utility data only.</strong>
+        V1 has no backup or disaster-recovery service. Your VPS remains the recovery authority.
+      </p>
+    </div>
+    {{if .Notice}}
+      <div class="tinker-notice tinker-notice--success" role="status"><p>{{.Notice}}</p></div>
+    {{end}}
+
+    {{if eq .Actor.Role "operator"}}
+      <section class="tinker-section" aria-labelledby="overview-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">At a glance</p><h2 id="overview-title">Platform overview</h2></div>
+        </div>
+        <div class="tinker-grid tinker-grid--3">
+          <article class="tinker-card tinker-stat"><p class="tinker-stat__label">Your apps</p><p class="tinker-stat__value">{{len .View.Apps}}</p></article>
+          <article class="tinker-card tinker-stat"><p class="tinker-stat__label">Active deployers</p><p class="tinker-stat__value">{{len .View.ActiveDeployerEmails}}</p></article>
+          <article class="tinker-card tinker-stat"><p class="tinker-stat__label">Health checks</p><p class="tinker-stat__value">{{len .View.Health}}</p></article>
+        </div>
+		{{if .View.PublicGate.Available}}
+		  <p class="tinker-card__meta">Public static gate: {{if .View.PublicGate.Enabled}}enabled{{else}}disabled{{end}} (revision {{.View.PublicGate.Revision}}). Root authority changes this only with <code>tinkercloud public enable</code> or <code>tinkercloud public disable</code>.</p>
+		{{else}}
+		  <p class="tinker-card__meta">Public static gate status is unavailable. No browser control is provided.</p>
+		{{end}}
+      </section>
+
+      {{if .OperatorStartPrompt}}
+        <section class="tinker-section" aria-labelledby="get-started-title">
+          <div class="tinker-section-header">
+            <div><p class="tinker-eyebrow">Operator only</p><h2 id="get-started-title">Get started with a coding agent</h2></div>
+            <p>Copy a bounded deployment brief. The agent uses its own deployer login; this dashboard never shares credentials.</p>
+          </div>
+          <article class="tinker-card tinker-stack">
+            <div><h3>Ready-to-copy prompt</h3><p class="tinker-card__meta">The endpoint is derived from this Tinkercloud server’s validated configuration. Select the prompt if copying is unavailable.</p></div>
+            <textarea class="tinker-textarea tinker-code-block" id="operator-get-started-prompt" readonly rows="10" aria-label="Coding-agent deployment prompt">{{.OperatorStartPrompt}}</textarea>
+            <div class="tinker-cluster">
+              <button class="tinker-button tinker-button--secondary" type="button" data-tinker-copy-target="operator-get-started-prompt" data-tinker-copy-feedback="operator-get-started-feedback" hidden>Copy prompt</button>
+              <p class="tinker-card__meta" id="operator-get-started-feedback" data-tinker-copy-feedback role="status" aria-live="polite">Select the prompt to copy it manually.</p>
+            </div>
+          </article>
+        </section>
+      {{end}}
+    {{end}}
+
+    <section class="tinker-section" aria-labelledby="apps-title">
+      <div class="tinker-section-header">
+        <div><p class="tinker-eyebrow">Applications</p><h2 id="apps-title">Your apps</h2></div>
+        {{if eq .Actor.Role "operator"}}<p>Every app stays behind its current gateway policy and release posture.</p>{{else}}<p>This list is derived from your current deployer account.</p>{{end}}
+      </div>
+      {{if .Unavailable}}
+        <div class="tinker-state tinker-state--unavailable" role="alert">
+          <div class="tinker-state__icon" aria-hidden="true">!</div>
+          <div><h3>Your app overview is unavailable.</h3><p>Retry from the dashboard. If it continues, ask the operator to run <code>tinkercloud doctor</code>.</p></div>
+        </div>
+      {{else if .View.Apps}}
+        <div class="tinker-app-filter" data-tinker-app-filter hidden>
+          <label class="tinker-field" for="app-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="app-list" data-tinker-app-filter-query>
+          </label>
+          <label class="tinker-field" for="app-filter-status">
+            <span class="tinker-label">Status</span>
+            <select class="tinker-select" id="app-filter-status" aria-controls="app-list" data-tinker-app-filter-status>
+              <option value="">All statuses</option>
+              <option value="creating">creating</option>
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="deleting">deleting</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <p class="tinker-app-filter__count" data-tinker-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tinker-app-list" id="app-list" data-tinker-app-list>
+          {{range .View.Apps}}
+            {{$app := .}}
+            {{$qr := tinkerQR .StableURL}}
+            <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="{{.Slug}}" data-tinker-app-description="{{.Description}}" data-tinker-app-status="{{.Status}}">
+              <div class="tinker-app-card__summary">
+                <div class="tinker-card__header">
+                  <div><p class="tinker-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}</div>
+                  {{if .StableURL}}
+                    <div class="tinker-app-card__actions">
+                      <a class="tinker-button tinker-button--secondary tinker-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>
+                      {{if $qr}}<button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="qr-{{.Slug}}" aria-label="Show QR code for {{.Slug}}" title="Show QR code for {{.Slug}}"><span aria-hidden="true">▦</span></button>{{end}}
+                    </div>
+                  {{end}}
+                  <span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span>
+                </div>
+                <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}</p>
+                <section class="tinker-inset" aria-labelledby="insights-{{.Slug}}">
+                  <div class="tinker-card__header"><div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div></div>
+                  {{if .Insights.Available}}
+                    <div class="tinker-insight-summary">
+                      <p><strong>Last 7 days</strong> · {{.Insights.Last7Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last7Days.ApproximateVisitors}}</p>
+                      <p><strong>Last 30 days</strong> · {{.Insights.Last30Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last30Days.ApproximateVisitors}}</p>
+                      <p>Last activity · {{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</p>
+                    </div>
+                    <figure class="tinker-insight-chart" aria-labelledby="insight-chart-{{.Slug}}">
+                      <figcaption id="insight-chart-{{.Slug}}"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption>
+                      <div class="tinker-insight-chart__bars">{{range .Insights.Last30Days.Days}}<span class="tinker-insight-chart__day" data-page-level="{{insightLevel .PageViews}}" data-visitor-level="{{insightLevel .ApproximateVisitors}}" tabindex="0" role="img" aria-label="{{.Day.Format "2006-01-02"}}: {{.PageViews}} page views; {{.ApproximateVisitors}} approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">{{.Day.Format "Jan 02"}} · {{.PageViews}} page views · {{.ApproximateVisitors}} Approximate visitors</span></span>{{end}}</div>
+                    </figure>
+                    <div class="tinker-visually-hidden"><table><caption>Last 30 UTC days raw local insights values</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody>{{range .Insights.Last30Days.Days}}<tr><td>{{.Day.Format "2006-01-02"}}</td><td>{{.ApproximateVisitors}}</td><td>{{.PageViews}}</td></tr>{{end}}</tbody></table></div>
+                  {{else}}
+                    <div class="tinker-state tinker-state--unavailable" role="status"><div><h4>Local insights unavailable</h4><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; ask the operator to check the local insights setting.</p></div></div>
+                  {{end}}
+                </section>
+              </div>
+              {{if $qr}}
+                <dialog class="tinker-dialog tinker-dialog--compact" id="qr-{{.Slug}}" aria-labelledby="qr-title-{{.Slug}}">
+                  <div class="tinker-dialog__header">
+                    <div>
+                      <p class="tinker-eyebrow">Open on your phone</p>
+                      <h2 id="qr-title-{{.Slug}}">{{.Slug}}</h2>
+                    </div>
+                    <form method="dialog">
+                      <button class="tinker-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
+                    </form>
+                  </div>
+                  <div class="tinker-dialog__body tinker-qr-dialog__body">
+                    <div class="tinker-qr-frame"><canvas class="tinker-qr" width="650" height="650" data-tinker-qr="{{$qr}}" role="img" aria-label="QR code for this app URL"></canvas></div>
+                    <p>Scan with your phone to open this app. Its normal sign-in and access policy still apply.</p>
+                    <a class="tinker-qr-url tinker-mono" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer">{{.StableURL}}</a>
+                  </div>
+                  <div class="tinker-dialog__actions">
+                    <form method="dialog">
+                      <button class="tinker-button tinker-button--secondary" type="submit" value="close">Close</button>
+                    </form>
+                  </div>
+                </dialog>
+              {{end}}
+              {{if eq $.Actor.Role "operator"}}
+              <div class="tinker-app-card__body">
+                <details class="tinker-details">
+                  <summary>Access policy</summary>
+                  <div class="tinker-details__body tinker-stack">
+                    <div class="tinker-notice">
+                      <p id="policy-help-{{$app.Slug}}">
+                        You are always an implicit viewer.
+                        {{if or .Access.Emails .Access.Domains}}
+                          These are the additional viewers allowed by the current policy.
+                        {{else}}
+                          This app is owner-only: no additional email or domain viewers are allowed.
+                        {{end}}
+                        A future deployment can replace this policy with its immutable <code>tinker.yaml</code> allowlist.
+                      </p>
+                    </div>
+                    {{if or .Access.Emails .Access.Domains}}
+                      <dl class="tinker-definition">
+                        {{if .Access.Emails}}<dt>Emails</dt><dd>{{range $index, $email := .Access.Emails}}{{if $index}}, {{end}}{{$email}}{{end}}</dd>{{end}}
+                        {{if .Access.Domains}}<dt>Domains</dt><dd>{{range $index, $domain := .Access.Domains}}{{if $index}}, {{end}}{{$domain}}{{end}}</dd>{{end}}
+                      </dl>
+                    {{end}}
+                    <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/access">
+                      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                      <input type="hidden" name="expected_revision" value="{{.Access.Revision}}">
+					  <input type="hidden" name="mode" value="{{.Access.Mode}}">
+                      <label class="tinker-field" for="emails-{{$app.Slug}}">
+                        <span class="tinker-label">Allowed emails</span>
+                        <textarea class="tinker-textarea" id="emails-{{$app.Slug}}" name="emails" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Emails}}{{.}}
+{{end}}</textarea>
+                        <span class="tinker-help">One exact email per line or comma-separated.</span>
+                      </label>
+                      <label class="tinker-field" for="domains-{{$app.Slug}}">
+                        <span class="tinker-label">Allowed domains</span>
+                        <textarea class="tinker-textarea" id="domains-{{$app.Slug}}" name="domains" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Domains}}{{.}}
+{{end}}</textarea>
+                        <span class="tinker-help">Use domains such as <code>example.com</code>.</span>
+                      </label>
+                      <label class="tinker-choice">
+                        <input class="tinker-checkbox" type="checkbox" name="confirm_broadening" value="confirm">
+                        <span>I confirm that adding any new email or domain broadens access.</span>
+                      </label>
+                      <button class="tinker-button tinker-button--primary" type="submit">Replace current policy</button>
+                    </form>
+                  </div>
+                </details>
+
+                <details class="tinker-details">
+                  <summary>Releases</summary>
+                  <div class="tinker-details__body tinker-stack">
+                    {{if .Releases}}
+                      {{range .Releases}}
+                        <div><strong class="tinker-mono">{{.ID}}</strong><p class="tinker-card__meta">{{.State}} · {{.CreatedAt}}</p>{{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}</div>
+                      {{end}}
+                    {{else}}
+                      <p class="tinker-card__meta">No immutable releases found.</p>
+                    {{end}}
+                  </div>
+                </details>
+
+                {{if eq $.Actor.Role "operator"}}
+                  <details class="tinker-details">
+                    <summary>LLM chat grant</summary>
+                    <div class="tinker-details__body tinker-stack">
+                      {{if .LLMGrant}}
+                        <div class="tinker-notice" role="status"><p><strong>{{.LLMGrant.Status}}</strong> grant using profile <code>{{.LLMGrant.ProfileID}}</code>. This month: {{.LLMGrant.UsedTokens}} used, {{.LLMGrant.ReservedTokens}} reserved, {{.LLMGrant.InFlight}} in flight.</p></div>
+                      {{else}}
+                        <p class="tinker-card__meta">No LLM chat grant exists for this app.</p>
+                      {{end}}
+                      {{if and .LLMGrant (eq .LLMGrant.Status "revoked")}}
+                        <div class="tinker-notice tinker-notice--warning" role="status"><p>This grant is revoked and cannot be reactivated from this dashboard.</p></div>
+                      {{else if $.View.LLMProfiles}}
+                        <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/llm/grant">
+                          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                          <input type="hidden" name="expected_revision" value="{{if .LLMGrant}}{{.LLMGrant.Revision}}{{else}}0{{end}}">
+                          <label class="tinker-field" for="llm-profile-{{$app.Slug}}"><span class="tinker-label">Approved profile</span><select class="tinker-select tinker-mono" id="llm-profile-{{$app.Slug}}" name="profile_id">{{range $.View.LLMProfiles}}{{if eq .Status "active"}}<option value="{{.ID}}" {{if $app.LLMGrant}}{{if eq $app.LLMGrant.ProfileID .ID}}selected{{end}}{{end}}>{{.Model}} · {{.ID}}</option>{{end}}{{end}}</select><span class="tinker-help">This explicitly grants the selected fixed provider profile to {{.Slug}}.</span></label>
+                          <button class="tinker-button tinker-button--primary" type="submit">Approve LLM chat grant</button>
+                        </form>
+                      {{else}}
+                        <p class="tinker-card__meta">Create an active LLM profile below before granting this app access.</p>
+                      {{end}}
+                      {{if .LLMGrant}}
+                        <div class="tinker-danger-zone tinker-stack">
+                          <h3>Restrict this app grant</h3>
+                          <p class="tinker-card__meta">Disable is the temporary pause: an operator can approve it again later. Revocation is terminal for this app and cannot be undone from the dashboard.</p>
+                          <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/llm/grant/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.LLMGrant.Revision}}"><label class="tinker-field"><span class="tinker-label">Type <code>disabled:grant:{{.Slug}}</code></span><input class="tinker-input tinker-mono" name="confirmation" required autocomplete="off"></label><button class="tinker-button tinker-button--secondary" type="submit">Disable LLM chat grant</button></form>
+                          <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/llm/grant/revoke"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.LLMGrant.Revision}}"><label class="tinker-field"><span class="tinker-label">Type <code>revoked:grant:{{.Slug}}</code></span><input class="tinker-input tinker-mono" name="confirmation" required autocomplete="off"></label><button class="tinker-button tinker-button--danger" type="submit">Revoke LLM chat grant</button></form>
+                        </div>
+                      {{end}}
+                    </div>
+                  </details>
+                {{end}}
+
+                <details class="tinker-details">
+                  <summary>App controls</summary>
+                  <div class="tinker-details__body tinker-stack">
+                    {{if eq .Status "active"}}
+                      <form method="post" action="/apps/{{.Slug}}/suspend">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <button class="tinker-button tinker-button--secondary" type="submit">Suspend app</button>
+                      </form>
+                    {{else if eq .Status "suspended"}}
+                      <form method="post" action="/apps/{{.Slug}}/resume">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <button class="tinker-button tinker-button--primary" type="submit">Resume app</button>
+                      </form>
+                    {{end}}
+                    <div class="tinker-danger-zone">
+                      <h3>Delete {{.Slug}}</h3>
+                      <p class="tinker-card__meta">Deletion revokes access first. Confirm the exact target to continue.</p>
+                      <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/delete">
+                        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+                        <label class="tinker-field">
+                          <span class="tinker-label">Type <code>delete:{{.Slug}}</code></span>
+                          <input class="tinker-input tinker-mono" name="confirmation" required autocomplete="off">
+                        </label>
+                        <button class="tinker-button tinker-button--danger" type="submit">Delete app</button>
+                      </form>
+                    </div>
+                  </div>
+                </details>
+              </div>
+              {{end}}
+            </article>
+          {{end}}
+        </div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-app-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Try a different app slug, description, or status filter. Your authorized apps have not changed.</p>
+        </div>
+      {{else}}
+        <div class="tinker-empty">
+          <div class="tinker-empty__icon" aria-hidden="true">→</div>
+          <h3>No apps yet.</h3>
+          <p>Build a static app, then run <code>tinker deploy ./dist</code> to create its private URL.</p>
+        </div>
+      {{end}}
+    </section>
+
+    {{if eq .Actor.Role "operator"}}
+      <section class="tinker-section" aria-labelledby="deployers-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Operator only</p><h2 id="deployers-title">Deployers</h2></div>
+          <p>Authorization grants narrow deployment power, never server or viewer authority.</p>
+        </div>
+        <form class="tinker-card tinker-card--flat tinker-stack" method="post" action="/deployers/active">
+          <div><h3>Active deployer allowlist</h3><p class="tinker-card__meta" id="active-deployers-help">One normalized email per line. Saving makes this the exact active deployer set: new and previously inactive addresses can deploy; removed addresses are signed out and cannot deploy.</p></div>
+          <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="{{.View.ActiveDeployerRevision}}">
+          <label class="tinker-field" for="active-deployer-emails"><span class="tinker-label">Allowed deployer emails</span><textarea class="tinker-textarea" id="active-deployer-emails" name="emails" maxlength="8192" aria-describedby="active-deployers-help">{{range .View.ActiveDeployerEmails}}{{.}}
+{{end}}</textarea><span class="tinker-help">Maximum 100 unique email addresses.</span></label>
+          <label class="tinker-choice"><input class="tinker-checkbox" type="checkbox" name="confirm_broadening" value="confirm"><span>I confirm that adding any email grants deployment authority.</span></label>
+          <div><button class="tinker-button tinker-button--primary" type="submit">Save active deployers</button></div>
+        </form>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="api-keys-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator only</p><h2 id="api-keys-title">API keys</h2></div><p>Provider API keys are encrypted and write-only. Tinkercloud never shows them again.</p></div>
+        {{if .View.LLMKeyManagementReady}}
+          <div class="tinker-grid tinker-grid--2">
+            <article class="tinker-card tinker-stack">
+              <div><h3>Add an API key</h3><p class="tinker-card__meta">Choose a supported provider. Tinkercloud verifies the API key before storing its encrypted envelope.</p></div>
+              <form class="tinker-stack" method="post" action="/dashboard/llm/connections">
+                <input type="hidden" name="csrf" value="{{.CSRF}}">
+                <label class="tinker-field" for="llm-connection-provider"><span class="tinker-label">Provider</span><select class="tinker-select" id="llm-connection-provider" name="provider"><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></label>
+                <label class="tinker-field" for="llm-connection-secret"><span class="tinker-label">API key</span><input class="tinker-input tinker-mono" id="llm-connection-secret" type="password" name="secret" maxlength="4096" required autocomplete="new-password"><span class="tinker-help">Write-only. It is never rendered or returned.</span></label>
+                <button class="tinker-button tinker-button--primary" type="submit">Verify and save API key</button>
+              </form>
+            </article>
+          </div>
+        {{else}}
+          <article class="tinker-state tinker-state--unavailable" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinkercloud llm enable</code>, then restart Tinkercloud. API keys cannot be added, rotated, or disabled until it is available.</p></article>
+        {{end}}
+        {{if .View.LLMConnections}}
+        <div class="tinker-grid tinker-grid--2 tinker-section__spaced">
+          {{range .View.LLMConnections}}
+          <article class="tinker-card tinker-stack"><div class="tinker-card__header"><div><h3>{{.DisplayName}}</h3><p class="tinker-card__meta">{{.Provider}} · <code>{{.ID}}</code></p></div><span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span></div>
+            {{if $.View.LLMKeyManagementReady}}<details class="tinker-details"><summary>Rotate API key</summary><div class="tinker-details__body tinker-stack"><p class="tinker-card__meta">Tinkercloud verifies the replacement against this connection’s stored provider. Provider selection cannot be changed here.</p><form class="tinker-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/rotate"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tinker-field"><span class="tinker-label">Replacement API key</span><input class="tinker-input tinker-mono" type="password" name="secret" maxlength="4096" required autocomplete="new-password"></label><button class="tinker-button tinker-button--primary" type="submit">Verify and rotate API key</button></form></div></details>
+            {{if eq .Status "active"}}<details class="tinker-details"><summary>Disable API key</summary><div class="tinker-details__body tinker-danger-zone tinker-stack"><p class="tinker-card__meta">Future calls using profiles on this API key will be denied.</p><form class="tinker-stack" method="post" action="/dashboard/llm/connections/{{.ID}}/disable"><input type="hidden" name="csrf" value="{{$.CSRF}}"><label class="tinker-field"><span class="tinker-label">Type <code>disable:{{.ID}}</code></span><input class="tinker-input tinker-mono" name="confirmation" required autocomplete="off"></label><button class="tinker-button tinker-button--danger" type="submit">Disable API key</button></form></div></details>{{end}}{{end}}
+          </article>
+          {{end}}
+        </div>
+        {{end}}
+      </section>
+
+      <section class="tinker-section" aria-labelledby="llm-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator only</p><h2 id="llm-title">LLM chat</h2></div><p>Choose fixed profiles, app grants, limits, and usage. App content is sent to the approved external provider.</p></div>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-card tinker-stack">
+            <div><h3>Create chat profile</h3><p class="tinker-card__meta">A profile fixes one model and every per-call, rate, concurrency, and monthly-token bound.</p></div>
+            {{if .View.LLMConnections}}
+            <form class="tinker-stack" method="post" action="/dashboard/llm/profiles">
+              <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="0">
+              <label class="tinker-field" for="llm-profile-connection"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" id="llm-profile-connection" name="connection_id">{{range .View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}">{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>
+              {{template "llm-profile-limits-new"}}
+              <button class="tinker-button tinker-button--primary" type="submit">Create profile</button>
+            </form>
+            {{else}}<p class="tinker-card__meta">Add an active provider connection before creating a profile.</p>{{end}}
+          </article>
+        </div>
+
+        {{if .View.LLMProfiles}}
+          <div class="tinker-section-header tinker-section__spaced"><div><p class="tinker-eyebrow">Fixed bounds</p><h3>Chat profiles</h3></div></div>
+          <div class="tinker-grid tinker-grid--2">{{range .View.LLMProfiles}}{{$profile := .}}<article class="tinker-card tinker-stack"><div class="tinker-card__header"><div><h3>{{.Model}}</h3><p class="tinker-card__meta">Profile <code>{{.ID}}</code> · connection <code>{{.ConnectionID}}</code></p></div><span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span></div><details class="tinker-details"><summary>Edit profile limits</summary><div class="tinker-details__body"><form class="tinker-stack" method="post" action="/dashboard/llm/profiles/{{.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.Revision}}"><label class="tinker-field"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" name="connection_id">{{range $.View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}" {{if eq $profile.ConnectionID .ID}}selected{{end}}>{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>{{template "llm-profile-limits-existing" .}}<button class="tinker-button tinker-button--primary" type="submit">Save profile limits</button></form></div></details></article>{{end}}</div>
+        {{end}}
+      </section>
+
+      <section class="tinker-section" aria-labelledby="audit-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Recent activity</p><h2 id="audit-title">Audit</h2></div></div>
+        {{if .View.Audit}}
+          <div class="tinker-table-wrap">
+            <table class="tinker-table">
+              <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Target</th></tr></thead>
+              <tbody>{{range .View.Audit}}<tr><td>{{.OccurredAt}}</td><td>{{.Action}}</td><td>{{.Outcome}}</td><td>{{.Target}}</td></tr>{{end}}</tbody>
+            </table>
+          </div>
+        {{else}}
+          <div class="tinker-empty"><h3>No recent audit events.</h3><p>Audited mutations will appear here without raw credentials or request bodies.</p></div>
+        {{end}}
+      </section>
+    {{end}}
+
+    {{if eq .Actor.Role "operator"}}
+      <section class="tinker-section" aria-labelledby="health-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Fail closed</p><h2 id="health-title">Server health</h2></div>
+          <p>Run <code>tinkercloud doctor</code> on the VPS for local credential and dependency diagnostics.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2">
+          {{range .View.Health}}
+            <article class="tinker-card tinker-card--flat">
+              <div class="tinker-card__header"><h3>{{.Name}}</h3><span class="tinker-status" data-state="{{.State}}">{{.State}}</span></div>
+              <p class="tinker-card__meta">{{.Detail}}</p>
+            </article>
+          {{end}}
+        </div>
+      </section>
+    {{end}}
+    <p class="tinker-footer-note">Open source. Your VPS. Your Tinkercloud.</p>
+  </main>
+</div>
+{{end}}

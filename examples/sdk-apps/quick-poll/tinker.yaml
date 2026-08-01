@@ -1,0 +1,16 @@
+version: 2
+name: quick-poll
+description: A private live team poll.
+
+build:
+  output: dist
+
+access:
+  mode: private
+  allow:
+    emails: []
+    domains: []
+
+features:
+  kv: true
+  realtime: true

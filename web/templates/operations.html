@@ -1,0 +1,33 @@
+{{define "operations"}}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tinkercloud operations</title>
+  <style>{{tinkerCSS}}</style>
+</head>
+<body>
+  <a class="tinker-skip" href="#main">Skip to content</a>
+  <main class="tinker-auth" id="main">
+    <section class="tinker-auth-card" aria-labelledby="operations-title">
+      <div class="tinker-brand">
+        <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+        <span>tinkercloud</span>
+      </div>
+      <p class="tinker-eyebrow">Local operation</p>
+      <h1 id="operations-title">Confirm the target.</h1>
+      <p class="tinker-auth-card__intro">Current state: <strong>{{.Status}}</strong></p>
+      {{if .Warning}}
+        <div class="tinker-notice tinker-notice--warning" role="alert"><p>{{.Warning}}</p></div>
+      {{end}}
+      <form class="tinker-stack" method="post" action="{{.Action}}">
+        <label class="tinker-field">
+          <span class="tinker-label">Exact target</span>
+          <input class="tinker-input tinker-mono" name="confirm" required autocomplete="off">
+        </label>
+        <button class="tinker-button tinker-button--danger tinker-button--full" type="submit">Confirm operation</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>{{end}}

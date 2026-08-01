@@ -1,0 +1,77 @@
+{{define "content"}}
+<div class="tinker-shell">
+  <header class="tinker-topbar">
+    <a class="tinker-brand" href="/apps" aria-label="Tinkercloud app catalog">
+      <span class="tinker-brand__mark" aria-hidden="true">{{tinkerMark}}</span>
+      <span>tinkercloud</span>
+    </a>
+    <form class="tinker-inline-form" method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="tinker-button tinker-button--quiet tinker-button--small" type="submit">Sign out of Tinkercloud</button>
+    </form>
+  </header>
+
+  <main class="tinker-main" id="main">
+    <div class="tinker-page-heading">
+      <div class="tinker-page-heading__copy">
+        <p class="tinker-eyebrow">Your team</p>
+        <h1>Apps you can open.</h1>
+        <p>This catalog contains only apps your verified Tinkercloud identity can currently access.</p>
+      </div>
+    </div>
+
+    <section class="tinker-section" aria-labelledby="catalog-title">
+      <div class="tinker-section-header">
+        <div><p class="tinker-eyebrow">Authorized apps</p><h2 id="catalog-title">App catalog</h2></div>
+        <p>App access is checked again when you open an app.</p>
+      </div>
+      {{if .Unavailable}}
+        <div class="tinker-state tinker-state--unavailable" role="alert">
+          <div class="tinker-state__icon" aria-hidden="true">!</div>
+          <div><h3>The app catalog is unavailable.</h3><p>Retry from this page. If it continues, contact your Tinkercloud operator.</p></div>
+        </div>
+      {{else if .Apps}}
+        <div class="tinker-app-filter" data-tinker-catalog-filter hidden>
+          <label class="tinker-field" for="catalog-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="catalog-filter-query" type="search" autocomplete="off" placeholder="Search by app slug" aria-controls="catalog-app-list" data-tinker-catalog-filter-query>
+          </label>
+          <label class="tinker-field" for="catalog-filter-tag">
+            <span class="tinker-label">Tag</span>
+            <select class="tinker-select" id="catalog-filter-tag" aria-controls="catalog-app-list" data-tinker-catalog-filter-tag>
+              <option value="">All tags</option>
+              {{range .Tags}}<option value="{{.}}">{{.}}</option>{{end}}
+            </select>
+          </label>
+          <p class="tinker-app-filter__count" data-tinker-catalog-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2" id="catalog-app-list" data-tinker-catalog-list>
+          {{range .Apps}}
+            <article class="tinker-card tinker-app-card" data-tinker-catalog-card data-tinker-catalog-slug="{{.Slug}}" data-tinker-catalog-description="{{.Description}}" data-tinker-catalog-tags="{{range .Tags}}{{.}} {{end}}">
+              <div class="tinker-app-card__summary">
+                <div class="tinker-card__header">
+                  <div><p class="tinker-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}</div>
+				  <span class="tinker-status" data-state="active">{{if eq .Posture "public"}}Public{{else}}Private{{end}}</span>
+                </div>
+                {{if .Tags}}<p class="tinker-card__meta">Tags: {{range $index, $tag := .Tags}}{{if $index}}, {{end}}{{$tag}}{{end}}</p>{{end}}
+                <a class="tinker-button tinker-button--secondary" href="{{.StableURL}}">Open {{.Slug}}</a>
+              </div>
+            </article>
+          {{end}}
+        </div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-catalog-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Adjust the app search or tag filter. Your current catalog is unchanged.</p>
+        </div>
+      {{else}}
+        <div class="tinker-empty">
+          <div class="tinker-empty__icon" aria-hidden="true">→</div>
+          <h3>No apps available yet.</h3>
+          <p>When an app owner allows this identity, it will appear here on your next visit.</p>
+        </div>
+      {{end}}
+    </section>
+  </main>
+</div>
+{{end}}

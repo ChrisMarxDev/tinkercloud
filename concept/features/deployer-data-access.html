@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tinkercloud — Deployer Data Access</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a></nav>
+    <p class="eyebrow">Implemented M4 deployer capability · live VPS evidence pending</p>
+    <h1>Inspect an app’s data from the CLI without exposing its database.</h1>
+    <p class="lede">Give an authenticated deployer bounded API and CLI access
+      to the KV entries and JSON documents of an app they own. Tinkercloud still
+      derives the immutable app identity, keeps SQLite private, and applies
+      current authorization on every request.</p>
+    <p class="promise">Owner-scoped data operations, not remote SQL.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="value">
+        <p class="eyebrow">Reason and value</p>
+        <h2>Make support and recovery possible without VPS access</h2>
+        <p>Today a deployer can create, deploy, configure, and observe an app,
+          but cannot safely inspect the state created through Tinkercloud’s SDK.
+          Bounded data access makes it practical to diagnose a broken poll,
+          repair one malformed document, confirm an import, or automate a
+          controlled export. It uses the same app-local data model as the SDK
+          and does not create a second database authority.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">4 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">3 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">4 / 5</span></div>
+      </section>
+    </div>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>Authenticated deployer access to an app the deployer owns.</li>
+          <li>Bounded KV list/get and collection/document list/get operations.</li>
+          <li>Stable JSON HTTP responses and deterministic CLI <code>--json</code> output.</li>
+          <li>Cursor pagination, existing size limits, and explicit versions.</li>
+          <li>Separate <code>data:read</code> and <code>data:write</code> token scopes.</li>
+          <li>Later single-record mutations with optimistic concurrency.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No SQL console, query language, joins, filters, schemas, or migrations.</li>
+          <li>No SQLite file download, database path, connection string, or second listener.</li>
+          <li>No viewer impersonation or client-selected immutable app ID.</li>
+          <li>No unbounded dump, bulk delete, or server-side backup product.</li>
+          <li>No automatic data access for operators or deployment agents.</li>
+          <li>No realtime CLI tail or durable change-history promise.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="experience">
+      <p class="eyebrow">Deployer experience</p>
+      <h2>The saved login is enough; ask only for the target and operation</h2>
+      <pre>tinker data kv list my-app --prefix settings/
+tinker data kv get my-app settings/theme
+
+tinker data collections list my-app
+tinker data documents list my-app tasks --limit 50
+tinker data documents get my-app tasks doc_abcdefghijklmnopqrstuv
+
+# Stable machine-readable output for every command
+tinker data documents list my-app tasks --json</pre>
+      <p>The CLI reuses its saved Tinkercloud server and deployer login. It does
+        not create a local database configuration, request a database
+        credential, or ask for information Tinkercloud can derive. Human output is
+        readable; <code>--json</code> preserves the versioned API envelope for
+        scripts.</p>
+    </section>
+
+    <section id="api">
+      <p class="eyebrow">Proposed control API</p>
+      <h2>App slug in; server-derived data scope out</h2>
+      <pre>GET /api/v1/apps/{slug}/data/kv?prefix=&amp;cursor=&amp;limit=
+GET /api/v1/apps/{slug}/data/kv/{key}
+
+GET /api/v1/apps/{slug}/data/collections?cursor=&amp;limit=
+GET /api/v1/apps/{slug}/data/collections/{collection}/documents?cursor=&amp;limit=
+GET /api/v1/apps/{slug}/data/collections/{collection}/documents/{id}</pre>
+      <p>The public slug is an owned control-plane resource identifier, not a
+        database selector. After authenticating the deployer and checking
+        <code>data:read</code>, the server verifies ownership, resolves the
+        immutable app ID, and produces a typed app-data authorization context.
+        Only that context may reach the existing KV and collection services.</p>
+      <p>Do not call the protected app dispatcher with a synthetic viewer
+        session or an <code>authorized=true</code> flag. Refactor the shared
+        data services to accept a narrow context containing server-derived app,
+        authenticated owner subject. The app gateway and
+        control gateway may each produce that context only after their own
+        authentication and authorization succeeds.</p>
+    </section>
+
+    <div class="grid">
+      <section class="half caution" id="deny">
+        <p class="eyebrow">Deny-path charter first</p>
+        <ul>
+          <li>Anonymous requests, browser identity cookies, and app viewer cookies cannot use the bearer-token data API.</li>
+          <li>A deployer cannot read another deployer’s app, even with a valid token and guessed slug.</li>
+          <li>Missing, expired, revoked, suspended, wrong-app, or wrong-scope credentials fail before opening an app database.</li>
+          <li>Malformed slugs, keys, collections, document IDs, cursors, limits, and encoded path separators fail closed.</li>
+          <li>Responses and errors never reveal another app’s bytes, a filesystem path, SQL, schema details, or secrets from logs.</li>
+          <li>Oversized pages, quota exhaustion, unavailable/locked databases, and cancellation return stable safe errors.</li>
+          <li>Future writes reject stale versions and partial mutations; an audit failure must not leave an unaudited write committed.</li>
+        </ul>
+      </section>
+      <section class="half" id="ownership">
+        <p class="eyebrow">Trust and ownership</p>
+        <ul>
+          <li><strong>Owner:</strong> the app remains owned by its deployer; app data remains isolated in its app-local SQLite file.</li>
+          <li><strong>Trust boundary:</strong> the platform gateway authenticates the deployer and resolves ownership before data access.</li>
+          <li><strong>Credential:</strong> a fresh interactive CLI login receives <code>data:read</code>/<code>data:write</code>; deployment-agent tokens receive no data scope by default.</li>
+          <li><strong>Revocation:</strong> deployer suspension, app deletion, or token revocation applies on the next request.</li>
+          <li><strong>Observability:</strong> record actor, app, operation, result, and request ID—never values or document bodies.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="rollout">
+      <p class="eyebrow">Implementation evidence</p>
+      <ol>
+        <li><strong>L1 — Read one document.</strong> Added the contract, ADR,
+          <code>data:read</code> authorization, typed app-data context, one
+          document-get endpoint, CLI command, audit metadata, and cross-app
+          negative tests.</li>
+        <li><strong>L2 — Bounded browsing.</strong> Added KV list/get, active
+          collection-name listing, paged document listing, stable JSON output,
+          and local two-owner HTTP integration evidence. Live-VPS acceptance
+          with two deployers and two apps remains the release exit gate.</li>
+        <li><strong>L3 — Deliberate mutation.</strong> Added
+          <code>data:write</code>, individual KV set/delete and document
+          create/update/delete. Require expected versions for update/delete,
+          accept JSON from a file or stdin, and confirm destructive actions.</li>
+        <li><strong>L4 — Evidence-led portability.</strong> Consider a paged
+          client-side JSONL export/import only after real demand. Never turn it
+          into a raw database download or V1 backup claim.</li>
+      </ol>
+    </section>
+
+    <section id="contracts">
+      <p class="eyebrow">Required implementation records</p>
+      <ul>
+        <li>Add <code>specs/api/deployer-data-contract.md</code> before code,
+          including routes, envelopes, limits, actor semantics, and the deny
+          charter above.</li>
+        <li>Record an ADR for allowing a deployer actor through the app-data
+          boundary while retaining one private database authority.</li>
+        <li>Update the HTTP and control-auth contracts, scope allowlists, CLI
+          contract, roadmap evidence, and the canonical
+          <code>skills/tinkercloud-platform</code> source.</li>
+        <li>Refresh marked specialized-skill copies and run the skill drift
+          check when the workflow becomes available.</li>
+      </ul>
+    </section>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Implemented decisions and remaining evidence</p>
+      <ul>
+        <li>Interactive owner logins gain <code>data:read</code> and
+          <code>data:write</code> only when freshly issued; machine/deployment-agent
+          tokens must request each scope explicitly and remain app-scoped.</li>
+        <li>Reads for an owned suspended app support
+          diagnosis, but permit writes only while active; deny all access once
+          deletion begins.</li>
+        <li>Writes record metadata-only intent/digest and a successful outcome
+          without storing values; interrupted outcomes reconcile only from
+          provable current state.</li>
+        <li>The two-owner/two-app live VPS denial matrix remains the release
+          evidence gate.</li>
+      </ul>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Build a narrow data administration API; do not expose SQLite</h2>
+      <p><strong>Do:</strong> Ship the read-only slice first. It has high
+        operational value at moderate complexity because it composes the
+        existing ownership, bearer-token, KV, collection, pagination, and
+        per-app database boundaries.</p>
+      <p><strong>Don’t:</strong> Add raw SQL or database downloads. They would
+        bypass capability limits, couple the public interface to internal
+        schema, increase exfiltration and corruption risk, and contradict the
+        single private data authority for little additional user value.</p>
+    </section>
+  </main>
+  <footer><p>Implemented locally as an M4 capability. The two-owner live VPS denial matrix remains release evidence.</p></footer>
+</body>
+</html>

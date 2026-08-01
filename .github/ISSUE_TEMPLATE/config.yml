@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/ChrisMarxDev/tinkercloud/blob/main/SECURITY.md
+    about: Follow the private reporting options; never open a public issue.
+  - name: Read the documentation
+    url: https://github.com/ChrisMarxDev/tinkercloud/blob/main/docs/README.md
+    about: Start with the documentation index and V1 scope.

@@ -1,0 +1,15 @@
+version: 2
+name: attachment-shelf
+description: A private, utility-grade attachment shelf.
+
+build:
+  output: dist
+
+access:
+  mode: private
+  allow:
+    emails: []
+    domains: []
+
+features:
+  blobs: true

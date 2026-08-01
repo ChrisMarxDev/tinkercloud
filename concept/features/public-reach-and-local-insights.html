@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tinkercloud — Public Reach and Local Insights</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav><a href="index.html">Feature ranking</a><a href="../index.html">Product concept</a><a href="../../PRINCIPLES.md">Principles</a></nav>
+    <p class="eyebrow">Accepted post-V1 extension · governed by PRD §21.3 and ADR 0054</p>
+    <h1>Share privately by default. Publish publicly on purpose. Know whether anyone came.</h1>
+    <p class="lede">Extend Tinkercloud's agent-to-team loop with a searchable
+      app catalog, deliberately public static deployments, and the smallest
+      useful local analytics: visitors, page views, and last activity.</p>
+    <p class="promise">Public reach without a public backend runtime, remote analytics service, or accidental capability access.</p>
+  </header>
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="summary">
+        <p class="eyebrow">Summary</p>
+        <h2>Turn finished team experiments into public proof</h2>
+        <p>Tinkercloud already makes a folder into a protected app URL. This
+          concept adds the next loop: find the team's apps, explicitly promote
+          a safe static app to the public internet, and see whether people
+          actually visited it. Public apps remain ordinary immutable releases
+          behind the same gateway; they do not gain server code, public data
+          APIs, credentials, or a new listener.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">4 / 5</span></div>
+        <div class="metric"><span>Release</span><span class="score">Post-V1</span></div>
+      </section>
+    </div>
+
+    <section id="why">
+      <p class="eyebrow">Reason and value</p>
+      <h2>Sharing creates the marketing loop that private hosting cannot</h2>
+      <div class="grid">
+        <div class="third card">
+          <h3>For deployers</h3>
+          <p>An agent can build a demo, visual story, game, calculator, or
+            launch page and publish the reviewed result without moving it to a
+            second hosting product.</p>
+        </div>
+        <div class="third card">
+          <h3>For teams</h3>
+          <p>A signed-in viewer gets one searchable shelf of apps they may use,
+            instead of collecting private URLs in chat and documents.</p>
+        </div>
+        <div class="third card">
+          <h3>For operators</h3>
+          <p>All publishing and analytics remain local to the existing gateway,
+            database, domain, and operational surface.</p>
+        </div>
+      </div>
+      <p class="muted">Competitive evidence points in the same direction:
+        Shopify Quick demonstrates broad creation when sharing is effortless;
+        ChatGPT Sites pairs public publishing with basic traffic analytics; Jot
+        pairs private team publishing with public slugs and local usage
+        counters. Tinkercloud should adopt the loop while retaining its fixed
+        capability model.</p>
+    </section>
+
+    <section id="product-model">
+      <p class="eyebrow">Product model</p>
+      <h2>Three surfaces, one gateway</h2>
+      <div class="flow" aria-label="Tinkercloud reach and insight loop">
+        <span><b>Build</b><br><code>tinker deploy .</code></span>
+        <span>→</span>
+        <span><b>Discover</b><br>team app catalog</span>
+        <span>→</span>
+        <span><b>Promote</b><br>public static policy</span>
+        <span>→</span>
+        <span><b>Learn</b><br>local visits summary</span>
+      </div>
+      <table>
+        <thead><tr><th>Surface</th><th>Audience</th><th>What it exposes</th><th>Authority</th></tr></thead>
+        <tbody>
+          <tr><td>Private app</td><td>Allowed viewers</td><td>Static app plus enabled SDK capabilities</td><td>Existing viewer session and current private policy</td></tr>
+          <tr><td>Public static app</td><td>Anyone with the URL</td><td>Immutable static release only</td><td>Explicit public policy plus active operator gate</td></tr>
+          <tr><td>Team catalog and analytics</td><td>Verified viewers for catalog; owner/operator for analytics</td><td>Bounded metadata and aggregates</td><td>Global identity, policy-filtered catalog, dashboard role/ownership</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>A viewer-facing catalog at the admin host showing only active apps the current identity may open.</li>
+          <li>Immutable manifest tags used for catalog display and local search.</li>
+          <li>An explicit <code>public</code> access mode for static files and SPA fallback.</li>
+          <li>A global operator gate, disabled by default, that permits public policies without making any app public itself.</li>
+          <li>Explicit deployer confirmation when a private app becomes public.</li>
+          <li>Default <code>noindex</code>; deliberate per-app search indexing opt-in.</li>
+          <li>Local daily page views, approximate visitors, and last activity.</li>
+          <li>Owner/operator dashboard summaries for 7 and 30 days.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No <code>server.ts</code>, workerd, backend process, function, cron, job, or arbitrary request handler.</li>
+          <li>No anonymous KV, collections, blobs, realtime, identity, or LLM capability access.</li>
+          <li>No public blob URLs, public uploads, public WebSockets, or anonymous write surface.</li>
+          <li>No custom events, funnels, heatmaps, referrers, paths, geography, devices, ad attribution, or session replay.</li>
+          <li>No external analytics script, product telemetry upload, or second persistence service.</li>
+          <li>No custom domains, external signed invitations, comments, public directory, or deployer-selected rollback in this concept.</li>
+          <li>No claim that approximate visitors equal people, accounts, or unique humans.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="public-experience">
+      <p class="eyebrow">Public deployment experience</p>
+      <h2>Public is a reviewed policy state, never a convenience flag that skips the gateway</h2>
+      <pre># Operator enables the capability for this Tinkercloud host.
+sudo tinkercloud public enable
+
+# Deployer deliberately requests public static access.
+access:
+  mode: public
+  indexing: false
+
+features:
+  kv: false
+  blobs: false
+  realtime: false
+
+capabilities:
+  llm:
+    chat: false
+
+tinker deploy .
+
+Access broadening: anyone on the internet can open this app.
+Publish demo publicly? [y/N]</pre>
+      <ul>
+        <li>The operator gate defaults off and is revisioned and audited. Enabling it permits requests; it changes no app policy.</li>
+        <li>A deployer must own the target and request <code>access.mode: public</code>. The server rejects public activation while any browser capability is enabled.</li>
+        <li>Interactive deployment asks once only when the effective policy broadens. Deterministic/JSON deployment requires an explicit machine-readable confirmation.</li>
+        <li>Turning the operator gate off removes anonymous access on the next request. Existing owner/email/domain rules remain available through the normal private login path.</li>
+        <li>Changing the app back to private removes anonymous access on the next request and does not wait for caches to expire.</li>
+      </ul>
+    </section>
+
+    <section id="public-boundary">
+      <p class="eyebrow">Public request boundary</p>
+      <h2>A typed public-static decision replaces authentication; it does not bypass authorization</h2>
+      <pre>canonical app host
+  → resolve active app and current release metadata only
+  → classify route
+  → load current policy and current operator public gate
+  → private route: validate session + evaluate viewer policy
+  → public static route: evaluate explicit public-static policy
+  → produce sealed StaticAccessContext
+  → verify immutable release evidence
+  → serve static bytes
+
+reserved /_tinker/* on public app
+  → deny before SDK, blob, realtime, or LLM dispatcher</pre>
+      <p>The sealed context should be a sum type produced only by the gateway:
+        private-viewer authorization or public-static authorization. Capability
+        dispatchers continue to require the private viewer-bearing context. A
+        boolean such as <code>public=true</code> or <code>authorized=true</code>
+        is forbidden.</p>
+      <p>Candidate verification becomes posture-aware. A private deployment
+        proves anonymous denial with zero release bytes. A public deployment
+        proves the expected candidate bytes are anonymously reachable through
+        the gateway while every reserved capability route remains denied.</p>
+    </section>
+
+    <section id="catalog">
+      <p class="eyebrow">Team catalog</p>
+      <h2>Replace “dashboard unavailable” with the apps this viewer can actually use</h2>
+      <pre>GET https://admin.example.com/apps
+
+Team apps
+┌──────────────────────────────────────────┐
+│ launch-map        planning · operations │
+│ Visual launch tracker                    │
+│ Private                         Open →   │
+├──────────────────────────────────────────┤
+│ product-story     demo · public          │
+│ Interactive product walkthrough          │
+│ Public                          Open →   │
+└──────────────────────────────────────────┘</pre>
+      <ul>
+        <li>The global identity is the source of viewer identity; browser query parameters never select an email or app.</li>
+        <li>The server queries only current active apps whose owner/email/domain policy matches that identity, plus public apps explicitly configured for catalog listing.</li>
+        <li>The response contains slug, active description, bounded tags, public/private badge, and stable URL—never denied app metadata.</li>
+        <li>Search and tag filtering operate only over the already-authorized server-rendered list.</li>
+        <li>Opening a private card still uses the normal app-bound handoff and rechecks current policy before any release byte is served.</li>
+      </ul>
+      <p>Recommended tag contract: zero to eight immutable active-deployment
+        tags, each 1–24 lowercase ASCII characters using letters, numbers, and
+        internal hyphens. Tags are presentation metadata, never policy or
+        capability selectors.</p>
+    </section>
+
+    <section id="analytics">
+      <p class="eyebrow">Basic local analytics</p>
+      <h2>Answer only: did people visit, how often, and when?</h2>
+      <div class="grid">
+        <div class="half card">
+          <h3>Metrics</h3>
+          <ul>
+            <li><strong>Visitors:</strong> approximate distinct browsers in the selected period.</li>
+            <li><strong>Page views:</strong> successful HTML document responses.</li>
+            <li><strong>Last activity:</strong> latest counted document response.</li>
+            <li><strong>Daily series:</strong> visitor and page-view totals for the last 30 days.</li>
+          </ul>
+        </div>
+        <div class="half card">
+          <h3>Explicit omissions</h3>
+          <ul>
+            <li>No clicks or custom app events in the first slice.</li>
+            <li>No asset/API/WebSocket request counts.</li>
+            <li>No paths, queries, referrers, IPs, email addresses, names, user agents, or device fingerprints.</li>
+            <li>No claim to bot filtering or cross-device identity.</li>
+          </ul>
+        </div>
+      </div>
+      <pre>Last 7 days
+Visitors       84
+Page views    219
+Last viewed   18 minutes ago
+
+Daily          Mon  Tue  Wed  Thu  Fri  Sat  Sun
+Visitors        8   12   19   15   21    5    4
+Page views     17   31   42   39   63   16   11</pre>
+      <p>A successful top-level HTML <code>GET</code> or validated SPA fallback
+        counts as a page view. Assets, ranges, source maps, reserved routes,
+        health checks, deployment probes, errors, and non-document requests do
+        not. Analytics failure never blocks an otherwise valid app response.</p>
+    </section>
+
+    <section id="analytics-privacy">
+      <p class="eyebrow">Analytics identity and ownership</p>
+      <h2>Count browsers locally without building a tracking profile</h2>
+      <ul>
+        <li>The gateway issues a random, host-only, <code>Secure</code>, <code>HttpOnly</code>, <code>SameSite=Lax</code> analytics cookie. It is app-specific and has a 30-day maximum lifetime.</li>
+        <li>The database stores only an app-scoped keyed digest of that random value, never the cookie, IP, viewer session, email, or global identity.</li>
+        <li>A missing or blocked cookie still increments the page view but cannot contribute a reliable returning-visitor identity.</li>
+        <li>Daily aggregates and visitor markers remain in the existing control SQLite database and are retained for at most 30 days.</li>
+        <li>The app owner and operator may read aggregates. Viewers, app JavaScript, SDK calls, deployment agents, and unrelated deployers cannot.</li>
+        <li>Hard app deletion removes its aggregates and visitor markers. Analytics state never survives as an independent app record.</li>
+      </ul>
+      <p class="muted">“Visitors” is deliberately approximate: one browser can
+        represent multiple people, one person can use multiple browsers, and
+        bots may be included. The UI must label the metric accordingly.</p>
+    </section>
+
+    <section id="data-model">
+      <p class="eyebrow">Implementation sketch</p>
+      <h2>Extend the current policy and control database; add no new service</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Planned change</th><th>Invariant</th></tr></thead>
+        <tbody>
+          <tr><td>Manifest</td><td>Add bounded <code>tags</code> and <code>access.indexing</code>; accept <code>access.mode: public</code> only after the governance/version change.</td><td>Active immutable manifest remains the metadata receipt.</td></tr>
+          <tr><td>Policy</td><td>Change the mode enum from private-only to explicit <code>private</code>/<code>public</code>; keep owner/email/domain rules.</td><td>Missing, corrupt, or unknown mode denies.</td></tr>
+          <tr><td>Operator gate</td><td>Add one durable, revisioned host setting controlling whether public policies are effective.</td><td>Default off; gate failure is off.</td></tr>
+          <tr><td>Authorization</td><td>Introduce a sealed static-access context with private-viewer and public-static variants.</td><td>Capability routes accept only viewer-bearing authorization.</td></tr>
+          <tr><td>Catalog</td><td>Add a policy-filtered active-app read model at the platform host.</td><td>Never list all apps and filter in the browser.</td></tr>
+          <tr><td>Analytics</td><td>Add bounded daily aggregates plus expiring app-scoped visitor digests in the control database.</td><td>No request path, IP, email, or content is stored.</td></tr>
+          <tr><td>UI</td><td>Add viewer catalog, public-policy controls, app badges/tags, and owner usage summary using the native web system.</td><td>Durable rules update contract, design guidance, showcase, regression tests, and native UI skill together.</td></tr>
+          <tr><td>Skills</td><td>Update the canonical platform skill, refresh role-facing copies, and add public/analytics verification.</td><td>Other agents receive the same constraints and denial checks.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="deny" class="caution">
+      <p class="eyebrow">Deny-path charter first</p>
+      <h2>Public static access must not become anonymous platform authority</h2>
+      <div class="grid">
+        <div class="half card">
+          <h3>Public publishing</h3>
+          <ul>
+            <li>Operator gate off, missing, stale, or unavailable denies anonymous bytes.</li>
+            <li>Private, unknown, suspended, deleting, failed, or corrupt apps deny anonymous bytes.</li>
+            <li>Public mode with KV, collections, blobs, realtime, LLM, or a future capability enabled cannot activate.</li>
+            <li>Every <code>/_tinker/*</code> route on a public app denies before a capability repository or provider is touched.</li>
+            <li>Public-to-private and global disable affect the next request and invalidate public cache behavior.</li>
+            <li>Wrong-host and cross-app requests never reuse another app's public decision.</li>
+          </ul>
+        </div>
+        <div class="half card">
+          <h3>Catalog and analytics</h3>
+          <ul>
+            <li>Anonymous catalog requests and denied viewer identities receive no private app metadata.</li>
+            <li>Policy revocation removes the card on the next catalog read.</li>
+            <li>App A owner cannot read App B analytics; deployment-agent and app SDK credentials cannot read any analytics.</li>
+            <li>Malformed dates, ranges, app slugs, tags, cookies, and digests fail within fixed bounds.</li>
+            <li>Analytics write failure does not alter authorization, static response bytes, or app availability.</li>
+            <li>Logs and database inspection prove no raw cookie, session, identity, IP, URL, referrer, or content retention.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="acceptance">
+      <p class="eyebrow">Acceptance criteria</p>
+      <ul>
+        <li>An operator can enable or disable permission for public apps without adding a listener, provider, daemon, or proxy.</li>
+        <li>A deployer can deliberately promote an owned, capability-free static app to public and receives a working anonymous URL only after posture-aware gateway verification.</li>
+        <li>An anonymous visitor can fetch public HTML/assets and cannot invoke any Tinkercloud SDK, blob, realtime, identity, login, or LLM route.</li>
+        <li>Disabling public access or returning the app to private denies the next anonymous request while normal private owner access remains possible.</li>
+        <li>A verified viewer sees a searchable catalog containing only current authorized private apps and explicitly catalog-listed public apps.</li>
+        <li>An owner sees approximate visitors, page views, last activity, and a 30-day daily series; repeated pages from one cookie count as one visitor and multiple views.</li>
+        <li>Analytics remains entirely local, bounded, deletable with the app, and non-blocking on failure.</li>
+        <li>Two-app/two-owner, anonymous, revoked, malformed, database-failure, restart, activation-failure, and public/private transition matrices pass on a real listener and clean VPS.</li>
+      </ul>
+    </section>
+
+    <section id="rollout">
+      <p class="eyebrow">Rollout phases</p>
+      <ol>
+        <li><strong>L0 — Governance and contracts.</strong> Amend PRD D3/FR-POLICY-006 as an explicit post-V1 decision, add the public-static threat model and ADR, define analytics privacy/retention, and update the manifest/API/test contracts before code.</li>
+        <li><strong>L1 — Basic local analytics on private apps.</strong> Count successful document responses, add bounded storage and owner dashboard summaries, verify privacy and non-blocking failure.</li>
+        <li><strong>L2 — Team catalog and tags.</strong> Replace the no-dashboard-role dead end with a policy-filtered viewer catalog; add active-manifest tags and local search.</li>
+        <li><strong>L3 — Operator-gated public static pilot.</strong> Implement public policy, sealed static context, capability-free activation, public/private transitions, dual deployment probes, and default noindex.</li>
+        <li><strong>L4 — Marketing evidence.</strong> Publish first-party example apps deliberately, opt selected examples into indexing, measure local visits, and run the full clean-VPS public/private matrix before making public mode generally available.</li>
+      </ol>
+    </section>
+
+    <section id="records">
+      <p class="eyebrow">Required implementation records</p>
+      <ul>
+        <li><strong>Recorded:</strong> <code>PRD.md</code> D3, §8.15, and §21.3 explicitly describe post-V1 public-static mode without changing the historical V1 claim.</li>
+        <li>Add an ADR for the public-static authorization context, operator gate, capability exclusion, cache/revocation behavior, and posture-aware activation proof.</li>
+        <li>Add technology-neutral contracts for public access, team catalog, and local analytics before changing routes or schema.</li>
+        <li>Write the public/catalog/analytics deny charters before happy-path implementation.</li>
+        <li>Update roadmap evidence, manifest and HTTP contracts, security matrix, native UI contract/showcase, examples, and canonical Tinkercloud skills in the same slices.</li>
+        <li>Refresh marked specialized-skill copies and run drift checks after every workflow change.</li>
+      </ul>
+    </section>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Open questions with recommended defaults</p>
+      <ul>
+        <li><strong>Should public apps ever use Tinkercloud capabilities?</strong> No. Public static only for the first release; revisit through a separate anonymous-capability concept with abuse budgets.</li>
+        <li><strong>What does “users” mean in analytics?</strong> Label the value “approximate visitors” and derive it only from an app-host random cookie.</li>
+        <li><strong>Should custom events count actions?</strong> No initially. Page views and visitors establish whether the app is used without adding an instrumentation SDK.</li>
+        <li><strong>Should public apps be indexed?</strong> No by default. Require explicit per-app opt-in while the operator public gate is active.</li>
+        <li><strong>Should every public app appear in the team catalog?</strong> Yes for signed-in team viewers by default; a future public showcase is a separate product surface.</li>
+        <li><strong>Should analytics be on by default?</strong> Yes, local-only with 30-day retention and one global operator disable switch; never load third-party code.</li>
+      </ul>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don't</p>
+      <h2>Build the staged reach loop; do not build a general public app runtime</h2>
+      <p><strong>Do:</strong> Build analytics, catalog discovery, and
+        operator-gated public static delivery as separate vertical slices. The
+        impact is high: public examples create a marketing surface, the catalog
+        strengthens everyday team use, and local analytics closes the learning
+        loop. Each slice reuses the existing gateway, immutable releases,
+        SQLite, native UI, and agent workflows.</p>
+      <p><strong>Don't:</strong> add anonymous platform capabilities or user-authored
+        server code. That would turn a controlled static-publishing feature into
+        a public compute, storage, abuse, and spend platform. It has much higher
+        complexity and permanently expands the trusted surface without being
+        necessary for the marketing opportunity.</p>
+    </section>
+  </main>
+  <footer><p>Concept decision: pursue public reach and simple local insights after the governance update; retain the fixed capability and single-gateway model.</p></footer>
+</body>
+</html>

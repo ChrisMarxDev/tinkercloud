@@ -1,0 +1,1679 @@
+package persistence
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
+	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
+	"github.com/ChrisMarxDev/tinkercloud/internal/blob"
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
+	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/jobs"
+	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
+	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
+	"net/http"
+	"net/url"
+	"sort"
+	"strings"
+	"time"
+)
+
+type ControlAuthenticator struct {
+	Store          *SQLiteStore
+	Clock          func() time.Time
+	RevokeChildren func([]AppSessionRef)
+}
+
+func (a ControlAuthenticator) AuthenticateControl(ctx context.Context, r *http.Request) (controlapi.Actor, error) {
+	h := r.Header.Get("Authorization")
+	if !strings.HasPrefix(h, "Bearer ") || strings.Count(h, " ") != 1 {
+		return controlapi.Actor{}, ErrToken
+	}
+	scope, slug, ok := classifyControlRoute(r.Method, r.URL.Path)
+	if !ok || a.Store == nil {
+		return controlapi.Actor{}, ErrToken
+	}
+	appID := ""
+	if slug != "" {
+		statuses := "'active'"
+		// A delete retry must still be able to authenticate an app-scoped token
+		// after the target became deleted. The service below permits only the
+		// matching idempotent deletion outcome for that state.
+		if scope == "app:delete" {
+			statuses = "'active','suspended','deleting','deleted'"
+		} else if scope == "data:read" {
+			// Owner data inspection remains available while an app is
+			// suspended so a deployer can diagnose it. The service repeats the
+			// owner/status check before opening the app database.
+			statuses = "'active','suspended'"
+		}
+		if err := a.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND status IN ("+statuses+")", slug).Scan(&appID); err != nil {
+			return controlapi.Actor{}, ErrToken
+		}
+	}
+	now := time.Now()
+	if a.Clock != nil {
+		now = a.Clock()
+	}
+	return a.Store.AuthenticateToken(ctx, strings.TrimPrefix(h, "Bearer "), scope, appID, now)
+}
+
+// AuthenticatePlatform accepts only the admin-host global identity cookie,
+// rotates it when required, and derives the current dashboard role separately.
+// Browser traffic cannot reuse a bearer token, while app cookies never reach
+// this exact host.
+func (a ControlAuthenticator) AuthenticatePlatform(ctx context.Context, w http.ResponseWriter, r *http.Request) (controlapi.Actor, error) {
+	if a.Store == nil {
+		return controlapi.Actor{}, ErrToken
+	}
+	c, err := r.Cookie(browseridentity.IdentityCookieName)
+	if err != nil || c.Value == "" {
+		return controlapi.Actor{}, ErrIdentity
+	}
+	now := time.Now()
+	if a.Clock != nil {
+		now = a.Clock()
+	}
+	result, err := a.Store.AuthenticateDashboardIdentity(ctx, c.Value, now)
+	if err != nil {
+		if errors.Is(err, ErrIdentity) && result.Identity.ID == "" {
+			http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.IdentityCookieName))
+		}
+		return controlapi.Actor{}, err
+	}
+	if result.ReplacementToken != "" {
+		http.SetCookie(w, browseridentity.IdentityCookie(result.ReplacementToken, result.Identity.ExpiresAt))
+	}
+	if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+		a.RevokeChildren(result.Revoked)
+	}
+	return result.Actor, nil
+}
+
+// AuthenticateViewer validates the global browser identity without deriving a
+// dashboard role. The catalog uses this deliberately separate seam so a
+// viewer with no operator/deployer row can discover only apps that current
+// app policy permits, while /dashboard keeps its role-based check unchanged.
+func (a ControlAuthenticator) AuthenticateViewer(ctx context.Context, w http.ResponseWriter, r *http.Request) (controlapi.ViewerIdentity, error) {
+	if a.Store == nil {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	c, err := r.Cookie(browseridentity.IdentityCookieName)
+	if err != nil || c.Value == "" {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	now := time.Now()
+	if a.Clock != nil {
+		now = a.Clock()
+	}
+	result, err := a.Store.ValidateIdentitySession(ctx, c.Value, now)
+	if err != nil {
+		if errors.Is(err, ErrIdentity) {
+			http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.IdentityCookieName))
+		}
+		if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+			a.RevokeChildren(result.Revoked)
+		}
+		return controlapi.ViewerIdentity{}, err
+	}
+	if result.ReplacementToken != "" {
+		http.SetCookie(w, browseridentity.IdentityCookie(result.ReplacementToken, result.Session.ExpiresAt))
+	}
+	if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+		a.RevokeChildren(result.Revoked)
+	}
+	if result.Session.ID == "" || result.Session.Identity.ID == "" || result.Session.Identity.Email == "" {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	return controlapi.ViewerIdentity{IdentityID: result.Session.Identity.ID, Email: result.Session.Identity.Email, IdentitySessionID: result.Session.ID}, nil
+}
+func routeScope(m, p string) string {
+	s, _, ok := classifyControlRoute(m, p)
+	if !ok {
+		return ""
+	}
+	return s
+}
+func classifyControlRoute(m, p string) (string, string, bool) {
+	if strings.Contains(p, "%2f") || strings.Contains(p, "%2F") {
+		return "", "", false
+	}
+	if m == "GET" && (p == "/api/v1/whoami" || p == "/api/v1/apps") {
+		return "app:read", "", true
+	}
+	// This is a self-revocation route. Restricting it to a global bearer means
+	// app-scoped deployment-agent credentials cannot use a server-level CLI
+	// convenience action, while the authenticated actor still identifies only
+	// the exact bearer row to revoke.
+	if m == "POST" && p == "/api/v1/auth/logout" {
+		return "app:read", "", true
+	}
+	if m == "POST" && p == "/api/v1/apps" {
+		return "app:create", "", true
+	}
+	const pre = "/api/v1/apps/"
+	if !strings.HasPrefix(p, pre) {
+		return "", "", false
+	}
+	x := strings.TrimPrefix(p, pre)
+	parts := strings.Split(x, "/")
+	if len(parts) < 1 || !releases.ValidSlug(parts[0]) {
+		return "", "", false
+	}
+	slug := parts[0]
+	if len(parts) == 2 && parts[1] == "tokens" {
+		if m == "GET" {
+			return "app:read", slug, true
+		}
+		if m == "POST" {
+			return "token:create", slug, true
+		}
+	}
+	if len(parts) == 3 && parts[1] == "tokens" && m == "DELETE" && safeTokenRouteID(parts[2]) {
+		return "token:revoke", slug, true
+	}
+	if len(parts) == 2 && parts[1] == "access" {
+		if m == "GET" {
+			return "access:read", slug, true
+		}
+		if m == "PUT" {
+			return "access:write", slug, true
+		}
+	}
+	if len(parts) == 2 && parts[1] == "releases" && m == "GET" {
+		return "app:read", slug, true
+	}
+	// Deployer data administration is a bounded control-plane capability. The
+	// slug is resolved here only to authenticate an app-scoped bearer; the
+	// service repeats owner/status resolution before selecting app-local data.
+	if len(parts) >= 3 && parts[1] == "data" {
+		if m == "GET" {
+			return "data:read", slug, true
+		}
+		if m == "POST" || m == "PUT" || m == "DELETE" {
+			return "data:write", slug, true
+		}
+	}
+	if len(parts) == 1 && m == "DELETE" {
+		return "app:delete", slug, true
+	}
+	if len(parts) == 2 && parts[1] == "deployments" && m == "POST" {
+		return "deploy:create", slug, true
+	}
+	if len(parts) == 4 && parts[1] == "deployments" && parts[2] != "" && parts[3] == "activate" && m == "POST" {
+		return "deploy:activate", slug, true
+	}
+	return "", "", false
+}
+func safeTokenRouteID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for _, c := range id {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+type ControlService struct {
+	Store          *SQLiteStore
+	Live           interface{ Revoke(string, string) }
+	BlobCleanup    interface{ Reconcile(context.Context) error }
+	AppDataCleanup interface {
+		Purge(context.Context, string) error
+	}
+	Deployments *deployments.Service
+	AppSuffix   string
+	// WriteGate protects only resource-growing mutations. It is deliberately
+	// not consulted by access changes, token revocation, or app suspension.
+	WriteGate       operations.WriteGate
+	AppsPerDeployer int
+	LLM             *LLMRepository
+	LLMValidator    interface {
+		Validate(context.Context, llm.Provider, []byte) error
+	}
+	// Deployer data repositories remain private app-local persistence adapters.
+	// Control routes receive no filesystem/database selector; dataScope resolves
+	// the immutable app ID from the authenticated deployer's owned slug.
+	DataKV        kv.Repository
+	DataDocuments collections.Repository
+	AppDatabases  *AppDatabaseManager
+	DataEvents    interface {
+		PublishKVChange(context.Context, appauth.DataAuthorizationContext, kv.Mutation)
+		PublishCollectionChange(context.Context, appauth.DataAuthorizationContext, collections.Mutation)
+	}
+}
+
+// deployerDataScope is deliberately private to persistence. It is constructed
+// only after a current control bearer and owned application have both been
+// verified, and it is the sole source of an app ID for data repositories.
+type deployerDataScope struct {
+	appID, actorID, slug string
+	auth                 appauth.DataAuthorizationContext
+}
+
+func (s ControlService) dataScope(ctx context.Context, a controlapi.Actor, slug string, write bool) (deployerDataScope, error) {
+	if !a.Active || (a.Role != "deployer" && a.Role != "operator") || s.Store == nil || !releases.ValidSlug(slug) {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	statuses := "('active','suspended')"
+	if write {
+		statuses = "('active')"
+	}
+	var appID string
+	if err := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status IN "+statuses, slug, a.ID).Scan(&appID); err != nil {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	auth := appauth.NewDeployerDataAuthorizationContext(appID, slug, a.ID, "")
+	if auth == nil {
+		return deployerDataScope{}, ErrUnavailable
+	}
+	return deployerDataScope{appID: appID, actorID: a.ID, slug: slug, auth: auth}, nil
+}
+
+// dataMutationIntent creates durable, metadata-only evidence before touching
+// the separate app database. SQLite cannot atomically span the control and app
+// files, so an intent is the fail-closed boundary: when audit persistence is
+// unavailable no data mutation is attempted. Values/document bodies are never
+// stored in control-plane audit metadata.
+func (s ControlService) dataMutationIntent(ctx context.Context, scope deployerDataScope, action, target, requestID, digest string) (fresh, completed bool, err error) {
+	if target == "" || requestID == "" {
+		return false, false, ErrUnavailable
+	}
+	err = s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var existing, metadata, outcome string
+		err := tx.QueryRowContext(ctx, "SELECT target_id,COALESCE(metadata_json,''),outcome FROM audit_events WHERE action=? AND actor_id=? AND request_id=?", action, scope.actorID, requestID).Scan(&existing, &metadata, &outcome)
+		if err == nil {
+			if existing == target && metadata == digest {
+				switch outcome {
+				case "succeeded":
+					completed = true
+					return nil
+				case "attempted":
+					// The app mutation may have committed before the separate
+					// outcome update failed. Let the operation-specific adapter
+					// reconcile only when current app state proves the result.
+					return nil
+				}
+			}
+			return ErrUnavailable
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_kind,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),datetime('now'),'deployer',?,?,?,'attempted','app_data',?,?,?)", scope.actorID, scope.appID, action, target, requestID, digest)
+		fresh = err == nil
+		return err
+	})
+	return fresh, completed, err
+}
+
+func (s ControlService) dataMutationComplete(ctx context.Context, scope deployerDataScope, action, requestID string) error {
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, "UPDATE audit_events SET outcome='succeeded' WHERE action=? AND actor_id=? AND app_id=? AND request_id=? AND outcome='attempted'", action, scope.actorID, scope.appID, requestID)
+		if err != nil {
+			return err
+		}
+		if n, _ := result.RowsAffected(); n != 1 {
+			return ErrUnavailable
+		}
+		return nil
+	})
+}
+
+func (s ControlService) CreateLLMConnection(ctx context.Context, a controlapi.Actor, provider, secret string) error {
+	if s.LLM == nil || s.LLM.Envelope == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || len(secret) == 0 {
+		return ErrUnavailable
+	}
+	p := llm.Provider(provider)
+	if p != llm.ProviderAnthropic && p != llm.ProviderGemini {
+		return ErrUnavailable
+	}
+	if err := s.LLMValidator.Validate(ctx, p, []byte(secret)); err != nil {
+		return ErrUnavailable
+	}
+	id, err := newLLMID()
+	if err != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.CreateConnection(ctx, LLMConnectionInput{ID: id, DisplayName: llmConnectionLabel(p), Provider: p, Secret: []byte(secret), KeyVersion: 1, ActorID: a.ID})
+}
+
+// llmConnectionLabel is server-owned metadata for the small fixed provider
+// set. Browser actors choose the provider and a write-only key, never a
+// display label or opaque connection identifier.
+func llmConnectionLabel(provider llm.Provider) string {
+	switch provider {
+	case llm.ProviderAnthropic:
+		return "Anthropic API key"
+	case llm.ProviderGemini:
+		return "Gemini API key"
+	default:
+		return ""
+	}
+}
+func (s ControlService) RotateLLMConnection(ctx context.Context, a controlapi.Actor, id, secret string) error {
+	if s.LLM == nil || s.LLM.Envelope == nil || s.LLMValidator == nil || !a.Active || a.Role != "operator" || id == "" || secret == "" {
+		return ErrUnavailable
+	}
+	// The connection's original provider is the authority for validation. A
+	// browser never submits a provider selector during rotation, preventing a
+	// credential from being validated against a different provider than the one
+	// that will later receive it.
+	p, err := s.LLM.ConnectionProvider(ctx, id)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if s.LLMValidator.Validate(ctx, p, []byte(secret)) != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.RotateConnection(ctx, id, []byte(secret), 1, a.ID)
+}
+func (s ControlService) DisableLLMConnection(ctx context.Context, a controlapi.Actor, id string) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" {
+		return ErrUnavailable
+	}
+	return s.LLM.DisableConnectionAs(ctx, id, a.ID)
+}
+
+func (s ControlService) CreateLLMProfile(ctx context.Context, a controlapi.Actor, in controlapi.LLMProfileInput) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" {
+		return ErrUnavailable
+	}
+	id, err := newLLMID()
+	if err != nil {
+		return ErrUnavailable
+	}
+	return s.LLM.CreateProfile(ctx, llmProfileInput(id, a.ID, in))
+}
+
+func (s ControlService) UpdateLLMProfile(ctx context.Context, a controlapi.Actor, id string, in controlapi.LLMProfileInput) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" || id == "" || in.ExpectedRevision == 0 {
+		return ErrUnavailable
+	}
+	return s.LLM.UpdateProfile(ctx, llmProfileInput(id, a.ID, in), in.ExpectedRevision)
+}
+
+func llmProfileInput(id, actor string, in controlapi.LLMProfileInput) LLMProfileInput {
+	return LLMProfileInput{ID: id, ConnectionID: in.ConnectionID, Model: in.Model, ActorID: actor, Limits: llm.Limits{MaxMessages: in.MaxMessages, MaxMessageBytes: in.MaxMessageBytes, MaxInputBytes: in.MaxInputBytes, MaxOutputTokens: in.MaxOutputTokens, Timeout: time.Duration(in.TimeoutMS) * time.Millisecond, ViewerRequests: in.ViewerRequests, AppRequests: in.AppRequests, RateWindow: time.Duration(in.RateWindowMS) * time.Millisecond}, ConcurrencyLimit: in.ConcurrencyLimit, MonthlyTokenLimit: in.MonthlyTokenLimit}
+}
+
+func (s ControlService) ApproveLLMGrant(ctx context.Context, a controlapi.Actor, slug, profileID string, expected uint64) error {
+	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || profileID == "" {
+		return ErrUnavailable
+	}
+	appID, err := s.appIDForLLMGrant(ctx, slug)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if expected > 0 {
+		var status string
+		if err := s.Store.DB.QueryRowContext(ctx, `SELECT status FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&status); err != nil {
+			return controlapi.ErrLLMRevision
+		}
+		if status == "revoked" {
+			return ErrUnavailable
+		}
+	}
+	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: "approved"}, expected)
+}
+
+func (s ControlService) SetLLMGrantStatus(ctx context.Context, a controlapi.Actor, slug, status string, expected uint64) error {
+	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || (status != "disabled" && status != "revoked") || expected == 0 {
+		return ErrUnavailable
+	}
+	appID, err := s.appIDForLLMGrant(ctx, slug)
+	if err != nil {
+		return ErrUnavailable
+	}
+	var profileID string
+	if err := s.Store.DB.QueryRowContext(ctx, `SELECT profile_id FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&profileID); err != nil {
+		return controlapi.ErrLLMRevision
+	}
+	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: status}, expected)
+}
+
+func (s ControlService) appIDForLLMGrant(ctx context.Context, slug string) (string, error) {
+	var appID string
+	err := s.Store.DB.QueryRowContext(ctx, `SELECT id FROM applications WHERE slug=? AND status IN ('active','suspended')`, slug).Scan(&appID)
+	return appID, err
+}
+
+// AppDataPurger owns only server-derived private byte paths. It deliberately
+// runs while the application is in deleting state, before its database rows
+// are removed, so a failed purge leaves an inaccessible app that can be retried.
+type AppDataPurger struct {
+	DataRoot    string
+	Store       *SQLiteStore
+	Apps        *AppDatabaseManager
+	BlobCleanup interface{ Reconcile(context.Context) error }
+}
+
+func (p AppDataPurger) Purge(ctx context.Context, appID string) error {
+	if err := jobs.RemoveAppReleases(p.DataRoot, appID); err != nil {
+		return err
+	}
+	appDatabases := p.Apps
+	if appDatabases == nil {
+		var err error
+		appDatabases, err = NewAppDatabaseManager(p.DataRoot, AppDatabaseManagerOptions{MaxOpen: 1})
+		if err != nil {
+			return err
+		}
+	}
+	if err := appDatabases.Remove(appID); err != nil {
+		return err
+	}
+	cleanup := p.BlobCleanup
+	if cleanup == nil {
+		if p.Store == nil {
+			return ErrUnavailable
+		}
+		cleanup = &BlobRepository{Store: p.Store, Bytes: blob.LocalStore{Root: p.DataRoot}}
+	}
+	if err := cleanup.Reconcile(ctx); err != nil {
+		return err
+	}
+	namespace, ok := cleanup.(interface{ RemoveAppNamespace(string) error })
+	if !ok {
+		return ErrUnavailable
+	}
+	return namespace.RemoveAppNamespace(appID)
+}
+
+// ReplaceActiveDeployers reconciles the exact active deployer allowlist while
+// preserving immutable deployer IDs and every owned app record.
+func (s ControlService) ReplaceActiveDeployers(ctx context.Context, a controlapi.Actor, emails []string, expectedRevision string, confirmBroadening bool, key string) error {
+	if s.Store == nil || !a.Active || a.Role != "operator" || key == "" || len(emails) > 100 {
+		return ErrUnavailable
+	}
+	requested := append([]string(nil), emails...)
+	sort.Strings(requested)
+	if len(strings.Join(requested, "\n")) > 8192 {
+		return ErrUnavailable
+	}
+	for i, email := range requested {
+		if normalized, err := identity.Normalize(email); err != nil || normalized != email || (i > 0 && requested[i-1] == email) {
+			return ErrUnavailable
+		}
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var priorAction, priorMetadata string
+		e := tx.QueryRowContext(ctx, "SELECT action,COALESCE(metadata_json,'') FROM audit_events WHERE actor_id=? AND request_id=?", a.ID, key).Scan(&priorAction, &priorMetadata)
+		if e == nil {
+			var prior struct {
+				Requested         []string `json:"requested"`
+				ExpectedRevision  string   `json:"expected_revision"`
+				ConfirmBroadening bool     `json:"confirm_broadening"`
+			}
+			if priorAction != "deployers.reconciled" || json.Unmarshal([]byte(priorMetadata), &prior) != nil || strings.Join(prior.Requested, "\x00") != strings.Join(requested, "\x00") || prior.ExpectedRevision != expectedRevision || prior.ConfirmBroadening != confirmBroadening {
+				return ErrUnavailable
+			}
+			return nil
+		}
+		if e != sql.ErrNoRows {
+			return e
+		}
+		var role, status string
+		if e = tx.QueryRowContext(ctx, "SELECT role,status FROM users WHERE id=?", a.ID).Scan(&role, &status); e != nil || role != "operator" || status != "active" {
+			return ErrUnavailable
+		}
+		rows, e := tx.QueryContext(ctx, "SELECT id,normalized_email,status FROM users WHERE role='deployer' ORDER BY normalized_email")
+		if e != nil {
+			return e
+		}
+		type deployer struct{ id, email, status string }
+		all := map[string]deployer{}
+		active := []string{}
+		for rows.Next() {
+			var d deployer
+			if e = rows.Scan(&d.id, &d.email, &d.status); e != nil {
+				rows.Close()
+				return e
+			}
+			all[d.email] = d
+			if d.status == "active" {
+				active = append(active, d.email)
+			}
+		}
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		currentRevision := deployerRevision(active)
+		if expectedRevision == "" || expectedRevision != currentRevision {
+			return controlapi.ErrDeployerRevision
+		}
+		activeSet, requestedSet := map[string]bool{}, map[string]bool{}
+		for _, email := range active {
+			activeSet[email] = true
+		}
+		for _, email := range requested {
+			requestedSet[email] = true
+		}
+		broadening := false
+		for email := range requestedSet {
+			if !activeSet[email] {
+				broadening = true
+			}
+		}
+		if broadening && !confirmBroadening {
+			return ErrUnavailable
+		}
+		for _, email := range requested {
+			var existingRole string
+			e = tx.QueryRowContext(ctx, "SELECT role FROM users WHERE normalized_email=?", email).Scan(&existingRole)
+			if e == nil && existingRole == "operator" {
+				return ErrUnavailable
+			}
+			if e != nil && e != sql.ErrNoRows {
+				return e
+			}
+		}
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		for _, email := range requested {
+			d, exists := all[email]
+			if !exists {
+				id := "usr_" + fmt.Sprintf("%x", sha256.Sum256([]byte(email)))[:16]
+				if _, e = tx.ExecContext(ctx, "INSERT INTO users(id,normalized_email,role,status,created_at) VALUES(?,?, 'deployer','active',?)", id, email, now); e != nil {
+					return e
+				}
+			} else if d.status != "active" {
+				if _, e = tx.ExecContext(ctx, "UPDATE otp_challenges SET invalidated_at=? WHERE purpose='control' AND normalized_email=? AND consumed_at IS NULL AND invalidated_at IS NULL", now, email); e != nil {
+					return e
+				}
+				if _, e = tx.ExecContext(ctx, "UPDATE users SET status='active' WHERE id=?", d.id); e != nil {
+					return e
+				}
+			}
+		}
+		for _, email := range active {
+			if requestedSet[email] {
+				continue
+			}
+			d := all[email]
+			if _, e = tx.ExecContext(ctx, "UPDATE users SET status='revoked' WHERE id=?", d.id); e != nil {
+				return e
+			}
+			for _, q := range []string{"UPDATE api_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL"} {
+				if _, e = tx.ExecContext(ctx, q, now, d.id); e != nil {
+					return e
+				}
+			}
+			if _, e = tx.ExecContext(ctx, "UPDATE otp_challenges SET invalidated_at=? WHERE purpose='control' AND normalized_email=? AND consumed_at IS NULL AND invalidated_at IS NULL", now, email); e != nil {
+				return e
+			}
+		}
+		metadata, e := json.Marshal(struct {
+			Requested         []string `json:"requested"`
+			ExpectedRevision  string   `json:"expected_revision"`
+			ConfirmBroadening bool     `json:"confirm_broadening"`
+		}{requested, expectedRevision, confirmBroadening})
+		if e != nil {
+			return e
+		}
+		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),?,'user',?,'deployers.reconciled','success','deployer_allowlist','active',?,?)", now, a.ID, key, string(metadata))
+		return e
+	})
+}
+
+func deployerRevision(emails []string) string {
+	sorted := append([]string(nil), emails...)
+	sort.Strings(sorted)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(sorted, "\n"))))
+}
+
+// SetAppStatus atomically makes a suspension effective before acknowledging it.
+// All app tokens, viewer sessions and live connections are revoked; resuming
+// does not resurrect credentials, so a new login/token is required.
+func (s ControlService) SetAppStatus(ctx context.Context, a controlapi.Actor, slug, status, key string) error {
+	if s.Store == nil || !a.Active || key == "" || (status != "active" && status != "suspended") {
+		return ErrUnavailable
+	}
+	var appID string
+	fresh := false
+	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var target, action string
+		e := tx.QueryRowContext(ctx, "SELECT target_id,action FROM audit_events WHERE actor_id=? AND request_id=?", a.ID, key).Scan(&target, &action)
+		if e == nil {
+			if target == slug && action == "app."+status {
+				return nil
+			}
+			return ErrUnavailable
+		}
+		if e != sql.ErrNoRows {
+			return e
+		}
+		q := "SELECT id,status FROM applications WHERE slug=? AND owner_user_id=?"
+		args := []any{slug, a.ID}
+		if a.Role == "operator" {
+			q, args = "SELECT id,status FROM applications WHERE slug=?", []any{slug}
+		}
+		var current string
+		if e = tx.QueryRowContext(ctx, q, args...).Scan(&appID, &current); e != nil {
+			return ErrUnavailable
+		}
+		if current == status {
+			return ErrUnavailable
+		}
+		if current != "active" && current != "suspended" {
+			return ErrUnavailable
+		}
+		if _, e = tx.ExecContext(ctx, "UPDATE applications SET status=?,updated_at=datetime('now') WHERE id=?", status, appID); e != nil {
+			return e
+		}
+		if status == "suspended" {
+			if _, e = tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE app_id=? AND revoked_at IS NULL", appID); e != nil {
+				return e
+			}
+			if _, e = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=datetime('now') WHERE app_id=? AND scope='app' AND revoked_at IS NULL", appID); e != nil {
+				return e
+			}
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_kind,target_id,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,?,?,'success','app',?,?)", a.ID, appID, "app."+status, slug, key); e != nil {
+			return e
+		}
+		fresh = true
+		return nil
+	})
+	if err == nil && fresh && status == "suspended" && s.Live != nil {
+		s.Live.Revoke(appID, "")
+	}
+	return err
+}
+
+func (s ControlService) Whoami(_ context.Context, a controlapi.Actor) any {
+	return map[string]string{"id": a.ID, "email": a.Email}
+}
+
+// RevokeCurrentBearer makes CLI logout effective on the next request. Actor
+// and CredentialID both originate in the successful bearer authentication; no
+// request-controlled token ID is accepted. A persistence failure is returned
+// so the client keeps its local credential rather than claiming logout.
+func (s ControlService) RevokeCurrentBearer(ctx context.Context, a controlapi.Actor) error {
+	if s.Store == nil || !a.Active || a.ID == "" || a.CredentialID == "" {
+		return ErrUnavailable
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE api_tokens
+			SET revoked_at=datetime('now')
+			WHERE id=? AND user_id=? AND app_id IS NULL AND revoked_at IS NULL`, a.CredentialID, a.ID)
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil || count != 1 {
+			return ErrUnavailable
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO audit_events
+			(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id)
+			VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,'cli.logout','success','token',?)`, a.ID, a.CredentialID)
+		return err
+	})
+}
+func (s ControlService) Apps(ctx context.Context, a controlapi.Actor) any {
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT slug,status FROM applications WHERE owner_user_id=? ORDER BY slug", a.ID)
+	if e != nil {
+		return []any{}
+	}
+	defer rows.Close()
+	out := []map[string]string{}
+	for rows.Next() {
+		var slug, status string
+		if rows.Scan(&slug, &status) == nil {
+			out = append(out, map[string]string{"slug": slug, "status": status})
+		}
+	}
+	return out
+}
+
+// Catalog returns only the current, bounded, server-authorized view of apps
+// for a verified global viewer identity. It intentionally has no dashboard
+// role argument and does not load a broad app list for browser filtering.
+func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIdentity) ([]controlapi.CatalogApp, error) {
+	if s.Store == nil || viewer.IdentityID == "" || viewer.Email == "" {
+		return nil, ErrUnavailable
+	}
+	normalized, err := identity.Normalize(viewer.Email)
+	if err != nil || normalized != viewer.Email {
+		return nil, ErrUnavailable
+	}
+	domain := identity.Domain(normalized)
+	publicEnabled := false
+	if gate, gateErr := s.Store.CurrentPublicGate(ctx); gateErr == nil && gate.Valid && gate.Enabled {
+		publicEnabled = true
+	}
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT a.slug,p.mode,COALESCE(CAST(d.manifest_json AS BLOB),X'')
+		FROM applications a
+		JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
+		JOIN users owner ON owner.id=a.owner_user_id
+		JOIN deployments d ON d.id=a.current_deployment_id AND d.app_id=a.id
+		WHERE a.status='active' AND d.state='active' AND (
+		  (p.mode='private' AND ((owner.status='active' AND owner.normalized_email=?)
+		    OR EXISTS (SELECT 1 FROM access_rules r
+		      WHERE r.app_id=a.id AND r.policy_revision=a.policy_revision
+		        AND ((r.kind='email' AND r.normalized_value=?) OR (r.kind='domain' AND r.normalized_value=?)) ) ))
+		  OR (p.mode='public' AND ?)
+		)
+		ORDER BY a.slug
+		LIMIT 101`, normalized, normalized, domain, publicEnabled)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	apps := make([]controlapi.CatalogApp, 0)
+	for rows.Next() {
+		var slug string
+		var mode string
+		var manifest []byte
+		if err := rows.Scan(&slug, &mode, &manifest); err != nil {
+			return nil, ErrUnavailable
+		}
+		var parsed releases.Manifest
+		if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) || (mode != "private" && mode != "public") {
+			return nil, ErrUnavailable
+		}
+		manifestMode := parsed.AccessMode
+		if manifestMode == "" {
+			manifestMode = "private"
+		}
+		if manifestMode != mode || (mode == "private" && parsed.Indexing) || (mode == "public" && !publicEnabled) {
+			return nil, ErrUnavailable
+		}
+		url := stableAppURL(slug, s.AppSuffix)
+		if url == "" {
+			return nil, ErrUnavailable
+		}
+		apps = append(apps, controlapi.CatalogApp{
+			Slug:        slug,
+			StableURL:   url,
+			Description: parsed.Description,
+			Tags:        append([]string(nil), parsed.Tags...),
+			Posture:     mode,
+		})
+	}
+	if err := rows.Err(); err != nil || len(apps) > 100 {
+		return nil, ErrUnavailable
+	}
+	return apps, nil
+}
+
+// Dashboard is deliberately a bounded metadata-only read model for the
+// platform UI. It uses server-derived ownership and never returns raw token
+// values, hashes, release paths, configuration secrets, or provider details.
+func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (controlapi.DashboardView, error) {
+	if !a.Active || s.Store == nil || (a.Role != "operator" && a.Role != "deployer") {
+		return controlapi.DashboardView{}, ErrUnavailable
+	}
+	v := controlapi.DashboardView{Health: []controlapi.DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinkercloud doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
+	if a.Role == "operator" {
+		if gate, gateErr := s.Store.CurrentPublicGate(ctx); gateErr == nil && gate.Valid {
+			v.PublicGate = controlapi.DashboardPublicGate{Available: true, Enabled: gate.Enabled, Revision: gate.Revision}
+		}
+	}
+	// A disabled or unavailable recorder is not an empty analytics window.
+	// Preserve that distinction in every card rather than inventing zeroes.
+	insightsEnabled, insightsErr := s.Store.InsightsEnabled(ctx)
+	insightsNow := time.Now().UTC()
+	query, args := "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.owner_user_id=? AND a.status <> 'deleted' ORDER BY a.slug LIMIT 100", []any{a.ID}
+	if a.Role == "operator" {
+		query, args = "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.status <> 'deleted' ORDER BY a.slug LIMIT 100", nil
+	}
+	rows, err := s.Store.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return v, err
+	}
+	type appRow struct {
+		id, owner, currentDeploymentID string
+		app                            controlapi.DashboardApp
+	}
+	var owned []appRow
+	for rows.Next() {
+		var x appRow
+		var mode sql.NullString
+		var current sql.NullString
+		if err := rows.Scan(&x.id, &x.owner, &x.app.Slug, &x.app.Status, &x.app.Access.Revision, &mode, &current); err != nil {
+			rows.Close()
+			return v, err
+		}
+		if !mode.Valid || (mode.String != "private" && mode.String != "public") {
+			rows.Close()
+			return v, ErrUnavailable
+		}
+		x.app.Access.Mode = mode.String
+		if current.Valid {
+			x.currentDeploymentID = current.String
+		}
+		owned = append(owned, x)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return v, err
+	}
+	rows.Close()
+	for _, x := range owned {
+		app := x.app
+		// The active pointer is independent from the bounded release history. Read
+		// it directly so its summary and stable launch link do not disappear or
+		// degrade into a guessed description.
+		if x.currentDeploymentID != "" {
+			var state string
+			var manifest []byte
+			if e := s.Store.DB.QueryRowContext(ctx, "SELECT state,COALESCE(manifest_json,X'') FROM deployments WHERE id=? AND app_id=?", x.currentDeploymentID, x.id).Scan(&state, &manifest); e != nil || state != string(releases.Active) || (app.Status != "active" && app.Status != "suspended") {
+				return v, ErrUnavailable
+			}
+			description, e := dashboardManifestDescription(manifest, state, app.Slug)
+			if e != nil {
+				return v, ErrUnavailable
+			}
+			var parsed releases.Manifest
+			if json.Unmarshal(manifest, &parsed) != nil || !releases.ValidStoredManifest(parsed) {
+				return v, ErrUnavailable
+			}
+			manifestMode := parsed.AccessMode
+			if manifestMode == "" {
+				manifestMode = "private"
+			}
+			if manifestMode != app.Access.Mode || (app.Access.Mode == "private" && parsed.Indexing) {
+				return v, ErrUnavailable
+			}
+			app.Access.Indexing = parsed.Indexing
+			app.Description = description
+			if app.Status == "active" {
+				app.StableURL = stableAppURL(app.Slug, s.AppSuffix)
+			}
+		}
+		accessRows, e := s.Store.DB.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=? ORDER BY kind,normalized_value", x.id, app.Access.Revision)
+		if e != nil {
+			return v, e
+		}
+		for accessRows.Next() {
+			var kind, value string
+			if e := accessRows.Scan(&kind, &value); e != nil {
+				accessRows.Close()
+				return v, e
+			}
+			switch kind {
+			case "email":
+				app.Access.Emails = append(app.Access.Emails, value)
+			case "domain":
+				app.Access.Domains = append(app.Access.Domains, value)
+			case "owner":
+			default:
+				accessRows.Close()
+				return v, ErrUnavailable
+			}
+		}
+		if e := accessRows.Err(); e != nil {
+			accessRows.Close()
+			return v, e
+		}
+		accessRows.Close()
+		releasesRows, e := s.Store.DB.QueryContext(ctx, "SELECT id,COALESCE(release_hash,''),COALESCE(manifest_json,X''),state,created_at,COALESCE(verified_at,''),COALESCE(activated_at,'') FROM deployments WHERE app_id=? ORDER BY created_at DESC,id DESC LIMIT 100", x.id)
+		if e != nil {
+			return v, e
+		}
+		for releasesRows.Next() {
+			var r controlapi.DashboardRelease
+			var manifest []byte
+			if e := releasesRows.Scan(&r.ID, &r.ReleaseHash, &manifest, &r.State, &r.CreatedAt, &r.VerifiedAt, &r.ActivatedAt); e != nil {
+				releasesRows.Close()
+				return v, e
+			}
+			description, e := dashboardManifestDescription(manifest, r.State, app.Slug)
+			if e != nil {
+				releasesRows.Close()
+				return v, ErrUnavailable
+			}
+			r.Description = description
+			app.Releases = append(app.Releases, r)
+		}
+		if e := releasesRows.Err(); e != nil {
+			releasesRows.Close()
+			return v, e
+		}
+		releasesRows.Close()
+		tokensRows, e := s.Store.DB.QueryContext(ctx, "SELECT id,scopes,expires_at,last_used_at,revoked_at FROM api_tokens WHERE app_id=? AND user_id=? ORDER BY id LIMIT 100", x.id, x.owner)
+		if e != nil {
+			return v, e
+		}
+		for tokensRows.Next() {
+			var t controlapi.DashboardToken
+			var scopes string
+			var lastUsed, revoked sql.NullString
+			if e := tokensRows.Scan(&t.ID, &scopes, &t.ExpiresAt, &lastUsed, &revoked); e != nil {
+				tokensRows.Close()
+				return v, e
+			}
+			t.Scopes = strings.Split(scopes, ",")
+			if lastUsed.Valid {
+				value := lastUsed.String
+				t.LastUsedAt = &value
+			}
+			t.Revoked = revoked.Valid
+			app.Tokens = append(app.Tokens, t)
+		}
+		if e := tokensRows.Err(); e != nil {
+			tokensRows.Close()
+			return v, e
+		}
+		tokensRows.Close()
+		if insightsErr == nil && insightsEnabled {
+			seven, sevenErr := s.Store.InsightSummary(ctx, x.id, 7, insightsNow)
+			thirty, thirtyErr := s.Store.InsightSummary(ctx, x.id, 30, insightsNow)
+			if sevenErr == nil && thirtyErr == nil {
+				app.Insights = controlapi.DashboardInsights{
+					Available:  true,
+					Last7Days:  dashboardInsightPeriod(seven),
+					Last30Days: dashboardInsightPeriod(thirty),
+				}
+			}
+		}
+		v.Apps = append(v.Apps, app)
+	}
+	if a.Role != "operator" {
+		return v, nil
+	}
+	if s.LLM != nil {
+		// This server-derived readiness state is deliberately narrower than the
+		// safe metadata reader. Operators can see a truthful unavailable state
+		// without learning whether an encryption root exists or its value.
+		v.LLMKeyManagementReady = s.LLM.Envelope != nil && s.LLMValidator != nil
+		connections, profiles, grants, err := s.LLM.OperatorViews(ctx)
+		if err != nil {
+			return v, err
+		}
+		activeConnections := make(map[string]bool, len(connections))
+		for _, x := range connections {
+			v.LLMConnections = append(v.LLMConnections, controlapi.LLMConnection{ID: x.ID, DisplayName: x.DisplayName, Provider: x.Provider, Status: x.Status})
+			activeConnections[x.ID] = x.Status == "active"
+		}
+		for _, x := range profiles {
+			// The dashboard read model, not template filtering, determines which
+			// profiles may be selected for a new app grant.
+			if x.Status != "active" || !activeConnections[x.ConnectionID] {
+				continue
+			}
+			v.LLMProfiles = append(v.LLMProfiles, controlapi.LLMProfile{ID: x.ID, ConnectionID: x.ConnectionID, Model: x.Model, Status: x.Status, Revision: x.Revision, MaxMessages: x.Limits.MaxMessages, MaxMessageBytes: x.Limits.MaxMessageBytes, MaxInputBytes: x.Limits.MaxInputBytes, MaxOutputTokens: x.Limits.MaxOutputTokens, TimeoutMS: x.Limits.Timeout.Milliseconds(), ViewerRequests: x.Limits.ViewerRequests, AppRequests: x.Limits.AppRequests, RateWindowMS: x.Limits.RateWindow.Milliseconds(), ConcurrencyLimit: x.ConcurrencyLimit, MonthlyTokenLimit: x.MonthlyTokenLimit})
+		}
+		grantsBySlug := make(map[string]controlapi.LLMGrant, len(grants))
+		for _, x := range grants {
+			grant := controlapi.LLMGrant{AppSlug: x.AppSlug, ProfileID: x.ProfileID, Status: x.Status, Revision: x.Revision, UsedTokens: x.UsedTokens, ReservedTokens: x.ReservedTokens, InFlight: x.InFlight}
+			v.LLMGrants = append(v.LLMGrants, grant)
+			grantsBySlug[x.AppSlug] = grant
+		}
+		for i := range v.Apps {
+			if grant, ok := grantsBySlug[v.Apps[i].Slug]; ok {
+				v.Apps[i].LLMGrant = &grant
+			}
+		}
+	}
+	users, err := s.Store.DB.QueryContext(ctx, "SELECT normalized_email FROM users WHERE role='deployer' AND status='active' ORDER BY normalized_email LIMIT 101")
+	if err != nil {
+		return v, err
+	}
+	for users.Next() {
+		var email string
+		if err := users.Scan(&email); err != nil {
+			users.Close()
+			return v, err
+		}
+		v.ActiveDeployerEmails = append(v.ActiveDeployerEmails, email)
+	}
+	if err := users.Err(); err != nil {
+		users.Close()
+		return v, err
+	}
+	users.Close()
+	if len(v.ActiveDeployerEmails) > 100 {
+		return v, ErrUnavailable
+	}
+	v.ActiveDeployerRevision = deployerRevision(v.ActiveDeployerEmails)
+	audit, err := s.Store.DB.QueryContext(ctx, "SELECT occurred_at,action,outcome,COALESCE(target_id,'') FROM audit_events ORDER BY occurred_at DESC,id DESC LIMIT 100")
+	if err != nil {
+		return v, err
+	}
+	for audit.Next() {
+		var x controlapi.DashboardAudit
+		if err := audit.Scan(&x.OccurredAt, &x.Action, &x.Outcome, &x.Target); err != nil {
+			audit.Close()
+			return v, err
+		}
+		v.Audit = append(v.Audit, x)
+	}
+	err = audit.Err()
+	audit.Close()
+	return v, err
+}
+
+func dashboardInsightPeriod(in InsightSummary) controlapi.DashboardInsightPeriod {
+	out := controlapi.DashboardInsightPeriod{
+		PageViews:           in.PageViews,
+		ApproximateVisitors: in.ApproximateVisitors,
+		LastActivity:        in.LastActivity,
+		Days:                make([]controlapi.DashboardInsightDay, 0, len(in.Days)),
+	}
+	for _, day := range in.Days {
+		out.Days = append(out.Days, controlapi.DashboardInsightDay{
+			Day:                 day.Day,
+			PageViews:           day.PageViews,
+			ApproximateVisitors: day.ApproximateVisitors,
+		})
+	}
+	return out
+}
+
+func dashboardManifestDescription(manifest []byte, state, slug string) (string, error) {
+	// Only releases which could be the current immutable app bytes are an
+	// authority for dashboard metadata. Candidates in every other known state
+	// are diagnostic history, not an active description source: their manifest
+	// may be incomplete, rejected before parsing, or deliberately hostile.
+	// Never parse it merely to make an historical card prettier.
+	switch releases.State(state) {
+	case releases.Uploading, releases.Uploaded, releases.Validating, releases.Staged, releases.Rejected, releases.Failed:
+		return "", nil
+	case releases.Verified, releases.Active, releases.Superseded:
+		// These immutable states have passed manifest validation. A missing or
+		// malformed stored value is control-plane corruption and must fail
+		// closed, including for the active pointer below.
+	default:
+		return "", ErrUnavailable
+	}
+	var parsed releases.Manifest
+	if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) {
+		return "", ErrUnavailable
+	}
+	return parsed.Description, nil
+}
+
+// stableAppURL admits only the configured stable gateway origin. It never
+// constructs a release path or turns deployment metadata into a link.
+func stableAppURL(slug, suffix string) string {
+	if !releases.ValidSlug(slug) || !validDNSSuffix(suffix) {
+		return ""
+	}
+	raw := "https://" + slug + "." + suffix + "/"
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host != slug+"."+suffix || u.Path != "/" || u.RawQuery != "" || u.Fragment != "" {
+		return ""
+	}
+	return raw
+}
+
+func validDNSSuffix(value string) bool {
+	if len(value) == 0 || len(value) > 253 || strings.HasSuffix(value, ".") {
+		return false
+	}
+	for _, label := range strings.Split(value, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var ErrUnavailable = errors.New("control operation unavailable")
+
+func (s ControlService) CreateApp(ctx context.Context, a controlapi.Actor, slug, key string) error {
+	if !a.Active || key == "" || !appnamespace.Valid(slug) {
+		return ErrUnavailable
+	}
+	if s.WriteGate != nil {
+		if err := s.WriteGate.AllowWrite(ctx, operations.WriteAppCreate); err != nil {
+			return err
+		}
+	}
+	limit := s.AppsPerDeployer
+	if limit == 0 {
+		limit = 20
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var target string
+		err := tx.QueryRowContext(ctx, "SELECT target_id FROM audit_events WHERE action='app.created' AND actor_id=? AND request_id=?", a.ID, key).Scan(&target)
+		if err == nil {
+			if target == slug {
+				return nil
+			}
+			return ErrUnavailable
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+		var status string
+		if err = tx.QueryRowContext(ctx, "SELECT status FROM users WHERE id=?", a.ID).Scan(&status); err != nil || status != "active" {
+			return ErrUnavailable
+		}
+		var count int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM applications WHERE owner_user_id=? AND status NOT IN ('deleting','deleted')", a.ID).Scan(&count); err != nil {
+			return err
+		}
+		if count >= limit {
+			return ErrUnavailable
+		}
+		b := make([]byte, 16)
+		if _, err = rand.Read(b); err != nil {
+			return err
+		}
+		id := "app_" + base64.RawURLEncoding.EncodeToString(b)
+		if _, err = tx.ExecContext(ctx, "INSERT INTO applications(id,owner_user_id,slug,status,policy_revision,created_at,updated_at) VALUES(?,?,?,'active',1,datetime('now'),datetime('now'))", id, a.ID, slug); err != nil {
+			return err
+		}
+		if _, err = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,1,'private',?,datetime('now'))", id, a.ID); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_kind,target_id,request_id) VALUES(?,datetime('now'),'user',?,?,'app.created','success','app',?,?)", id+"_audit", a.ID, id, slug, key)
+		return err
+	})
+}
+
+type AccessView struct {
+	Mode     string `json:"mode"`
+	Revision uint64 `json:"revision"`
+	Allow    struct {
+		Emails  []string `json:"emails"`
+		Domains []string `json:"domains"`
+	} `json:"allow"`
+}
+
+func (s ControlService) Access(ctx context.Context, a controlapi.Actor, slug string) (any, error) {
+	if !a.Active || s.Store == nil {
+		return nil, ErrUnavailable
+	}
+	var id, mode string
+	var rev uint64
+	e := s.Store.DB.QueryRowContext(ctx, "SELECT a.id,a.policy_revision,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.slug=? AND a.owner_user_id=? AND a.status='active'", slug, a.ID).Scan(&id, &rev, &mode)
+	if e != nil || (mode != "private" && mode != "public") {
+		return nil, ErrUnavailable
+	}
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=? ORDER BY kind,normalized_value", id, rev)
+	if e != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	v := AccessView{Mode: mode, Revision: rev}
+	for rows.Next() {
+		var k, x string
+		if e = rows.Scan(&k, &x); e != nil {
+			return nil, ErrUnavailable
+		}
+		if k == "email" {
+			v.Allow.Emails = append(v.Allow.Emails, x)
+		} else if k == "domain" {
+			v.Allow.Domains = append(v.Allow.Domains, x)
+		} else if k != "owner" {
+			return nil, ErrUnavailable
+		}
+	}
+	if rows.Err() != nil {
+		return nil, ErrUnavailable
+	}
+	sort.Strings(v.Allow.Emails)
+	sort.Strings(v.Allow.Domains)
+	return v, nil
+}
+func (s ControlService) ReplaceAccess(ctx context.Context, a controlapi.Actor, slug string, in controlapi.AccessPolicyInput, key string) error {
+	if !a.Active || key == "" || in.ExpectedRevision == 0 {
+		return ErrUnavailable
+	}
+	b, _ := json.Marshal(in)
+	digest := fmt.Sprintf("%x", sha256.Sum256(b))
+	fresh := false
+	var appID string
+	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var target, meta string
+		e := tx.QueryRowContext(ctx, "SELECT target_id,metadata_json FROM audit_events WHERE action='policy.replaced' AND actor_id=? AND request_id=?", a.ID, key).Scan(&target, &meta)
+		if e == nil {
+			if target == slug && meta == digest {
+				return nil
+			}
+			return ErrUnavailable
+		}
+		if e != sql.ErrNoRows {
+			return e
+		}
+		var rev uint64
+		var currentMode string
+		e = tx.QueryRowContext(ctx, `SELECT a.id,a.policy_revision,p.mode FROM applications a
+			JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
+			WHERE a.slug=? AND a.owner_user_id=? AND a.status='active'`, slug, a.ID).Scan(&appID, &rev, &currentMode)
+		if e != nil {
+			return ErrUnavailable
+		}
+		// Access-rule maintenance never changes public/private posture. That
+		// transition is sealed into an immutable deployment and reverified by
+		// activation, so a browser/API replacement cannot bypass that gate.
+		if (currentMode != "private" && currentMode != "public") || in.Mode != currentMode {
+			return ErrUnavailable
+		}
+		if rev != in.ExpectedRevision {
+			return controlapi.ErrPolicyRevision
+		}
+		currentEmails, currentDomains := map[string]bool{}, map[string]bool{}
+		rows, e := tx.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=?", appID, rev)
+		if e != nil {
+			return e
+		}
+		for rows.Next() {
+			var kind, value string
+			if e = rows.Scan(&kind, &value); e != nil {
+				rows.Close()
+				return e
+			}
+			switch kind {
+			case "email":
+				currentEmails[value] = true
+			case "domain":
+				currentDomains[value] = true
+			case "owner":
+			default:
+				rows.Close()
+				return ErrUnavailable
+			}
+		}
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return e
+		}
+		rows.Close()
+		broadening := false
+		for _, value := range in.Allow.Emails {
+			broadening = broadening || !currentEmails[value]
+		}
+		for _, value := range in.Allow.Domains {
+			broadening = broadening || !currentDomains[value]
+		}
+		if broadening && !in.ConfirmBroadening {
+			return ErrUnavailable
+		}
+		rev++
+		if _, e = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,?,?,?,datetime('now'))", appID, rev, currentMode, a.ID); e != nil {
+			return e
+		}
+		for _, x := range in.Allow.Emails {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES(lower(hex(randomblob(16))),?,?,'email',?, ?,datetime('now'))", appID, rev, x, a.ID); e != nil {
+				return e
+			}
+		}
+		for _, x := range in.Allow.Domains {
+			if _, e = tx.ExecContext(ctx, "INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES(lower(hex(randomblob(16))),?,?,'domain',?, ?,datetime('now'))", appID, rev, x, a.ID); e != nil {
+				return e
+			}
+		}
+		if _, e = tx.ExecContext(ctx, "UPDATE applications SET policy_revision=? WHERE id=?", rev, appID); e != nil {
+			return e
+		}
+		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_id,request_id,metadata_json) VALUES(lower(hex(randomblob(16))),datetime('now'),'user',?,?,'policy.replaced','success',?,?,?)", a.ID, appID, slug, key, digest)
+		fresh = e == nil
+		return e
+	})
+	if err == nil && fresh && s.Live != nil {
+		s.Live.Revoke(appID, "")
+	}
+	return err
+}
+func (s ControlService) Tokens(ctx context.Context, a controlapi.Actor, slug string) (any, error) {
+	if !a.Active {
+		return nil, ErrUnavailable
+	}
+	var id string
+	if e := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&id); e != nil {
+		return nil, ErrUnavailable
+	}
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,scopes,expires_at,last_used_at,revoked_at FROM api_tokens WHERE app_id=? AND user_id=? ORDER BY id", id, a.ID)
+	if e != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	type view struct {
+		ID         string   `json:"id"`
+		Scopes     []string `json:"scopes"`
+		ExpiresAt  string   `json:"expires_at"`
+		LastUsedAt *string  `json:"last_used_at"`
+		Revoked    bool     `json:"revoked"`
+	}
+	out := []view{}
+	for rows.Next() {
+		var v view
+		var scopes string
+		var lastUsed, revoked sql.NullString
+		if e = rows.Scan(&v.ID, &scopes, &v.ExpiresAt, &lastUsed, &revoked); e != nil {
+			return nil, ErrUnavailable
+		}
+		v.Scopes = strings.Split(scopes, ",")
+		if lastUsed.Valid {
+			value := lastUsed.String
+			v.LastUsedAt = &value
+		}
+		v.Revoked = revoked.Valid
+		out = append(out, v)
+	}
+	if rows.Err() != nil {
+		return nil, ErrUnavailable
+	}
+	return out, nil
+}
+
+type ReleaseView struct {
+	ID          string `json:"id"`
+	ReleaseHash string `json:"release_hash,omitempty"`
+	State       string `json:"state"`
+	CreatedAt   string `json:"created_at"`
+	VerifiedAt  string `json:"verified_at,omitempty"`
+	ActivatedAt string `json:"activated_at,omitempty"`
+}
+
+// Releases deliberately returns database metadata only. Immutable release
+// directories remain gateway-private and are never exposed through control.
+func (s ControlService) Releases(ctx context.Context, a controlapi.Actor, slug string) (any, error) {
+	if !a.Active || s.Store == nil {
+		return nil, ErrUnavailable
+	}
+	var appID string
+	if err := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status IN ('active','suspended')", slug, a.ID).Scan(&appID); err != nil {
+		return nil, ErrUnavailable
+	}
+	rows, err := s.Store.DB.QueryContext(ctx, "SELECT id,COALESCE(release_hash,''),state,created_at,COALESCE(verified_at,''),COALESCE(activated_at,'') FROM deployments WHERE app_id=? ORDER BY created_at DESC,id DESC LIMIT 100", appID)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	out := make([]ReleaseView, 0)
+	for rows.Next() {
+		var v ReleaseView
+		if err := rows.Scan(&v.ID, &v.ReleaseHash, &v.State, &v.CreatedAt, &v.VerifiedAt, &v.ActivatedAt); err != nil {
+			return nil, ErrUnavailable
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, ErrUnavailable
+	}
+	return out, nil
+}
+
+// DeleteApp first makes the app inaccessible, then synchronously removes its
+// server-derived bytes, then deletes every app-owned database row. A byte
+// cleanup failure deliberately leaves the row in deleting state so a later
+// confirmed owner request can retry without restoring access.
+func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug, key string) error {
+	if !a.Active || s.Store == nil || key == "" {
+		return ErrUnavailable
+	}
+	var appID string
+	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var status string
+		if err := tx.QueryRowContext(ctx, "SELECT id,status FROM applications WHERE slug=? AND owner_user_id=?", slug, a.ID).Scan(&appID, &status); err != nil {
+			return ErrUnavailable
+		}
+		if status != "active" && status != "suspended" && status != "deleting" && status != "deleted" {
+			return ErrUnavailable
+		}
+		if status == "active" || status == "suspended" {
+			res, err := tx.ExecContext(ctx, "UPDATE applications SET status='deleting',updated_at=datetime('now') WHERE id=? AND status IN ('active','suspended')", appID)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n != 1 {
+				return ErrUnavailable
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE app_id=? AND revoked_at IS NULL", appID); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=datetime('now') WHERE app_id=? AND scope='app' AND revoked_at IS NULL", appID); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if s.Live != nil {
+		s.Live.Revoke(appID, "")
+	}
+	purger := s.AppDataCleanup
+	if purger == nil {
+		purger = AppDataPurger{DataRoot: s.Store.DataRoot, Store: s.Store, BlobCleanup: s.BlobCleanup}
+	}
+	if err := purger.Purge(ctx, appID); err != nil {
+		return err
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		// Delete children explicitly. SQLite foreign keys are intentionally
+		// restrictive, so this list is also a reviewable ownership inventory.
+		for _, statement := range []string{
+			"DELETE FROM app_insight_visitors WHERE app_id=?",
+			"DELETE FROM app_insight_days WHERE app_id=?",
+			// LLM usage and reservations refer to both the app and a profile. They
+			// must go before the grant and application row; connection/profile
+			// records are operator-owned and intentionally remain reusable.
+			"DELETE FROM llm_reservations WHERE app_id=?",
+			"DELETE FROM llm_usage WHERE app_id=?",
+			"DELETE FROM app_capability_grants WHERE app_id=?",
+			"DELETE FROM deployment_files WHERE deployment_id IN (SELECT id FROM deployments WHERE app_id=?)",
+			"DELETE FROM deployments WHERE app_id=?",
+			"DELETE FROM access_rules WHERE app_id=?",
+			"DELETE FROM access_policies WHERE app_id=?",
+			"DELETE FROM otp_challenges WHERE app_id=?",
+			"DELETE FROM sessions WHERE app_id=?",
+			"DELETE FROM api_tokens WHERE app_id=?",
+			"DELETE FROM app_quota_usage WHERE app_id=?",
+			"DELETE FROM app_blobs WHERE app_id=?",
+			"DELETE FROM identity_handoffs WHERE app_id=?",
+			"DELETE FROM audit_events WHERE app_id=?",
+		} {
+			if _, err := tx.ExecContext(ctx, statement, appID); err != nil {
+				return err
+			}
+		}
+		result, err := tx.ExecContext(ctx, "DELETE FROM applications WHERE id=? AND owner_user_id=? AND status IN ('deleting','deleted')", appID, a.ID)
+		if err != nil {
+			return err
+		}
+		if count, err := result.RowsAffected(); err != nil || count != 1 {
+			return ErrUnavailable
+		}
+		return nil
+	})
+}
+func (s ControlService) CreateToken(ctx context.Context, a controlapi.Actor, slug string, in controlapi.TokenInput, key string) (controlapi.TokenResult, error) {
+	var out controlapi.TokenResult
+	if !a.Active || key == "" {
+		return out, ErrUnavailable
+	}
+	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var seen string
+		e := tx.QueryRowContext(ctx, "SELECT id FROM audit_events WHERE action='token.created' AND actor_id=? AND request_id=?", a.ID, key).Scan(&seen)
+		if e == nil {
+			return ErrUnavailable
+		}
+		if e != sql.ErrNoRows {
+			return e
+		}
+		var appID string
+		e = tx.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&appID)
+		if e != nil {
+			return ErrUnavailable
+		}
+		b := make([]byte, 32)
+		if _, e = rand.Read(b); e != nil {
+			return e
+		}
+		raw := "tinker_" + base64.RawURLEncoding.EncodeToString(b)
+		h := sha256.Sum256([]byte(raw))
+		id := "tok_" + base64.RawURLEncoding.EncodeToString(h[:12])
+		expiry := time.Now().Add(time.Duration(in.ExpiresInSeconds) * time.Second).UTC()
+		scopes := strings.Join(in.Scopes, ",")
+		if _, e = tx.ExecContext(ctx, "INSERT INTO api_tokens(id,user_id,app_id,secret_hash,scopes,expires_at) VALUES(?,?,?,?,?,?)", id, a.ID, appID, h[:], scopes, expiry.Format(time.RFC3339Nano)); e != nil {
+			return e
+		}
+		if _, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_id,request_id) VALUES(?,datetime('now'),'user',?,?,'token.created','success',?,?)", id+"_audit", a.ID, appID, id, key); e != nil {
+			return e
+		}
+		out = controlapi.TokenResult{ID: id, Token: raw, Scopes: append([]string(nil), in.Scopes...), ExpiresAt: expiry.Format(time.RFC3339Nano)}
+		return nil
+	})
+	return out, err
+}
+func (s ControlService) RevokeToken(ctx context.Context, a controlapi.Actor, slug, tokenID, key string) error {
+	if !a.Active || key == "" {
+		return ErrUnavailable
+	}
+	return s.Store.Write(ctx, func(tx *sql.Tx) error {
+		var prior string
+		e := tx.QueryRowContext(ctx, "SELECT target_id FROM audit_events WHERE action='token.revoked' AND actor_id=? AND request_id=?", a.ID, key).Scan(&prior)
+		if e == nil {
+			if prior == tokenID {
+				return nil
+			}
+			return ErrUnavailable
+		}
+		if e != sql.ErrNoRows {
+			return e
+		}
+		var appID string
+		if e = tx.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&appID); e != nil {
+			return ErrUnavailable
+		}
+		res, e := tx.ExecContext(ctx, "UPDATE api_tokens SET revoked_at=datetime('now') WHERE id=? AND user_id=? AND app_id=? AND revoked_at IS NULL", tokenID, a.ID, appID)
+		if e != nil {
+			return e
+		}
+		n, _ := res.RowsAffected()
+		if n != 1 {
+			return ErrUnavailable
+		}
+		_, e = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,app_id,action,outcome,target_id,request_id) VALUES(?,datetime('now'),'user',?,?,'token.revoked','success',?,?)", tokenID+"_revoke", a.ID, appID, tokenID, key)
+		return e
+	})
+}
+func (s ControlService) CreateDeployment(ctx context.Context, a controlapi.Actor, slug, key string, u controlapi.Upload) (any, error) {
+	if s.Deployments == nil || !a.Active {
+		return nil, ErrUnavailable
+	}
+	var id string
+	if e := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&id); e != nil {
+		return nil, ErrUnavailable
+	}
+	b := make([]byte, 16)
+	if _, e := rand.Read(b); e != nil {
+		return nil, e
+	}
+	did := "dep_" + base64.RawURLEncoding.EncodeToString(b)
+	if _, e := s.Deployments.Create(ctx, deployments.Actor{ID: a.ID, Active: a.Active}, id, slug, did, key, u.PublicAcknowledged); e != nil {
+		return nil, e
+	}
+	if e := s.Deployments.Upload(ctx, deployments.Actor{ID: a.ID, Active: a.Active}, did, u.ContentType, u.Reader); e != nil {
+		return nil, e
+	}
+	r, e := s.Deployments.Repo.Get(ctx, did)
+	if e != nil {
+		return nil, e
+	}
+	return map[string]string{"deployment_id": r.ID, "state": string(r.State)}, nil
+}
+func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, id, key string) (controlapi.ActivationResult, error) {
+	if s.Deployments == nil || !a.Active || key == "" {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	var appID string
+	if e := s.Store.DB.QueryRowContext(ctx, "SELECT id FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&appID); e != nil {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	r, e := s.Deployments.Repo.Get(ctx, id)
+	if e != nil || r.AppID != appID || r.OwnerID != a.ID {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	// An exact committed replay is a receipt only. In particular it must not
+	// revoke live sessions again; the deployment service delegates this decision
+	// only to durable repository audit/state verification.
+	replayed, e := s.Deployments.ActivationReplay(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key)
+	if e != nil {
+		return controlapi.ActivationResult{}, e
+	}
+	if replayed {
+		return activationReceipt(r, s.AppSuffix)
+	}
+	e = s.Deployments.Activate(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key)
+	if e != nil {
+		return controlapi.ActivationResult{}, e
+	}
+	// The repository has committed the release pointer and its candidate policy
+	// together. Existing sockets must not retain the policy that was replaced.
+	if s.Live != nil {
+		s.Live.Revoke(appID, "")
+	}
+	return activationReceipt(r, s.AppSuffix)
+}
+
+// activationReceipt exposes only the post-activation evidence a deployer can
+// use to independently check the server-derived stable origin. In particular,
+// public static proof is not represented as anonymous denial: it is exact
+// immutable document/asset evidence plus the indexing choice.
+func activationReceipt(r deployments.Record, domain string) (controlapi.ActivationResult, error) {
+	if r.ID == "" || r.AppSlug == "" || domain == "" {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	result := controlapi.ActivationResult{
+		DeploymentID: r.ID,
+		URL:          "https://" + r.AppSlug + "." + domain + "/",
+		Domain:       domain,
+		PolicyReady:  true,
+		TLSReady:     true,
+	}
+	mode := r.Manifest.AccessMode
+	if mode == "" {
+		mode = "private"
+	}
+	if mode == "private" {
+		result.Posture = controlapi.ActivationPrivate
+		result.AnonymousDenied = true
+		result.AuthenticatedHealthy = true
+		return result, nil
+	}
+	// A committed public record is sufficient here. Fresh acknowledgement is a
+	// transition gate checked against the current policy before and inside the
+	// activation transaction; public-to-public continuity deliberately does not
+	// rewrite immutable upload evidence.
+	if mode != "public" {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	var root string
+	var rootBytes int64
+	var assetPath, assetHash string
+	var assetBytes int64
+	for _, file := range r.Files {
+		if file.Path == "index.html" {
+			root, rootBytes = file.Hash, file.Size
+			continue
+		}
+		if assetPath == "" && releases.ServableStaticAssetPath(file.Path) {
+			assetPath, assetHash, assetBytes = file.Path, file.Hash, file.Size
+		}
+	}
+	if len(root) != 64 || rootBytes < 0 || (assetPath == "") != (assetHash == "") || (assetHash != "" && (len(assetHash) != 64 || assetBytes < 0)) {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	result.Posture = controlapi.ActivationPublicStatic
+	result.PublicStatic = &controlapi.PublicStaticEvidence{RootSHA256: root, RootBytes: rootBytes, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes, Indexing: r.Manifest.Indexing}
+	return result, nil
+}

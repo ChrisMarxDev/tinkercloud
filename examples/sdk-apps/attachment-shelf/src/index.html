@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A private Tinkercloud attachment shelf using app-scoped blob storage."
+    >
+    <title>Attachment Shelf</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">↧</span>
+          <span>Attachment Shelf</span>
+        </div>
+        <div class="viewer" title="Current Tinkercloud viewer">
+          <span id="viewer-avatar" class="avatar" aria-hidden="true">?</span>
+          <span id="viewer-email" class="viewer-email">Connecting…</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="page-title">
+          <div>
+            <p id="app-name" class="eyebrow">Private attachment shelf</p>
+            <h1 id="page-title">Share a file, not a filesystem.</h1>
+            <p class="lede">
+              Attachments are available to the viewers already allowed into this
+              app. They are utility-grade local VPS data—not backups or public links.
+            </p>
+          </div>
+          <div id="storage-status" class="status" data-tone="warning" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="storage-copy">Discovering storage</span>
+          </div>
+        </section>
+
+        <div id="notice" class="notice" data-tone="danger" role="alert" hidden>
+          <strong id="notice-title"></strong>
+          <span id="notice-message"></span>
+          <small id="notice-request"></small>
+        </div>
+
+        <section class="workspace" aria-label="Attachment shelf">
+          <aside class="panel">
+            <div class="panel-body">
+              <p class="eyebrow">Add an attachment</p>
+              <h2>Upload one file</h2>
+              <form id="upload-form">
+                <div class="field">
+                  <label for="file">Choose a file</label>
+                  <input id="file" name="file" type="file" required>
+                  <p class="hint">The server enforces file, app, and disk limits.</p>
+                </div>
+                <div class="button-row">
+                  <button id="upload" class="button button-primary" type="submit">
+                    Upload attachment
+                  </button>
+                  <button id="cancel" class="button button-secondary" type="button" disabled>
+                    Cancel upload
+                  </button>
+                </div>
+              </form>
+              <div class="meta-row">
+                <span id="blob-count">0 attachments</span>
+                <span>Private · no public URL</span>
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel" aria-labelledby="attachments-title">
+            <div class="panel-heading">
+              <div>
+                <h2 id="attachments-title">Available now</h2>
+                <p>Downloads are attachment bytes, never a storage path.</p>
+              </div>
+              <button id="refresh" class="button button-secondary" type="button">
+                Refresh
+              </button>
+            </div>
+            <ul id="blob-list" class="list"></ul>
+            <div id="empty" class="empty">
+              <div class="empty-icon" aria-hidden="true">↧</div>
+              <h3>Nothing here yet</h3>
+              <p>Upload a replaceable attachment for the people in this app.</p>
+            </div>
+            <div class="panel-body" id="more-wrap" hidden>
+              <button id="more" class="button button-secondary" type="button">
+                Load more
+              </button>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>App-scoped files · bounded local storage</span>
+        <span>Losing the VPS can lose attachments.</span>
+      </footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Public Readiness"
+  short_description: "Sweep a repository before making it public"
+  default_prompt: "Use $check-public-readiness to audit this repository before it becomes public."

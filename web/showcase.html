@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tinkercloud native web system</title>
+  <link rel="stylesheet" href="assets/tinkercloud.css?v=1">
+  <script src="assets/tinkercloud.js?v=1" defer></script>
+</head>
+<body>
+  <a class="tinker-skip" href="#main">Skip to content</a>
+  <div class="tinker-shell">
+    <header class="tinker-topbar">
+      <a class="tinker-brand" href="#">
+        <span class="tinker-brand__mark" aria-hidden="true">
+          <img src="assets/tinkercloud-mark.svg" alt="">
+        </span>
+        <span>tinkercloud</span>
+      </a>
+      <div class="tinker-topbar__account">
+        <div class="tinker-account">
+          <strong>operator@example.com</strong>
+          <span>operator</span>
+        </div>
+        <form class="tinker-inline-form" method="post" action="/logout">
+          <input type="hidden" name="csrf" value="server-rendered-token">
+          <button class="tinker-button tinker-button--quiet tinker-button--small" type="submit">Sign out of Tinkercloud</button>
+        </form>
+      </div>
+    </header>
+
+    <main class="tinker-main" id="main">
+      <div class="tinker-page-heading">
+        <div class="tinker-page-heading__copy">
+          <p class="tinker-eyebrow">Native web system</p>
+          <h1>Small, warm, and secure.</h1>
+          <p>
+            Shared foundations and states for Tinkercloud login, dashboard,
+            diagnostics, display-once credentials, and operations.
+          </p>
+        </div>
+        <span class="tinker-status" data-state="active">Ready to use</span>
+      </div>
+
+      <section class="tinker-section" aria-labelledby="actions-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Actions</p><h2 id="actions-title">Buttons and status</h2></div>
+        </div>
+        <div class="tinker-card tinker-stack">
+          <div class="tinker-cluster">
+            <button class="tinker-button tinker-button--primary" type="button">Primary action</button>
+            <button class="tinker-button tinker-button--secondary" type="button">Secondary</button>
+            <button class="tinker-button tinker-button--quiet" type="button">Quiet action</button>
+            <button class="tinker-button tinker-button--danger" type="button">Destructive</button>
+            <button class="tinker-button tinker-button--primary" type="button" data-state="busy" aria-busy="true" disabled>Saving policy</button>
+          </div>
+          <div class="tinker-cluster">
+            <span class="tinker-status" data-state="active">active</span>
+            <span class="tinker-status" data-state="degraded">degraded</span>
+            <span class="tinker-status" data-state="suspended">suspended</span>
+            <span class="tinker-status" data-state="validating">validating</span>
+            <span class="tinker-status" data-state="offline">offline</span>
+            <span class="tinker-status" data-state="unknown">unknown</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="insights-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Owner and operator only</p><h2 id="insights-title">Local insights</h2></div>
+          <p>Bounded local aggregates; exact daily values remain available beyond the compact chart.</p>
+        </div>
+        <article class="tinker-card tinker-stack">
+          <div class="tinker-insight-summary"><p><strong>Last 7 days</strong> · 38 page views · <strong>Approximate visitors</strong> 12</p><p><strong>Last 30 days</strong> · 124 page views · <strong>Approximate visitors</strong> 41</p><p>Last activity · 2026-08-01 12:04 UTC</p></div>
+          <figure class="tinker-insight-chart" aria-labelledby="showcase-insight-chart"><figcaption id="showcase-insight-chart"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption><div class="tinker-insight-chart__bars"><span class="tinker-insight-chart__day" data-page-level="4" data-visitor-level="3" tabindex="0" role="img" aria-label="Aug 01: 12 page views; 4 approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Aug 01 · 12 page views · 4 Approximate visitors</span></span><span class="tinker-insight-chart__day" data-page-level="0" data-visitor-level="0" tabindex="0" role="img" aria-label="Jul 31: 0 page views; 0 approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Jul 31 · 0 page views · 0 Approximate visitors</span></span><span class="tinker-insight-chart__day" data-page-level="2" data-visitor-level="1" tabindex="0" role="img" aria-label="Jul 30: 3 page views; 1 approximate visitor."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Jul 30 · 3 page views · 1 Approximate visitor</span></span></div></figure>
+          <div class="tinker-visually-hidden"><table><caption>Last 30 UTC days raw local insights values</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody><tr><td>2026-08-01</td><td>4</td><td>12</td></tr><tr><td>2026-07-31</td><td>0</td><td>0</td></tr><tr><td>2026-07-30</td><td>1</td><td>3</td></tr></tbody></table></div>
+        </article>
+        <article class="tinker-state tinker-state--unavailable" role="status"><div><h3>Local insights unavailable</h3><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; check the local insights setting on the VPS.</p></div></article>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="deployer-allowlist-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Operator only</p><h2 id="deployer-allowlist-title">Active deployer allowlist</h2></div>
+          <p>One revision-protected authority set using ordinary semantic controls.</p>
+        </div>
+        <form class="tinker-card tinker-card--flat tinker-stack"><p class="tinker-card__meta" id="showcase-deployer-help">One normalized email per line. Removed addresses are signed out and cannot deploy.</p><label class="tinker-field" for="showcase-deployer-emails"><span class="tinker-label">Allowed deployer emails</span><textarea class="tinker-textarea" id="showcase-deployer-emails" aria-describedby="showcase-deployer-help">dev@example.com</textarea></label><label class="tinker-choice"><input class="tinker-checkbox" type="checkbox"><span>I confirm that adding any email grants deployment authority.</span></label><div><button class="tinker-button tinker-button--primary" type="button">Save active deployers</button></div></form>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="feedback-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Feedback</p><h2 id="feedback-title">Notices carry words, not just color</h2></div>
+        </div>
+        <div class="tinker-grid tinker-grid--2">
+          <div class="tinker-notice" role="status"><p><strong>Private policy updated.</strong> The next request uses revision 8.</p></div>
+          <div class="tinker-notice tinker-notice--success" role="status"><p><strong>Deployment active.</strong> Anonymous denial was verified.</p></div>
+          <div class="tinker-notice tinker-notice--warning" role="status"><p><strong>Email degraded.</strong> Existing sessions continue; new sign-ins are paused.</p></div>
+          <div class="tinker-notice tinker-notice--danger" role="alert"><p><strong>Writes disabled.</strong> Free disk space on the VPS before retrying.</p></div>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="overlays-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Overlays</p><h2 id="overlays-title">Toasts and dialogs</h2></div>
+          <p>Short feedback stays light. Decisions still name the exact consequence.</p>
+        </div>
+        <div class="tinker-card tinker-stack">
+          <div class="tinker-cluster">
+            <button
+              class="tinker-button tinker-button--primary"
+              type="button"
+              data-tinker-toast-message="The next request uses policy revision 8."
+              data-tinker-toast-title="Private policy updated"
+              data-tinker-toast-tone="success"
+            >Show success toast</button>
+            <button
+              class="tinker-button tinker-button--secondary"
+              type="button"
+              data-tinker-toast-message="Email is unavailable. Existing sessions continue."
+              data-tinker-toast-title="Email degraded"
+              data-tinker-toast-tone="warning"
+            >Show warning toast</button>
+            <button
+              class="tinker-button tinker-button--danger"
+              type="button"
+              data-tinker-dialog-open="suspend-dialog"
+            >Open confirmation dialog</button>
+          </div>
+          <p class="tinker-card__meta">
+            Toasts announce non-blocking results. Dialogs use the native browser
+            focus loop, Escape handling, and focus return.
+          </p>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="disclosure-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Progressive disclosure</p><h2 id="disclosure-title">Expandable cards</h2></div>
+          <p>Important state stays visible while secondary controls remain tucked away.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2">
+          <details class="tinker-disclosure-card" open>
+            <summary>
+              <span class="tinker-disclosure-card__summary">
+                <span class="tinker-disclosure-card__title">Access policy</span>
+                <span class="tinker-disclosure-card__meta">Owner + everyone at example.com</span>
+              </span>
+            </summary>
+            <div class="tinker-disclosure-card__body">
+              <dl class="tinker-definition">
+                <dt>Owner</dt><dd>operator@example.com</dd>
+                <dt>Domain</dt><dd><code>example.com</code></dd>
+                <dt>Revision</dt><dd>8</dd>
+              </dl>
+            </div>
+          </details>
+          <details class="tinker-disclosure-card">
+            <summary>
+              <span class="tinker-disclosure-card__summary">
+                <span class="tinker-disclosure-card__title">Immutable releases</span>
+                <span class="tinker-disclosure-card__meta">4 immutable releases · current rel_01J</span>
+              </span>
+            </summary>
+            <div class="tinker-disclosure-card__body">
+              <p>Failed activation preserves the current release until every check passes.</p>
+              <p class="tinker-card__meta">Only verified, active, and superseded immutable releases provide descriptions. Uploading, uploaded, validating, staged, rejected, and failed candidates remain description-less.</p>
+              <button class="tinker-button tinker-button--secondary" type="button">View releases</button>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="forms-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Forms</p><h2 id="forms-title">Plain inputs, exact consequences</h2></div>
+        </div>
+        <div class="tinker-auth-preview">
+          <article class="tinker-auth-card" aria-labelledby="auth-example-title">
+            <a class="tinker-brand" href="#">
+              <span class="tinker-brand__mark" aria-hidden="true"><img src="assets/tinkercloud-mark.svg" alt=""></span>
+              <span>protected by tinkercloud</span>
+            </a>
+            <p class="tinker-eyebrow">Private app</p>
+            <h1 id="auth-example-title">Sign in to continue.</h1>
+            <p class="tinker-auth-card__intro">Use an email address the app owner has allowed.</p>
+            <form class="tinker-stack">
+              <label class="tinker-field">
+                <span class="tinker-label">Email address</span>
+                <input class="tinker-input" type="email" autocomplete="email">
+              </label>
+              <button class="tinker-button tinker-button--primary tinker-button--full" type="button">Send one-time code</button>
+            </form>
+            <p class="tinker-auth-card__footer">This app is on the open internet, securely gated by Tinkercloud.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="form-controls-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Controls</p><h2 id="form-controls-title">Policy and confirmation forms</h2></div>
+        </div>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-card tinker-stack">
+            <label class="tinker-field" data-state="invalid">
+              <span class="tinker-label">Email address</span>
+              <input class="tinker-input" type="email" value="viewer@acme" aria-invalid="true" aria-describedby="viewer-email-help viewer-email-error">
+              <span class="tinker-help" id="viewer-email-help">One exact viewer identity.</span>
+              <span class="tinker-error" id="viewer-email-error">Enter a complete email address.</span>
+            </label>
+            <label class="tinker-field">
+              <span class="tinker-label">Allowed domains</span>
+              <textarea class="tinker-textarea">example.com</textarea>
+              <span class="tinker-help">One normalized domain per line.</span>
+            </label>
+            <label class="tinker-field">
+              <span class="tinker-label">Policy mode</span>
+              <select class="tinker-select"><option>Exact viewers and domains</option><option>Exact viewers only</option></select>
+            </label>
+            <label class="tinker-choice">
+              <input class="tinker-checkbox" type="checkbox">
+              <span>I confirm this change broadens access.</span>
+            </label>
+            <label class="tinker-choice">
+              <input class="tinker-radio" type="radio" name="policy-preview" checked>
+              <span>Preview policy before replacing it.</span>
+            </label>
+            <button class="tinker-button tinker-button--primary" type="button">Replace private policy</button>
+          </article>
+
+          <article class="tinker-card tinker-card--danger tinker-stack">
+            <div>
+              <p class="tinker-eyebrow">Danger zone</p>
+              <h3>Delete payroll-preview</h3>
+              <p class="tinker-card__meta">After successful irreversible deletion, this app and its owned data are permanently removed. It cannot be restored.</p>
+            </div>
+            <label class="tinker-field">
+              <span class="tinker-label">Type <code>delete:payroll-preview</code></span>
+              <input class="tinker-input tinker-mono" autocomplete="off">
+            </label>
+            <button class="tinker-button tinker-button--danger" type="button">Delete app</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="app-filter-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Progressive list filter</p><h2 id="app-filter-title">Find an authorized app</h2></div>
+          <p>The controls appear only after local enhancement; without it every app remains visible.</p>
+        </div>
+        <div class="tinker-app-filter" data-tinker-app-filter hidden>
+          <label class="tinker-field" for="showcase-app-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="showcase-app-filter-query" type="search" autocomplete="off" placeholder="Search by app slug or description" aria-controls="showcase-app-list" data-tinker-app-filter-query>
+          </label>
+          <label class="tinker-field" for="showcase-app-filter-status">
+            <span class="tinker-label">Status</span>
+            <select class="tinker-select" id="showcase-app-filter-status" aria-controls="showcase-app-list" data-tinker-app-filter-status>
+              <option value="">All statuses</option>
+              <option value="creating">creating</option>
+              <option value="active">active</option>
+              <option value="suspended">suspended</option>
+              <option value="deleting">deleting</option>
+              <option value="failed">failed</option>
+            </select>
+          </label>
+          <p class="tinker-app-filter__count" data-tinker-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tinker-app-list" id="showcase-app-list" data-tinker-app-list>
+          <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="payroll-preview" data-tinker-app-description="Payroll review for finance" data-tinker-app-status="active">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><div class="tinker-app-card__actions"><a class="tinker-button tinker-button--secondary tinker-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tinker-status" data-state="active">active</span></div><p class="tinker-card__meta">Private policy r7 · 4 releases</p></div>
+          </article>
+          <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="migration-sandbox" data-tinker-app-description="Safe migration rehearsal" data-tinker-app-status="suspended">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><h3>migration-sandbox</h3><span class="tinker-status" data-state="suspended">suspended</span></div><p class="tinker-card__meta">Private policy r3 · 1 release</p></div>
+          </article>
+        </div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-app-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Try a different app slug, description, or status filter. Your authorized apps have not changed.</p>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="catalog-filter-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Viewer catalog</p><h2 id="catalog-filter-title">Find an app you can open</h2></div>
+          <p>Local search and tags only narrow the already-authorized cards on this page.</p>
+        </div>
+        <div class="tinker-app-filter" data-tinker-catalog-filter hidden>
+          <label class="tinker-field" for="showcase-catalog-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="showcase-catalog-filter-query" type="search" autocomplete="off" placeholder="Search app, description, or tag" aria-controls="showcase-catalog-app-list" data-tinker-catalog-filter-query>
+          </label>
+          <label class="tinker-field" for="showcase-catalog-filter-tag">
+            <span class="tinker-label">Tag</span>
+            <select class="tinker-select" id="showcase-catalog-filter-tag" aria-controls="showcase-catalog-app-list" data-tinker-catalog-filter-tag><option value="">All tags</option><option value="finance">finance</option><option value="team">team</option></select>
+          </label>
+          <p class="tinker-app-filter__count" data-tinker-catalog-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2" id="showcase-catalog-app-list" data-tinker-catalog-list>
+          <article class="tinker-card tinker-app-card" data-tinker-catalog-card data-tinker-catalog-slug="payroll-preview" data-tinker-catalog-description="Payroll review for finance" data-tinker-catalog-tags="finance team">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><span class="tinker-status" data-state="active">Private</span></div><p class="tinker-card__meta">Tags: finance, team</p></div>
+          </article>
+          <article class="tinker-card tinker-app-card" data-tinker-catalog-card data-tinker-catalog-slug="handbook" data-tinker-catalog-description="Team handbook" data-tinker-catalog-tags="team">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>handbook</h3><p class="tinker-card__meta">Team handbook</p></div><span class="tinker-status" data-state="active">Private</span></div><p class="tinker-card__meta">Tags: team</p></div>
+          </article>
+        </div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-catalog-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Adjust the search or tag. No new app data was requested.</p>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="data-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Operational data</p><h2 id="data-title">Cards, details, and tables</h2></div>
+        </div>
+        <article class="tinker-card tinker-app-card">
+          <div class="tinker-app-card__summary">
+            <div class="tinker-card__header">
+              <div><p class="tinker-eyebrow">Application</p><h3>payroll-preview</h3></div>
+              <span class="tinker-status" data-state="active">active</span>
+            </div>
+            <p class="tinker-card__meta">Private policy r7 · 4 releases</p>
+          </div>
+          <div class="tinker-app-card__body">
+            <details class="tinker-details" open>
+              <summary>Access policy</summary>
+              <div class="tinker-details__body">
+                <dl class="tinker-definition">
+                  <dt>Owner</dt><dd>operator@example.com</dd>
+                  <dt>Domains</dt><dd><code>example.com</code></dd>
+                  <dt>Revision</dt><dd>7</dd>
+                </dl>
+              </div>
+            </details>
+            <details class="tinker-details"><summary>Immutable releases</summary><div class="tinker-details__body"><p>Four immutable releases.</p></div></details>
+          </div>
+        </article>
+
+        <div class="tinker-table-wrap">
+          <table class="tinker-table">
+            <thead><tr><th scope="col">When</th><th scope="col">Action</th><th scope="col">Outcome</th><th scope="col">Target</th></tr></thead>
+            <tbody>
+              <tr><td>2 minutes ago</td><td>policy.replaced</td><td><span class="tinker-status" data-state="succeeded">succeeded</span></td><td>payroll-preview</td></tr>
+              <tr><td>Yesterday</td><td>deployment.activated</td><td><span class="tinker-status" data-state="succeeded">succeeded</span></td><td>rel_01J</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="states-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Server states</p><h2 id="states-title">Visible failure paths and durable progress</h2></div>
+          <p>These are server-rendered states. No client-side state grants access or hides a denial.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-state tinker-state--loading" role="status">
+            <p class="tinker-state__title">Loading deployments</p>
+            <p class="tinker-state__copy">Fetching the current deployment list from this Tinkercloud server.</p>
+          </article>
+          <article class="tinker-state tinker-state--stale" role="status">
+            <p class="tinker-state__title">Showing cached deployment data</p>
+            <p class="tinker-state__copy">The latest safe list is still visible while refresh continues.</p>
+            <p class="tinker-state__meta">Last safe update: 10:42 UTC</p>
+          </article>
+          <article class="tinker-state tinker-state--unavailable" role="alert">
+            <p class="tinker-state__title">Deployment status is unavailable</p>
+            <p class="tinker-state__copy">Try again from this page. Do not assume an activation completed.</p>
+          </article>
+          <article class="tinker-state tinker-state--error" role="alert">
+            <p class="tinker-state__title">Deployment validation failed</p>
+            <p class="tinker-state__copy">Your previous release remains active. Review the safe validation summary before retrying.</p>
+          </article>
+        </div>
+        <div class="tinker-card tinker-stack tinker-stack--spaced">
+          <div class="tinker-progress" aria-labelledby="progress-title">
+            <div class="tinker-card__header"><div><h3 id="progress-title">Release validation</h3><p class="tinker-card__meta">Step 2 of 4: checking the staged archive.</p></div><span class="tinker-status" data-state="validating">validating</span></div>
+            <progress value="2" max="4">2 of 4 stages complete</progress>
+            <ol class="tinker-stage-list">
+              <li data-state="complete">Upload received</li>
+              <li aria-current="step">Archive validation in progress</li>
+              <li>Anonymous denial probe</li>
+              <li>Atomic activation</li>
+            </ol>
+          </div>
+          <nav class="tinker-pagination" aria-label="Deployment history pages">
+            <span aria-disabled="true">Previous</span>
+            <a href="?page=1" aria-current="page">1<span class="tinker-visually-hidden">, current page</span></a>
+            <a href="?page=2">2</a>
+            <a href="?page=2">Next</a>
+          </nav>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="empty-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">List state</p><h2 id="empty-title">Empty is still useful</h2></div>
+        </div>
+        <div class="tinker-empty">
+          <div class="tinker-empty__icon" aria-hidden="true">→</div>
+          <h3>No apps yet.</h3>
+          <p>Build a static app, then run <code>tinker deploy ./dist</code> to create its private URL.</p>
+        </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="agent-handoff-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator only</p><h2 id="agent-handoff-title">Get started with a coding agent</h2></div><p>Copy a bounded deployment brief without sharing dashboard credentials.</p></div>
+        <article class="tinker-card tinker-stack">
+          <div><h3>Ready-to-copy prompt</h3><p class="tinker-card__meta">The endpoint is server-derived. Select the prompt if copying is unavailable.</p></div>
+          <textarea class="tinker-textarea tinker-code-block" id="showcase-agent-prompt" readonly rows="10" aria-label="Coding-agent deployment prompt">Build and deploy a small Tinkercloud app.
+
+Repository: https://github.com/ChrisMarxDev/tinkercloud
+Tinkercloud endpoint: https://admin.example.test
+
+Follow skills/tinkercloud-deployer/SKILL.md in the repository. Ask me only for the deployer email, then ask for the one-time code when it is sent. Use the normal email OTP flow to authenticate that deployer. Generate the app, build it, and deploy it with the fewest necessary questions. Do not ask for operator access, tokens, or secrets.</textarea>
+          <div class="tinker-cluster"><button class="tinker-button tinker-button--secondary" type="button" data-tinker-copy-target="showcase-agent-prompt" data-tinker-copy-feedback="showcase-agent-feedback" hidden>Copy prompt</button><p class="tinker-card__meta" id="showcase-agent-feedback" data-tinker-copy-feedback role="status" aria-live="polite">Select the prompt to copy it manually.</p></div>
+        </article>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="api-keys-showcase-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator-only capability</p><h2 id="api-keys-showcase-title">API keys</h2></div><p>Safe metadata is visible; provider API keys never return to the page.</p></div>
+        <div class="tinker-grid tinker-grid--2">
+          <article class="tinker-card tinker-stack"><div><h3>Add an API key</h3><p class="tinker-card__meta">The API key is encrypted after verification and cannot be shown again.</p></div><label class="tinker-field"><span class="tinker-label">Provider</span><select class="tinker-select"><option>Anthropic</option><option>Gemini</option></select></label><label class="tinker-field"><span class="tinker-label">API key</span><input class="tinker-input tinker-mono" type="password" autocomplete="new-password"><span class="tinker-help">Write-only. Never displayed or recovered.</span></label><button class="tinker-button tinker-button--primary" type="button">Verify and save API key</button></article>
+          <article class="tinker-card tinker-stack"><div class="tinker-card__header"><div><h3>Anthropic API key</h3><p class="tinker-card__meta">Anthropic · <code>0123456789abcdef0123456789abcdef</code></p></div><span class="tinker-status" data-state="active">active</span></div><details class="tinker-details"><summary>Disable API key</summary><div class="tinker-details__body tinker-danger-zone tinker-stack"><p class="tinker-card__meta">Future chat calls using this API key will be denied.</p><label class="tinker-field"><span class="tinker-label">Type <code>disable:0123456789abcdef0123456789abcdef</code></span><input class="tinker-input tinker-mono" autocomplete="off"></label><button class="tinker-button tinker-button--danger" type="button">Disable API key</button></div></details></article>
+        </div>
+        <article class="tinker-state tinker-state--unavailable tinker-section__spaced" role="status"><h3>API key management is unavailable</h3><p>Enable the root-owned LLM credential boundary on the VPS with <code>tinkercloud llm enable</code>, then restart Tinkercloud. API keys cannot be added, rotated, or disabled until it is available.</p></article>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="llm-showcase-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator-only capability</p><h2 id="llm-showcase-title">LLM chat</h2></div><p>Profiles, app grants, limits, and usage stay separate from API-key management.</p></div>
+      </section>
+
+      <p class="tinker-footer-note">Open source. Your VPS. Your Tinkercloud.</p>
+    </main>
+  </div>
+
+  <dialog class="tinker-dialog tinker-dialog--compact" id="showcase-qr-dialog" aria-labelledby="showcase-qr-title">
+    <div class="tinker-dialog__header">
+      <div>
+        <p class="tinker-eyebrow">Open on your phone</p>
+        <h2 id="showcase-qr-title">payroll-preview</h2>
+      </div>
+      <form method="dialog">
+        <button class="tinker-dialog__close" type="submit" value="close" aria-label="Close QR code">×</button>
+      </form>
+    </div>
+    <div class="tinker-dialog__body tinker-qr-dialog__body">
+      <div class="tinker-qr-frame"><canvas class="tinker-qr" width="650" height="650" data-tinker-qr="/mtrPDw/P8EV4cpKSpBuvFpXSUnLt0FobsDAJduntrf72hLsE14dEKixB/qqqqqqqv4BbS3GSkkA762tvw8O4l7qhpHS0mOQoPDiy8ua0TYtJIaCmzctPLrvLxbWjYpJIMDC0NiPDjtTR4PAAtJIaGtE99vLrJaWioQIpJAeHlEku3DjLa2KK6TtJre1lk8/XLt5+f0sKepK6a2q7vxfD96cvl/KPtKopKZrmjTa9vDxlnRqaG4tLZwP4g8PvLz+txQS1GigcQ6tq8qysMrKxJSnHAwMaX9o8Pw0J/34sS3ShoWbR/K8rWloVwhMSnfh4bqn1I8JWtqV0gjS3Zl5arGra8r/j4LwiRSnbhYYXVzo8I3vyoOxAS1eSksWbxet3Q8P2sJthovS0liLhfDnS8v+2Z8tIoaOdjz8HL3LTzvXSGpIsODEkpnfDnJCRuPy/tIoaGkkAl3L/paW+oBBpJEeHsU/tfDqra2qMF9tJHeXsUuq/L/p+O+t03pKoeGqaupnDz7e3fsF3tLYpKeq/rra1vDxb4A=" role="img" aria-label="QR code for this app URL"></canvas></div>
+      <p>Scan with your phone to open this app. Its normal sign-in and access policy still apply.</p>
+      <a class="tinker-qr-url tinker-mono" href="/">https://payroll-preview.apps.example.test/</a>
+    </div>
+    <div class="tinker-dialog__actions">
+      <form method="dialog">
+        <button class="tinker-button tinker-button--secondary" type="submit" value="close">Close</button>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog class="tinker-dialog" id="suspend-dialog" aria-labelledby="suspend-dialog-title">
+    <div class="tinker-dialog__header">
+      <div>
+        <p class="tinker-eyebrow">Confirm suspension</p>
+        <h2 id="suspend-dialog-title">Suspend payroll-preview?</h2>
+      </div>
+      <form method="dialog">
+        <button class="tinker-dialog__close" type="submit" value="cancel" aria-label="Close dialog">×</button>
+      </form>
+    </div>
+    <div class="tinker-dialog__body">
+      <p>
+        Viewers will lose access on their next request and affected live
+        connections will close. The current release remains stored.
+      </p>
+      <div class="tinker-notice tinker-notice--warning">
+        <p><strong>Exact target:</strong> <code>payroll-preview</code></p>
+      </div>
+    </div>
+    <div class="tinker-dialog__actions">
+      <form method="dialog">
+        <button class="tinker-button tinker-button--secondary" type="submit" value="cancel">Keep app active</button>
+        <button
+          class="tinker-button tinker-button--danger"
+          type="submit"
+          value="confirm"
+          data-tinker-toast-message="Demo only — no server mutation was performed."
+          data-tinker-toast-title="Suspension reviewed"
+          data-tinker-toast-tone="danger"
+          data-tinker-toast-duration="0"
+        >Suspend payroll-preview</button>
+      </form>
+    </div>
+  </dialog>
+
+  <div
+    class="tinker-toast-region"
+    data-tinker-toast-region
+    aria-live="polite"
+    aria-label="Notifications"
+  ></div>
+</body>
+</html>

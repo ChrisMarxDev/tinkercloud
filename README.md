@@ -1,0 +1,180 @@
+# Tinkercloud
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+![Tinkercloud turns a folder into a protected team app](docs/assets/readme-deploy-flow.webp)
+
+## Overview
+
+Tinkercloud is a self-hosted private micro-app platform: one operator runs one
+gateway, deployers publish small apps, and viewers authenticate by email.
+
+For a deployer, the shortest useful path is preview, then publish the current
+project directory:
+
+```sh
+tinker dev
+tinker deploy .
+```
+
+For an operator, signed installation and everyday host checks stay equally
+direct:
+
+```sh
+tinker host install root@HOST
+tinker host status root@HOST
+tinker host doctor root@HOST
+```
+
+The first `tinker deploy .` asks only for required information it cannot safely
+derive, including optional viewer emails or domains. With no viewer rule, the
+app remains private to its owner.
+
+The defining guarantee is stronger than “apps include authentication”:
+
+> No private app file, platform API, WebSocket, blob, or backend request is
+> reachable until Tinkercloud has authenticated and authorized the request.
+
+Tinkercloud includes a Go gateway, deployer CLI, SQLite-backed capabilities,
+browser SDK, and local operational commands. It is pre-release software: use it
+for replaceable toy, prototype, and utility apps—not business-critical data.
+
+## Install the Tinker CLI
+
+Tinker is installed directly from an exact GitHub release. Replace `VERSION`
+with a published beta version; beta installation never follows a mutable
+`latest` channel.
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/ sh
+```
+
+The installer selects the macOS or Linux binary for the local architecture,
+verifies its checksum and Ed25519 signature, and installs `tinker` into
+`~/.local/bin`. Run it as the current user, never with `sudo`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+tinker version
+```
+
+## Operator first: run the platform
+
+From the operator workstation, the same CLI installs and administers the
+Tinkercloud server over the existing root SSH trust boundary:
+
+```sh
+tinker host install root@HOST
+tinker host status root@HOST
+tinker host doctor root@HOST
+tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host uninstall root@HOST
+```
+
+The released CLI derives the exact immutable GitHub release URL from its own
+signed build version. A local development build instead requires the explicit
+`--release-base` form. Installation places the verified server binary and
+systemd unit; it does not guess the domain, operator identity, or protected
+email credential needed to initialize an instance.
+
+`tinker host update` invokes the server's signed self-updater. The host verifies
+the complete compatibility evidence, restarts the service, runs health and
+anonymous-denial checks, and automatically restores the previous binary if a
+gate fails. Tinker uses a fixed SSH command grammar; it stores no root
+credential and exposes no arbitrary remote shell.
+
+`tinker host uninstall` requires confirmation of the exact SSH target. It
+permanently removes Tinkercloud configuration, credentials, apps, data,
+service, binary, and service identity while preserving the ACME cache so a
+manual reinstall does not request the same certificates again.
+
+After installing the host binary, initialize the instance through the current
+deterministic operator contract:
+
+```sh
+sudo tinkercloud init --non-interactive \
+  --domain example.com \
+  --operator-email operator@example.com \
+  --email-from access@example.com \
+  --resend-api-key-file /root/tinkercloud-resend.key \
+  --hmac-key-file /root/tinkercloud-hmac.key
+sudo tinkercloud status
+sudo tinkercloud doctor
+```
+
+The minimum-question `tinkercloud setup` assistant remains planned; the README
+does not treat it as implemented installation behavior.
+
+`status` reports redacted local health for SQLite, disk, permissions, clock,
+service state, listeners, version, and rollback state. `doctor` performs bounded
+DNS, TLS, and read-only provider checks without sending mail or printing
+secrets. Updates use the configured signed release source, restart the service,
+and restore the prior version automatically if a gate fails. Read the
+[Hetzner deployment guide](docs/operations/hetzner-deployment.md),
+[setup scenarios](docs/operations/setup-scenarios.md), and
+[VPS smoke acceptance](docs/operations/vps-e2e.md) before operating a host.
+
+## Deployer second: publish an app
+
+From a static app project, deploy the project directory—not only its output
+folder:
+
+```sh
+tinker deploy .
+```
+
+On its first human run, Tinker asks for the HTTPS platform URL only when it has
+no verified default, reuses or establishes the deployer identity, inspects the
+project, asks only about ambiguous required state, and creates a missing
+`tinker.yaml` as a reviewed receipt. Use `tinker init .` to create the manifest
+ahead of time. Later commands reuse the saved default server and verified CLI
+bearer; `tinker logout` revokes and removes that local bearer.
+
+For local app development:
+
+```sh
+tinker dev
+```
+
+The local subset includes current viewer/app information, KV, bounded document
+collections, snapshot recovery, and live change hints. It deliberately excludes
+production login, policy, deployment, blobs, TLS/protection proof, and
+LLM/provider capabilities. Local success is development evidence only.
+
+## What Tinkercloud protects
+
+- Every app has an isolated origin and storage namespace.
+- Gateway authorization precedes app files, APIs, WebSockets, blobs, and backend
+  requests.
+- V1 blobs are private, local, bounded, and gateway-authorized.
+- Operator-governed LLM access uses server-side provider credentials; secrets
+  never enter deployed browser code.
+- Revoked sessions, deployers, policies, and apps take effect on the next
+  relevant request.
+
+## User documentation
+
+- [Host your first private app](docs/getting-started/first-app.md)
+- [Client SDK](docs/architecture/client-sdk.md)
+- [V1 scope](docs/product/v1-scope.md)
+- [System architecture](docs/architecture/system.md)
+- [Security model](docs/security/threat-model.md)
+- [Technology decisions](docs/decisions/README.md)
+- [Browsable product concept](concept/index.html)
+- [Complete operator flow](concept/flows/operator.html)
+- [Complete deployer flow](concept/flows/deployer.html)
+- [Full documentation map](docs/README.md)
+
+Governance and implementation scope remain canonical in
+[PRINCIPLES.md](PRINCIPLES.md) and [PRD.md](PRD.md). Contributor and agent
+maintenance material lives under [`internals/`](internals/README.md) and
+[`skills/`](skills/).
+
+## License and community
+
+Apache-2.0. See [LICENSE](LICENSE) and the repository-owned
+[asset provenance](ASSET_PROVENANCE.md).
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md),
+[security policy](SECURITY.md), [support guide](SUPPORT.md), and
+[governance model](GOVERNANCE.md) before contributing or requesting support.

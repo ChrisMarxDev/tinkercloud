@@ -1,0 +1,60 @@
+# Go build products and test output
+/bin/
+/tinker
+/tinkercloud
+*.test
+*.prof
+coverage.out
+coverage/
+.coverprofile
+
+# Local Tinkercloud state: databases, release trees, runtime configuration, and keys
+/data/
+/runtime/
+/state/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+tinkercloud.yaml
+tinkercloud.local.yaml
+tinkercloud-vps-known_hosts
+resend-api-key
+*-resend.key
+*-hmac.key
+.tinker/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+!packaging/release-public-key.pem
+
+# Node package installs and generated package outputs
+**/node_modules/
+sdk/typescript/dist/
+examples/sdk-apps/*/dist/
+live_examples/
+*.tgz
+npm-debug.log*
+
+# Tool caches and editor/OS noise
+.private/
+.task/
+.cache/
+**/__pycache__/
+*.py[cod]
+.tmp/
+tmp/
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Autonomous GitHub issue-loop runtime and local credential fallback
+.hermes-task-loop/
+GITHUB_TOKEN

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Full-Stack Test"
+  short_description: "Run safe opt-in Tinkercloud VPS acceptance tests"
+  default_prompt: "Use $tinkercloud-full-stack-test to run Tinkercloud's unattended VPS acceptance workflow."

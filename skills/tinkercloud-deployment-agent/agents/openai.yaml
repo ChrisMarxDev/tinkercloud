@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Deployment Agent"
+  short_description: "Run one local Tinkercloud test deploy"
+  default_prompt: "Use $tinkercloud-deployment-agent to make one verified local Tinkercloud test deployment as an exact deployer identity."

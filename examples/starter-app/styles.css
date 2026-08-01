@@ -1,0 +1,469 @@
+:root {
+  color-scheme: light;
+  --ink: #15211d;
+  --muted: #64706b;
+  --paper: #f6f2e9;
+  --card: #fffdf7;
+  --forest: #173f35;
+  --mint: #bde7d3;
+  --coral: #ff7a5c;
+  --line: rgba(21, 33, 29, 0.14);
+  --shadow: 0 24px 70px rgba(23, 63, 53, 0.14);
+  font-family:
+    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 4%, rgba(255, 122, 92, 0.18), transparent 28rem),
+    radial-gradient(circle at 90% 88%, rgba(189, 231, 211, 0.55), transparent 31rem),
+    var(--paper);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.page-shell {
+  width: min(1120px, calc(100% - 40px));
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar,
+.page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar {
+  min-height: 88px;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: inline-flex;
+  gap: 12px;
+  align-items: center;
+  color: inherit;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 33px;
+  height: 33px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 3px;
+  border-radius: 10px;
+  background: var(--forest);
+  box-shadow: 0 7px 16px rgba(23, 63, 53, 0.2);
+}
+
+.brand-mark span {
+  display: block;
+  border-radius: 999px;
+  background: var(--mint);
+}
+
+.brand-mark span:nth-child(1) {
+  height: 45%;
+}
+
+.brand-mark span:nth-child(2) {
+  height: 100%;
+}
+
+.brand-mark span:nth-child(3) {
+  height: 70%;
+}
+
+.privacy-label {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 253, 247, 0.58);
+  font-size: 0.77rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(440px, 1fr);
+  align-items: center;
+  gap: clamp(48px, 8vw, 112px);
+  padding: 72px 0;
+}
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--coral);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  max-width: 650px;
+  margin-bottom: 24px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3.2rem, 7vw, 6rem);
+  font-weight: 500;
+  letter-spacing: -0.065em;
+  line-height: 0.95;
+}
+
+.lede {
+  max-width: 540px;
+  margin-bottom: 38px;
+  color: var(--muted);
+  font-size: clamp(1rem, 2vw, 1.15rem);
+  line-height: 1.65;
+}
+
+.date-card {
+  width: fit-content;
+  padding: 13px 17px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 253, 247, 0.7);
+  box-shadow: 0 10px 30px rgba(23, 63, 53, 0.06);
+}
+
+.date-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.date-card time {
+  font-weight: 720;
+}
+
+.ritual-card {
+  overflow: hidden;
+  border: 1px solid rgba(23, 63, 53, 0.13);
+  border-radius: 28px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.card-heading,
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.card-heading {
+  padding: 30px 30px 20px;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.progress-copy {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+progress {
+  width: calc(100% - 60px);
+  height: 7px;
+  margin: 0 30px 18px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  color: var(--coral);
+  background: #e6e9e3;
+  appearance: none;
+}
+
+progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #e6e9e3;
+}
+
+progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--coral);
+  transition: width 180ms ease;
+}
+
+progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--coral);
+  transition: width 180ms ease;
+}
+
+.ritual-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.ritual-list li {
+  border-top: 1px solid var(--line);
+}
+
+.ritual-list label {
+  min-height: 103px;
+  padding: 22px 30px;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
+  gap: 17px;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.ritual-list label:hover {
+  background: rgba(189, 231, 211, 0.18);
+}
+
+.ritual-list input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.checkmark {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #9aa59f;
+  border-radius: 8px;
+  background: #fff;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.checkmark::after {
+  width: 9px;
+  height: 5px;
+  border-bottom: 2px solid #fff;
+  border-left: 2px solid #fff;
+  content: "";
+  opacity: 0;
+  transform: translateY(-1px) rotate(-45deg) scale(0.7);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+input:checked + .checkmark {
+  border-color: var(--forest);
+  background: var(--forest);
+  transform: rotate(-2deg);
+}
+
+input:checked + .checkmark::after {
+  opacity: 1;
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+input:focus-visible + .checkmark {
+  outline: 3px solid rgba(255, 122, 92, 0.35);
+  outline-offset: 3px;
+}
+
+.ritual-list strong,
+.ritual-list small {
+  display: block;
+}
+
+.ritual-list strong {
+  margin-bottom: 5px;
+  font-size: 1rem;
+}
+
+.ritual-list small {
+  color: var(--muted);
+  font-size: 0.87rem;
+  line-height: 1.45;
+}
+
+input:checked ~ span strong {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--coral);
+  text-decoration-thickness: 2px;
+}
+
+.card-footer {
+  min-height: 76px;
+  padding: 18px 30px;
+  border-top: 1px solid var(--line);
+  background: rgba(23, 63, 53, 0.035);
+}
+
+.card-footer p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+button {
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--forest);
+  background: transparent;
+  font-size: 0.8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: rgba(23, 63, 53, 0.32);
+  background: var(--card);
+}
+
+button:focus-visible,
+.brand:focus-visible {
+  outline: 3px solid rgba(255, 122, 92, 0.4);
+  outline-offset: 3px;
+}
+
+.page-footer {
+  min-height: 70px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+body[data-complete="true"] .ritual-card {
+  box-shadow:
+    0 24px 70px rgba(23, 63, 53, 0.14),
+    0 0 0 6px rgba(189, 231, 211, 0.38);
+}
+
+@media (max-width: 860px) {
+  main {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 54px 0 64px;
+  }
+
+  h1 {
+    max-width: 720px;
+  }
+
+  .intro {
+    max-width: 720px;
+  }
+}
+
+@media (max-width: 560px) {
+  .page-shell {
+    width: min(100% - 24px, 1120px);
+  }
+
+  .topbar {
+    min-height: 72px;
+  }
+
+  .privacy-label {
+    display: none;
+  }
+
+  main {
+    padding-top: 38px;
+  }
+
+  h1 {
+    font-size: clamp(2.8rem, 15vw, 4.2rem);
+  }
+
+  .ritual-card {
+    border-radius: 20px;
+  }
+
+  .card-heading,
+  .ritual-list label,
+  .card-footer {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .card-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  progress {
+    width: calc(100% - 40px);
+    margin-right: 20px;
+    margin-left: 20px;
+  }
+
+  .card-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .page-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

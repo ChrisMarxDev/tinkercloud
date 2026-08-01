@@ -1,0 +1,8 @@
+version: 2
+name: kv-recovery
+description: KV recovery and reconnect exercise.
+build:
+  output: .
+features:
+  kv: true
+  realtime: true

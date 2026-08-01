@@ -1,0 +1,132 @@
+#!/bin/sh
+set -eu
+
+src=skills/tinkercloud-platform/SKILL.md
+
+compare_block() {
+  block_name=$1
+  dst=$2
+  start="<!-- shared:${block_name}:start -->"
+  end="<!-- shared:${block_name}:end -->"
+  canonical=$(sed -n "\\|${start}|,\\|${end}|p" "$src")
+  copied=$(sed -n "\\|${start}|,\\|${end}|p" "$dst")
+  test -n "$canonical" || {
+    echo "missing canonical skill block: ${block_name}" >&2
+    exit 1
+  }
+  test "$canonical" = "$copied" || {
+    echo "shared skill block drift (${block_name}): ${dst}" >&2
+    exit 1
+  }
+}
+
+compare_block role-common skills/tinkercloud-deployer/SKILL.md
+compare_block deployer skills/tinkercloud-deployer/SKILL.md
+compare_block role-common skills/tinkercloud-operator/SKILL.md
+compare_block operator skills/tinkercloud-operator/SKILL.md
+compare_block role-common skills/tinkercloud-full-stack-test/SKILL.md
+
+check_distribution_skill() {
+  skill=$1
+  file="skills/${skill}/SKILL.md"
+  metadata="skills/${skill}/agents/openai.yaml"
+  test -f "$file" && test -f "$metadata" || {
+    echo "missing distribution skill: ${skill}" >&2
+    exit 1
+  }
+  ! grep -F "[TODO" "$file" >/dev/null || {
+    echo "unfinished distribution skill: ${skill}" >&2
+    exit 1
+  }
+  grep -F "name: ${skill}" "$file" >/dev/null || {
+    echo "distribution skill name drift: ${skill}" >&2
+    exit 1
+  }
+  grep -F "specs/operations/distribution-contract.md" "$file" >/dev/null || {
+    echo "distribution contract missing from skill: ${skill}" >&2
+    exit 1
+  }
+  grep -F "default_prompt: \"Use \$${skill}" "$metadata" >/dev/null || {
+    echo "distribution skill metadata drift: ${skill}" >&2
+    exit 1
+  }
+}
+
+check_distribution_skill distribute-tinker-cli
+check_distribution_skill distribute-tinkercloud-sdk
+
+check_deployment_agent_skill() {
+  skill=tinkercloud-deployment-agent
+  file="skills/${skill}/SKILL.md"
+  metadata="skills/${skill}/agents/openai.yaml"
+  wrapper="skills/${skill}/scripts/deploy_once.py"
+  tests="skills/${skill}/scripts/test_deploy_once.py"
+  test -f "$file" && test -f "$metadata" && test -x "$wrapper" && test -x "$tests" || {
+    echo "missing deployment-agent skill resource" >&2
+    exit 1
+  }
+  ! grep -F "[TODO" "$file" >/dev/null || {
+    echo "unfinished deployment-agent skill" >&2
+    exit 1
+  }
+  grep -F "name: ${skill}" "$file" >/dev/null || {
+    echo "deployment-agent skill name drift" >&2
+    exit 1
+  }
+  grep -F "default_prompt: \"Use \$${skill}" "$metadata" >/dev/null || {
+    echo "deployment-agent skill metadata drift" >&2
+    exit 1
+  }
+  grep -F "local deployer-workstation test automation" "$file" >/dev/null &&
+    grep -F "not production CI/noninteractive" "$file" >/dev/null || {
+    echo "deployment-agent local-only boundary missing" >&2
+    exit 1
+  }
+}
+
+check_deployment_agent_skill
+
+grep -F "task distribution:prepare" skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI distribution task drift" >&2
+  exit 1
+}
+grep -F 'The npm `bin` key, launcher target, native artifact names' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI distribution rename gate drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run beta-release.yml' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI GitHub beta workflow drift" >&2
+  exit 1
+}
+grep -F 'task release:beta-check' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI GitHub beta verification drift" >&2
+  exit 1
+}
+grep -F 'task release:stable-check' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable release verification drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run stable-release.yml' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable GitHub workflow drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run npm-cli-publish.yml' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI npm trusted-publish workflow drift" >&2
+  exit 1
+}
+grep -F 'specs/operations/stable-release-contract.md' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable release contract drift" >&2
+  exit 1
+}
+grep -F "npm test --prefix sdk/typescript" skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK distribution test drift" >&2
+  exit 1
+}
+grep -F 'The npm tarball contains exactly `LICENSE`, `README.md`, `dist/index.d.ts`' skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK distribution file gate drift" >&2
+  exit 1
+}
+grep -F 'GitHub beta workflow publishes the SDK tarball' skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK GitHub beta workflow drift" >&2
+  exit 1
+}

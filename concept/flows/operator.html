@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tinkercloud — Complete Operator Flow</title>
+  <link rel="stylesheet" href="../assets/concept.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="../index.html">Product concept</a>
+      <a href="deployer.html">Deployer flow</a>
+      <a href="../../PRINCIPLES.md">Principles</a>
+      <a href="../../PRD.md">PRD</a>
+    </nav>
+    <p class="eyebrow">Actor flow · Operator · July 2026</p>
+    <h1>From no server to a tinker private cloud.</h1>
+    <p class="lede">The complete human journey includes buying the VPS and
+      domain, creating DNS and email-provider state, installing Tinkercloud,
+      granting deployment authority, operating apps, updating, and recovering.</p>
+    <p class="promise">Ask only for a necessary value that Tinkercloud cannot
+      discover or safely default. Generate config as a receipt.</p>
+  </header>
+
+  <main>
+    <div class="grid">
+      <section class="two-thirds" id="value">
+        <p class="eyebrow">Reason and value</p>
+        <h2>One understandable host, one guided setup</h2>
+        <p>The operator wants a working private-app platform, not a lesson in
+          reverse proxies, SQLite, systemd, ACME, or config schemas. Tinkercloud
+          owns those mechanics while leaving account ownership, DNS, SSH,
+          firewall policy, and the VPS lifecycle with the operator.</p>
+      </section>
+      <section class="third">
+        <div class="metric"><span>Impact</span><span class="score">5 / 5</span></div>
+        <div class="metric"><span>Complexity</span><span class="score">4 / 5</span></div>
+        <div class="metric"><span>Yield</span><span class="score">5 / 5</span></div>
+      </section>
+    </div>
+
+    <div class="grid" id="scope">
+      <section class="half">
+        <p class="eyebrow">Scope</p>
+        <ul>
+          <li>Dedicated supported public Hetzner VPS.</li>
+          <li>Operator-owned domain, DNS, SSH, and firewall.</li>
+          <li>Resend sending-domain verification and API credential.</li>
+          <li>Signed install, resumable setup, TLS, and health proof.</li>
+          <li>Operator login and exact active-deployer allowlist.</li>
+          <li>Diagnostics, app intervention, signed update, and root recovery.</li>
+        </ul>
+      </section>
+      <section class="half refuse">
+        <p class="eyebrow">Non-goals</p>
+        <ul>
+          <li>No Docker, reverse-proxy assembly, or database service.</li>
+          <li>No Tinkercloud ownership of SSH or provider firewall policy.</li>
+          <li>No DNS-provider or registrar credentials in V1.</li>
+          <li>No public-app mode or blanket VPN identity bypass.</li>
+          <li>No operator backup or total-VPS-loss recovery guarantee.</li>
+          <li>No hand-authored config required for the human path.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section id="phase-a">
+      <p class="eyebrow">Phase A · External ownership</p>
+      <h2>Acquire the things Tinkercloud cannot create</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Operator action</th><th>System or external action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td>Use an existing domain or buy one from a registrar.</td>
+            <td>The registrar establishes domain ownership and a DNS control plane.</td>
+            <td>Tinkercloud asks for nothing yet. Registrar billing/contact data stays external.</td>
+            <td>Existing email inboxes are assumed; Tinkercloud does not provision mailboxes.</td>
+            <td>A controlled domain is necessary for stable HTTPS platform and app hosts.</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td>Create a dedicated Hetzner VPS using the supported Ubuntu LTS image and x86-64 architecture.</td>
+            <td>Hetzner allocates a public IPv4 address and, when selected, IPv6.</td>
+            <td>Hetzner may ask region, billing, plan, and account data; Tinkercloud asks none of it.</td>
+            <td>Provider, OS, and architecture are fixed by the V1 support contract. Use the documented smallest validated plan when published.</td>
+            <td>A public supported host is necessary; provider-shopping questions do not belong in Tinkercloud setup.</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td>Add an SSH public key during VPS creation and connect as root.</td>
+            <td>SSH presents a host key; the operator verifies and records it before trusting the shell.</td>
+            <td>SSH key selection and host-key trust are external operator decisions.</td>
+            <td>Tinkercloud never creates or uploads the operator’s SSH credential.</td>
+            <td>Root access is the installation and recovery authority.</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td>Configure the cloud/host firewall.</td>
+            <td>Permit public TCP 80/443 and deliberately scope TCP 22 to the operator’s needs.</td>
+            <td>No application ports, database ports, or storage ports are requested.</td>
+            <td>Tinkercloud’s only public listener is the gateway on 80/443.</td>
+            <td>HTTP is required for ACME; HTTPS is required for the platform. SSH policy remains operator-owned.</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td>Obtain the Tinkercloud installer and signed release from a trusted release source.</td>
+            <td>The thin installer verifies checksum and signature before installing the binary.</td>
+            <td>No release URL is asked when the installer has a trusted built-in source; an explicit source is an advanced override.</td>
+            <td>Architecture is discovered from the host.</td>
+            <td>Unsigned or unverifiable code must not become the trust root.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-b">
+      <p class="eyebrow">Phase B · Guided bootstrap</p>
+      <h2>Run one resumable setup assistant</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Operator action</th><th>System or external action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>6</td>
+            <td>Run <code>sudo tinkercloud setup</code>.</td>
+            <td>Tinkercloud checks root authority, exact OS/architecture, clock, disk, ports, public IPs, and resumable state before mutation.</td>
+            <td>None.</td>
+            <td>Host facts are discovered; unsupported or conflicting state produces one exact correction.</td>
+            <td>Never ask a person to type information the server can inspect.</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td>Enter the controlled root domain.</td>
+            <td>Tinkercloud normalizes it and previews the resulting topology.</td>
+            <td>One base domain, for example <code>example.com</code>.</td>
+            <td><code>admin.example.com</code>, <code>&lt;slug&gt;.example.com</code>, and <code>access@example.com</code>.</td>
+            <td>Domain ownership cannot be discovered. Separate dashboard/app/sender questions are unnecessary.</td>
+          </tr>
+          <tr>
+            <td>8</td>
+            <td>Enter the initial operator email.</td>
+            <td>Tinkercloud normalizes it and uses it as the control identity and persisted internal ACME contact.</td>
+            <td>One existing inbox address.</td>
+            <td>ACME contact defaults to the operator email. No separate question.</td>
+            <td>The first operator identity and delivery target cannot be inferred safely.</td>
+          </tr>
+          <tr>
+            <td>9</td>
+            <td>Inspect the derived setup summary; choose “Edit” or “Cancel” only when needed.</td>
+            <td>Tinkercloud displays derived values, then continues because <code>tinkercloud setup</code> already expresses installation intent.</td>
+            <td>No generic confirmation. Optional edits are entered only after choosing “Edit.”</td>
+            <td>All conventional values remain selected without individual prompts.</td>
+            <td>A second “continue?” prompt adds no decision after an explicit setup command.</td>
+          </tr>
+          <tr>
+            <td>10</td>
+            <td>Create or reuse a Resend account and add the derived sending domain.</td>
+            <td>Resend supplies domain-verification DNS records.</td>
+            <td>Provider account/billing data remains external.</td>
+            <td>The sending domain defaults to the controlled base domain.</td>
+            <td>Collect provider records before visiting DNS so all records can be added together.</td>
+          </tr>
+          <tr>
+            <td>11</td>
+            <td>Create a narrowly scoped Resend API key and keep it in a protected local/root-readable source while DNS is pending.</td>
+            <td>Resend creates the provider credential; Tinkercloud has not ingested it yet.</td>
+            <td>No key value is entered into argv, config, or the paused assistant.</td>
+            <td>The final root-owned destination and permissions are generated later.</td>
+            <td>Creating the key now avoids a second provider visit and does not weaken its destination boundary.</td>
+          </tr>
+          <tr>
+            <td>12</td>
+            <td>Leave the assistant paused at one combined DNS checkpoint.</td>
+            <td>Tinkercloud saves validated non-secret progress and prints its records beside the Resend-supplied records.</td>
+            <td>None.</td>
+            <td>One <code>A * → VPS IPv4</code> wildcard record; matching AAAA only for discovered usable IPv6.</td>
+            <td>DNS is external and eventually consistent; re-entering prior answers is unnecessary.</td>
+          </tr>
+          <tr>
+            <td>13</td>
+            <td>Add the Tinkercloud host records and Resend’s exact verification records in one DNS-provider session.</td>
+            <td>Public DNS propagates; Resend verifies domain ownership.</td>
+            <td>Only record names/values from Tinkercloud and Resend.</td>
+            <td>No zone-file/config authoring and no Tinkercloud DNS-provider credential.</td>
+            <td>One combined external visit preserves both ownership boundaries with less ceremony.</td>
+          </tr>
+          <tr>
+            <td>14</td>
+            <td>After DNS and Resend verification, resume <code>tinkercloud setup</code> and provide the protected credential source.</td>
+            <td>The assistant verifies DNS/provider state and copies the key into the root-owned credential boundary.</td>
+            <td>Either a root-readable key-file path or the secret through a no-echo prompt.</td>
+            <td>The credential destination, permissions, provider name, and config reference are generated.</td>
+            <td>The secret itself is necessary; asking for a YAML/env file layout is not.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-c">
+      <p class="eyebrow">Phase C · Automatic installation and proof</p>
+      <h2>Tinkercloud performs the infrastructure work</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Operator action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>15</td>
+            <td>Wait while setup runs; no additional input on the happy path.</td>
+            <td>Create the unprivileged service identity, private directories, generated config, internal hashing/session keys, SQLite, migrations, and first operator.</td>
+            <td>None.</td>
+            <td>Paths, modes, ports, database location, service user, limits, and internal secrets.</td>
+            <td>Implementation details are not operator decisions.</td>
+          </tr>
+          <tr>
+            <td>16</td>
+            <td>Continue waiting.</td>
+            <td>Install and start the hardened systemd service; obtain the platform certificate; validate Resend; prove direct HTTPS version and security headers.</td>
+            <td>None.</td>
+            <td>ACME contact, systemd unit, and probe URLs come from verified state.</td>
+            <td>Readiness is evidence, not another question.</td>
+          </tr>
+          <tr>
+            <td>17</td>
+            <td>If setup pauses, perform the one printed correction and rerun the same command.</td>
+            <td>Tinkercloud resumes after the last durable successful step and rechecks the failed dependency.</td>
+            <td>Only newly missing state, never prior valid answers.</td>
+            <td>Completed steps and safe answers are reused.</td>
+            <td>Failure must be actionable without becoming a questionnaire.</td>
+          </tr>
+          <tr>
+            <td>18</td>
+            <td>Read the printed dashboard URL and root recovery command; optionally copy them into an operator-owned runbook.</td>
+            <td>Tinkercloud reports ready only after local/public health succeeds.</td>
+            <td>No extra recovery password or remote bypass credential.</td>
+            <td>Root SSH remains the recovery authority.</td>
+            <td>Printing is required; storing a second copy is optional operator practice.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-d">
+      <p class="eyebrow">Phase D · First administration</p>
+      <h2>Grant narrow deployment authority</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Operator action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>19</td>
+            <td>Open the dashboard and sign in with the operator email OTP.</td>
+            <td>The platform creates a control-plane session separate from CLI and viewer credentials.</td>
+            <td>Email is prefilled when safe; only the delivered OTP is newly requested.</td>
+            <td>Platform URL and operator identity were established during setup.</td>
+            <td>Remote operator access needs authentication; setup values must not be retyped.</td>
+          </tr>
+          <tr>
+            <td>20</td>
+            <td>Open the global active-deployer allowlist and edit one normalized email per line.</td>
+            <td>Tinkercloud shows the exact current active set and a hidden server revision.</td>
+            <td>Only deployer email addresses the operator intends to authorize.</td>
+            <td>Sorting, normalization, current IDs, statuses, and limits are server-derived.</td>
+            <td>The operator must choose who can deploy; individual status forms are unnecessary ceremony.</td>
+          </tr>
+          <tr>
+            <td>21</td>
+            <td>Confirm only if new/reactivated addresses broaden deployment authority, then save.</td>
+            <td>Tinkercloud atomically creates/reactivates requested deployers, revokes removed deployers’ current credentials, and writes one audit event.</td>
+            <td>One explicit broadening confirmation when applicable.</td>
+            <td>Removal consequences, credential rows, immutable IDs, and app ownership are derived.</td>
+            <td>Broadening must be intentional; narrowing needs no second confirmation. A stale revision rejects everything, refreshes the exact list, and applies no partial change.</td>
+          </tr>
+          <tr>
+            <td>22</td>
+            <td>Later, if the operator requests deployment capability, add their own email to the deployer list.</td>
+            <td>Tinkercloud treats the same person as two separately authorized roles.</td>
+            <td>The operator explicitly chooses this additional role.</td>
+            <td>Operator authority never transfers automatically.</td>
+            <td>Least privilege requires an explicit deployer grant.</td>
+          </tr>
+          <tr>
+            <td>23</td>
+            <td>When an authorized deployer is ready to onboard, copy the displayed platform URL and share it through an existing channel.</td>
+            <td>The deployer requests their own OTP when ready.</td>
+            <td>No invitation email template or second delivery address.</td>
+            <td>The platform URL is already known; an automated invite is optional future convenience.</td>
+            <td>Authorization is the necessary action. Invitation delivery is not.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phase-e">
+      <p class="eyebrow">Phase E · Ongoing operation and recovery</p>
+      <h2>Operate one small server without hidden authority</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Operator action</th><th>System action</th>
+            <th>Information requested</th><th>Derived or defaulted</th><th>Necessity gate</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>24</td>
+            <td>Use dashboard search/status filters and direct-launch controls to inspect apps.</td>
+            <td>Tinkercloud searches current app slug/description locally and launches only the stable protected app origin. Operator authority does not grant app access; the global browser identity, app handoff, and current policy still apply.</td>
+            <td>A search term or filter only when the operator chooses to narrow the list.</td>
+            <td>App URLs, status, description, ownership, and release state are server-derived.</td>
+            <td>Do not ask for an app ID or URL the server already knows.</td>
+          </tr>
+          <tr>
+            <td>25</td>
+            <td>Use dashboard diagnostics or run <code>sudo tinkercloud status</code>/<code>doctor</code>.</td>
+            <td>Inspect service, DNS, TLS, email, disk, database, resource limits, audit, and gateway health.</td>
+            <td>No config path on the standard installation.</td>
+            <td>Canonical paths and hosts come from installed state.</td>
+            <td>Overrides are recovery/test options, not normal questions.</td>
+          </tr>
+          <tr>
+            <td>26</td>
+            <td>Suspend an app or remove a deployer when current access must stop.</td>
+            <td>The next request denies; matching tokens/sessions/live connections are revoked as defined by scope.</td>
+            <td>The selected server-rendered app and explicit app-suspension confirmation. Deployer removal is already expressed by the reviewed exact allowlist and receives no extra confirmation.</td>
+            <td>IDs, storage paths, and affected credentials are server-derived.</td>
+            <td>Immediate revocation is required; internal selectors must never be typed by the operator.</td>
+          </tr>
+          <tr>
+            <td>27</td>
+            <td>Run the signed manual server update when desired.</td>
+            <td>Tinkercloud downloads/verifies, creates bounded local update recovery state, applies, restarts, and runs health plus anonymous-denial probes.</td>
+            <td>An alternate release source only when intentionally overriding the configured source.</td>
+            <td>Installed config, active probe target, and prior binary/state are discovered.</td>
+            <td>Normal update must not require a config path or arbitrary app slug.</td>
+          </tr>
+          <tr>
+            <td>28</td>
+            <td>If remote operator login is unavailable, SSH as root and run the printed recovery command.</td>
+            <td>Root locally changes the operator identity or diagnoses/restarts the service without an HTTP bypass.</td>
+            <td>A replacement operator email only when recovery changes it.</td>
+            <td>Config, database, and service locations are installed-state defaults.</td>
+            <td>Recovery must work without email, but must not create a second remote authority.</td>
+          </tr>
+          <tr>
+            <td>29</td>
+            <td>Boundary: if the VPS is permanently lost, recreate the platform and redeploy replaceable apps.</td>
+            <td>V1 provides no backup or disaster-recovery guarantee.</td>
+            <td>None.</td>
+            <td>No hidden remote replica or recovery claim.</td>
+            <td>Honest loss boundaries are simpler and safer than an unproven backup feature.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="implementation">
+      <p class="eyebrow">Implementation sketch</p>
+      <h2>Wizard state is a resumable projection, not new authority</h2>
+      <pre>discover host state
+→ ask base domain + operator email
+→ derive conventional topology
+→ persist validated non-secret progress
+→ pause for DNS + Resend ownership
+→ ingest secret into root-owned credential boundary
+→ generate config + internal keys + database + service
+→ prove TLS, email, platform health, route classification, and safe unknown-host denial
+→ print dashboard + root recovery</pre>
+      <p>Automation retains strict explicit non-interactive inputs. The human
+        assistant calls the same validation and domain services; it does not
+        create a weaker setup path.</p>
+    </section>
+
+    <section id="questions" class="caution">
+      <p class="eyebrow">Open questions</p>
+      <h2>Evidence still needed</h2>
+      <ul>
+        <li>What is the smallest recommended Hetzner plan that passes deployment,
+          SDK, blob, realtime, update, and fuzz-derived operating headroom?</li>
+        <li>Should the release source be compiled into V1 or selected once during
+          installation from signed metadata?</li>
+        <li>Can a no-echo Resend-key prompt meet the secret-handling audit on all
+          supported shells, or should V1 guide the operator to a protected file?</li>
+        <li>Which setup steps can be safely undone before first readiness, and
+          which should only be resumed?</li>
+      </ul>
+    </section>
+
+    <section id="decision" class="decision">
+      <p class="eyebrow">Do or don’t</p>
+      <h2>Build the guided path; keep the explicit automation contract</h2>
+      <p><strong>Do:</strong> The assistant removes repeated hostnames, paths,
+        flags, and config editing while preserving the one-server trust model.</p>
+      <p><strong>Don’t:</strong> Do not hide DNS, domain ownership, provider
+        credentials, firewall responsibility, or total-VPS-loss risk. These are
+        necessary external boundaries, not wizard defects.</p>
+      <p class="muted">Decision basis: impact 5/5, complexity 4/5, yield 5/5.
+        Every prompt must justify itself against Principle 17.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>Detailed operator flow. Continue with the
+      <a href="deployer.html">deployer flow</a> or the
+      <a href="../../docs/product/flow-necessity-audit-2026-07.md">input necessity audit</a>.</p>
+  </footer>
+</body>
+</html>

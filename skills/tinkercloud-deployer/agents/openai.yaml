@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Deployer"
+  short_description: "Build and deploy protected Tinkercloud apps"
+  default_prompt: "Use $tinkercloud-deployer to build or deploy this app and verify that it remains private."

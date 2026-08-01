@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Tinker Ritual, a dependency-free starter app for Tinkercloud."
+    >
+    <title>Tinker Ritual</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Tinker Ritual home">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+          <span>Tinker Ritual</span>
+        </a>
+        <span class="privacy-label">Private by default</span>
+      </header>
+
+      <main>
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">A five-minute reset</p>
+          <h1 id="page-title">Make room for one good day.</h1>
+          <p class="lede">
+            Three small moves before the noisy part begins. Nothing to sign up
+            for, nothing sent anywhere.
+          </p>
+
+          <div class="date-card">
+            <span>Today</span>
+            <time id="today">Loading date…</time>
+          </div>
+        </section>
+
+        <section class="ritual-card" aria-labelledby="ritual-title">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">Daily ritual</p>
+              <h2 id="ritual-title">Start light</h2>
+            </div>
+            <p id="progress-copy" class="progress-copy" aria-live="polite">
+              0 of 3 complete
+            </p>
+          </div>
+
+          <progress id="progress" max="3" value="0">0 of 3 complete</progress>
+
+          <ul class="ritual-list">
+            <li>
+              <label>
+                <input type="checkbox" data-step="clear">
+                <span class="checkmark" aria-hidden="true"></span>
+                <span>
+                  <strong>Clear one loose end</strong>
+                  <small>Finish, file, or consciously drop it.</small>
+                </span>
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox" data-step="focus">
+                <span class="checkmark" aria-hidden="true"></span>
+                <span>
+                  <strong>Choose one real priority</strong>
+                  <small>If this moves, the day counts.</small>
+                </span>
+              </label>
+            </li>
+            <li>
+              <label>
+                <input type="checkbox" data-step="kind">
+                <span class="checkmark" aria-hidden="true"></span>
+                <span>
+                  <strong>Make one kind move</strong>
+                  <small>For future you or somebody nearby.</small>
+                </span>
+              </label>
+            </li>
+          </ul>
+
+          <div class="card-footer">
+            <p>Saved only in this browser for today.</p>
+            <button id="reset" type="button">Reset today</button>
+          </div>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>Small app. Small promise.</span>
+        <span>Made to run on Tinkercloud.</span>
+      </footer>
+    </div>
+  </body>
+</html>

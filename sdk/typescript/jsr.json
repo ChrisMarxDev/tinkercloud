@@ -1,0 +1,12 @@
+{
+  "name": "@tinkercloud/sdk",
+  "version": "0.1.1",
+  "exports": "./src/index.ts",
+  "publish": {
+    "include": [
+      "src/**/*.ts",
+      "README.md",
+      "LICENSE"
+    ]
+  }
+}

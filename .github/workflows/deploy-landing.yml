@@ -1,0 +1,89 @@
+name: deploy-landing
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "landing/**"
+      - ".github/workflows/deploy-landing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: landing-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy tinkercloud.fun
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: landing-production
+      url: https://tinkercloud.fun
+    defaults:
+      run:
+        working-directory: landing
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+
+      - name: Install landing dependencies
+        run: npm ci
+
+      - name: Test and build landing
+        run: npm test
+
+      - name: Deploy Worker and static assets
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: landing
+          command: deploy
+
+      - name: Verify public landing page
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          response_path="${RUNNER_TEMP}/tinkercloud-landing.html"
+          trap 'rm -f "${response_path}"' EXIT
+
+          for attempt in 1 2 3 4 5 6; do
+            if curl \
+              --proto '=https' \
+              --tlsv1.2 \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              --max-time 30 \
+              --output "${response_path}" \
+              https://tinkercloud.fun/ \
+              && grep -F '<title>Tinkercloud — Turn small apps into trusted team tools</title>' "${response_path}" >/dev/null \
+              && grep -F 'aria-label="tinker deploy . --allow &#x27;*@acme.com&#x27;"' "${response_path}" >/dev/null \
+              && grep -F 'Open source. Your VPS. Your Tinkercloud.' "${response_path}" >/dev/null; then
+              exit 0
+            fi
+
+            if [[ "${attempt}" -eq 6 ]]; then
+              echo "The deployed landing page did not pass public verification." >&2
+              exit 1
+            fi
+
+            sleep 5
+          done

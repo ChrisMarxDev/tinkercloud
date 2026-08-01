@@ -1,0 +1,60 @@
+{
+  "name": "@tinkercloud/sdk",
+  "version": "0.1.1",
+  "description": "Typed browser SDK for Tinkercloud app identity, KV, and realtime capabilities",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChrisMarxDev/tinkercloud.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/ChrisMarxDev/tinkercloud/issues"
+  },
+  "homepage": "https://github.com/ChrisMarxDev/tinkercloud#readme",
+  "keywords": [
+    "tinkercloud",
+    "browser",
+    "sdk",
+    "self-hosted"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "module": "./dist/index.js",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:live": "node test/live.test.mjs && node test/multiplex.test.mjs",
+    "test:collections": "node test/collections.test.mjs",
+    "test:blobs": "node test/blobs.test.mjs",
+    "test:llm": "node test/llm.test.mjs",
+    "test:examples": "node test/examples-compile.mjs && node ../../examples/sdk-apps/llm-chat/test/history.test.mjs && node ../../examples/sdk-apps/build.mjs --check",
+    "test:bundle": "node test/bundle-size.mjs",
+    "test:package": "node test/package-contents.mjs",
+    "test:version": "node test/version-sync.mjs",
+    "test:distribution": "node test/distribution.mjs",
+    "test": "npm run build && npm run test:live && npm run test:collections && npm run test:blobs && npm run test:llm && npm run test:examples && npm run test:bundle && npm run test:package && npm run test:version && npm run test:distribution",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm test"
+  },
+  "devDependencies": {
+    "typescript": "4.1.3"
+  }
+}
