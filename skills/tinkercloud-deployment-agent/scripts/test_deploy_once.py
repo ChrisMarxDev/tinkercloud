@@ -59,12 +59,30 @@ class DeploymentAgentTests(unittest.TestCase):
         self.assertEqual(len(logins), 1)
         self.assertEqual([call[-1] for call in calls], ["whoami", "whoami", str(self.app)])
 
-    def test_login_failure_blocks_deploy_and_otp_is_not_in_error(self):
-        with patch.object(module, "run_json", lambda *_: (1, {"valid": False, "error": {"code": "not_authenticated", "message": "Login required."}})), patch.object(module, "forced_login", lambda *_: (_ for _ in ()).throw(module.DeploymentError("login failure 123456"))):
+    def test_main_emits_only_fixed_stage_and_never_exception_content(self):
+        secret = "token=abc123 otp=123456 dev@example.test /private/secret-app"
+        for stage in (module.INPUT_VALIDATION, module.SAVED_IDENTITY_CHECK,
+                      module.FORCED_LOGIN, module.POST_LOGIN_IDENTITY_CHECK,
+                      module.DEPLOYMENT_RESULT_VALIDATION):
             stderr = io.StringIO()
-            with contextlib.redirect_stderr(stderr):
+            with patch.object(module, "deploy_once", side_effect=module.DeploymentError(stage)), contextlib.redirect_stderr(stderr):
                 self.assertEqual(module.main(["--tinker", str(self.tinker), "--server", "https://admin.example.test", "--deployer-email", "dev@example.test", "--app-dir", str(self.app)]), 1)
-            self.assertEqual(stderr.getvalue(), "tinker deployment agent failed\n")
+            self.assertEqual(stderr.getvalue(), stage + "\n")
+            self.assertNotIn(secret, stderr.getvalue())
+
+        stderr = io.StringIO()
+        with patch.object(module, "deploy_once", side_effect=module.DeploymentError(module.FORCED_LOGIN + " " + secret)), contextlib.redirect_stderr(stderr):
+            self.assertEqual(module.main(["--tinker", str(self.tinker), "--server", "https://admin.example.test", "--deployer-email", "dev@example.test", "--app-dir", str(self.app)]), 1)
+        self.assertEqual(stderr.getvalue(), module.INTERNAL_FAILURE + "\n")
+        self.assertNotIn(secret, stderr.getvalue())
+
+    def test_main_maps_arbitrary_exception_to_fixed_internal_stage_without_leaking(self):
+        secret = "token=abc123 otp=123456 dev@example.test /private/secret-app"
+        stderr = io.StringIO()
+        with patch.object(module, "deploy_once", side_effect=RuntimeError(secret)), contextlib.redirect_stderr(stderr):
+            self.assertEqual(module.main(["--tinker", str(self.tinker), "--server", "https://admin.example.test", "--deployer-email", "dev@example.test", "--app-dir", str(self.app)]), 1)
+        self.assertEqual(stderr.getvalue(), module.INTERNAL_FAILURE + "\n")
+        self.assertNotIn(secret, stderr.getvalue())
 
     def test_fake_cli_and_reader_force_login_without_logging_otp(self):
         state, reader = self.root / "state", self.root / "reader"
@@ -116,8 +134,30 @@ raise SystemExit(99)
         self.assertEqual(json.loads(stdout.getvalue())["reused_saved_identity"], True)
 
     def test_deploy_failure_is_nonzero_result(self):
-        with self.assertRaisesRegex(module.DeploymentError, "deployment failed"):
+        with self.assertRaisesRegex(module.DeploymentError, module.DEPLOYMENT_RESULT_VALIDATION):
             self.run_with([(0, {"valid": True, "name": "dev@example.test"}), (1, {"valid": False, "error": {"code": "deploy_failed"}})])
+
+    def test_fixed_stage_contract_maps_each_expected_failure_boundary(self):
+        with self.assertRaisesRegex(module.DeploymentError, module.INPUT_VALIDATION):
+            module.deploy_once("relative-tinker", "https://admin.example.test", "dev@example.test", str(self.app))
+
+        with patch.object(module, "run_json", side_effect=module.DeploymentError("token=abc123")):
+            with self.assertRaisesRegex(module.DeploymentError, module.SAVED_IDENTITY_CHECK):
+                module.deploy_once(str(self.tinker), "https://admin.example.test", "dev@example.test", str(self.app))
+
+        not_authenticated = (1, {"valid": False, "error": {"code": "not_authenticated", "message": "Login required."}})
+        with patch.object(module, "run_json", return_value=not_authenticated):
+            with self.assertRaisesRegex(module.DeploymentError, module.FORCED_LOGIN):
+                module.deploy_once(str(self.tinker), "https://admin.example.test", "dev@example.test", str(self.app),
+                                   lambda *_: (_ for _ in ()).throw(module.DeploymentError("otp=123456")))
+
+        with patch.object(module, "run_json", side_effect=[not_authenticated, (0, {"valid": True, "name": "wrong@example.test"})]):
+            with self.assertRaisesRegex(module.DeploymentError, module.POST_LOGIN_IDENTITY_CHECK):
+                module.deploy_once(str(self.tinker), "https://admin.example.test", "dev@example.test", str(self.app), lambda *_: None)
+
+        with patch.object(module, "run_json", side_effect=[(0, {"valid": True, "name": "dev@example.test"}), module.DeploymentError("app=private-app")]):
+            with self.assertRaisesRegex(module.DeploymentError, module.DEPLOYMENT_RESULT_VALIDATION):
+                module.deploy_once(str(self.tinker), "https://admin.example.test", "dev@example.test", str(self.app))
 
     def test_unsafe_non_https_and_missing_inputs_are_denied(self):
         for server in ("http://admin.example.test", "https://admin.example.test/path", "https://admin.example.test:444"):

@@ -51,6 +51,16 @@ domain and never accepts a separately supplied platform host. If the domain is
 missing, invalid, or does not match `--server`, stop rather than weakening the
 sibling reader's hostname validation.
 
+Before the one permitted wrapper invocation, check whether the execution
+environment restricts outbound network access (for example, a Codex sandbox).
+If it does, obtain scoped permission for that exact wrapper command first. The
+permission must allow HTTPS to the explicit Tinkercloud server and, only when a
+forced login may be needed, the fixed Resend API used by the local reader. Do
+not run the command unprivileged as a connectivity probe: a sandbox-denied
+wrapper invocation still consumes this workflow's one allowed attempt. If that
+permission cannot be obtained, stop and report the environment limitation
+without invoking the wrapper.
+
 The wrapper runs `tinker whoami --json` against the explicit server. It reuses a
 saved credential only when the response is exact valid JSON and its identity
 exactly matches the requested deployer email. A missing/invalid saved login or
@@ -63,6 +73,20 @@ It performs exactly one `tinker deploy --json` and accepts it only when the safe
 JSON success result confirms the CLI's built-in fresh anonymous HTTPS denial
 proof. Do not retry login or deploy. Any failure blocks deployment or reports
 the single failed attempt without leaking command output.
+
+On failure, the wrapper writes exactly one fixed identifier to stderr. It never
+prints CLI output, an exception, email, path, app ID, OTP, token, or provider
+detail. Report that identifier verbatim to the supervising operator and stop;
+do not retry the wrapper, login, or deployment.
+
+| Identifier | Meaning |
+| --- | --- |
+| `input_validation` | A required local input, path, server URL, manifest, or forbidden credential environment was invalid or unsafe. |
+| `saved_identity_check` | The saved CLI credential could not be safely classified as the requested deployer or a normal missing-login response. |
+| `forced_login` | The one permitted forced login, local OTP reader configuration, or OTP exchange failed. |
+| `post_login_identity_check` | The login completed but the follow-up identity proof did not exactly match the requested deployer. |
+| `deployment_result_validation` | The one permitted deployment failed or did not return a safe verified deployment result. |
+| `internal_failure` | An unexpected wrapper failure occurred; report it without adding diagnostics or retrying. |
 
 ## Verification
 

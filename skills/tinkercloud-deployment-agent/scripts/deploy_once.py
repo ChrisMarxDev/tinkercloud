@@ -21,13 +21,36 @@ TIMEOUT_SECONDS = 120
 MAX_JSON_OUTPUT_BYTES = 32 * 1024
 FORBIDDEN_CREDENTIAL_ENV = ("TINKER_TOKEN", "TINKER_OTP")
 
+INPUT_VALIDATION = "input_validation"
+SAVED_IDENTITY_CHECK = "saved_identity_check"
+FORCED_LOGIN = "forced_login"
+POST_LOGIN_IDENTITY_CHECK = "post_login_identity_check"
+DEPLOYMENT_RESULT_VALIDATION = "deployment_result_validation"
+INTERNAL_FAILURE = "internal_failure"
+PUBLIC_FAILURE_STAGES = frozenset((
+    INPUT_VALIDATION,
+    SAVED_IDENTITY_CHECK,
+    FORCED_LOGIN,
+    POST_LOGIN_IDENTITY_CHECK,
+    DEPLOYMENT_RESULT_VALIDATION,
+    INTERNAL_FAILURE,
+))
+
 
 class DeploymentError(Exception):
     """A deliberately redacted deployment error."""
 
 
-def fail(message: str) -> None:
-    raise DeploymentError(message)
+def fail(stage: str) -> None:
+    raise DeploymentError(stage)
+
+
+def at_stage(stage: str, action: Callable[[], object]) -> object:
+    """Map all expected implementation details to one fixed public stage."""
+    try:
+        return action()
+    except DeploymentError:
+        fail(stage)
 
 
 def private_regular(path: Path, executable: bool = False) -> None:
@@ -179,18 +202,23 @@ def forced_login(tinker: Path, server: str, email: str, reader: Path, env: dict[
 
 def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
                 login_driver: Callable[[Path, str, str, Path, dict[str, str]], None] = forced_login) -> dict:
-    if any(os.environ.get(name) for name in FORBIDDEN_CREDENTIAL_ENV):
-        fail("credential environment input is forbidden")
-    tinker, app = Path(tinker_raw), Path(app_raw)
-    if not tinker.is_absolute() or not app.is_absolute() or not EMAIL.fullmatch(email_raw.lower()):
-        fail("required input is invalid")
-    email = email_raw.lower()
-    private_regular(tinker, executable=True)
-    owned_directory(app)
-    manifest = app / "tinker.yaml"
-    private_regular(manifest)
-    server, host = parse_server(server_raw)
-    status, whoami = run_json([str(tinker), "--json", "--server", server, "whoami"])
+    def validate_inputs() -> tuple[Path, Path, str, str, str]:
+        if any(os.environ.get(name) for name in FORBIDDEN_CREDENTIAL_ENV):
+            fail("credential environment input is forbidden")
+        tinker, app = Path(tinker_raw), Path(app_raw)
+        if not tinker.is_absolute() or not app.is_absolute() or not EMAIL.fullmatch(email_raw.lower()):
+            fail("required input is invalid")
+        email = email_raw.lower()
+        private_regular(tinker, executable=True)
+        owned_directory(app)
+        private_regular(app / "tinker.yaml")
+        server, host = parse_server(server_raw)
+        return tinker, app, email, server, host
+
+    tinker, app, email, server, host = at_stage(INPUT_VALIDATION, validate_inputs)  # type: ignore[misc]
+    status, whoami = at_stage(SAVED_IDENTITY_CHECK, lambda: run_json(
+        [str(tinker), "--json", "--server", server, "whoami"]
+    ))  # type: ignore[misc]
     reused = status == 0 and exact_identity(whoami, email)
     if not reused:
         if status == 0 and valid_identity_shape(whoami):
@@ -198,20 +226,35 @@ def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
         elif status != 0 and missing_login(whoami):
             pass
         else:
-            fail("saved CLI identity could not be verified")
-        login_driver(tinker, server, email, reader_path(), reader_environment(host))
-        status, whoami = run_json([str(tinker), "--json", "--server", server, "whoami"])
+            fail(SAVED_IDENTITY_CHECK)
+
+        def login() -> None:
+            login_driver(tinker, server, email, reader_path(), reader_environment(host))
+        at_stage(FORCED_LOGIN, login)
+        status, whoami = at_stage(POST_LOGIN_IDENTITY_CHECK, lambda: run_json(
+            [str(tinker), "--json", "--server", server, "whoami"]
+        ))  # type: ignore[misc]
         if status != 0 or not exact_identity(whoami, email):
-            fail("forced login identity could not be verified")
-    status, deployment = run_json([str(tinker), "--json", "--server", server, "deploy", str(app)])
-    if status != 0 or deployment.get("valid") is not True or not isinstance(deployment.get("name"), str):
-        fail("deployment failed")
-    url, _host = parse_server(deployment["name"])
+            fail(POST_LOGIN_IDENTITY_CHECK)
+
+    def deploy_and_validate() -> str:
+        status, deployment = run_json([str(tinker), "--json", "--server", server, "deploy", str(app)])
+        if status != 0 or deployment.get("valid") is not True or not isinstance(deployment.get("name"), str):
+            fail("deployment failed")
+        url, _host = parse_server(deployment["name"])
+        return url
+
+    url = at_stage(DEPLOYMENT_RESULT_VALIDATION, deploy_and_validate)
     return {"valid": True, "reused_saved_identity": reused, "url": url}
 
 
+class SafeArgumentParser(argparse.ArgumentParser):
+    def error(self, _message: str) -> None:
+        fail(INPUT_VALIDATION)
+
+
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = SafeArgumentParser(add_help=False)
     parser.add_argument("--tinker", required=True)
     parser.add_argument("--server", required=True)
     parser.add_argument("--deployer-email", required=True)
@@ -220,8 +263,12 @@ def main(argv: list[str]) -> int:
         args = parser.parse_args(argv)
         print(json.dumps(deploy_once(args.tinker, args.server, args.deployer_email, args.app_dir), separators=(",", ":")))
         return 0
-    except (DeploymentError, SystemExit):
-        print("tinker deployment agent failed", file=sys.stderr)
+    except DeploymentError as error:
+        stage = error.args[0] if error.args and error.args[0] in PUBLIC_FAILURE_STAGES else INTERNAL_FAILURE
+        print(stage, file=sys.stderr)
+        return 1
+    except Exception:
+        print(INTERNAL_FAILURE, file=sys.stderr)
         return 1
 
 
