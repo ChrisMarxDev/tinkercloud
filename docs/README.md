@@ -1,7 +1,12 @@
-# Planning map
+# Tinkercloud user documentation
+
+These documents explain Tinkercloud to operators, deployers, and viewers.
+Operators are the primary audience; deployer and viewer guidance follows.
+Contributor workflows, agent instructions, repository maps, and CI mechanics
+belong in [`../internals/`](../internals/README.md) or a focused skill.
 
 Canonical product scope: [`../PRD.md`](../PRD.md). The documents below expand
-specific sections without overriding it.
+user-facing product and operational behavior without overriding it.
 
 ## Get started
 
@@ -33,15 +38,13 @@ specific sections without overriding it.
 ## Delivery
 
 - [Roadmap](delivery/roadmap.md)
-- [AI development loop](delivery/ai-development-loop.md)
 - [Definition of done](delivery/definition-of-done.md)
 - [Hetzner-first deployment](operations/hetzner-deployment.md)
 - [Common setup scenarios](operations/setup-scenarios.md)
 - [External VPS smoke acceptance](operations/vps-e2e.md)
 - [Signed release pipeline](operations/release-pipeline.md)
 - [SDK distribution](operations/sdk-distribution.md)
-- [Agent skill system](delivery/agent-skills.md)
-- [Open-source readiness](delivery/open-source-readiness.md)
+
 
 ## Decisions and contracts
 
@@ -51,3 +54,6 @@ specific sections without overriding it.
 - [Event vocabulary](../specs/events/event-catalog.md)
 - [Manifest contract](../specs/manifest/tinker-yaml.md)
 - [Native web UI contract](../specs/ui/native-web-system.md)
+
+For contributor and agent material, start with the
+[internal repository guide](../internals/README.md).
