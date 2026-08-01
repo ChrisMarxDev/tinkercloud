@@ -67,15 +67,21 @@ test("server-renders the complete Tinkercloud landing page", async () => {
 });
 
 test("keeps the static landing page narrow and private by design", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, styles, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
   assert.doesNotMatch(page, /<form|<input|<script|localStorage|fetch\(/i);
   assert.doesNotMatch(page, /authorized\s*=\s*true/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
+  assert.match(page, /title: "Blob storage"/);
+  assert.match(page, /title: "LLM capability · post-V1"/);
+  assert.match(page, /<div className="how" id="how-it-works"/);
+  assert.match(styles, /\.how\s*\{[^}]*grid-column: 1 \/ -1;/s);
+  assert.match(styles, /\.flow-arrow\s*\{\s*display: none;/);
   assert.match(page, /src="\/tinkercloud-mark\.svg"/);
   assert.match(page, /function Flourishes/);
   assert.match(layout, /@fontsource-variable\/fredoka/);

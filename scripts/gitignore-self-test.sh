@@ -30,7 +30,7 @@ ignored .tinker/vps/known_hosts
 ignored .tinker/vps/ssh_config
 ignored .hermes-task-loop/issues.json
 ignored GITHUB_TOKEN
-ignored landing/.git/config
+ignored landing/.wrangler/wrangler.log
 visible packaging/release-public-key.pem
 visible sdk/typescript/package-lock.json
 visible examples/live-presence/index.html
