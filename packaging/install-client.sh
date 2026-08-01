@@ -40,7 +40,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/tinker-client-install.XXXXXX")
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 cat >"$work/release-public-key.pem" <<'EOF'
 -----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAQPDqQfUvtNnVIG+6Cr3kYXaBlDRLCSjDQorOLNX1dug=
+MCowBQYDK2VwAyEAYhkssT8gJdyQLriNH5b4f+olvZ90xXbE2G6CrVVAX4g=
 -----END PUBLIC KEY-----
 EOF
 
