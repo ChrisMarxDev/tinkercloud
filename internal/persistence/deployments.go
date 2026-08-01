@@ -309,8 +309,21 @@ func (s *SQLiteStore) CandidatePolicyReady(ctx context.Context, r deployments.Re
 // from activating against an unrelated current policy.
 func canonicalManifestPolicy(r deployments.Record) ([]string, []string, error) {
 	m := r.Manifest
-	if m.Version != 1 || m.Name == "" || !releases.ValidSlug(m.Name) || (r.AppSlug != "" && m.Name != r.AppSlug) {
+	if (m.Version != 1 && m.Version != 2) || m.Name == "" || !releases.ValidSlug(m.Name) || (r.AppSlug != "" && m.Name != r.AppSlug) {
 		return nil, nil, errors.New("invalid candidate policy")
+	}
+	// V2 can be parsed before public reach exists, but this L2 slice has no
+	// public authorization variant or gateway serving path. A public request
+	// must therefore fail activation rather than being silently installed as a
+	// private policy with a misleading immutable receipt.
+	if m.AccessMode == "" {
+		m.AccessMode = "private"
+	}
+	if m.Version == 1 && (m.AccessMode != "private" || m.Indexing || len(m.Tags) != 0) {
+		return nil, nil, errors.New("invalid v1 candidate policy")
+	}
+	if m.Version == 2 && (m.AccessMode != "private" || m.Indexing) {
+		return nil, nil, errors.New("invalid v2 candidate policy")
 	}
 	emails := append([]string(nil), m.Emails...)
 	domains := append([]string(nil), m.Domains...)

@@ -391,15 +391,18 @@ the exact project-owned build action; do not deploy source arbitrarily or make
 Use this V1 shape and omit unused optional sections:
 
 ```yaml
-version: 1
+version: 2
 name: team-pulse
 description: Lightweight team check-ins.
+tags:
+  - team
 
 build:
   output: dist
 
 access:
   mode: private
+  indexing: false
   allow:
     emails:
       - alice@example.com
@@ -424,7 +427,12 @@ Rules:
 - `name` is a valid stable app slug; do not silently rewrite it.
 - `build.output` and optional fallback stay beneath the project with no
   symlinks or traversal.
-- `access.mode` is always `private`; empty allowlists mean owner-only.
+- `access.mode` is private by default; v2 `public` requests are parsed but
+  cannot activate until the separately gated public-static slice exists.
+  Empty allowlists mean owner-only.
+- Tags are optional, lowercase ASCII, 1–24 characters, internally hyphenated
+  at most, unique, and limited to eight. `access.indexing` stays false unless
+  a future effective public release explicitly permits it.
 - Enable only capabilities the app uses and the deployer deliberately accepts.
 - `spa.fallback` names a normal file inside the built output.
 - Unknown keys are errors.

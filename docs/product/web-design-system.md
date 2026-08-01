@@ -274,6 +274,30 @@ configuration or explanation while keeping the summary, durable state, and
 important next action visible. The local interaction helper smoothly animates
 their content-dependent height in both directions and supports interruption.
 
+### Public reach, catalog, and local insights
+
+The team catalog uses the existing card/list rhythm because it is a shelf of
+authorized apps, not a second operational dashboard. Public/private posture and
+tags are compact metadata with visible text. Search matches only the rendered
+slug, active immutable description, and tags case-insensitively; tag selection
+matches one rendered canonical tag exactly. Both controls are a local
+convenience over server-authorized cards and disappear cleanly when JavaScript
+is unavailable.
+
+Local insights answer only three questions: approximately how many browser
+cookies returned, how many document views succeeded, and when the last view
+occurred. Reuse stat/definition/table primitives, label “Approximate visitors”
+in full, and keep the daily values available as text at every width. A future
+chart may supplement but never replace those values. Empty means a verified
+zero; unavailable has its own state and next step.
+
+Public publishing is an access broadening, not a decorative status toggle. The
+confirmation copy names the app and says that anyone on the internet can open
+its static files. Capability exclusion and no-index/indexed state remain
+visible adjacent facts. The first pilot does not put the root operator gate in
+the browser; native UI displays server truth while the root-local command owns
+the mutation.
+
 ## Usage
 
 Go templates receive `tinkerCSS`, `tinkerJS`, and `tinkerMark` through

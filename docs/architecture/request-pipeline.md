@@ -6,7 +6,7 @@
 |---|---:|---:|---:|
 | App login form | No | App must exist and be active | No |
 | OTP request/verify | No | Eligibility and current policy | No |
-| Static content | Yes | Every request | Yes |
+| Static content | Private: yes; effective public-static: no | Every request | Yes |
 | Current-user API | Yes | Every request | Yes |
 | KV API | Yes | Every request | Yes |
 | WebSocket | Yes | Before upgrade and through connection lifecycle | Yes |
@@ -39,21 +39,33 @@ func HandleAppRequest(w, r, slug, requestID):
         return
 
     endpoint = appRouter.Classify(r.Method, r.URL.Path)
-    if endpoint.IsPreAuthentication:
-        authEndpoints.Dispatch(app, endpoint, w, r)
-        return
     if endpoint.UnknownOrForbidden:
         GenericNotFound(w)
-        return
-
-    session, err = sessions.ValidateCookie(app.ID, r.Cookie(AppCookieName))
-    if err != nil:
-        RespondWithChallengeOrUnauthorized(app, endpoint, w, r)
         return
 
     policy, err = policies.LoadCurrent(app.ID)
     if err != nil:
         DenyUnavailable(w)
+        return
+
+    if policy.Mode == Public:
+        gate = hostSettings.PublicAppsEnabledOrFalse()
+        if gate.Enabled:
+            if !endpoint.IsStaticOrSPAFallback || !app.ActiveManifest.CapabilityFree:
+                DenyUnauthorized(w)
+                return
+            staticAccess = NewPublicStaticAccessContext(
+                app, policy.Revision, gate.Revision, requestID)
+            staticRuntime.Dispatch(staticAccess, endpoint, w, r)
+            return
+
+    if endpoint.IsPreAuthentication:
+        authEndpoints.Dispatch(app, endpoint, w, r)
+        return
+
+    session, err = sessions.ValidateCookie(app.ID, r.Cookie(AppCookieName))
+    if err != nil:
+        RespondWithChallengeOrUnauthorized(app, endpoint, w, r)
         return
 
     decision = policy.Evaluate(session.Identity, Now())
@@ -62,21 +74,28 @@ func HandleAppRequest(w, r, slug, requestID):
         return
 
     authz = NewAuthorizationContext(app, session, policy.Revision, requestID)
-    protectedDispatcher.Dispatch(authz, endpoint, w, r)
+    if endpoint.IsStaticOrSPAFallback:
+        staticRuntime.Dispatch(authz.StaticAccess(), endpoint, w, r)
+    else:
+        protectedDispatcher.Dispatch(authz, endpoint, w, r)
 ```
 
 ## Structural enforcement
 
 The future Go API should make the safe path the easy path:
 
-- Protected handlers implement a signature that requires
-  `AuthorizationContext`.
+- Capability handlers implement a signature that requires viewer-bearing
+  `AuthorizationContext`; static handlers require the sealed
+  `StaticAccessContext`, whose public variant cannot satisfy capability APIs.
 - Pre-auth handlers live in a separate router and cannot access release/KV
   repositories.
 - The static runtime is not registered directly with `http.Server`.
 - Repository methods for KV require a typed `AppID`, derived from context.
 - Tests enumerate the route registry and fail when a protected route lacks an
   authorization classification.
+- Public gate failure is equivalent to gate-off for anonymous access and falls
+  back to the retained private owner/email/domain login path; it never serves
+  bytes optimistically.
 
 ## Redirect safety
 

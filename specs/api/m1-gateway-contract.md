@@ -3,11 +3,14 @@
 ## Trust boundary
 
 Only the public gateway accepts HTTP. It derives the application from a
-canonical `Host` and the viewer from an opaque host-only app session cookie
-derived from the admin-host global identity during a server-created handoff. A
-protected dispatcher receives an `appauth.AuthorizationContext`, which only
-the `appauth` package can implement. It never accepts an app identifier from a
-request parameter, cookie, or header.
+canonical `Host`. A protected capability dispatcher receives a viewer-bearing
+`appauth.AuthorizationContext`, which only the `appauth` package can implement.
+The static dispatcher receives the narrower sealed `StaticAccessContext`: a
+private-viewer variant derived from the opaque host-only app session, or the
+accepted post-V1 public-static variant derived from current policy plus the
+current operator gate. Neither context accepts an app identifier from a
+request parameter, cookie, or header, and public-static cannot satisfy a
+capability dispatcher interface.
 
 ## Deny-path charter
 
@@ -15,17 +18,33 @@ App resolution before authorization is metadata-only: it may query the active
 app, deployment, manifest, and durable file evidence, but must not open,
 stat, hash, or otherwise read the release tree. Before any release path is
 opened, the gateway must deny malformed or unknown hosts, inactive
-applications, login/OTP routes, reserved unknown routes, missing/wrong/revoked
-sessions, absent/corrupt policy, and policy-store failure. These responses
-contain no release bytes. `/_tinker/*` is reserved and cannot use SPA fallback.
+applications, reserved unknown routes, absent/corrupt policy, and policy-store
+or public-gate failure. A private request also denies missing/wrong/revoked
+sessions. These responses contain no release bytes. `/_tinker/*` is reserved
+and cannot use SPA fallback or public-static authority.
 
-After the gateway produces a sealed `AuthorizationContext`, protected static
+After the gateway produces a sealed `StaticAccessContext`, protected static
 dispatch verifies the current immutable release tree against the active
 deployment's hash and complete durable file evidence before opening or serving
 any app file. Missing, changed, symlinked, malformed, or mismatched release
 evidence fails closed. Tests must count release inspections: every pre-auth,
 reserved, anonymous, and wrong-session route performs zero inspections; an
 authorized static request verifies once before returning content.
+
+## Post-V1 public-static route posture
+
+Only ordinary static-file and validated SPA-fallback route classes may receive
+public-static authority. Every `/_tinker/*` route on an effectively public app,
+including login/callback/logout, identity, SDK, data, blob, realtime, and LLM
+routes, denies before its pre-auth or protected dispatcher is invoked. If the
+operator gate is off/unavailable, the public app follows the normal private
+viewer/login path using its retained owner/email/domain rules.
+
+Public eligibility and release capability-free evidence are re-evaluated from
+current durable metadata on every request. Missing/unknown state denies. The
+first public pilot uses no-store response caching so policy or gate revocation
+affects the next request. Public documents carry `X-Robots-Tag: noindex,
+nofollow` unless the active version-2 manifest explicitly enables indexing.
 
 ## Current implementation seam
 

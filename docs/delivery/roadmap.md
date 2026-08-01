@@ -4,6 +4,34 @@ The roadmap uses vertical slices. Each milestone includes a user-visible result,
 a security claim, and an exit gate. Calendar estimates should be added only by
 the implementing team after spikes.
 
+## Active post-V1 extension — public reach and local insights
+
+Outcome: a verified viewer can discover current apps they may open, an owner
+can see bounded local usage, and an operator may permit deliberate
+capability-free public static publishing without adding a listener, runtime,
+provider, or anonymous platform capability.
+
+Delivery order:
+
+1. **L0 governance/contracts:** PRD D3/§21.3, ADR 0054, manifest v2,
+   public-static/catalog/insights contracts, threat model, and deny charter.
+2. **L1 local insights:** successful document outcome seam, bounded async local
+   recorder, 30-day SQLite aggregates/digests, hard-delete/retention behavior,
+   and owner/operator native UI summaries.
+3. **L2 team catalog:** manifest-v2 tags, global-identity-only catalog auth,
+   policy-filtered server query, and local search/tag filtering over authorized
+   cards.
+4. **L3 public static:** durable default-off operator gate, sealed static
+   context, capability-free public activation, exact broadening confirmation,
+   posture-aware probes, noindex default, and next-request transitions.
+5. **L4 release evidence:** first-party public examples plus the complete
+   two-owner/two-app private/public/catalog/insights clean-VPS matrix.
+
+Exit evidence is the acceptance list in
+[`concept/features/public-reach-and-local-insights.html`](../../concept/features/public-reach-and-local-insights.html)
+and the executable obligations in
+[`public-reach-local-insights-denial-charter.md`](../../test/security/public-reach-local-insights-denial-charter.md).
+
 ## Next implementation slice — M5/M3 minimum-necessary guided flows
 
 Outcome: a human operator can run `tinkercloud setup`, and a human deployer can run

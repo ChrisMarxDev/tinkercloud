@@ -681,7 +681,9 @@ func createManifest(project string, prompt client.Prompt) ([]byte, error) {
 	if err != nil || (fallback != "" && !safeFallback(dir, output, fallback)) {
 		return nil, errManifestSetup
 	}
-	m := releases.Manifest{Version: 1, Name: slug, Description: description, BuildOutput: output, SPAFallback: fallback}
+	// New local receipts always use v2. It remains private by default; v2 only
+	// reserves explicit reach metadata for the separately gated future slice.
+	m := releases.Manifest{Version: 2, Name: slug, Description: description, BuildOutput: output, SPAFallback: fallback}
 	for _, item := range splitSetupList(allow) {
 		if strings.Contains(item, "@") {
 			m.Emails = append(m.Emails, item)

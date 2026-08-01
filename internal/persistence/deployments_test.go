@@ -432,6 +432,35 @@ func TestDeploymentCandidatePolicyFailurePreservesActivePointerAndPolicy(t *test
 	}
 }
 
+func TestDeploymentV2PublicRequestCannotActivateBeforePublicAuthorizationExists(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	r := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	old := deployments.Record{Deployment: releases.Deployment{ID: "old-private", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "old-private", Manifest: releases.Manifest{Version: 1, Name: "alpha"}}
+	public := deployments.Record{Deployment: releases.Deployment{ID: "public-request", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "public-request", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public"}}
+	for _, record := range []deployments.Record{old, public} {
+		if err := r.Create(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='old-private' WHERE id='a'"); err != nil {
+		t.Fatal(err)
+	}
+	if s.CandidatePolicyReady(context.Background(), public) {
+		t.Fatal("v2 public request passed private-only activation gate")
+	}
+	if err := r.CommitActivation(context.Background(), public, &old, "public-request"); err == nil {
+		t.Fatal("v2 public request activated without public authorization")
+	}
+	var current string
+	if err := s.DB.QueryRow("SELECT current_deployment_id FROM applications WHERE id='a'").Scan(&current); err != nil || current != "old-private" {
+		t.Fatalf("public request changed active deployment: %q %v", current, err)
+	}
+}
+
 func TestDeploymentActivationAuditFailurePreservesReleaseAndPolicy(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -17,26 +18,45 @@ import (
 // The top-level file is the operator-visible contract; exact normalized bytes
 // avoid a partial-table check silently accepting schema drift.
 func TestEmbeddedMigrationsMatchCanonicalFiles(t *testing.T) {
-	entries, err := os.ReadDir("../../migrations")
+	canonical, err := migrationNames("../../migrations")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join("../../migrations", entry.Name()))
+	embedded, err := migrationNames("sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(canonical, "\x00") != strings.Join(embedded, "\x00") {
+		t.Fatalf("migration file sets differ: canonical=%v embedded=%v", canonical, embedded)
+	}
+	for _, name := range canonical {
+		b, err := os.ReadFile(filepath.Join("../../migrations", name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		embedded, err := migrationFS.ReadFile("sql/" + entry.Name())
+		mirror, err := os.ReadFile(filepath.Join("sql", name))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(b) != string(embedded) {
-			t.Fatalf("embedded migration differs from canonical migrations/%s", entry.Name())
+		if string(b) != string(mirror) {
+			t.Fatalf("embedded migration differs from canonical migrations/%s", name)
 		}
 	}
+}
+
+func migrationNames(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
+			out = append(out, entry.Name())
+		}
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func TestControlCredentialMigrationUpgradesAndDeniesLegacyChallenge(t *testing.T) {

@@ -30,12 +30,15 @@ applications
   created_at, updated_at
 
 access_policies
-  app_id, mode(private|public), revision, public_enabled_snapshot, created_by,
-  created_at
+  app_id, mode(private|public), revision, created_by, created_at
 
 access_rules
   id, app_id, policy_revision, kind(owner|email|domain), normalized_value,
   created_by, created_at
+
+host_settings
+  key(public_apps_enabled|analytics_enabled), revision, boolean_value,
+  updated_by, updated_at
 ```
 
 Policy updates create or transactionally replace a revision. `applications`
@@ -48,6 +51,11 @@ Uniqueness:
   reserved platform label;
 - normalized email/domain rules are unique within one policy revision;
 - an active app must reference an activatable policy revision.
+
+Host settings are durable current operator decisions, not activation snapshots.
+Missing, corrupt, or unavailable public-gate state is disabled. Enabling the
+host gate changes no application policy; disabling it removes effective
+anonymous access on the next request.
 
 ## Authentication
 
@@ -110,6 +118,29 @@ deployments
 deployment_files
   deployment_id, relative_path, size, content_hash, media_type
 ```
+
+Version-2 immutable `manifest_json` carries bounded presentation tags plus
+public indexing intent. It is the source for current catalog metadata through
+`applications.current_deployment_id`; there is no mutable application tag or
+description column.
+
+## Local app insights
+
+```text
+app_analytics_daily
+  app_id, day_utc, page_views, last_activity_at
+
+app_analytics_visitors
+  app_id, day_utc, visitor_digest, expires_at
+```
+
+`visitor_digest` is an app-scoped keyed digest of a random host-only cookie.
+Neither the raw cookie nor identity/session, email, IP, URL/query/path,
+referrer, user agent, content, geography, or device data is stored. Period
+visitors are counted distinctly across the requested window, not summed from
+daily unique counts. Reads exclude data older than 30 days; startup and
+scheduled bounded cleanup physically remove it. Hard app deletion removes both
+tables with other app-owned control state.
 
 Release paths are derived internally from IDs and never accepted from requests.
 The file manifest enables integrity checks, update recovery, and a later backup

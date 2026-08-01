@@ -34,6 +34,49 @@ cannot observe or mutate B by:
 - deployment ID;
 - token scope escalation.
 
+## Post-V1 public-static matrix
+
+For capability-free App A, exercise private/public mode against operator gate
+off/on/missing/unavailable and active/suspended/deleting/failed lifecycle.
+
+- Private mode always denies anonymous HTML/assets/SPA with zero release bytes.
+- Public mode plus gate on serves only expected immutable HTML/assets/SPA.
+- Public mode plus gate off/missing/unavailable follows the private login/deny
+  path and exposes zero anonymous bytes.
+- Every `/_tinker/*` identity, login, SDK, KV, collection, blob, realtime, and
+  LLM route denies before its dispatcher under public-static authority.
+- Public-to-private and gate-on-to-off deny the next anonymous request with no
+  cache grace.
+- Wrong-host/App B requests cannot reuse App A's public result.
+- Public activation with any browser capability, missing confirmation, failed
+  gate recheck, failed candidate proof, or failed commit preserves the previous
+  active release and policy.
+
+## Catalog and local-insights matrix
+
+Create two owners, two ordinary viewers, two private policies, one effective
+public app, current/failed releases, and distinct tags.
+
+- Anonymous/expired/revoked global identities receive no catalog metadata.
+- Each viewer receives only current policy matches plus effective public apps;
+  revocation removes a card on the next server read.
+- Search/tag controls operate only over the authorized rendered cards and work
+  as an all-visible no-JavaScript fallback.
+- App A owner/operator may read A insights; App B owner, ordinary viewer,
+  public visitor, app session, SDK, and deployment-agent authority may not.
+- Exact HTML and SPA-fallback 200 GETs increment page views. Assets, ranges,
+  304/errors, probes, redirects, APIs, WebSockets, HEAD, and other methods do
+  not.
+- A returned valid cookie contributes one distinct visitor across repeated
+  pages; a missing/malformed cookie never stores a visitor marker.
+- Full queue, SQLite failure, cleanup failure, and shutdown races do not change
+  an authorized static response.
+- Read cutoffs exclude data older than 30 days; startup/scheduled cleanup and
+  hard app deletion remove aggregate and digest rows.
+- DB, log, audit, and HTTP inspection finds no raw cookie, session, identity,
+  email, IP, URL/query/path, referrer, user agent, content, geography, or device
+  data.
+
 ## Routing corpus
 
 Test:

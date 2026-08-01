@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
 	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 )
 
@@ -73,6 +74,32 @@ func TestControlAuthenticatorSeparatesBrowserBearerAndViewerCredentials(t *testi
 	}
 	if err = bearer(viewer); err == nil {
 		t.Fatal("app viewer session accepted as bearer")
+	}
+}
+
+func TestControlAuthenticatorViewerIdentityDoesNotRequireDashboardRole(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	challenge, err := s.RequestPlatformIdentityOTP(ctx, "catalog-browser", "viewer@example.test", "fingerprint", []byte("key"), now, time.Minute)
+	if err != nil || challenge == nil {
+		t.Fatalf("request platform identity: %#v %v", challenge, err)
+	}
+	issued, err := s.VerifyPlatformIdentityOTP(ctx, "catalog-browser", "viewer@example.test", challenge.ID, challenge.Code, "", false, []byte("key"), now, 5)
+	if err != nil || issued.Token == "" {
+		t.Fatalf("issue viewer identity: %#v %v", issued, err)
+	}
+	auth := ControlAuthenticator{Store: s, Clock: func() time.Time { return now.Add(time.Second) }}
+	r := httptest.NewRequest(http.MethodGet, "https://admin.example.test/apps", nil)
+	r.AddCookie(&http.Cookie{Name: browseridentity.IdentityCookieName, Value: issued.Token})
+	w := httptest.NewRecorder()
+	viewer, err := auth.AuthenticateViewer(ctx, w, r)
+	if err != nil || viewer.Email != "viewer@example.test" || viewer.IdentityID == "" || viewer.IdentitySessionID == "" {
+		t.Fatalf("viewer identity=%#v err=%v", viewer, err)
+	}
+	if _, err := auth.AuthenticatePlatform(ctx, httptest.NewRecorder(), r); err == nil {
+		t.Fatal("viewer identity unexpectedly became dashboard authority")
 	}
 }
 

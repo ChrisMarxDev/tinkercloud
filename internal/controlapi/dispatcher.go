@@ -156,10 +156,34 @@ type PlatformAuthenticator interface {
 	AuthenticatePlatform(context.Context, http.ResponseWriter, *http.Request) (Actor, error)
 }
 
+// ViewerIdentity is a verified global browser identity with no control-plane
+// role. It is intentionally distinct from Actor so a catalog cannot turn a
+// viewer into a deployer/operator authority.
+type ViewerIdentity struct {
+	IdentityID, Email, IdentitySessionID string
+}
+
+// ViewerAuthenticator validates only the host-only global browser identity.
+// It must not join roles or accept app sessions/bearer credentials.
+type ViewerAuthenticator interface {
+	AuthenticateViewer(context.Context, http.ResponseWriter, *http.Request) (ViewerIdentity, error)
+}
+
 // DashboardReader is an optional, safe read-model seam for the HTML UI. It
 // contains no token secret/hash, provider credential, or release path.
 type DashboardReader interface {
 	Dashboard(context.Context, Actor) (DashboardView, error)
+}
+
+// CatalogReader returns a bounded, policy-filtered viewer read model. It must
+// authorize in service/repository code before template rendering.
+type CatalogReader interface {
+	Catalog(context.Context, ViewerIdentity) ([]CatalogApp, error)
+}
+
+type CatalogApp struct {
+	Slug, StableURL, Description string
+	Tags                         []string
 }
 
 type DashboardView struct {

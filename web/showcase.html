@@ -265,6 +265,37 @@
         </div>
       </section>
 
+      <section class="tinker-section" aria-labelledby="catalog-filter-title">
+        <div class="tinker-section-header">
+          <div><p class="tinker-eyebrow">Viewer catalog</p><h2 id="catalog-filter-title">Find an app you can open</h2></div>
+          <p>Local search and tags only narrow the already-authorized cards on this page.</p>
+        </div>
+        <div class="tinker-app-filter" data-tinker-catalog-filter hidden>
+          <label class="tinker-field" for="showcase-catalog-filter-query">
+            <span class="tinker-label">Search apps</span>
+            <input class="tinker-input" id="showcase-catalog-filter-query" type="search" autocomplete="off" placeholder="Search app, description, or tag" aria-controls="showcase-catalog-app-list" data-tinker-catalog-filter-query>
+          </label>
+          <label class="tinker-field" for="showcase-catalog-filter-tag">
+            <span class="tinker-label">Tag</span>
+            <select class="tinker-select" id="showcase-catalog-filter-tag" aria-controls="showcase-catalog-app-list" data-tinker-catalog-filter-tag><option value="">All tags</option><option value="finance">finance</option><option value="team">team</option></select>
+          </label>
+          <p class="tinker-app-filter__count" data-tinker-catalog-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
+        </div>
+        <div class="tinker-grid tinker-grid--2" id="showcase-catalog-app-list" data-tinker-catalog-list>
+          <article class="tinker-card tinker-app-card" data-tinker-catalog-card data-tinker-catalog-slug="payroll-preview" data-tinker-catalog-description="Payroll review for finance" data-tinker-catalog-tags="finance team">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><span class="tinker-status" data-state="active">Private</span></div><p class="tinker-card__meta">Tags: finance, team</p></div>
+          </article>
+          <article class="tinker-card tinker-app-card" data-tinker-catalog-card data-tinker-catalog-slug="handbook" data-tinker-catalog-description="Team handbook" data-tinker-catalog-tags="team">
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>handbook</h3><p class="tinker-card__meta">Team handbook</p></div><span class="tinker-status" data-state="active">Private</span></div><p class="tinker-card__meta">Tags: team</p></div>
+          </article>
+        </div>
+        <div class="tinker-empty tinker-app-filter__no-results" data-tinker-catalog-filter-empty hidden>
+          <div class="tinker-empty__icon" aria-hidden="true">⌕</div>
+          <h3>No matching apps.</h3>
+          <p>Adjust the search or tag. No new app data was requested.</p>
+        </div>
+      </section>
+
       <section class="tinker-section" aria-labelledby="data-title">
         <div class="tinker-section-header">
           <div><p class="tinker-eyebrow">Operational data</p><h2 id="data-title">Cards, details, and tables</h2></div>

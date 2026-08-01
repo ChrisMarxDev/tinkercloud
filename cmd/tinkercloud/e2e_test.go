@@ -41,7 +41,7 @@ func TestBuildHandlerComposesCLILogin(t *testing.T) {
 		SessionExpiry: time.Hour,
 		Limits:        config.ResourceLimits{DiskWarningPercent: 80, DiskStopPercent: 99},
 	}
-	h, _, err := buildHandler(cfg, config.Secrets{HMACKey: "test-composed-cli-login-hmac-key"}, store, denyDeploymentGates{}, nil)
+	h, _, _, err := buildHandler(cfg, config.Secrets{HMACKey: "test-composed-cli-login-hmac-key"}, store, denyDeploymentGates{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestPlatformVersionTLSHostHarness(t *testing.T) {
 		p, e := verification.ProbeCandidate(ctx, cfg, root, r)
 		return e == nil && p.Passed()
 	}}
-	h, _, err := buildHandler(cfg, config.Secrets{}, s, gates, nil)
+	h, _, _, err := buildHandler(cfg, config.Secrets{}, s, gates, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

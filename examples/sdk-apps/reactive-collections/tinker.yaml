@@ -1,4 +1,4 @@
-version: 1
+version: 2
 name: reactive-collections
 description: A shared checklist using Tinkercloud document collections and best-effort live refresh hints.
 build:

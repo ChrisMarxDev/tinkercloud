@@ -17,22 +17,27 @@ import (
 )
 
 // Serve is intentionally unreachable without the sealed authorization context.
-func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) {
+// Outcome separates the exact static-document decision from side effects such
+// as local insights. DocumentCandidate only becomes countable if the gateway's
+// response observer confirms a successful 200 response.
+type Outcome struct{ DocumentCandidate bool }
+
+func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request, beforeDocument ...func()) Outcome {
 	if r.Method != "GET" && r.Method != "HEAD" {
 		http.NotFound(w, r)
-		return
+		return Outcome{}
 	}
 	// An authorization context is sealed by appauth. Only after it exists may
 	// static serving read the release tree; a path alone is never evidence that
 	// the current release is safe to serve.
 	if !verifyRelease(auth) {
 		http.NotFound(w, r)
-		return
+		return Outcome{}
 	}
 	rel, err := safePath(r.URL)
 	if err != nil {
 		http.NotFound(w, r)
-		return
+		return Outcome{}
 	}
 	f, info, err := openBeneath(auth.ReleaseRoot(), rel)
 	if errors.Is(err, fs.ErrNotExist) && auth.SPAFallback() && !strings.HasPrefix(r.URL.Path, "/_tinker/") {
@@ -40,7 +45,7 @@ func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Req
 	}
 	if err != nil {
 		http.NotFound(w, r)
-		return
+		return Outcome{}
 	}
 	defer f.Close()
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -49,14 +54,19 @@ func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Req
 	w.Header().Set("ETag", etag)
 	if r.Header.Get("If-None-Match") == etag {
 		w.WriteHeader(http.StatusNotModified)
-		return
+		return Outcome{}
 	}
 	ct := mime.TypeByExtension(filepath.Ext(info.Name()))
 	if ct == "" {
 		ct = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ct)
+	document := r.Method == http.MethodGet && r.Header.Get("Range") == "" && strings.HasPrefix(strings.ToLower(ct), "text/html")
+	if document && len(beforeDocument) > 0 && beforeDocument[0] != nil {
+		beforeDocument[0]()
+	}
 	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+	return Outcome{DocumentCandidate: document}
 }
 
 var inspectRelease = releases.Inspect

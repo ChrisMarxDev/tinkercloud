@@ -3,6 +3,7 @@ package compose
 import (
 	"net/http"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/analytics"
 	"github.com/ChrisMarxDev/tinkercloud/internal/appapi"
 	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
 	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
@@ -30,6 +31,9 @@ func AppPlaneWithPlatformAndBlobsAndCollections(cfg config.Config, appsRepo apps
 	return AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg, appsRepo, sessions, policy, repo, blobs, documents, hub, login, platform, nil)
 }
 func AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler, llmService *llm.Service) http.Handler {
+	return AppPlaneWithPlatformAndBlobsCollectionsLLMAndInsights(cfg, appsRepo, sessions, policy, repo, blobs, documents, hub, login, platform, llmService, nil, nil)
+}
+func AppPlaneWithPlatformAndBlobsCollectionsLLMAndInsights(cfg config.Config, appsRepo apps.Repository, sessions SessionValidatorRevoker, policy policies.Store, repo kv.Repository, blobs blob.Repository, documents collections.Repository, hub *live.Hub, login Login, platform http.Handler, llmService *llm.Service, insights *analytics.Recorder, insightsKey []byte) http.Handler {
 	// The broker owns only its fixed admin-host namespace and delegates every
 	// control/dashboard route to the existing platform handler. Its interface is
 	// deliberately independent from the gateway's app authorization context.
@@ -67,7 +71,7 @@ func AppPlaneWithPlatformAndBlobsCollectionsAndLLM(cfg config.Config, appsRepo a
 	d := NewAppDispatcher(appapi.Dispatcher{KV: service, Collections: documentsService, Blobs: blob.New(bl, blobs), BlobMaxBytes: bl.BlobBytes, Origin: origin, Capabilities: caps, LLM: llmService})
 	realtime := cfg.EffectiveRealtimeLimits()
 	d.Live = &live.WebSocketAdapter{Hub: hub, Origin: live.SameOrigin, IdleTimeout: realtime.IdleTimeout, PingInterval: realtime.PingInterval, PongTimeout: realtime.PongTimeout, WriteTimeout: realtime.WriteTimeout, OutboundSize: realtime.OutboundQueue}
-	return gateway.Gateway{Config: cfg, Apps: appsRepo, Authorizer: appauth.Authorizer{Sessions: sessions, Policies: policy}, Protected: d, PreAuth: login, Platform: platform}
+	return gateway.Gateway{Config: cfg, Apps: appsRepo, Authorizer: appauth.Authorizer{Sessions: sessions, Policies: policy}, Protected: d, PreAuth: login, Platform: platform, Insights: insights, InsightsKey: insightsKey}
 }
 func cfgBlobLimits(cfg config.Config) blob.Limits {
 	l := cfg.EffectiveLimits()

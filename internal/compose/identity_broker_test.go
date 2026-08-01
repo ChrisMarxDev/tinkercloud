@@ -283,7 +283,7 @@ func TestIdentityBrokerViewerWithoutDashboardRoleCanUseNoRoleGlobalLogout(t *tes
 	r.Host = "admin.apps.tinker.test"
 	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
 	h.ServeHTTP(page, r)
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "This account cannot use the dashboard.") {
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "This account cannot use the dashboard.") || !strings.Contains(page.Body.String(), `href="/apps"`) {
 		t.Fatalf("viewer no-role page status=%d body=%q", page.Code, page.Body.String())
 	}
 	csrf := cookieByName(page.Result().Cookies(), browseridentity.CSRFCookieName)

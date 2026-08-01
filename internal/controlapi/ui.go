@@ -28,9 +28,11 @@ var templateFiles embed.FS
 // Platform serves the platform host only. API routes remain bearer-token
 // authenticated through API; browser forms never proxy into that API.
 type Platform struct {
-	API   http.Handler
-	Auth  PlatformAuthenticator
-	Views DashboardReader
+	API        http.Handler
+	Auth       PlatformAuthenticator
+	ViewerAuth ViewerAuthenticator
+	Views      DashboardReader
+	Catalogs   CatalogReader
 	// Actions is deliberately separate from API. HTML forms call the same
 	// typed service boundary, with the actor always derived from the control
 	// cookie. They never replay browser credentials into the bearer API.
@@ -75,12 +77,56 @@ func (p Platform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.dashboard(w, r)
+	case "/apps":
+		if r.Method != http.MethodGet {
+			p.methodNotAllowed(w)
+			return
+		}
+		p.catalog(w, r)
 	default:
 		if r.Method == http.MethodPost && p.formAction(w, r) {
 			return
 		}
 		p.errorPage(w, http.StatusNotFound, "Page not found", "This Tinkercloud page is unavailable or has moved.", "/login", "Go to sign in")
 	}
+}
+
+// catalog is a global-viewer-identity surface, not a less restrictive control
+// dashboard. Its authenticator deliberately never derives a role.
+func (p Platform) catalog(w http.ResponseWriter, r *http.Request) {
+	if p.ViewerAuth == nil || p.Catalogs == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	viewer, err := p.ViewerAuth.AuthenticateViewer(r.Context(), w, r)
+	if err != nil || viewer.IdentityID == "" || viewer.Email == "" {
+		// No catalog template or read model is rendered before identity proof.
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	apps, err := p.Catalogs.Catalog(r.Context(), viewer)
+	if err != nil {
+		// A failed safe read model is unavailable, never a partially rendered
+		// catalog. This also makes an adapter contract violation non-disclosing.
+		apps = nil
+	}
+	csrf := p.csrf(w, r, Actor{IdentitySessionID: viewer.IdentitySessionID})
+	p.render(w, "catalog.html", catalogPage{Apps: apps, Tags: catalogTags(apps), CSRF: csrf, Unavailable: err != nil})
+}
+
+func catalogTags(apps []CatalogApp) []string {
+	seen := make(map[string]struct{})
+	for _, app := range apps {
+		for _, tag := range app.Tags {
+			seen[tag] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(seen))
+	for tag := range seen {
+		result = append(result, tag)
+	}
+	sort.Strings(result)
+	return result
 }
 
 // formAction handles only fixed route shapes. It enforces the browser trust
@@ -501,3 +547,9 @@ type tokenPage struct {
 	Token TokenResult
 }
 type errorPage struct{ Title, Message, Href, Label string }
+type catalogPage struct {
+	Apps        []CatalogApp
+	Tags        []string
+	CSRF        string
+	Unavailable bool
+}

@@ -71,13 +71,16 @@ active -> superseded
 `rejected` is invalid deployer input; `failed` is an operational failure. Both
 are terminal. Only a `verified` immutable release with an activatable candidate
 policy,
-ready certificate, and passing anonymous-denial probe can become active. A
+ready certificate, and passing posture-aware candidate probe can become active. A
 failed activation restores the previously active release.
 
 During upload the server validates and persists the deployment manifest's
-canonical private allowlist. Activation installs that exact allowlist and the
-active deployment pointer in one transaction. The owner remains server-derived
-and implicit; the client never supplies an owner or app ID for this binding.
+canonical access policy. Activation installs that exact mode/allowlist and the
+active deployment pointer in one transaction. A public candidate additionally
+requires the current operator gate, an explicit public acknowledgement, and
+central proof that every browser capability is disabled; these are rechecked
+inside the activation transaction. The owner remains server-derived and
+implicit; the client never supplies an owner or app ID for this binding.
 
 Before activation, a newly staged app's exact HTTPS origin receives a bounded
 certificate-readiness probe at `/_tinker/api/v1/app`. This is a protected,
@@ -120,7 +123,8 @@ preserves the previous active pointer.
   OTP, manifest creation, or credential writes. A local path with traversal or
   a symlinked output/fallback component is denied before archive creation.
 - App/release ownership is checked by the repository/service, not only the CLI.
-- Missing audit capability, valid candidate policy, certificate readiness, or probe result
+- Missing audit capability, valid candidate policy, current public gate,
+  capability-free public posture, explicit public acknowledgement, certificate readiness, or probe result
   denies activation.
 - Certificate readiness is pre-activation evidence only: redirect, wrong-host,
   unverified-TLS, exhausted-budget, cancelled, or non-ready outcomes deny and
@@ -173,13 +177,13 @@ preserves the previous active pointer.
   open-beneath hardening remains an exit gate and must use Go >=1.25.12 or
   >=1.26.5; the vulnerable Go 1.24 `os.Root` implementation is not used.
 - A CLI result is successful only after both server candidate evidence and a
-  fresh deployer-side anonymous GET to the exact server-derived protected URL
-  pass. That GET reuses its real TLS transport but has no bearer token or
-  cookie jar, follows no redirect, and requires the bounded gateway `401` JSON
-  `not_authorized` envelope with a valid request ID matching `X-Request-ID`,
-  `Cache-Control: no-store`, and `X-Content-Type-Options: nosniff`. A 404,
-  2xx, redirect, wrong URL/host/scheme, malformed or oversized denial,
-  timeout, or transport failure denies CLI success.
+  fresh deployer-side anonymous posture probe to the exact server-derived URL
+  pass. A private candidate retains the bounded gateway `401 not_authorized`
+  zero-release-byte proof. A public candidate requires the bounded expected
+  root-document hash/bytes and indexing header plus denial of representative
+  reserved capability routes before their dispatchers. Every probe uses real
+  TLS, no bearer or cookie jar, and no redirect. A response inconsistent with
+  the server-returned typed posture is terminal and never retried into success.
 - After the server has returned a successful activation result, the CLI may
   retry only transient DNS, TLS, connection, timeout, `404`, `502`, `503`, or
   `504` public-probe outcomes within one finite 45-second budget. Every attempt

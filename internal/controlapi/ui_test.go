@@ -22,6 +22,26 @@ func (a uiAuth) AuthenticatePlatform(context.Context, http.ResponseWriter, *http
 	return a.actor, a.err
 }
 
+type uiViewerAuth struct {
+	viewer ViewerIdentity
+	err    error
+}
+
+func (a uiViewerAuth) AuthenticateViewer(context.Context, http.ResponseWriter, *http.Request) (ViewerIdentity, error) {
+	return a.viewer, a.err
+}
+
+type uiCatalogs struct {
+	apps []CatalogApp
+	err  error
+	got  ViewerIdentity
+}
+
+func (c *uiCatalogs) Catalog(_ context.Context, viewer ViewerIdentity) ([]CatalogApp, error) {
+	c.got = viewer
+	return c.apps, c.err
+}
+
 type uiViews struct {
 	value DashboardView
 	err   error
@@ -133,6 +153,36 @@ func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != 200 || strings.Contains(w.Body.String(), "deployer@example.test</td>") || views.got.ID != "d" {
 		t.Fatalf("deployer page disclosed operator data: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUICatalogRequiresViewerIdentityAndRendersOnlyCatalogReadModel(t *testing.T) {
+	denied := Platform{ViewerAuth: uiViewerAuth{err: errors.New("denied")}, Catalogs: &uiCatalogs{apps: []CatalogApp{{Slug: "secret-app"}}}}
+	if w := uiRequest(t, denied, http.MethodGet, "/apps", ""); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/login" || strings.Contains(w.Body.String(), "secret-app") {
+		t.Fatalf("anonymous catalog leaked metadata: %d %q %s", w.Code, w.Header().Get("Location"), w.Body.String())
+	}
+	catalogs := &uiCatalogs{apps: []CatalogApp{{Slug: "allowed-app", Description: `<script>alert("x")</script>`, Tags: []string{"demo", "team"}, StableURL: "https://allowed-app.apps.example.test/"}}}
+	p := Platform{ViewerAuth: uiViewerAuth{viewer: ViewerIdentity{IdentityID: "viewer", Email: "viewer@example.test", IdentitySessionID: "gis"}}, Catalogs: catalogs}
+	w := uiRequest(t, p, http.MethodGet, "/apps", "")
+	page := w.Body.String()
+	if w.Code != http.StatusOK || catalogs.got.Email != "viewer@example.test" || !strings.Contains(page, "allowed-app") || strings.Contains(page, `<script>alert`) || !strings.Contains(page, "&lt;script&gt;") {
+		t.Fatalf("catalog page=%d got=%#v body=%s", w.Code, catalogs.got, page)
+	}
+	for _, required := range []string{"data-tinker-catalog-filter", "data-tinker-catalog-filter-query", "data-tinker-catalog-filter-tag", "data-tinker-catalog-filter-count", "data-tinker-catalog-filter-empty", "data-tinker-catalog-description", "All authorized apps are shown.", `method="post" action="/logout"`, `name="csrf"`, "Sign out of Tinkercloud", "Private"} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("catalog missing %q", required)
+		}
+	}
+	if strings.Contains(page, "deployer") || strings.Contains(page, "operator") || strings.Contains(page, "dashboard") || strings.Contains(page, ">Public<") {
+		t.Fatalf("catalog rendered control-plane role data: %s", page)
+	}
+}
+
+func TestPlatformUICatalogUnavailableDoesNotSubstituteEmptyCatalog(t *testing.T) {
+	p := Platform{ViewerAuth: uiViewerAuth{viewer: ViewerIdentity{IdentityID: "viewer", Email: "viewer@example.test"}}, Catalogs: &uiCatalogs{err: errors.New("unavailable")}}
+	w := uiRequest(t, p, http.MethodGet, "/apps", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "The app catalog is unavailable.") || strings.Contains(w.Body.String(), "No apps available yet.") {
+		t.Fatalf("catalog unavailable state=%d %s", w.Code, w.Body.String())
 	}
 }
 

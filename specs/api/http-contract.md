@@ -62,6 +62,16 @@ POST /login/verify
 POST /logout
 ```
 
+An authenticated global identity may also open the team catalog:
+
+```text
+GET /apps
+```
+
+This HTML route requires only a valid global identity, not an operator/deployer
+role. Its server query returns only current policy-authorized private apps plus
+effective public apps. `/dashboard` retains its separate current role check.
+
 Every platform broker POST requires an exact HTTPS same-origin `Origin` header
 matching the derived admin host, an URL-encoded form body, and a bounded
 body. Missing, malformed, or cross-origin requests return the same generic
@@ -81,6 +91,22 @@ The app callback consumes an opaque one-time grant and state after current
 policy rechecks; it is not an API, SDK, or app-content route.
 
 ## App host: protected capabilities
+
+For an effectively public version-2 app, only ordinary immutable static files
+and validated SPA fallback are anonymous. Every route in the protected or
+pre-authentication namespace below denies public-static authority before
+dispatcher invocation. A private session may use capabilities only on a
+private active app; capability-bearing public candidates cannot activate.
+
+Successful counted HTML documents may set the app-origin host-only
+`__Host-tinker-insights` cookie. It is Secure, HttpOnly, SameSite=Lax, Path=/,
+has no Domain attribute, and expires within 30 days. It contains only random
+opaque bytes and is never accepted as identity, authorization, or SDK input.
+
+Owner/operator insights are part of the authenticated control read model and
+may use a bounded `GET /api/v1/apps/{slug}/insights?window=7|30`
+representation. Viewer/global/app cookies and deployment-agent credentials are
+never accepted for that control read.
 
 ```text
 GET    /_tinker/api/v1/me

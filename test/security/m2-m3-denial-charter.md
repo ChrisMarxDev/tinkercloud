@@ -31,7 +31,7 @@ devices, duplicate/case-folded paths, corrupt headers, unsafe permissions,
 entry/depth/expanded-size/single-file limits, and cleanup after an extraction
 failure. Test ZIP and tar.gz inputs separately.
 
-For manifests, reject unknown keys, public mode, invalid/duplicate email or
+For version-1 manifests, reject unknown keys, public mode, tags/indexing, invalid/duplicate email or
 domain entries, unsafe SPA fallbacks, malformed indentation/scalars, and
 capabilities unavailable under the effective server policy.
 

@@ -114,6 +114,35 @@ deployer-selected rollback form, route, button, or simulated client-side
 control. Failed activation preservation is server-side deployment behavior, not
 a dashboard mutation.
 
+## Post-V1 reach and insights surfaces
+
+- The viewer catalog is a distinct global-identity surface, not a weakened
+  operator/deployer dashboard. The server renders only current authorized
+  private apps plus effective public apps; client filtering never receives a
+  denied record.
+- Catalog cards reuse the native app-card grammar and show escaped slug, active
+  immutable description, bounded tags, stable URL, and explicit `Private` or
+  `Public` text. A public badge never implies SDK/capability availability.
+- Catalog search and tag controls are hidden until local initialization, keep
+  every authorized card visible without JavaScript, use labelled native
+  controls, announce a polite visible result count, and perform no fetch or
+  persistence. Search matches only the rendered slug, active immutable
+  description, and rendered tags case-insensitively; the tag select matches a
+  rendered canonical tag exactly.
+- Owner/operator app summaries label the metric **Approximate visitors** and
+  show page views, last activity, and a textual 30-day daily series. Unavailable
+  analytics renders as unavailable, never as zero. Viewers and unrelated
+  deployers receive no analytics markup or serialized values.
+- Public-policy and operator-gate states use visible exact text. Enabling public
+  authority states “Anyone on the internet can open this app” and requires the
+  normal exact server-side broadening confirmation; color/icon styling is only
+  supporting information.
+- Public indexing is shown as a separate immutable state and defaults to
+  `Not indexed`. No UI may imply that indexing changes access authority.
+- Deployer dashboard remains owned-app-only and list-oriented. Public policy
+  mutation stays in the scoped CLI; operator gate mutation stays root-local in
+  the first pilot. The dashboard may display their current effective states.
+
 ## Security and denial charter
 
 Before a styled happy path is accepted, tests must prove:

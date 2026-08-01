@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ChrisMarxDev/tinkercloud/internal/analytics"
 	"github.com/ChrisMarxDev/tinkercloud/internal/certificates"
 	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
 	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
@@ -158,8 +159,14 @@ func (v llmCredentialValidator) Validate(ctx context.Context, provider llm.Provi
 	return validator.ValidateCredential(ctx, credential)
 }
 
-func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates, onOTPIssuanceFailure func(controlapi.OTPIssuanceFailureCategory)) (http.Handler, *live.Hub, error) {
+func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates, onOTPIssuanceFailure func(controlapi.OTPIssuanceFailureCategory)) (http.Handler, *live.Hub, *analytics.Recorder, error) {
 	hub := live.New(live.DefaultLimits())
+	insights := analytics.NewRecorder(store, analytics.DefaultQueueSize)
+	insightsEnabled, err := store.InsightsEnabled(context.Background())
+	if err != nil {
+		return nil, hub, insights, err
+	}
+	insights.SetEnabled(insightsEnabled)
 	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
 	liveSessions := compose.LiveSessions{Sessions: store, Hub: hub}
 	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost(), AppSuffix: c.AppSuffix(), RevokeChildren: func(refs []persistence.AppSessionRef) {
@@ -179,12 +186,12 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	resources, _ := compose.NewResourceControls(c, operations.StaticDiskSource{Path: c.DataDirectory})
 	appDatabases, err := persistence.NewAppDatabaseManager(c.DataDirectory, persistence.AppDatabaseManagerOptions{})
 	if err != nil {
-		return nil, hub, err
+		return nil, hub, insights, err
 	}
 	deploy := &deployments.Service{Repo: persistence.DeploymentRepository{Store: store}, Root: c.DataDirectory, Gates: gates}
 	resources.ConfigureDeployments(deploy)
 	if err := deploy.RecoverStartup(context.Background(), deployments.FilesystemEvidence{Root: c.DataDirectory}); err != nil {
-		return nil, hub, err
+		return nil, hub, insights, err
 	}
 	blobs := resources.BlobRepository(store)
 	var llmRepository *persistence.LLMRepository
@@ -193,7 +200,7 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	if len(secrets.LLMRootKey) == 32 {
 		envelope, e := llm.NewAESGCMEnvelope(secrets.LLMRootKey)
 		if e != nil {
-			return nil, hub, e
+			return nil, hub, insights, e
 		}
 		repository := persistence.LLMRepository{Store: store, Envelope: envelope}
 		llmRepository = &repository
@@ -228,13 +235,13 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
-	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion), OTPIssuanceFailure: onOTPIssuanceFailure}, Auth: controlAuth, Views: controlService, Actions: controlService}
+	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion), OTPIssuanceFailure: onOTPIssuanceFailure}, Auth: controlAuth, ViewerAuth: controlAuth, Views: controlService, Catalogs: controlService, Actions: controlService}
 	if err := blobs.Reconcile(context.Background()); err != nil {
-		return nil, hub, err
+		return nil, hub, insights, err
 	}
 	appKV := persistence.KVRepository{Apps: appDatabases, WriteGate: resources.Gate}
 	documents := persistence.CollectionRepository{Apps: appDatabases, WriteGate: resources.Gate}
-	return compose.AppPlaneWithPlatformAndBlobsCollectionsAndLLM(c, store, liveSessions, store, appKV, blobs, documents, hub, login, platform, llmService), hub, nil
+	return compose.AppPlaneWithPlatformAndBlobsCollectionsLLMAndInsights(c, store, liveSessions, store, appKV, blobs, documents, hub, login, platform, llmService, insights, []byte(secrets.HMACKey)), hub, insights, nil
 }
 
 var effectiveUID = os.Geteuid
@@ -526,10 +533,15 @@ func run(args []string, out, errout *os.File) error {
 			return e == nil && p.Passed()
 		}}
 		logger := slog.New(slog.NewJSONHandler(errout, nil))
-		h, _, err := buildHandler(cfg, secrets, store, gates, func(category controlapi.OTPIssuanceFailureCategory) {
+		h, _, insights, err := buildHandler(cfg, secrets, store, gates, func(category controlapi.OTPIssuanceFailureCategory) {
 			requestlog.Service(logger, "cli_otp_issuance_"+string(category), "failed", 1)
 		})
 		if err != nil {
+			return err
+		}
+		// Retention is completed before either listener becomes ready. A later
+		// bounded scheduler run handles normal maintenance without delaying apps.
+		if err := store.CleanupInsights(context.Background(), time.Now(), 250); err != nil {
 			return err
 		}
 		resolver := hostResolver{suffix: cfg.AppSuffix(), store: store}
@@ -560,8 +572,12 @@ func run(args []string, out, errout *os.File) error {
 		ts := serverOptions(requestlog.Middleware(secureHTTPS, logger))
 		serveCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		insights.Start(serveCtx)
 		cleanup := &jobs.Scheduler{Interval: 6 * time.Hour, Timeout: 2 * time.Minute}
 		cleanup.Run = func(ctx context.Context) error {
+			if err := store.CleanupInsights(ctx, time.Now(), 250); err != nil {
+				return err
+			}
 			removed, e := store.ExecuteCleanup(ctx, cfg.DataDirectory, cfg.Limits.ReleaseRetention, jobs.Executor{})
 			outcome := "succeeded"
 			if e != nil {

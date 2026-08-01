@@ -9,7 +9,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/analytics"
 	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
 	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
 	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
@@ -126,12 +128,15 @@ type PreAuthDispatcher interface {
 }
 
 type Gateway struct {
-	Config     config.Config
-	Apps       apps.Repository
-	Authorizer appauth.Authorizer
-	Protected  ProtectedDispatcher
-	PreAuth    PreAuthDispatcher
-	Platform   http.Handler
+	Config      config.Config
+	Apps        apps.Repository
+	Authorizer  appauth.Authorizer
+	Protected   ProtectedDispatcher
+	PreAuth     PreAuthDispatcher
+	Platform    http.Handler
+	Insights    *analytics.Recorder
+	InsightsKey []byte
+	Clock       func() time.Time
 }
 
 func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +193,15 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if endpoint := ClassifyRoute(r.Method, r.URL.Path); endpoint == ProtectedStatic {
-		staticruntime.Serve(auth, w, r)
+		observed := &responseObserver{ResponseWriter: w}
+		var event analytics.Event
+		var record bool
+		outcome := staticruntime.Serve(auth, observed, r, func() { event, record = g.prepareInsight(auth, observed, r) })
+		if outcome.DocumentCandidate && IsDocumentNavigation(r) && observed.status() == http.StatusOK {
+			if record {
+				_ = g.Insights.Offer(event)
+			}
+		}
 		return
 	}
 	if g.Protected == nil {
@@ -196,6 +209,70 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.Protected.Dispatch(auth, ClassifyRoute(r.Method, r.URL.Path), w, r)
+}
+
+type responseObserver struct {
+	http.ResponseWriter
+	code          int
+	pendingCookie *http.Cookie
+}
+
+func (w *responseObserver) WriteHeader(code int) {
+	if w.code == 0 {
+		w.code = code
+		if code == http.StatusOK && w.pendingCookie != nil {
+			http.SetCookie(w.ResponseWriter, w.pendingCookie)
+		}
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+func (w *responseObserver) Write(b []byte) (int, error) {
+	if w.code == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(b)
+}
+func (w *responseObserver) status() int {
+	if w.code == 0 {
+		return http.StatusOK
+	}
+	return w.code
+}
+
+// recordInsight runs only after staticruntime has served an authorized 200 HTML
+// document. The recorder's offer is non-blocking, and a cookie is an analytics
+// header only; a failed random source or recorder can never change the body.
+func (g Gateway) prepareInsight(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) (analytics.Event, bool) {
+	if g.Insights == nil || len(g.InsightsKey) == 0 || !g.Insights.Available() {
+		return analytics.Event{}, false
+	}
+	now := time.Now().UTC()
+	if g.Clock != nil {
+		now = g.Clock().UTC()
+	}
+	event := analytics.Event{AppID: auth.AppID(), Occurred: now}
+	if marker, ok := analytics.ReadMarker(r); ok {
+		event.Marker, event.HasMarker = analytics.Digest(g.InsightsKey, auth.AppID(), marker), true
+		// Conditional static requests may be turned into a 304/412 by ServeContent
+		// after this callback. Never introduce a fresh marker on that path; an
+		// existing valid marker can still be counted only after the observed 200.
+	} else if !hasConditionalRequest(r) {
+		if cookie, err := analytics.NewMarkerCookie(now); err == nil {
+			if observed, ok := w.(*responseObserver); ok {
+				observed.pendingCookie = cookie
+			}
+		}
+	}
+	return event, true
+}
+
+func hasConditionalRequest(r *http.Request) bool {
+	for _, header := range []string{"If-Match", "If-Modified-Since", "If-None-Match", "If-Unmodified-Since"} {
+		if r.Header.Get(header) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // IsDocumentNavigation is intentionally narrow. Browser navigation metadata

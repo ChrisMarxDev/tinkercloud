@@ -11,7 +11,7 @@
 
 **North star:** [Shopify Quick](docs/product/north-star-quick.md)
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-08-01
 
 ## 0. How to use this document
 
@@ -917,6 +917,55 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   executable scripts; a Codex-compatible `SKILL.md` packaging is the first
   distribution format but not the only usable documentation.
 
+### 8.15 Post-V1 public reach and local insights
+
+These requirements govern the accepted post-V1 extension described in §21.3.
+They do not retroactively expand the V1 release claim.
+
+- **FR-PUBLIC-001:** Public access MUST require both an explicit current app
+  policy mode of `public` and a current durable operator public-app gate. The
+  gate defaults off, is revisioned and audited, and any missing, corrupt,
+  stale, or unavailable gate state means off.
+- **FR-PUBLIC-002:** Anonymous public authority MUST be represented by a sealed
+  public-static authorization variant produced by the gateway. It MUST permit
+  only active immutable static files and validated SPA fallback; it MUST NOT be
+  accepted by identity, login, SDK, KV, collections, blobs, realtime, LLM, or
+  any other reserved `/_tinker/*` dispatcher.
+- **FR-PUBLIC-003:** A public candidate MUST be rejected before activation when
+  any browser capability is enabled. Interactive deployment requires one
+  explicit access-broadening confirmation; JSON automation requires the
+  corresponding explicit machine-readable acknowledgement.
+- **FR-PUBLIC-004:** Public activation MUST prove the expected candidate bytes
+  are anonymously reachable through the exact app origin and that every
+  reserved capability route remains denied. Private activation retains the V1
+  zero-release-byte anonymous-denial proof.
+- **FR-PUBLIC-005:** Public indexing defaults off. Unless the active immutable
+  manifest explicitly opts in while public access is effective, successful
+  document responses MUST carry a no-index response directive.
+- **FR-CATALOG-001:** A verified global browser identity MAY read a bounded
+  server-rendered catalog containing only current active private apps whose
+  owner/email/domain policy matches that identity and current effective public
+  apps. Anonymous callers receive no catalog metadata.
+- **FR-CATALOG-002:** Catalog metadata is limited to stable URL, slug, active
+  immutable description, zero to eight bounded immutable tags, and the current
+  public/private badge. Search and tag filtering operate only over the already
+  authorized server-rendered result.
+- **FR-INSIGHT-001:** Tinkercloud MUST count only successful top-level HTML GET
+  or validated SPA-fallback responses as page views. Assets, ranges, reserved
+  routes, probes, errors, and non-document requests MUST NOT count.
+- **FR-INSIGHT-002:** Approximate visitors use only an app-origin random
+  host-only cookie and an app-scoped keyed digest. Tinkercloud MUST NOT retain
+  the raw cookie, IP, email, global/app session, URL path/query, referrer, user
+  agent, content, geography, or device fingerprint for analytics.
+- **FR-INSIGHT-003:** Daily page-view aggregates and visitor markers remain in
+  the existing control SQLite database for at most 30 days. Analytics failure
+  never changes authorization, response bytes, or app availability, and hard
+  app deletion removes all associated analytics state.
+- **FR-INSIGHT-004:** Only the exact owner and operator may read bounded 7-day
+  and 30-day summaries containing approximate visitors, page views, last
+  activity, and a 30-day daily series. Viewer, SDK, deployment-agent, and
+  unrelated-deployer authority MUST be denied.
+
 ## 9. Architecture requirements
 
 ### 9.1 Deployment topology
@@ -1605,7 +1654,26 @@ connections, fixed operator profiles, app grants, bounded non-streaming
 provider-neutral SDK support. It does not expand the locked V1 release claim;
 streaming and broader provider capabilities remain future work.
 
-### 21.3 Later candidates
+### 21.3 Accepted post-V1 public reach and local insights extension
+
+Tinkercloud extends the private agent-to-team loop with three deliberately
+bounded surfaces: a policy-filtered team app catalog, local 30-day page-view and
+approximate-browser insights, and operator-gated public static publishing.
+
+The extension preserves the one-gateway topology. Public access is an explicit
+typed authorization result for immutable static files only; it grants no
+anonymous SDK, data, blob, realtime, identity, login, LLM, or future capability
+authority. The operator gate defaults off, public indexing defaults off, and a
+public candidate with any browser capability enabled cannot activate. Local
+analytics stores no raw browser identifier, identity, IP, URL, referrer, user
+agent, or content and never blocks an otherwise authorized static response.
+
+The normative boundaries are defined by
+[`public-static-access.md`](specs/api/public-static-access.md),
+[`team-app-catalog.md`](specs/api/team-app-catalog.md), and
+[`local-app-insights.md`](specs/operations/local-app-insights.md).
+
+### 21.4 Later candidates
 
 Rank after usage evidence:
 
@@ -1680,9 +1748,18 @@ backed, and cursor/size/count/quota bounded.
 
 ### D3 — Public apps
 
-V1 is private-only. No CLI, manifest, UI, or API surface exposes public mode.
-The architecture may leave a future policy seam, but missing/unknown policy
-always denies.
+V1 remains private-only and its release claim exposes no public mode. The
+accepted post-V1 reach extension adds operator-gated public static access after
+the V1 exit gate: an app is anonymously readable only when its explicit current
+policy is `public`, the durable operator gate is on, the active release is
+capability-free, and the gateway produces the sealed public-static
+authorization variant. Missing or unknown policy/gate state always denies.
+
+Public mode never grants anonymous access to `/_tinker/*`, SDK capabilities,
+identity, login, data, blobs, realtime, LLM, or future dispatchers. Search
+indexing is a separate immutable opt-in and defaults off. Returning an app to
+private or disabling the operator gate affects the next request while retaining
+the normal owner/email/domain private access path.
 
 ### D4 — Deployer authentication and owner access
 

@@ -117,6 +117,52 @@
     });
   }
 
+  // Catalog filtering is deliberately presentation-only. The page contains
+  // only server-authorized cards; this helper neither fetches nor persists
+  // data, and all cards remain visible when JavaScript is unavailable.
+  function initializeCatalogFilters() {
+    var filters = document.querySelectorAll("[data-tinker-catalog-filter]");
+    filters.forEach(function (filter) {
+      var query = filter.querySelector("[data-tinker-catalog-filter-query]");
+      var tag = filter.querySelector("[data-tinker-catalog-filter-tag]");
+      var count = filter.querySelector("[data-tinker-catalog-filter-count]");
+      var list = filter.parentElement.querySelector("[data-tinker-catalog-list]");
+      var empty = filter.parentElement.querySelector("[data-tinker-catalog-filter-empty]");
+      if (!query || !tag || !count || !list || !empty) {
+        return;
+      }
+
+      var cards = list.querySelectorAll("[data-tinker-catalog-card]");
+      if (!cards.length) {
+        return;
+      }
+
+      function apply() {
+        var search = query.value.trim().toLocaleLowerCase();
+        var wantedTag = tag.value;
+        var visible = 0;
+        cards.forEach(function (card) {
+          var slug = (card.getAttribute("data-tinker-catalog-slug") || "").toLocaleLowerCase();
+          var description = (card.getAttribute("data-tinker-catalog-description") || "").toLocaleLowerCase();
+          var tags = (card.getAttribute("data-tinker-catalog-tags") || "").trim().split(/\s+/);
+          var matches = (!search || slug.indexOf(search) >= 0 || description.indexOf(search) >= 0 || tags.join(" ").toLocaleLowerCase().indexOf(search) >= 0) &&
+            (!wantedTag || tags.indexOf(wantedTag) >= 0);
+          card.hidden = !matches;
+          if (matches) {
+            visible += 1;
+          }
+        });
+        count.textContent = visible === 1 ? "Showing 1 app." : "Showing " + visible + " apps.";
+        empty.hidden = visible !== 0;
+      }
+
+      query.addEventListener("input", apply);
+      tag.addEventListener("change", apply);
+      filter.hidden = false;
+      apply();
+    });
+  }
+
   function removeToast(toast) {
     if (!toast || toast.dataset.leaving === "true") {
       return;
@@ -370,6 +416,7 @@
 
   initializeQRCodes();
   initializeAppFilters();
+  initializeCatalogFilters();
 
   window.TinkerUI = Object.freeze({
     closeDialog: closeDialog,

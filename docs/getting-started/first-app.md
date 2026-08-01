@@ -41,7 +41,7 @@ are done previewing it.
 Open `tinker.yaml` and replace `tinker-ritual` with a unique name:
 
 ```yaml
-version: 1
+version: 2
 name: my-tinker-ritual
 description: A private daily ritual tracker.
 
@@ -50,6 +50,7 @@ build:
 
 access:
   mode: private
+  indexing: false
   allow:
     emails: []
     domains: []

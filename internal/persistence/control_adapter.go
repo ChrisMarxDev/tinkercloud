@@ -100,6 +100,44 @@ func (a ControlAuthenticator) AuthenticatePlatform(ctx context.Context, w http.R
 	}
 	return result.Actor, nil
 }
+
+// AuthenticateViewer validates the global browser identity without deriving a
+// dashboard role. The catalog uses this deliberately separate seam so a
+// viewer with no operator/deployer row can discover only apps that current
+// app policy permits, while /dashboard keeps its role-based check unchanged.
+func (a ControlAuthenticator) AuthenticateViewer(ctx context.Context, w http.ResponseWriter, r *http.Request) (controlapi.ViewerIdentity, error) {
+	if a.Store == nil {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	c, err := r.Cookie(browseridentity.IdentityCookieName)
+	if err != nil || c.Value == "" {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	now := time.Now()
+	if a.Clock != nil {
+		now = a.Clock()
+	}
+	result, err := a.Store.ValidateIdentitySession(ctx, c.Value, now)
+	if err != nil {
+		if errors.Is(err, ErrIdentity) {
+			http.SetCookie(w, browseridentity.ExpiredCookie(browseridentity.IdentityCookieName))
+		}
+		if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+			a.RevokeChildren(result.Revoked)
+		}
+		return controlapi.ViewerIdentity{}, err
+	}
+	if result.ReplacementToken != "" {
+		http.SetCookie(w, browseridentity.IdentityCookie(result.ReplacementToken, result.Session.ExpiresAt))
+	}
+	if len(result.Revoked) > 0 && a.RevokeChildren != nil {
+		a.RevokeChildren(result.Revoked)
+	}
+	if result.Session.ID == "" || result.Session.Identity.ID == "" || result.Session.Identity.Email == "" {
+		return controlapi.ViewerIdentity{}, ErrIdentity
+	}
+	return controlapi.ViewerIdentity{IdentityID: result.Session.Identity.ID, Email: result.Session.Identity.Email, IdentitySessionID: result.Session.ID}, nil
+}
 func routeScope(m, p string) string {
 	s, _, ok := classifyControlRoute(m, p)
 	if !ok {
@@ -703,6 +741,64 @@ func (s ControlService) Apps(ctx context.Context, a controlapi.Actor) any {
 	return out
 }
 
+// Catalog returns only the current, bounded, server-authorized view of apps
+// for a verified global viewer identity. It intentionally has no dashboard
+// role argument and does not load a broad app list for browser filtering.
+// Public apps are not included yet: v2 may record public intent, but effective
+// public policy/gateway authorization is outside this L2 slice.
+func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIdentity) ([]controlapi.CatalogApp, error) {
+	if s.Store == nil || viewer.IdentityID == "" || viewer.Email == "" {
+		return nil, ErrUnavailable
+	}
+	normalized, err := identity.Normalize(viewer.Email)
+	if err != nil || normalized != viewer.Email {
+		return nil, ErrUnavailable
+	}
+	domain := identity.Domain(normalized)
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT a.slug,COALESCE(CAST(d.manifest_json AS BLOB),X'')
+		FROM applications a
+		JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
+		JOIN users owner ON owner.id=a.owner_user_id
+		JOIN deployments d ON d.id=a.current_deployment_id AND d.app_id=a.id
+		WHERE a.status='active' AND p.mode='private' AND d.state='active'
+		  AND ( (owner.status='active' AND owner.normalized_email=?)
+		    OR EXISTS (SELECT 1 FROM access_rules r
+		      WHERE r.app_id=a.id AND r.policy_revision=a.policy_revision
+		        AND ((r.kind='email' AND r.normalized_value=?) OR (r.kind='domain' AND r.normalized_value=?)) ) )
+		ORDER BY a.slug
+		LIMIT 101`, normalized, normalized, domain)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer rows.Close()
+	apps := make([]controlapi.CatalogApp, 0)
+	for rows.Next() {
+		var slug string
+		var manifest []byte
+		if err := rows.Scan(&slug, &manifest); err != nil {
+			return nil, ErrUnavailable
+		}
+		var parsed releases.Manifest
+		if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) || parsed.AccessMode != "" && parsed.AccessMode != "private" || parsed.Indexing {
+			return nil, ErrUnavailable
+		}
+		url := stableAppURL(slug, s.AppSuffix)
+		if url == "" {
+			return nil, ErrUnavailable
+		}
+		apps = append(apps, controlapi.CatalogApp{
+			Slug:        slug,
+			StableURL:   url,
+			Description: parsed.Description,
+			Tags:        append([]string(nil), parsed.Tags...),
+		})
+	}
+	if err := rows.Err(); err != nil || len(apps) > 100 {
+		return nil, ErrUnavailable
+	}
+	return apps, nil
+}
+
 // Dashboard is deliberately a bounded metadata-only read model for the
 // platform UI. It uses server-derived ownership and never returns raw token
 // values, hashes, release paths, configuration secrets, or provider details.
@@ -925,14 +1021,10 @@ func dashboardManifestDescription(manifest []byte, state, slug string) (string, 
 		return "", nil
 	}
 	var parsed releases.Manifest
-	if json.Unmarshal(manifest, &parsed) != nil || parsed.Version != 1 || !releases.ValidSlug(parsed.Name) || parsed.Name != slug {
+	if json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) {
 		return "", ErrUnavailable
 	}
-	description, err := releases.NormalizeDescription(parsed.Description)
-	if err != nil || description != parsed.Description {
-		return "", ErrUnavailable
-	}
-	return description, nil
+	return parsed.Description, nil
 }
 
 // stableAppURL admits only the configured stable gateway origin. It never
@@ -1287,6 +1379,8 @@ func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug,
 		// Delete children explicitly. SQLite foreign keys are intentionally
 		// restrictive, so this list is also a reviewable ownership inventory.
 		for _, statement := range []string{
+			"DELETE FROM app_insight_visitors WHERE app_id=?",
+			"DELETE FROM app_insight_days WHERE app_id=?",
 			// LLM usage and reservations refer to both the app and a profile. They
 			// must go before the grant and application row; connection/profile
 			// records are operator-owned and intentionally remain reusable.

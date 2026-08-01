@@ -14,6 +14,13 @@ This is the primary asset. Confidentiality of operator/deployer credentials,
 viewer identity, release content, KV state, blob content and metadata, keys,
 and update artifacts follows from it.
 
+For the accepted post-V1 public-static posture, anonymous callers may receive
+only active immutable static bytes after the gateway has resolved the app,
+loaded the explicit public policy, loaded the current default-off operator
+gate, proved capability-free active metadata, classified a non-reserved static
+route, and produced the sealed public-static context. That context cannot call
+any capability dispatcher.
+
 ## Trust boundaries
 
 ```text
@@ -66,6 +73,10 @@ trusted in V1.
 | Provider cost abuse | compromised app loops LLM calls | app/viewer/global budgets and rate limits | cost alerts and immediate grant disable |
 | Outbound request abuse | adapter becomes an SSRF proxy | fixed adapter destinations and schemas | denied-destination telemetry |
 | Socket resource abuse | connection/subscription flood or slow consumer | hard quotas, rate limits, bounded queues | disconnect and realtime load tests |
+| Public-context privilege escalation | public page calls KV/blob/live/LLM or login route | sealed public-static context accepted only by static runtime; all `/_tinker/*` denied | route registry and dispatcher-call counters |
+| Gate/policy cache staleness | bytes remain public after disable | current gate/policy every request; no-store pilot | next-request transition matrix |
+| Analytics tracking profile | store raw cookie/IP/path/referrer/identity | app-scoped HMAC digest only; fixed fields and 30-day cutoff | DB/log schema inspection and retention tests |
+| Catalog metadata leak | browser filters a list containing denied apps | policy-filtered bounded server query from global identity | two-owner policy/revocation matrix |
 
 ## Special cases
 
@@ -76,11 +87,23 @@ repository dependency. A valid active app is still required. They return
 generic messages, enforce limits before expensive work, and never accept
 client-provided identity as authenticated identity.
 
-### Future public apps
+### Post-V1 public static apps
 
-V1 exposes no public-app mode. A future version would require an explicit
-current policy plus an operator configuration gate and would still pass through
-app resolution, status, quotas, security headers, and protected dispatch.
+V1 exposes no public-app mode. The accepted post-V1 extension requires an
+explicit current public policy plus a revisioned operator gate and still passes
+through app resolution, active immutable evidence, route classification,
+security headers, and a sealed static authorization decision. It excludes all
+anonymous identity, login, SDK, data, blob, realtime, LLM, and future
+capability routes. Missing or unavailable gate state means no anonymous access.
+
+### Local insights privacy
+
+Insights are server-side request-outcome counters, not app instrumentation.
+They retain only UTC daily totals and app-scoped keyed random-cookie digests for
+30 days. The raw cookie, identity/session, email, IP, URL/query/path, referrer,
+user agent, content, geography, and device data never enter analytics storage.
+A bounded full/unavailable recorder drops evidence rather than delaying or
+altering an authorized app response.
 
 ### Same-origin platform APIs
 

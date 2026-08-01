@@ -39,6 +39,53 @@ func TestManifestRejectsPublicAndUnknown(t *testing.T) {
 		}
 	}
 }
+
+func TestManifestV1KeepsPrivateOnlyShape(t *testing.T) {
+	for _, in := range []string{
+		"version: 1\nname: demo\ntags: []\n",
+		"version: 1\nname: demo\ntags: null\n",
+		"version: 1\nname: demo\naccess:\n  indexing: false\n",
+		"version: 1\nname: demo\naccess:\n  indexing: null\n",
+		"version: 1\nname: demo\naccess:\n  mode: public\n",
+	} {
+		if _, err := ParseManifest([]byte(in)); err == nil {
+			t.Fatalf("v1 accepted v2 reach field: %q", in)
+		}
+	}
+}
+
+func TestManifestV2CanonicalTagsAndReachMetadata(t *testing.T) {
+	m, err := ParseManifest([]byte("version: 2\nname: demo\ntags: [team, demo-tag]\naccess:\n  mode: public\n  indexing: true\n"))
+	if err != nil || m.AccessMode != "public" || !m.Indexing || len(m.Tags) != 2 || m.Tags[0] != "demo-tag" || m.Tags[1] != "team" {
+		t.Fatalf("v2 manifest=%#v err=%v", m, err)
+	}
+	for _, tags := range []string{"null", "[Team]", "[demo, demo]", "[-demo]", "[demo-]", "[one, two, three, four, five, six, seven, eight, nine]"} {
+		if _, err := ParseManifest([]byte("version: 2\nname: demo\ntags: " + tags + "\n")); err == nil {
+			t.Fatalf("accepted invalid tags %s", tags)
+		}
+	}
+	for _, in := range []string{
+		"version: 2\nname: demo\naccess:\n  indexing: null\n",
+		"version: 2\nname: demo\naccess:\n  mode: private\n  indexing: true\n",
+		"version: 2\nname: demo\naccess:\n  mode: public\nfeatures:\n  kv: true\n",
+		"version: 2\nname: demo\naccess:\n  mode: public\ncapabilities:\n  llm:\n    chat: true\n",
+	} {
+		if _, err := ParseManifest([]byte(in)); err == nil {
+			t.Fatalf("accepted invalid v2 reach posture: %q", in)
+		}
+	}
+}
+
+func TestGenerateManifestAlwaysEmitsV2(t *testing.T) {
+	b, err := GenerateManifest(Manifest{Version: 1, Name: "demo", Tags: []string{"team", "demo"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParseManifest(b)
+	if err != nil || m.Version != 2 || len(m.Tags) != 2 || m.Tags[0] != "demo" || m.Tags[1] != "team" {
+		t.Fatalf("generated manifest=%s parsed=%#v err=%v", b, m, err)
+	}
+}
 func TestManifestAcceptsLogicalLLMChatRequestOnly(t *testing.T) {
 	m, err := ParseManifest([]byte("version: 1\nname: chat\ncapabilities:\n  llm:\n    chat: true\n"))
 	if err != nil || !m.LLMChat {

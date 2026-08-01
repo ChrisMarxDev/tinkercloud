@@ -74,6 +74,24 @@ the control-plane mark, stylesheet, or chrome.
   still applies, and omit the action on encoding failure; never call a remote
   QR service or encode a release path, credential, session, or app-selected
   identity.
+- A viewer team catalog is a separate global-identity surface, never a
+  role-weakened dashboard. Render only the server-authorized private apps plus
+  effective public apps. Local search/tag controls may inspect only those
+  rendered cards, remain hidden until initialization, leave every card visible
+  without JavaScript, announce a polite result count, and never fetch or store.
+- Catalog cards show escaped active immutable description/tags, stable URL, and
+  explicit Private/Public text. Public never implies capability access. Catalog
+  search matches only rendered slug, active description, and tags
+  case-insensitively; an optional tag select matches rendered canonical tags
+  exactly.
+- Owner/operator insights use existing stat/table primitives and the exact
+  label “Approximate visitors.” Show page views, last activity, and textual
+  daily values; unavailable is never rendered as zero. No viewer, app SDK,
+  deployment-agent, or unrelated-deployer markup may contain analytics values.
+- Public publishing copy must state that anyone on the internet can open the
+  app, keep indexing as a separate default-off fact, and retain exact
+  server-side broadening confirmation. In the first pilot, UI displays the
+  operator public gate but root-local CLI owns the mutation.
 - After a successful irreversible app deletion, the redirected operational
   dashboard's server read model excludes the app from its list, local
   search/filter inputs and results, and visible count because confirmed
