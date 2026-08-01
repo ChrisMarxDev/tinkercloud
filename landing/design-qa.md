@@ -4,9 +4,9 @@
 
 - Selected direction: `/Users/christophermarx/.codex/generated_images/019fa33d-9a0d-70a1-9bb3-3a34ff926e3d/call_wcDdDHxXjsUAzkqa2BE62nrA.png`
 - Supplied brand asset: `public/tinkercloud-icon.svg`
-- Desktop implementation: `/private/tmp/tinkercloud-value-p0-desktop.png`
-- Mobile hero implementation: `/private/tmp/tinkercloud-value-p0-mobile.png`
-- Mobile receipt implementation: `/private/tmp/tinkercloud-value-p0-mobile-receipt.png`
+- Desktop implementation: `/private/tmp/tinkercloud-command-only-desktop.png`
+- Mobile hero implementation: `/private/tmp/tinkercloud-command-only-mobile.png`
+- Mobile command implementation: `/private/tmp/tinkercloud-command-only-mobile-command.png`
 
 ## Capture state
 
@@ -15,7 +15,7 @@
 - Source artwork: 864 × 1821 pixels
 - Page state: public static landing page, default state
 - Interaction states checked: “See one deploy” anchor navigation, operator setup
-  link semantics, deploy-command copy confirmation, and SDK code copy
+  link semantics, and SDK code copy
 
 ## Comparison evidence
 
@@ -35,17 +35,18 @@ spacing, and copy can be judged without full-page screenshot scaling.
 - Spacing: the large hero breathing room, compact three-step sequence, and
   grouped essentials preserve the selected direction's hierarchy.
 - Color: warm cream, deep grape, cobalt, pink, and soft lilac match the visual
-  target without introducing gradients.
+  target. Decorative highlights now live only on the outer canvas, never in a
+  content element or card.
 - Assets: only the supplied Tinkercloud mark is used. No borrowed mascot or
   character artwork is present.
 - Copy: auth, app-scoped storage, ephemeral live sockets, and the typed client
   SDK are all represented. The code card uses actual Tinkercloud SDK methods. The hero
   now names the team-tool category, deployer/agent use case, operator-owned VPS,
   and stable private URL outcome before explaining platform capabilities.
-- Terminal receipt: the command quotes the wildcard viewer rule, wraps at
-  semantic command/URL boundaries on mobile, and visualizes only existing
-  activation and anonymous-denial evidence. Copy controls retain visible text,
-  accessible names, and polite confirmation.
+- Terminal command: the hero shows only
+  `tinker deploy . --allow '*@acme.com'`. The wildcard viewer rule is quoted,
+  and the command wraps at its two semantic spans on mobile without simulated
+  output, terminal chrome, a generated URL, or extra controls.
 - Responsive behavior: no horizontal overflow at 390 px; cards, actions, code,
   and feature rows reflow cleanly.
 
@@ -90,6 +91,11 @@ spacing, and copy can be judged without full-page screenshot scaling.
   grape “trusted deploy receipt,” rewrote the hero around the private team-tool
   outcome, and separated the deployer and operator actions. Desktop and 390 px
   checks show no horizontal overflow; reduced motion removes the receipt reveal.
+- Pass 13: reduced the hero proof to one static deploy command, replaced the
+  roadmap-qualified LLM card with outcome-led “AI-ready” copy, and moved ten
+  colorful highlights to the page canvas. Desktop and 390 px checks show no
+  horizontal overflow, the command wraps only between semantic spans, and the
+  browser console has no warnings or errors.
 - P3 intentional adaptation: the production code section uses a two-column
   desktop layout for readability instead of the artwork's full-width card.
 - P3 intentional adaptation: the supplied SVG keeps its native proportions,

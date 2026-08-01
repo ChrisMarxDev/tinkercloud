@@ -6,9 +6,8 @@ The public landing page lets a prospective operator or deployer understand in
 one viewport that Tinkercloud turns small static apps into private team tools,
 deploys them through one command, and runs on one operator-controlled VPS.
 
-The hero demonstrates a private deployment as a compact receipt: a shell-safe
-command, the existing activation and anonymous-denial evidence, the allowed
-viewer domain from the command, and an illustrative stable private URL.
+The hero demonstrates the product through one shell-safe deploy command. The
+marketing copy owns the outcome; the terminal does not simulate CLI output.
 
 ## Trust boundary and ownership
 
@@ -18,9 +17,8 @@ viewer domain from the command, and an illustrative stable private URL.
 - An operator owns the VPS and platform setup. A deployer owns the action of
   deploying an app they are authorized to manage. A viewer only opens an app
   after the gateway derives identity and evaluates the current policy.
-- Terminal output may summarize only stable evidence already defined by the
-  deployment contract. It must not imply that the marketing Worker performed a
-  deployment or authenticated a viewer.
+- The command is explanatory static text. It must not imply that the marketing
+  Worker performed a deployment or authenticated a viewer.
 
 ## Required first-viewport story
 
@@ -31,11 +29,15 @@ viewer domain from the command, and an illustrative stable private URL.
 - State the one-VPS operator-ownership boundary.
 - Give deployers a direct path to the deploy explanation and operators a direct
   path to setup documentation.
-- Render `tinker deploy ./dist --allow '*@acme.com'` with the wildcard quoted so
+- Render `tinker deploy . --allow '*@acme.com'` with the wildcard quoted so
   a shell cannot expand it.
-- Label the result as an example and keep the private URL non-interactive.
-- Provide keyboard-accessible copy controls for the command and URL, visible
-  copy confirmation, visible focus, and a reduced-motion fallback.
+- Do not add simulated status output, a generated URL, terminal chrome, or
+  controls to the hero command.
+- Describe the product as `AI-ready` by focusing on the private home it gives
+  agent-created tools, without exposing roadmap status or claiming an embedded
+  LLM runtime.
+- Keep colorful decorative highlights on the page canvas. Cards, content
+  surfaces, and controls must not contain decorative highlights.
 
 ## Deny-path test charter
 
@@ -43,11 +45,10 @@ viewer domain from the command, and an illustrative stable private URL.
   deployment request, long-lived secret, app ID, or an untyped authorization
   claim.
 - The example must not render the unsafe unquoted `--allow *@acme.com` command.
-- The receipt must not claim public access, anonymous capabilities, a backend
-  runtime, durable realtime history, deployment to an edge platform, or any
-  planned reach-and-insights feature as available.
-- A decorative or animated status must not be the only representation of the
-  command, activation evidence, anonymous denial, allowed viewers, or URL.
-- The illustrative URL must not be a live navigation target.
+- The terminal must not claim public access, anonymous capabilities, a backend
+  runtime, durable realtime history, deployment status, or any planned
+  reach-and-insights feature as available.
+- The AI-ready message must not imply that LLM execution is included in the
+  current runtime.
 - Metadata and visible copy must not describe Tinkercloud as a general-purpose
   PaaS or obscure that the operator controls the VPS.

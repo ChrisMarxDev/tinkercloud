@@ -44,12 +44,8 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(html, /tinker\.live\.onKvChange/);
   assert.match(
     html,
-    /aria-label="tinker deploy \.\/dist --allow &#x27;\*@acme\.com&#x27;"/,
+    /aria-label="tinker deploy \. --allow &#x27;\*@acme\.com&#x27;"/,
   );
-  assert.match(html, /Release activated/);
-  assert.match(html, /Anonymous access denied/);
-  assert.match(html, /Allowed viewers/);
-  assert.match(html, /https:\/\/launch-map\.apps\.acme\.com/);
   assert.match(html, /one VPS you control/i);
   assert.match(html, /See one deploy/);
   assert.match(html, /Operator setup/);
@@ -59,11 +55,10 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(html, /How to host it/);
   assert.match(html, /One VPS\. One Tinkercloud\./);
   assert.match(html, /Read the README/);
-  assert.match(html, /flourishes-hero/);
-  assert.match(html, /flourishes-hosting/);
+  assert.match(html, /background-highlights/);
   assert.match(html, /aria-hidden="true"/);
-  assert.match(html, /aria-label="Copy deploy command"/);
-  assert.match(html, /aria-label="Copy private URL"/);
+  assert.match(html, /AI-ready/);
+  assert.doesNotMatch(html, /LLM capability|post-V1|when enabled/);
   assert.match(
     html,
     /href="https:\/\/github\.com\/ChrisMarxDev\/tinkercloud#readme"/,
@@ -74,7 +69,9 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   );
   assert.doesNotMatch(html, /Abode|Bloom|Lulu|flower|mascot/i);
   assert.doesNotMatch(html, /--allow \*@acme\.com/);
-  assert.doesNotMatch(html, /href="https:\/\/launch-map\.apps\.acme\.com/);
+  assert.doesNotMatch(html, /Release activated|Anonymous access denied|Allowed viewers/);
+  assert.doesNotMatch(html, /launch-map\.apps\.acme\.com/);
+  assert.doesNotMatch(html, /Copy deploy command|Copy private URL/);
   assert.doesNotMatch(html, /Deploying to edge/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
@@ -91,15 +88,15 @@ test("keeps the static landing page narrow and private by design", async () => {
   assert.doesNotMatch(page, /authorized\s*=\s*true/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.match(page, /title: "Blob storage"/);
-  assert.match(page, /title: "LLM capability · post-V1"/);
+  assert.match(page, /title: "AI-ready"/);
   assert.match(page, /<div className="how" id="how-it-works"/);
   assert.match(styles, /\.how\s*\{[^}]*grid-column: 1 \/ -1;/s);
-  assert.match(styles, /\.deploy-receipt\s*\{[^}]*width: min\(620px/s);
+  assert.match(styles, /\.deploy-command\s*\{[^}]*width: min\(620px/s);
   assert.match(page, /src="\/tinkercloud-mark\.svg"/);
-  assert.match(page, /function Flourishes/);
-  assert.match(page, /<DeployReceipt \/>/);
+  assert.match(page, /function BackgroundHighlights/);
+  assert.match(page, /<DeployCommand \/>/);
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(styles, /\.deploy-reveal/);
+  assert.doesNotMatch(styles, /receipt-|deploy-reveal/);
   assert.match(layout, /@fontsource-variable\/fredoka/);
   await access(
     new URL("../public/tinkercloud-mark.svg", import.meta.url),

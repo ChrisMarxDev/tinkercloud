@@ -21,7 +21,7 @@ import {
   UserCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import { CodeExample } from "./CodeExample";
-import { DeployReceipt } from "./DeployReceipt";
+import { DeployCommand } from "./DeployCommand";
 
 const steps = [
   {
@@ -72,8 +72,8 @@ const essentials = [
   },
   {
     icon: Sparkle,
-    title: "LLM capability · post-V1",
-    body: "Operator-governed AI access without browser secrets when enabled.",
+    title: "AI-ready",
+    body: "A private home for the useful tools your coding agents create.",
   },
 ];
 
@@ -94,17 +94,19 @@ function Brand({ footer = false }: { footer?: boolean }) {
   );
 }
 
-function Flourishes({
-  area,
-}: {
-  area: "hero" | "how" | "essentials" | "code" | "hosting";
-}) {
+function BackgroundHighlights() {
   return (
-    <div className={`flourishes flourishes-${area}`} aria-hidden="true">
-      <Sparkle className="flourish flourish-a" weight="fill" />
-      <Circle className="flourish flourish-b" weight="fill" />
-      <Diamond className="flourish flourish-c" weight="fill" />
-      <StarFour className="flourish flourish-d" weight="fill" />
+    <div className="background-highlights" aria-hidden="true">
+      <Sparkle weight="fill" />
+      <Circle weight="fill" />
+      <Diamond weight="fill" />
+      <StarFour weight="fill" />
+      <Circle weight="fill" />
+      <Sparkle weight="fill" />
+      <StarFour weight="fill" />
+      <Diamond weight="fill" />
+      <Sparkle weight="fill" />
+      <Circle weight="fill" />
     </div>
   );
 }
@@ -112,6 +114,7 @@ function Flourishes({
 export default function Home() {
   return (
     <main>
+      <BackgroundHighlights />
       <nav className="nav" aria-label="Primary navigation">
         <a href="#" aria-label="Tinkercloud home">
           <Brand />
@@ -123,7 +126,6 @@ export default function Home() {
       </nav>
 
       <section className="hero" aria-labelledby="hero-title">
-        <Flourishes area="hero" />
         <div className="hero-copy">
           <p className="private-pill">
             <LockSimpleIcon size={17} weight="bold" aria-hidden="true" />
@@ -180,10 +182,9 @@ export default function Home() {
           </div>
         </div>
 
-        <DeployReceipt />
+        <DeployCommand />
 
         <div className="how" id="how-it-works" aria-labelledby="how-title">
-          <Flourishes area="how" />
           <div className="section-heading">
             <p className="eyebrow">How it works</p>
             <h2 id="how-title">From folder to private.</h2>
@@ -216,7 +217,6 @@ export default function Home() {
       </section>
 
       <section className="essentials" aria-labelledby="essentials-title">
-        <Flourishes area="essentials" />
         <p className="eyebrow">Ready when your app is</p>
         <h2 id="essentials-title">
           The small essentials.
@@ -238,7 +238,6 @@ export default function Home() {
       </section>
 
       <section className="code-section" aria-labelledby="code-title">
-        <Flourishes area="code" />
         <div className="code-copy">
           <p className="eyebrow">One Tinkercloud SDK</p>
           <h2 id="code-title">Useful from line one.</h2>
@@ -260,7 +259,6 @@ export default function Home() {
       </aside>
 
       <section className="hosting" aria-labelledby="hosting-title">
-        <Flourishes area="hosting" />
         <span className="hosting-icon" aria-hidden="true">
           <BookOpenText size={30} weight="bold" />
         </span>

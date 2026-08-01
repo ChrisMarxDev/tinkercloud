@@ -56,7 +56,10 @@ test("deploys from main with environment-scoped credentials and public verificat
     workflow,
     /<title>Tinkercloud — Turn small apps into trusted team tools<\/title>/,
   );
-  assert.match(workflow, /Example private deployment receipt/);
+  assert.match(
+    workflow,
+    /aria-label="tinker deploy \. --allow &#x27;\*@acme\.com&#x27;"/,
+  );
   assert.match(workflow, /Open source\. Your VPS\. Your Tinkercloud\./);
   assert.doesNotMatch(workflow, /pull_request:/);
 });

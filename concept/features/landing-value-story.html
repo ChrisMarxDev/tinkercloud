@@ -63,7 +63,7 @@
         <tbody>
           <tr><td>Category</td><td>“Your private web” names the category in the headline.</td><td>“Small apps” is broad; the category arrives in body copy.</td><td>Name the private-web/team-tool category in the hero without copying Jot's words.</td></tr>
           <tr><td>Audience and job</td><td>Names teams, agents, pages, tools, services, and one push.</td><td>Names apps, VPS, open internet, and team access, but not the generated-work problem.</td><td>Lead with deployers and agents turning ad hoc output into trusted team tools.</td></tr>
-          <tr><td>Command proof</td><td>A terminal shows the command and its returned URL as one event.</td><td>A command pill and separate URL card illustrate a flow but not real CLI feedback.</td><td>Use a compact terminal scene with command, activation evidence, anonymous-denial evidence, and the final URL.</td></tr>
+          <tr><td>Command proof</td><td>A terminal makes the core action immediately legible.</td><td>A command pill and separate URL card over-explain a simple promise.</td><td>Use one high-contrast terminal command; let the surrounding copy explain the outcome.</td></tr>
           <tr><td>Thesis repetition</td><td>Each major section restates a reason to choose Jot.</td><td>Lower sections list steps and capabilities more than reasons.</td><td>Organize around “one command,” “private by default,” “one VPS,” and “made for generated work.”</td></tr>
           <tr><td>Proof</td><td>Shows concrete live artifacts and its own analytics dashboard.</td><td>Shows abstract files, features, and SDK code.</td><td>Add specific app use cases now; add real public examples only after the public-static pilot ships.</td></tr>
           <tr><td>Identity</td><td>Editorial black, white, and purple.</td><td>Friendly cream, grape, cobalt, rounded type, and playful cloud forms.</td><td>Keep Tinkercloud's identity; increase copy precision and terminal contrast instead of imitating Jot.</td></tr>
@@ -76,7 +76,7 @@
         <p class="eyebrow">Scope</p>
         <ul>
           <li>Rewrite the hero around category, audience, action, and trust.</li>
-          <li>Replace the decorative command pill with a reusable terminal-result scene.</li>
+          <li>Replace the decorative command flow with one focused terminal command.</li>
           <li>Reorder the page from value proof to product mechanics.</li>
           <li>Group technical capabilities by the work they remove for deployers and operators.</li>
           <li>Add concrete generated-work examples: reports, prototypes, dashboards, review tools, forms, games, and small utilities.</li>
@@ -101,7 +101,7 @@
       <p class="eyebrow">Proposed content architecture</p>
       <h2>Lead with the outcome; reveal the platform in layers</h2>
       <ol>
-        <li><strong>Hero — category and result.</strong> State the private-web promise, name teams and agents, show the real deploy command and returned protected URL, then offer “See one deploy” and “View on GitHub.”</li>
+        <li><strong>Hero — category and result.</strong> State the private-web promise, name teams and agents, show the deploy command once, then offer “See one deploy” and “View on GitHub.”</li>
         <li><strong>Why Tinkercloud — four decision reasons.</strong> Private by default, simple by default, made for generated work, and self-hosted as one understandable system.</li>
         <li><strong>What one deploy removes.</strong> Explain built-in sign-in, access policy, immutable activation, TLS, storage, and live updates as work the deployer does not repeat.</li>
         <li><strong>What teams make.</strong> Use concrete artifact cards rather than generic feature icons. Every example should name a recognizable job and the person who benefits.</li>
@@ -140,23 +140,14 @@
 
     <section id="terminal">
       <p class="eyebrow">Terminal visual system</p>
-      <h2>Show the command, the trust proof, and the result together</h2>
-      <pre><span class="muted">Deploy a private team app</span>
-
-$ tinker deploy ./dist --allow '*@acme.com'
-
-✓ release activated
-✓ anonymous access denied
-✓ allowed viewers: *@acme.com
-
-Private URL  https://launch-map.apps.acme.com</pre>
+      <h2>Show the command. Stop there.</h2>
+      <pre>$ tinker deploy . --allow '*@acme.com'</pre>
       <ul>
-        <li>Use a deep-grape terminal surface, cream text, cobalt prompt, mint success, and yellow in-progress accents so it belongs to Tinkercloud.</li>
+        <li>Use a deep-grape terminal surface, cream text, and a cobalt prompt so it belongs to Tinkercloud.</li>
         <li>Use one shell-safe, contract-backed command. The wildcard allow rule must be quoted so the shell cannot expand it.</li>
-        <li>Animate only one purposeful sequence: command, verification, URL. Respect reduced motion and show all content immediately when motion is disabled.</li>
-        <li>Add copy controls for the command and URL, visible keyboard focus, an accessible live status, and a persistent text label instead of color-only state.</li>
-        <li>Reuse the same component for future setup and public-publishing examples; never style unshipped commands as runnable.</li>
-        <li>Derive every displayed status line from stable CLI fixtures or documentation contracts before implementation.</li>
+        <li>Do not add terminal chrome, status lines, generated URLs, copy controls, or animation.</li>
+        <li>Wrap only at semantic command boundaries on small screens.</li>
+        <li>Let the headline and supporting copy sell the result; the terminal only makes the action tangible.</li>
       </ul>
     </section>
 
@@ -166,10 +157,10 @@ Private URL  https://launch-map.apps.acme.com</pre>
       <table>
         <thead><tr><th>Keep</th><th>Tighten</th><th>Signature</th></tr></thead>
         <tbody>
-          <tr><td>Fredoka display voice, Nunito Sans body, cream canvas, grape text, cobalt actions, cloud mark, rounded cards, restrained colorful flourishes.</td><td>Reduce empty hero height, use fewer decorative flourishes near dense copy, increase body width/contrast where needed, and replace generic feature symmetry with editorial grouping.</td><td>The memorable element is the “trusted deploy receipt”: a terminal scene that visibly turns generated files into a verified private URL.</td></tr>
+          <tr><td>Fredoka display voice, Nunito Sans body, cream canvas, grape text, cobalt actions, cloud mark, rounded cards, and playful color.</td><td>Keep colorful highlights in the page background, away from content and card surfaces; increase body width and contrast where needed.</td><td>The memorable element is the one-command slab: a single decisive action beside a clear outcome.</td></tr>
         </tbody>
       </table>
-      <p>The aesthetic risk is a larger, darker terminal receipt inside the
+      <p>The aesthetic risk is a darker terminal command inside the
         otherwise light playful page. It adds technical credibility and focus
         without turning the whole site into a generic dark developer landing
         page.</p>
@@ -179,7 +170,7 @@ Private URL  https://launch-map.apps.acme.com</pre>
       <p class="eyebrow">Implementation sketch</p>
       <h2>Four bounded passes</h2>
       <ol>
-        <li><strong>P0 — Message and hero proof.</strong> Update the landing copy contract and rendered-HTML tests; implement the hero thesis, role-aware CTA labels, and accessible terminal receipt using only currently shipped behavior.</li>
+        <li><strong>P0 — Message and hero proof.</strong> Update the landing copy contract and rendered-HTML tests; implement the hero thesis, role-aware CTA labels, and static one-command terminal.</li>
         <li><strong>P1 — Story and examples.</strong> Reorder the lower page, replace the capability-first grid with decision reasons and concrete use cases, retain the SDK proof, and tighten the one-VPS/honest-limits section.</li>
         <li><strong>P2 — Reach roadmap bridge.</strong> Add a clearly planned section for team catalog, public static publishing, and local insights. Promote each item from “coming next” to “available” only after its contract, deny matrix, deployment proof, and UI exit evidence pass.</li>
         <li><strong>P3 — Public proof.</strong> After the public-static pilot, replace illustrative use cases with real first-party examples and link to them. Use Tinkercloud's own bounded local insights for those apps; do not add third-party marketing telemetry.</li>
@@ -194,10 +185,10 @@ Private URL  https://launch-map.apps.acme.com</pre>
       <ul>
         <li>In a five-second comprehension test, at least four of five participants can say that Tinkercloud self-hosts small team apps, makes them private by default, and deploys them with one command.</li>
         <li>The first viewport names the audience, operator ownership, deploy action, protected URL outcome, and primary next action.</li>
-        <li>The terminal command is shell-safe, matches the CLI contract, and displays no status the real deploy path cannot prove.</li>
+        <li>The terminal displays exactly <code>tinker deploy . --allow '*@acme.com'</code> and no simulated output.</li>
         <li>Current and planned capabilities are visually and verbally distinct; no planned feature is presented as shipped.</li>
-        <li>At 390 px and 1440 px, the headline, terminal, URL, and CTAs have no clipping or horizontal overflow.</li>
-        <li>Heading order, keyboard focus, copy controls, status announcements, contrast, and reduced motion pass targeted accessibility checks.</li>
+        <li>At 390 px and 1440 px, the headline, command, and CTAs have no clipping or horizontal overflow.</li>
+        <li>Heading order, keyboard focus, contrast, and semantic command text pass targeted accessibility checks.</li>
         <li>Rendered-HTML tests assert the thesis, current/planned labels, shell-safe command, honest limits, and working navigation targets.</li>
         <li>Production build, lint, deployment dry run, GitHub action, and public HTTPS content verification pass.</li>
       </ul>
@@ -210,7 +201,7 @@ Private URL  https://launch-map.apps.acme.com</pre>
         <li><strong>Primary CTA?</strong> Use “See one deploy” until the repository and installer are genuinely ready for first-time operators; keep GitHub as the secondary proof/action.</li>
         <li><strong>Public reach in the hero?</strong> Not yet. Keep the hero's shipped promise private; describe public-static publishing in a clearly planned section until L3 exits.</li>
         <li><strong>Show real examples now?</strong> Use named illustrative jobs without fake links. Replace them with first-party live examples at L4.</li>
-        <li><strong>Animated terminal?</strong> Yes, once, under four seconds, with reduced-motion and static fallbacks. Clarity must not depend on the animation.</li>
+        <li><strong>Animated terminal?</strong> No. The command should be instantly legible and stay visually quiet.</li>
       </ul>
     </section>
 
@@ -228,6 +219,6 @@ Private URL  https://launch-map.apps.acme.com</pre>
     </section>
   </main>
 
-  <footer><p>Concept decision: clarify the shipped private-web promise now, stage public reach honestly, and make the verified terminal receipt the landing page's signature.</p></footer>
+  <footer><p>Concept decision: clarify the private-web promise, keep decorative highlights in the canvas, and make one deploy command the landing page's signature.</p></footer>
 </body>
 </html>
