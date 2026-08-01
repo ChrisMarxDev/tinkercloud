@@ -3,6 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"));
+const workflow = readFileSync(
+  new URL("../../.github/workflows/deploy-landing.yml", import.meta.url),
+  "utf8",
+);
 
 test("defines the typed Cloudflare Worker deployment boundary", () => {
   assert.equal(config.name, "tinkercloud-landing");
@@ -33,4 +37,25 @@ test("denies legacy hosts, implicit or additional routes, and embedded credentia
 
   const serialized = JSON.stringify(config);
   assert.doesNotMatch(serialized, /(?:api[_-]?key|password|secret|token)/i);
+});
+
+test("deploys from main with environment-scoped credentials and public verification", () => {
+  assert.match(workflow, /branches:\s*\n\s*- main/);
+  assert.match(workflow, /environment:\s*\n\s*name: landing-production/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(
+    workflow,
+    /apiToken: \$\{\{ secrets\.CLOUDFLARE_API_TOKEN \}\}/,
+  );
+  assert.match(
+    workflow,
+    /accountId: \$\{\{ secrets\.CLOUDFLARE_ACCOUNT_ID \}\}/,
+  );
+  assert.match(workflow, /https:\/\/tinkercloud\.fun\//);
+  assert.match(
+    workflow,
+    /<title>Tinkercloud — Your small apps, securely shared<\/title>/,
+  );
+  assert.match(workflow, /Open source\. Your VPS\. Your Tinkercloud\./);
+  assert.doesNotMatch(workflow, /pull_request:/);
 });

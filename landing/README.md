@@ -29,6 +29,18 @@ npm run cf:whoami
 npm run deploy
 ```
 
+Production deploys also run automatically after landing changes reach `main`,
+or by manually dispatching `.github/workflows/deploy-landing.yml`. Configure
+these secrets in the GitHub `landing-production` Environment:
+
+- `CLOUDFLARE_API_TOKEN`: a narrowly scoped token that can deploy this Worker
+  and manage its exact custom-domain route.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns the Worker and
+  `tinkercloud.fun`.
+
+The action tests and builds before deployment, then verifies the public HTTPS
+page and its identifying content before reporting success.
+
 The checked-in Wrangler config publishes the Worker only at the exact
 `tinkercloud.fun` custom domain. The account's `workers.dev` and preview URLs
 are disabled. Cloudflare creates the apex DNS record and manages its certificate
