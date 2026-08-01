@@ -74,7 +74,8 @@ jobs:
               --max-time 30 \
               --output "${response_path}" \
               https://tinkercloud.fun/ \
-              && grep -F '<title>Tinkercloud — Your small apps, securely shared</title>' "${response_path}" >/dev/null \
+              && grep -F '<title>Tinkercloud — Turn small apps into trusted team tools</title>' "${response_path}" >/dev/null \
+              && grep -F 'Example private deployment receipt' "${response_path}" >/dev/null \
               && grep -F 'Open source. Your VPS. Your Tinkercloud.' "${response_path}" >/dev/null; then
               exit 0
             fi

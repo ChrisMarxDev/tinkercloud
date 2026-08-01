@@ -17,28 +17,28 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(origin),
-    title: "Tinkercloud — Your small apps, securely shared",
+    title: "Tinkercloud — Turn small apps into trusted team tools",
     description:
-      "Turn a folder of static files into a private, secure URL. Tinkercloud handles hosting, sign-in, and access control.",
+      "Turn dashboards, prototypes, reports, and utilities into trusted private team tools on one VPS you control.",
     openGraph: {
-      title: "Tinkercloud — Your small apps, securely shared",
+      title: "Tinkercloud — Turn small apps into trusted team tools",
       description:
-        "Private static app hosting with sign-in and access control built in.",
+        "Self-hosted private app deployment with sign-in and access control built in.",
       type: "website",
       images: [
         {
           url: "/og.png",
           width: 1733,
           height: 909,
-          alt: "Tinkercloud — Your small apps, securely shared",
+          alt: "Tinkercloud private app deployment",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Tinkercloud — Your small apps, securely shared",
+      title: "Tinkercloud — Turn small apps into trusted team tools",
       description:
-        "Private static app hosting with sign-in and access control built in.",
+        "Self-hosted private app deployment with sign-in and access control built in.",
       images: ["/og.png"],
     },
   };

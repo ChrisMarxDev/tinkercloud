@@ -29,22 +29,30 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Tinkercloud — Your small apps, securely shared<\/title>/i);
-  assert.match(html, /Your/);
-  assert.match(html, /small apps\./);
-  assert.match(html, /Securely/);
-  assert.match(html, /shared\./);
+  assert.match(html, /<title>Tinkercloud — Turn small apps into trusted team tools<\/title>/i);
+  assert.match(html, /Turn small apps into/);
+  assert.match(html, /trusted team tools\./);
+  assert.match(html, /Self-hosted/);
+  assert.match(html, /Private by default/);
+  assert.match(html, /Agent-ready/);
+  assert.match(html, /coding agents create dashboards, prototypes, reports, and utilities/i);
   assert.match(html, /From folder to private\./);
   assert.match(html, /The small essentials\./);
   assert.match(html, /Live sockets/);
   assert.match(html, /@tinkercloud\/sdk/);
   assert.match(html, /tinker\.user\.current/);
   assert.match(html, /tinker\.live\.onKvChange/);
-  assert.match(html, /tinker deploy \.\/dist/);
-  assert.match(html, /--allow \*@acme\.com/);
-  assert.match(html, /apps live on the open internet/i);
-  assert.match(html, /only your team can get in/i);
-  assert.match(html, /open-source platform you host on your own VPS/i);
+  assert.match(
+    html,
+    /aria-label="tinker deploy \.\/dist --allow &#x27;\*@acme\.com&#x27;"/,
+  );
+  assert.match(html, /Release activated/);
+  assert.match(html, /Anonymous access denied/);
+  assert.match(html, /Allowed viewers/);
+  assert.match(html, /https:\/\/launch-map\.apps\.acme\.com/);
+  assert.match(html, /one VPS you control/i);
+  assert.match(html, /See one deploy/);
+  assert.match(html, /Operator setup/);
   assert.match(html, /Runs on your VPS/);
   assert.match(html, /Open source on GitHub/);
   assert.match(html, /View on GitHub/);
@@ -54,6 +62,8 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(html, /flourishes-hero/);
   assert.match(html, /flourishes-hosting/);
   assert.match(html, /aria-hidden="true"/);
+  assert.match(html, /aria-label="Copy deploy command"/);
+  assert.match(html, /aria-label="Copy private URL"/);
   assert.match(
     html,
     /href="https:\/\/github\.com\/ChrisMarxDev\/tinkercloud#readme"/,
@@ -63,6 +73,9 @@ test("server-renders the complete Tinkercloud landing page", async () => {
     2,
   );
   assert.doesNotMatch(html, /Abode|Bloom|Lulu|flower|mascot/i);
+  assert.doesNotMatch(html, /--allow \*@acme\.com/);
+  assert.doesNotMatch(html, /href="https:\/\/launch-map\.apps\.acme\.com/);
+  assert.doesNotMatch(html, /Deploying to edge/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
@@ -81,9 +94,12 @@ test("keeps the static landing page narrow and private by design", async () => {
   assert.match(page, /title: "LLM capability · post-V1"/);
   assert.match(page, /<div className="how" id="how-it-works"/);
   assert.match(styles, /\.how\s*\{[^}]*grid-column: 1 \/ -1;/s);
-  assert.match(styles, /\.flow-arrow\s*\{\s*display: none;/);
+  assert.match(styles, /\.deploy-receipt\s*\{[^}]*width: min\(620px/s);
   assert.match(page, /src="\/tinkercloud-mark\.svg"/);
   assert.match(page, /function Flourishes/);
+  assert.match(page, /<DeployReceipt \/>/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(styles, /\.deploy-reveal/);
   assert.match(layout, /@fontsource-variable\/fredoka/);
   await access(
     new URL("../public/tinkercloud-mark.svg", import.meta.url),

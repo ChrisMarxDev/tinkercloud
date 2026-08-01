@@ -278,11 +278,11 @@ main {
 
 .hero {
   display: grid;
-  min-height: 710px;
+  min-height: 680px;
   align-items: center;
-  padding: 52px 0 94px;
-  grid-template-columns: 1fr 0.92fr;
-  gap: clamp(52px, 8vw, 104px);
+  padding: 42px 0 90px;
+  grid-template-columns: minmax(0, 1.02fr) minmax(460px, 0.98fr);
+  gap: clamp(48px, 6vw, 82px);
 }
 
 .private-pill {
@@ -294,7 +294,7 @@ main {
   border: 1px solid #f0dca4;
   border-radius: 999px;
   background: var(--yellow-soft);
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   font-weight: 850;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -316,10 +316,10 @@ h3 {
 h1 {
   max-width: 610px;
   margin-bottom: 26px;
-  font-size: clamp(3.285rem, 6.12vw, 5.49rem);
+  font-size: clamp(3.15rem, 5.55vw, 5.05rem);
   font-weight: 650;
-  letter-spacing: -0.042em;
-  line-height: 0.92;
+  letter-spacing: -0.047em;
+  line-height: 0.94;
 }
 
 h1 span {
@@ -372,6 +372,13 @@ h1 span {
   transform: translateY(-1px);
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+}
+
 .button {
   display: inline-flex;
   min-height: 54px;
@@ -393,126 +400,263 @@ h1 span {
   transform: translateY(-3px);
 }
 
-.deploy-flow {
-  display: flex;
+.button-secondary {
+  display: inline-flex;
+  min-height: 54px;
   align-items: center;
-  flex-direction: column;
-}
-
-.app-folder {
-  display: grid;
-  position: relative;
-  width: 260px;
-  height: 190px;
-  place-items: center;
-  border: 1px solid #ded8eb;
-  border-radius: 36px;
+  justify-content: center;
+  gap: 11px;
+  padding: 0 17px;
+  border: 1px solid #d9d1e7;
+  border-radius: 13px;
   background: var(--paper);
-  color: var(--yellow);
-}
-
-.file-icons {
-  display: flex;
-  position: absolute;
-  gap: 0;
-}
-
-.file-icons span {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  border: 1px solid #e3dfe8;
-  border-radius: 16px;
-  background: var(--paper);
-  box-shadow: 0 3px 0 rgba(25, 21, 38, 0.05);
-}
-
-.file-icons span + span {
-  margin-left: -8px;
-}
-
-.file-icons span:nth-child(1) {
-  z-index: 1;
-  color: #df572f;
-}
-
-.file-icons span:nth-child(2) {
-  z-index: 2;
   color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 850;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
 }
 
-.file-icons span:nth-child(3) {
-  z-index: 3;
-  color: #c49500;
-}
-
-.file-icons svg {
-  display: block;
-  shape-rendering: geometricPrecision;
-}
-
-.flow-arrow {
-  margin: 13px 0;
-  color: var(--blue);
-}
-
-.command-card,
-.private-url {
+.button-secondary span {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  gap: 0.35em;
+}
+
+.button-secondary small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.button-secondary:hover {
+  border-color: #b9c8fb;
+  transform: translateY(-2px);
+}
+
+.deploy-receipt {
+  overflow: hidden;
+  width: 100%;
+  border: 1px solid #3c2a77;
+  border-radius: 26px;
+  background: #180752;
+  color: #fffdf6;
+  box-shadow:
+    0 18px 42px rgba(32, 6, 117, 0.18),
+    10px 11px 0 var(--yellow-soft);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  transform: rotate(0.55deg);
+}
+
+.receipt-toolbar {
+  display: grid;
+  min-height: 58px;
+  align-items: center;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: #210966;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.receipt-lights {
+  display: flex;
+  gap: 7px;
+}
+
+.receipt-lights i {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--pink);
+}
+
+.receipt-lights i:nth-child(2) {
+  background: var(--yellow);
+}
+
+.receipt-lights i:nth-child(3) {
+  background: var(--mint);
+}
+
+.receipt-title {
+  color: #ddd4ff;
+  font-size: 0.73rem;
   font-weight: 750;
+  letter-spacing: 0.04em;
 }
 
-.command-card {
-  gap: 14px;
-  min-width: 330px;
-  padding: 20px 25px;
-  border: 1px solid #dcd4ec;
-  border-radius: 19px;
-  background: var(--paper);
-  box-shadow: 0 7px 0 rgba(25, 21, 38, 0.06);
+.receipt-state {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  color: var(--mint);
+  font-size: 0.7rem;
+  font-weight: 800;
 }
 
-.command-card svg {
-  color: var(--blue);
+.receipt-body {
+  padding: 27px 25px 24px;
 }
 
-.command-card code {
+.receipt-context {
+  margin-bottom: 17px;
+  color: #a99bda;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.receipt-command-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.receipt-command-row code {
   display: flex;
   flex-wrap: wrap;
   gap: 0 0.7ch;
+  color: #fffdf6;
+  font-size: clamp(0.72rem, 1.12vw, 0.85rem);
+  font-weight: 700;
 }
 
-.allow-flag {
-  color: var(--blue);
+.receipt-prompt {
+  color: #6f9cff;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
-.private-url {
-  min-width: 350px;
-  gap: 14px;
-  padding: 13px 14px;
-  border: 1px solid #d8d6dd;
-  border-radius: 22px;
-  background: var(--paper);
-  transform: rotate(-1deg);
+.receipt-copy {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #fffdf6;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.67rem;
+  font-weight: 750;
 }
 
-.private-url > svg {
-  margin-left: auto;
-  color: var(--green);
+.receipt-copy:hover {
+  background: rgba(255, 255, 255, 0.13);
 }
 
-.lock-bubble {
+.receipt-evidence {
   display: grid;
-  width: 45px;
-  height: 45px;
+  gap: 10px;
+  margin: 24px 0;
+  padding-left: 25px;
+}
+
+.receipt-evidence p {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #ded6f6;
+  font-size: clamp(0.72rem, 1.1vw, 0.82rem);
+}
+
+.receipt-evidence svg {
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--green);
-  color: white;
+  color: var(--mint);
+}
+
+.receipt-evidence code {
+  color: var(--yellow);
+  font-weight: 750;
+}
+
+.receipt-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 14px 16px 17px;
+  border: 1px solid rgba(201, 244, 214, 0.35);
+  border-radius: 15px;
+  background: rgba(201, 244, 214, 0.09);
+}
+
+.receipt-result > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.receipt-result-label {
+  color: var(--mint);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.receipt-result code {
+  display: flex;
+  flex-wrap: wrap;
+  color: #fffdf6;
+  font-size: clamp(0.72rem, 1.15vw, 0.86rem);
+  font-weight: 750;
+}
+
+.receipt-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 17px 0 0;
+  color: #a99bda;
+  font-size: 0.68rem;
+}
+
+.receipt-footnote svg {
+  flex: 0 0 auto;
+  color: #6f9cff;
+}
+
+.deploy-reveal {
+  animation: deployReveal 440ms ease-out both;
+}
+
+.deploy-reveal-1 {
+  animation-delay: 180ms;
+}
+
+.deploy-reveal-2 {
+  animation-delay: 360ms;
+}
+
+.deploy-reveal-3 {
+  animation-delay: 540ms;
+}
+
+.deploy-reveal-4 {
+  animation-delay: 720ms;
+}
+
+@keyframes deployReveal {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .how {
@@ -906,12 +1050,10 @@ footer {
     grid-template-columns: 1fr;
   }
 
-  .deploy-flow {
-    padding-top: 20px;
-  }
-
-  .flow-arrow {
-    display: none;
+  .deploy-receipt {
+    width: min(620px, calc(100% - 12px));
+    margin-top: 20px;
+    justify-self: center;
   }
 
   .steps {
@@ -1026,15 +1168,10 @@ footer {
     line-height: 0.95;
   }
 
-  .app-folder {
-    width: min(250px, 82vw);
-  }
-
-  .command-card,
-  .private-url {
-    min-width: 0;
-    width: min(340px, 92vw);
-    font-size: 0.82rem;
+  .private-pill {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    line-height: 1.4;
   }
 
   .how {
@@ -1110,7 +1247,10 @@ footer {
     scroll-behavior: auto;
   }
 
-  .button {
+  .button,
+  .button-secondary,
+  .deploy-reveal {
+    animation: none;
     transition: none;
   }
 }

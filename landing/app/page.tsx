@@ -5,15 +5,11 @@ import {
   ArrowUpRight,
   BookOpenText,
   CaretDown,
-  CheckCircle,
   Circle,
   CloudArrowUp,
   Code,
   Database,
   Diamond,
-  FileCssIcon,
-  FileHtmlIcon,
-  FileJsIcon,
   FolderOpen,
   GithubLogo,
   HardDrives,
@@ -25,6 +21,7 @@ import {
   UserCircle,
 } from "@phosphor-icons/react/dist/ssr";
 import { CodeExample } from "./CodeExample";
+import { DeployReceipt } from "./DeployReceipt";
 
 const steps = [
   {
@@ -130,21 +127,16 @@ export default function Home() {
         <div className="hero-copy">
           <p className="private-pill">
             <LockSimpleIcon size={17} weight="bold" aria-hidden="true" />
-            Private by default
+            Self-hosted <span aria-hidden="true">·</span> Private by default{" "}
+            <span aria-hidden="true">·</span> Agent-ready
           </p>
           <h1 id="hero-title">
-            Your
-            <br />
-            small apps.
-            <br />
-            <span>Securely</span>
-            <br />
-            <span>shared.</span>
+            Turn small apps into <span>trusted team tools.</span>
           </h1>
           <p className="lede">
-            Tinkercloud is an open-source platform you host on your own VPS. Your
-            apps live on the open internet, but Tinkercloud securely gates them
-            so only your team can get in.
+            Your team and coding agents create dashboards, prototypes, reports,
+            and utilities. Tinkercloud gives each one a stable private URL,
+            built-in access, and useful app capabilities—on one VPS you control.
           </p>
           <div className="hero-facts" aria-label="Tinkercloud ownership">
             <span className="hero-fact">
@@ -162,54 +154,43 @@ export default function Home() {
               Open source on GitHub
             </a>
           </div>
-          <a className="button" href="#how-it-works">
-            See how it works
-            <ArrowDown size={19} weight="bold" aria-hidden="true" />
-          </a>
-        </div>
-
-        <div className="deploy-flow" aria-label="Tinkercloud deployment flow">
-          <div className="app-folder">
-            <FolderOpen size={112} weight="fill" aria-hidden="true" />
-            <div className="file-icons" aria-hidden="true">
+          <div className="hero-actions">
+            <a
+              className="button"
+              href="#how-it-works"
+              aria-label="Deployer: see one deploy"
+            >
+              See one deploy
+              <ArrowDown size={19} weight="bold" aria-hidden="true" />
+            </a>
+            <a
+              className="button-secondary"
+              href="https://github.com/ChrisMarxDev/tinkercloud#readme"
+              target="_blank"
+              rel="noreferrer"
+              title="Repository is private for now"
+              aria-label="Operator setup"
+            >
               <span>
-                <FileHtmlIcon size={36} weight="bold" />
+                <small>Operator</small>
+                setup
               </span>
-              <span>
-                <FileCssIcon size={36} weight="bold" />
-              </span>
-              <span>
-                <FileJsIcon size={36} weight="bold" />
-              </span>
-            </div>
-          </div>
-          <ArrowDown className="flow-arrow" size={42} weight="bold" aria-hidden="true" />
-          <div className="command-card">
-            <TerminalWindow size={26} weight="bold" aria-hidden="true" />
-            <code>
-              <span>tinker deploy ./dist</span>
-              <span className="allow-flag">{" --allow *@acme.com"}</span>
-            </code>
-          </div>
-          <ArrowDown className="flow-arrow" size={42} weight="bold" aria-hidden="true" />
-          <div className="private-url">
-            <span className="lock-bubble">
-              <LockSimpleIcon size={24} weight="bold" aria-hidden="true" />
-            </span>
-            <code>project.apps.example</code>
-            <CheckCircle size={34} weight="fill" aria-hidden="true" />
+              <ArrowUpRight size={18} weight="bold" aria-hidden="true" />
+            </a>
           </div>
         </div>
 
-      <div className="how" id="how-it-works" aria-labelledby="how-title">
-        <Flourishes area="how" />
-        <div className="section-heading">
-          <p className="eyebrow">How it works</p>
-          <h2 id="how-title">From folder to private.</h2>
-        </div>
+        <DeployReceipt />
 
-        <ol className="steps">
-          {steps.map((step) => {
+        <div className="how" id="how-it-works" aria-labelledby="how-title">
+          <Flourishes area="how" />
+          <div className="section-heading">
+            <p className="eyebrow">How it works</p>
+            <h2 id="how-title">From folder to private.</h2>
+          </div>
+
+          <ol className="steps">
+            {steps.map((step) => {
             const StepIcon = step.icon;
             return (
               <li key={step.number}>
@@ -229,10 +210,10 @@ export default function Home() {
                 )}
               </li>
             );
-          })}
-        </ol>
-      </div>
-    </section>
+            })}
+          </ol>
+        </div>
+      </section>
 
       <section className="essentials" aria-labelledby="essentials-title">
         <Flourishes area="essentials" />

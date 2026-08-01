@@ -54,8 +54,9 @@ test("deploys from main with environment-scoped credentials and public verificat
   assert.match(workflow, /https:\/\/tinkercloud\.fun\//);
   assert.match(
     workflow,
-    /<title>Tinkercloud — Your small apps, securely shared<\/title>/,
+    /<title>Tinkercloud — Turn small apps into trusted team tools<\/title>/,
   );
+  assert.match(workflow, /Example private deployment receipt/);
   assert.match(workflow, /Open source\. Your VPS\. Your Tinkercloud\./);
   assert.doesNotMatch(workflow, /pull_request:/);
 });

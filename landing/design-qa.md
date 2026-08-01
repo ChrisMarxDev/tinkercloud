@@ -4,8 +4,9 @@
 
 - Selected direction: `/Users/christophermarx/.codex/generated_images/019fa33d-9a0d-70a1-9bb3-3a34ff926e3d/call_wcDdDHxXjsUAzkqa2BE62nrA.png`
 - Supplied brand asset: `public/tinkercloud-icon.svg`
-- Desktop implementation: `/private/tmp/tinkercloud-allowlist-desktop.png`
-- Mobile implementation: `/private/tmp/tinkercloud-allowlist-mobile.png`
+- Desktop implementation: `/private/tmp/tinkercloud-value-p0-desktop.png`
+- Mobile hero implementation: `/private/tmp/tinkercloud-value-p0-mobile.png`
+- Mobile receipt implementation: `/private/tmp/tinkercloud-value-p0-mobile-receipt.png`
 
 ## Capture state
 
@@ -13,7 +14,8 @@
 - Mobile viewport: 390 × 844 CSS pixels at DPR 1
 - Source artwork: 864 × 1821 pixels
 - Page state: public static landing page, default state
-- Interaction states checked: “See how it works” anchor navigation and successful code copy
+- Interaction states checked: “See one deploy” anchor navigation, operator setup
+  link semantics, deploy-command copy confirmation, and SDK code copy
 
 ## Comparison evidence
 
@@ -38,8 +40,12 @@ spacing, and copy can be judged without full-page screenshot scaling.
   character artwork is present.
 - Copy: auth, app-scoped storage, ephemeral live sockets, and the typed client
   SDK are all represented. The code card uses actual Tinkercloud SDK methods. The hero
-  now explains that apps have internet-reachable URLs while access remains
-  gateway-gated to the allow-listed team.
+  now names the team-tool category, deployer/agent use case, operator-owned VPS,
+  and stable private URL outcome before explaining platform capabilities.
+- Terminal receipt: the command quotes the wildcard viewer rule, wraps at
+  semantic command/URL boundaries on mobile, and visualizes only existing
+  activation and anonymous-denial evidence. Copy controls retain visible text,
+  accessible names, and polite confirmation.
 - Responsive behavior: no horizontal overflow at 390 px; cards, actions, code,
   and feature rows reflow cleanly.
 
@@ -80,6 +86,10 @@ spacing, and copy can be judged without full-page screenshot scaling.
 - Pass 11: corrected the brand source to `tinkercloud-mark.svg`, keeping the
   transparent purple-and-blue cloud mark in the header and footer while the
   page-level flourishes provide the surrounding color.
+- Pass 12: replaced the abstract folder-command-URL illustration with the dark
+  grape “trusted deploy receipt,” rewrote the hero around the private team-tool
+  outcome, and separated the deployer and operator actions. Desktop and 390 px
+  checks show no horizontal overflow; reduced motion removes the receipt reveal.
 - P3 intentional adaptation: the production code section uses a two-column
   desktop layout for readability instead of the artwork's full-width card.
 - P3 intentional adaptation: the supplied SVG keeps its native proportions,
