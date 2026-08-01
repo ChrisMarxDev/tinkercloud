@@ -43,6 +43,7 @@ npm-debug.log*
 
 # Tool caches and editor/OS noise
 .private/
+.codex/
 .task/
 .cache/
 **/__pycache__/
