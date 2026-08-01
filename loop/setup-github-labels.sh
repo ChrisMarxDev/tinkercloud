@@ -6,7 +6,7 @@ REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 TOKEN_FILE="${TOKEN_FILE:-${REPO_DIR}/GITHUB_TOKEN}"
 HERMES_ENV_FILE="${HERMES_ENV_FILE:-${HERMES_HOME:-$HOME/.hermes}/.env}"
 GH_BIN="${GH_BIN:-gh}"
-REPO_SLUG="${REPO_SLUG:-ChrisMarxDev/tinker}"
+REPO_SLUG="${REPO_SLUG:-ChrisMarxDev/tinkercloud}"
 
 if ! command -v "${GH_BIN}" >/dev/null 2>&1; then
   echo "GitHub CLI not found. Set GH_BIN or install gh." >&2

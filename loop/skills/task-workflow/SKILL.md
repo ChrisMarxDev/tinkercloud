@@ -175,16 +175,16 @@ contract requires them. Never weaken or skip a failed protection check.
 
 ## GitHub command pattern
 
-Always pass `--repo "${REPO_SLUG:-ChrisMarxDev/tinker}"` and prefer JSON output.
+Always pass `--repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}"` and prefer JSON output.
 Useful operations include:
 
 ```sh
-gh issue view 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --comments --json number,title,body,labels,comments,url
-gh issue list --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --state all --search "phrase" --json number,title,state,url
-gh pr list --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --state all --search "123" --json number,title,state,url,headRefName
-gh issue edit 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --remove-label inbox --add-label open
-gh issue comment 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --body-file /tmp/tinker-issue-comment.md
-gh pr create --repo "${REPO_SLUG:-ChrisMarxDev/tinker}" --draft --title "..." --body-file /tmp/tinker-pr.md
+gh issue view 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --comments --json number,title,body,labels,comments,url
+gh issue list --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --state all --search "phrase" --json number,title,state,url
+gh pr list --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --state all --search "123" --json number,title,state,url,headRefName
+gh issue edit 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --remove-label inbox --add-label open
+gh issue comment 123 --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --body-file /tmp/tinkercloud-issue-comment.md
+gh pr create --repo "${REPO_SLUG:-ChrisMarxDev/tinkercloud}" --draft --title "..." --body-file /tmp/tinkercloud-pr.md
 ```
 
 If required labels are missing, use `loop/setup-github-labels.sh` only when the

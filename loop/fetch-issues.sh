@@ -8,7 +8,7 @@ OUT_FILE="${1:-${STATE_DIR}/issues.json}"
 TOKEN_FILE="${TOKEN_FILE:-${REPO_DIR}/GITHUB_TOKEN}"
 HERMES_ENV_FILE="${HERMES_ENV_FILE:-${HERMES_HOME:-$HOME/.hermes}/.env}"
 GH_BIN="${GH_BIN:-gh}"
-REPO_SLUG="${REPO_SLUG:-ChrisMarxDev/tinker}"
+REPO_SLUG="${REPO_SLUG:-ChrisMarxDev/tinkercloud}"
 APPROVER_LOGINS="${APPROVER_LOGINS:-ChrisMarxDev}"
 
 mkdir -p "$(dirname "${OUT_FILE}")"

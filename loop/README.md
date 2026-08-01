@@ -43,7 +43,7 @@ newer issue state.
 Run once with a repository-admin credential:
 
 ```sh
-GH_TOKEN=... REPO_SLUG=ChrisMarxDev/tinker ./loop/setup-github-labels.sh
+GH_TOKEN=*** REPO_SLUG=ChrisMarxDev/tinkercloud ./loop/setup-github-labels.sh
 ```
 
 The labels are:
@@ -99,14 +99,14 @@ wrapper under Hermes home and the real logic in this repository:
 ```sh
 #!/usr/bin/env sh
 set -eu
-cd /root/tinker
+cd /root/tinkercloud
 exec bash ./loop/run-hermes-task-loop.sh
 ```
 
 Desired scheduler shape:
 
 ```text
-tinker task loop    every 30m    script: tinker_task_loop.sh    no_agent: true
+tinkercloud task loop    every 30m    script: run-hermes-task-loop.sh    no_agent: true
 ```
 
 `no_agent: true` is intentional. The scheduled script performs cheap
