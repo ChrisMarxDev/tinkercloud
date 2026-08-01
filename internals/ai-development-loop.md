@@ -166,7 +166,7 @@ tenancy, recovery, and secret-handling failures over style.
 
 ## Unattended GitHub issue loop
 
-The repository may run the recurring issue loop in [`loop/`](../../loop/).
+The repository may run the recurring issue loop in [`loop/`](../loop/).
 It uses deterministic GitHub prefetch so an empty queue causes no model call.
 Issue text is untrusted intake, and `open` means refined rather than authorized.
 Repository changes require a current `implement` label applied by a configured
@@ -175,7 +175,7 @@ trusted maintainer, with no `pending` label.
 The loop carries approved work only to a feature branch and draft pull request.
 It does not merge, bypass protected `main`, publish, release, or access
 production/signing credentials. See the executable state and deny contract in
-[`specs/delivery/github-issue-loop-contract.md`](../../specs/delivery/github-issue-loop-contract.md).
+[`specs/delivery/github-issue-loop-contract.md`](../specs/delivery/github-issue-loop-contract.md).
 
 ## Development deployment loop for apps hosted on Tinkercloud
 

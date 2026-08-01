@@ -64,7 +64,11 @@ Already implemented foundations:
   search/status filtering, stable launch, hard deletion, and no deployer
   rollback; and
 - one global browser identity with dashboard-role checks and app-bound
-  handoffs.
+  handoffs; and
+- an operator-only, server-derived coding-agent handoff prompt with the fixed
+  repository, exact admin endpoint, normal deployer OTP guidance, and a
+  no-JavaScript selectable-copy fallback. This narrows only the first handoff;
+  it does not complete the remaining guided-flow slice.
 
 Remaining vertical path:
 
@@ -191,6 +195,11 @@ wrong-app, and wrong-scope attempts leave it untouched; a metadata write
 failure denies and rolls back. Bounded token list and dashboard models expose
 only this safe timestamp (never a raw token/hash, IP, or user agent), and
 cross-owner token reads are denied.
+
+The dashboard deliberately renders no token count, inventory, or mutation form
+until the ownership, scope-selection, lifetime, status, and revocation UX is
+redesigned. Scoped API/CLI token management and the display-once response
+remain available and retain the same authorization and audit boundary.
 
 Evidence implemented: Tinkercloud-owned platform login, app-origin login,
 one-time-code verification, display-once token, dashboard, and operations
@@ -381,7 +390,7 @@ Evidence implemented:
 Live release evidence:
 
 - the signed `0.1.0` build passed the guarded clean-host VPS acceptance run on
-  2026-07-31 at `testing.tinkercloud.fun`;
+  2026-07-31 at the public-safe `testing.tinkercloud.example` placeholder;
 - real gateway requests proved two-app KV/collection isolation, restart
   persistence, anonymous denial with no app bytes, and fixture-scoped cleanup;
   and
@@ -629,6 +638,17 @@ prerelease. Direct CLI, host, and SDK-tarball installation use that exact
 versioned release. npm, JSR, Homebrew, stable/latest promotion, and silent
 updates remain disabled. The committed authority is beta-only and must rotate
 across every embedded trust anchor before stable distribution.
+The released workstation CLI now derives that exact immutable release for
+`tinker host install root@HOST`, while development builds require an explicit
+reviewed `--release-base`. Offline bootstrap evidence exercises the signed
+installer, server binary, and service unit through valid, redirect, metadata,
+signature, checksum, and tamper paths. Signature sidecars accept the release
+builder's bounded trailing newline but continue to reject internal whitespace
+or non-Base64 bytes. `tinker host uninstall root@HOST` adds the matching fixed
+SSH lifecycle endpoint: exact local confirmation precedes a root-only command
+that rejects custom, symlinked, and mounted state, removes only canonical
+configuration/application/service/binary identity, and preserves the ACME
+cache for reinstall.
 Stable distribution scaffolding is executable but intentionally inactive:
 `stable-release.yml` can publish and remotely verify an immutable GitHub
 release only when the committed key policy identifies a rotated production

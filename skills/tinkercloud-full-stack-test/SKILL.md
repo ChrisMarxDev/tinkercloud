@@ -78,11 +78,15 @@ and indexing proof plus denial of every reserved route through that gateway.
 4. Set `TINKERCLOUD_VPS_OTP_COMMAND` to the absolute path of
    `scripts/read-resend-otp.py`. Supply one `TINKERCLOUD_VPS_DOMAIN` and the
    sender values; the runner derives `admin.<domain>` and `<slug>.<domain>`.
+   Set `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` to the exact normalized domain
+   controlled for the local deployer and viewer test mailboxes. It is mandatory,
+   non-secret, and has no default.
    The reader receives only `deployer|viewer EMAIL HOST`; both V1 OTP purposes
    must use exactly `admin.<domain>` because the global browser identity owner
    owns the flow. Local automation accepts a recipient only when its normalized
-   domain is exactly `christopher-marx.de`; this is not a production login
-   restriction. It must print only a 4--12 digit code.
+   domain equals that configured domain exactly; missing/malformed configuration,
+   subdomains, and lookalikes deny before key or network access. This is not a
+   production login restriction. It must print only a 4--12 digit code.
 5. Require `TINKERCLOUD_VPS_E2E=1`, the exact target acknowledgement, a checked
    known-hosts file, and normal `TINKERCLOUD_VPS_REUSE=1` marker gating. Never
    weaken SSH trust or introduce an OTP/auth bypass. A clean rerun may remove

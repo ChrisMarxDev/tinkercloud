@@ -19,10 +19,18 @@ func TestPlatformUIInsightsRenderAggregateTextOrUnavailableNeverZero(t *testing.
 	available := DashboardInsights{Available: true, Last7Days: DashboardInsightPeriod{PageViews: 4, ApproximateVisitors: 2}, Last30Days: DashboardInsightPeriod{PageViews: 9, ApproximateVisitors: 3, LastActivity: day, Days: []DashboardInsightDay{{Day: day, PageViews: 4, ApproximateVisitors: 2}}}}
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "deployer", Email: "deployer@example.test", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Status: "active", Access: DashboardAccess{Mode: "private", Revision: 1}, Insights: available}}}}}
 	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
-	for _, required := range []string{"Approximate visitors", "Last 7 days", "Last 30 days", "Last activity", "Last 30 UTC days", ">2</td>", ">4</td>"} {
+	for _, required := range []string{"Approximate visitors", "Last 7 days", "Last 30 days", "Last activity", "Last 30 UTC days raw local insights values", "tinker-insight-chart", "tinker-insight-chart__tooltip", `tabindex="0"`, `data-page-level="3"`, `data-visitor-level="2"`, ">2</td>", ">4</td>"} {
 		if !strings.Contains(w.Body.String(), required) {
 			t.Fatalf("available insight markup missing %q: %s", required, w.Body.String())
 		}
+	}
+	if strings.Contains(w.Body.String(), `class="tinker-grid tinker-grid--2" id="app-list"`) || strings.Contains(w.Body.String(), `<div class="tinker-table-wrap"><table class="tinker-table"><caption>Last 30 UTC days</caption>`) {
+		t.Fatalf("dashboard retained the app grid or visible daily table: %s", w.Body.String())
+	}
+	viewer := Platform{Auth: uiAuth{actor: Actor{ID: "viewer", Role: "viewer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Insights: available}}}}}
+	w = uiRequest(t, viewer, http.MethodGet, "/dashboard", "")
+	if w.Code != http.StatusForbidden || strings.Contains(w.Body.String(), "Approximate visitors") || strings.Contains(w.Body.String(), `aria-labelledby="insights-owned-app"`) {
+		t.Fatalf("viewer received owner analytics markup: %d %s", w.Code, w.Body.String())
 	}
 	p.Views = &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Status: "active", Access: DashboardAccess{Mode: "private", Revision: 1}}}}}
 	w = uiRequest(t, p, http.MethodGet, "/dashboard", "")
@@ -171,6 +179,47 @@ func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != 200 || strings.Contains(w.Body.String(), "deployer@example.test</td>") || views.got.ID != "d" {
 		t.Fatalf("deployer page disclosed operator data: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUIOperatorCodingAgentPromptUsesConfiguredHostOnly(t *testing.T) {
+	operator := Platform{
+		Auth:         uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}},
+		Views:        &uiViews{},
+		PlatformHost: "admin.testing.tinkercloud.example",
+	}
+	body := uiRequest(t, operator, http.MethodGet, "/dashboard?endpoint=https://attacker.example", "").Body.String()
+	for _, want := range []string{
+		"Get started with a coding agent",
+		"https://github.com/ChrisMarxDev/tinkercloud",
+		"Tinkercloud endpoint: https://admin.testing.tinkercloud.example",
+		"Ask me only for the deployer email, then ask for the one-time code when it is sent.",
+		"skills/tinkercloud-deployer/SKILL.md",
+		"normal email OTP flow",
+		`id="operator-get-started-prompt"`,
+		"readonly",
+		`data-tinker-copy-target="operator-get-started-prompt"`,
+		"Select the prompt to copy it manually.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("operator prompt missing %q: %s", want, body)
+		}
+	}
+	for _, forbidden := range []string{"attacker.example", "name=\"endpoint\"", "tinker_only_once"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("operator prompt rendered unsafe input %q: %s", forbidden, body)
+		}
+	}
+
+	deployer := Platform{Auth: uiAuth{actor: Actor{ID: "deployer", Role: "deployer", Active: true}}, Views: &uiViews{}, PlatformHost: "admin.testing.tinkercloud.example"}
+	if body := uiRequest(t, deployer, http.MethodGet, "/dashboard", "").Body.String(); strings.Contains(body, "Get started with a coding agent") || strings.Contains(body, "operator-get-started-prompt") {
+		t.Fatalf("deployer received operator prompt: %s", body)
+	}
+	for _, malformed := range []string{"https://admin.testing.tinkercloud.example", "admin.testing.tinkercloud.example:443", "admin.testing.tinkercloud.example/path", "admin.testing.tinkercloud.example\nattacker.example", "ADMIN.testing.tinkercloud.example", "platform.testing.tinkercloud.example", "localhost"} {
+		p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Views: &uiViews{}, PlatformHost: malformed}
+		if body := uiRequest(t, p, http.MethodGet, "/dashboard", "").Body.String(); strings.Contains(body, "operator-get-started-prompt") || strings.Contains(body, "Get started with a coding agent") {
+			t.Fatalf("malformed platform host %q rendered a prompt: %s", malformed, body)
+		}
 	}
 }
 
@@ -511,6 +560,35 @@ func TestPlatformUICSRFAndSecretRedaction(t *testing.T) {
 	p.ServeHTTP(w, r)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("dashboard unexpectedly handled global logout: %d", w.Code)
+	}
+}
+
+func TestPlatformUIDashboardOmitsTokenManagementUntilOverhaul(t *testing.T) {
+	views := &uiViews{value: DashboardView{Apps: []DashboardApp{{
+		Slug:   "alpha",
+		Status: "active",
+		Access: DashboardAccess{Mode: "private", Revision: 1},
+		Tokens: []DashboardToken{{
+			ID:        "tok_safe",
+			Scopes:    []string{"app:read", "deploy:create"},
+			ExpiresAt: "2026-08-02T00:00:00Z",
+		}},
+	}}}}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "u", Email: "owner@example.test", Role: "operator", Active: true}}, Views: views}
+	body := uiRequest(t, p, http.MethodGet, "/dashboard", "").Body.String()
+	for _, forbidden := range []string{
+		"<summary>Tokens</summary>",
+		"tok_safe",
+		"deploy:create",
+		"expires_in_seconds",
+		"Create display-once token",
+		`action="/apps/alpha/tokens"`,
+		`action="/apps/alpha/tokens/tok_safe/revoke"`,
+		"tokens: 1",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("dashboard rendered deferred token management %q: %s", forbidden, body)
+		}
 	}
 }
 

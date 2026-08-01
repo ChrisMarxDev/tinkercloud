@@ -115,8 +115,7 @@ and utility-data disclaimers, then progressive disclosure:
 
 - summary cards first;
 - app state and protection summary next;
-- policy, token, release, and danger operations inside native `details`
-  panels;
+- policy, release, and danger operations inside native `details` panels;
 - operator-only deployers and audit remain distinct sections;
 - health is always visible and includes a local diagnostic next step; and
 - the operator-only host resource overview uses a compact, labeled recent
@@ -140,6 +139,29 @@ to use the scoped Tinker CLI for management actions.
 If that owned-app read model is unavailable, show an explicit unavailable state
 with the safe retry/operator-diagnostic next step; never make an outage look
 like the deployer owns no apps.
+
+A suspended app remains in the full-width app list as a metadata-only row. Its
+last active immutable release may still supply the description, access posture,
+and release history, but the row omits the stable launch link and QR action.
+Suspending one app must not make the dashboard or sibling rows unavailable, and
+resuming never resurrects revoked app sessions, app-scoped tokens, or live
+connections.
+
+#### Deferred dashboard token management
+
+Do not render token counts, inventory, scope or lifetime inputs, creation, or
+revocation in operator or deployer dashboards. The removed panel mixed an
+operator-only presentation with owner-only mutations, accepted scopes that were
+not all meaningful for an app-bound credential, and omitted essential expiry,
+last-use, and revoked-state context. A partial browser control would therefore
+make authority harder to understand.
+
+Keep the existing scoped control API, Tinker CLI workflow, and display-once
+success page. A later dashboard overhaul must first define the actor and app
+ownership model, task-oriented scope presets, safe lifetime defaults, complete
+credential status, display-once handling, and exact revocation behavior. Until
+then, omission is server-rendered: do not ship hidden markup, disabled forms,
+token counts, or a JavaScript feature flag that can reveal the controls.
 
 #### Operator API-key and LLM chat controls
 
@@ -301,12 +323,42 @@ its own state and next step. The global tracking switch remains a root-local
 `tinkercloud insights enable|disable` operation; the browser only displays
 server-derived read state.
 
+On the compact full-width app row, analytics stays secondary. Pair 7-day and
+30-day totals with a small 30-day two-series bar chart and visible page-view
+and **Approximate visitors** swatches. Use bounded `data-*` CSS bars rather
+than inline chart geometry or a chart package. Each paired bar is
+keyboard-focusable as well as hoverable and reveals its exact UTC day, page
+views, and approximate visitors; retain the complete daily series as a
+semantic visually-hidden table so the chart never replaces raw values. An
+unavailable read shows its existing explicit unavailable state, never a blank
+or zero chart. This is display-only local data: it adds no browser request,
+storage, identity, or authorization role.
+
 Public publishing is an access broadening, not a decorative status toggle. The
 confirmation copy names the app and says that anyone on the internet can open
 its static files. Capability exclusion and no-index/indexed state remain
 visible adjacent facts. The first pilot does not put the root operator gate in
 the browser; native UI displays server truth while the root-local command owns
 the mutation.
+
+### Operator coding-agent handoff
+
+The operator dashboard may offer one compact **Get started with a coding
+agent** card. It is guidance, not a deployment control: it gives a ready-to-copy
+prompt with the fixed Tinkercloud repository URL and the current HTTPS admin
+endpoint derived by the server from validated configuration. The prompt asks an
+agent to follow `skills/tinkercloud-deployer/SKILL.md`, ask first for the
+deployer email and then for the sent one-time code, use the normal email OTP
+flow, and generate, build, and deploy with minimal questions.
+
+Render the prompt as ordinary focusable, selectable code text. A native Copy
+prompt button can appear only after local clipboard initialization and updates
+a polite status message; no-JavaScript and clipboard-failure states tell the
+operator to select and copy the text manually. Do not render endpoint fields,
+query overrides, browser-held endpoint state, deployer tokens, cookies,
+one-time-code values, or secrets. “No OTP” forbids exposing a code value, not
+mentioning the normal OTP flow. A malformed configured host omits the card.
+Deployer dashboards omit it entirely.
 
 ## Usage
 

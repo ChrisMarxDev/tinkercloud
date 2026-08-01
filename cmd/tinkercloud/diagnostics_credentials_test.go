@@ -43,7 +43,7 @@ func writeDoctorCredential(t *testing.T, body string, mode os.FileMode) string {
 	return path
 }
 
-const validDoctorCredential = "RESEND_API_KEY=re_test_correct_key\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\n"
+var validDoctorCredential = credentialTestFixture(testResendCredentialValue)
 
 func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) {
 	rootDoctorTest(t)
@@ -56,7 +56,7 @@ func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if credentials.resendAPIKey != "re_test_correct_key" {
+	if credentials.resendAPIKey != testResendCredentialValue {
 		t.Fatal("doctor did not receive the credential-file key")
 	}
 	if got := os.Getenv("RESEND_API_KEY"); got != "ambient-wrong-key" {
@@ -64,7 +64,7 @@ func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) 
 	}
 	d := goodDeps()
 	d.ResendCheck = func(_ context.Context, key string) error {
-		if key != "re_test_correct_key" {
+		if key != testResendCredentialValue {
 			t.Fatalf("provider key = %q", key)
 		}
 		return nil
@@ -92,9 +92,9 @@ func TestDoctorCredentialDenialsDoNotReachProvider(t *testing.T) {
 		"absent":     {mode: 0600, absent: true},
 		"permissive": {body: valid, mode: 0640},
 		"non_root":   {body: valid, mode: 0600, owner: 1000},
-		"malformed":  {body: "RESEND_API_KEY\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\n", mode: 0600},
-		"duplicate":  {body: "RESEND_API_KEY=one\nRESEND_API_KEY=two\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\n", mode: 0600},
-		"unexpected": {body: "RESEND_API_KEY=one\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\nEXTRA=value\n", mode: 0600},
+		"malformed":  {body: "RESEND_API_KEY\nTINKERCLOUD_HMAC_KEY=" + testHMACCredentialValue() + "\n", mode: 0600},
+		"duplicate":  {body: "RESEND_API_KEY=one\nRESEND_API_KEY=two\nTINKERCLOUD_HMAC_KEY=" + testHMACCredentialValue() + "\n", mode: 0600},
+		"unexpected": {body: credentialTestFixture("one") + "EXTRA=value\n", mode: 0600},
 		"symlink":    {body: valid, mode: 0600, link: true},
 	} {
 		t.Run(name, func(t *testing.T) {

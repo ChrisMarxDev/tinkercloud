@@ -31,6 +31,9 @@ with Workers Static Assets and a server-rendered vinext entry point.
   `workers.dev` and preview URLs.
 - After Wrangler reports success, fetch the public HTTPS endpoint and verify
   landing-page-specific content before the workflow reports success.
+- Publish only social metadata whose referenced asset exists and has been
+  reviewed against the current landing-page visual system. Omit the image and
+  use text-only sharing metadata while no approved asset exists.
 - Add future Cloudflare products through typed bindings, not REST calls from the
   Worker when a binding exists.
 
@@ -41,6 +44,8 @@ directory, OpenAI Sites project metadata, a wildcard, implicit, or additional
 route, a credential-like variable, a missing asset/image binding, or disabled
 observability. Deployment must not be reported complete from a local build or
 dry run alone; the public hostname must return the intended page over HTTPS.
+Landing metadata must not reference a deleted, stale, or visually superseded
+social image.
 The production workflow must deny pull-request execution, missing
 environment-scoped credentials, non-`main` refs, and public verification
 failures.

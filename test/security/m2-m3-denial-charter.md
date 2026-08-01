@@ -75,3 +75,12 @@ state must fail unavailable rather than be represented as an empty allowlist;
 an empty valid current allowlist is explicitly owner-only. Form posts retain
 same-origin, CSRF, current actor/ownership, typed policy validation, audit, and
 immediate live-session revocation checks.
+
+For suspended-app dashboard visibility, prove a suspended app with a current
+active immutable deployment remains a visible metadata-only row beside other
+apps. It may retain the release description, policy metadata, and bounded
+release history, but exposes no stable launch URL, launch affordance, gateway
+authority, capability dispatch, active app session, app-scoped token, or live
+connection. Resume never restores revoked app-scoped credentials. A missing, malformed,
+foreign, or non-active current deployment pointer fails the dashboard read
+model closed rather than guessing at suspended-app metadata.

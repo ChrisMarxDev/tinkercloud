@@ -163,6 +163,31 @@
     });
   }
 
+  // Copy is only a convenience over server-rendered, selectable text. It
+  // neither selects an endpoint nor stores credentials, prompts, or state.
+  function initializeCopyControls() {
+    var controls = document.querySelectorAll("[data-tinker-copy-target]");
+    controls.forEach(function (control) {
+      var target = document.getElementById(control.getAttribute("data-tinker-copy-target") || "");
+      var feedback = document.getElementById(control.getAttribute("data-tinker-copy-feedback") || "");
+      if (!target || !navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+        return;
+      }
+      control.hidden = false;
+      control.addEventListener("click", function () {
+        navigator.clipboard.writeText(target.value || target.textContent || "").then(function () {
+          if (feedback) {
+            feedback.textContent = "Prompt copied.";
+          }
+        }, function () {
+          if (feedback) {
+            feedback.textContent = "Copy unavailable. Select the prompt to copy it manually.";
+          }
+        });
+      });
+    });
+  }
+
   function removeToast(toast) {
     if (!toast || toast.dataset.leaving === "true") {
       return;
@@ -417,6 +442,7 @@
   initializeQRCodes();
   initializeAppFilters();
   initializeCatalogFilters();
+  initializeCopyControls();
 
   window.TinkerUI = Object.freeze({
     closeDialog: closeDialog,

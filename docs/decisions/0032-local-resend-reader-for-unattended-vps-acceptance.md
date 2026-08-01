@@ -1,6 +1,6 @@
 # ADR 0032: Local Resend reader for unattended VPS acceptance
 
-**Status:** Accepted for V1 acceptance evidence
+**Status:** Accepted for V1 acceptance evidence; recipient-domain detail superseded by ADR 0056
 
 ## Context
 
@@ -15,9 +15,10 @@ Use a local-only, dependency-free Resend sent-email reader as the optional
 `TINKERCLOUD_VPS_OTP_COMMAND`. It receives the purpose, exact identity, and
 hostname from the existing black-box harness. Before it reads a local
 mode-`0600` full-access reader key or ledger, or contacts Resend, the identity's
-normalized recipient domain must be exactly `christopher-marx.de`; subdomains
-and lookalikes deny. This local test credential guard does not change normal
-Tinkercloud human-login eligibility. It then calls a fixed HTTPS Resend API
+normalized recipient domain must equal the mandatory local configuration
+defined by [ADR 0056](0056-configurable-local-automation-recipient-domain.md);
+subdomains and lookalikes deny. This local test credential guard does not
+change normal Tinkercloud human-login eligibility. It then calls a fixed HTTPS Resend API
 origin, and emits only
 the one exact Tinkercloud OTP that passes recipient, sender, subject, recent-time,
 hostname-shape, body, and consumed-message checks.
@@ -40,6 +41,6 @@ sent-email read permission, then rotate or narrow it afterwards.
 - Reusing that full-access key for the disposable VPS test temporarily broadens
   the VPS credential; it is a test convenience, not the recommended posture.
 - The reader cannot be used with a local-automation recipient outside the exact
-  `christopher-marx.de` domain, even when that identity is otherwise eligible
+  configured automation domain, even when that identity is otherwise eligible
   for normal Tinkercloud login.
 - Ambiguity and provider failure stop the test rather than selecting a code.

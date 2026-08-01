@@ -235,7 +235,7 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	}
 	resources.ConfigureControl(&controlService)
 	controlLogin := persistence.ControlLogin{Store: store, HMACKey: []byte(secrets.HMACKey), Outbox: out, TTL: c.OTPExpiry, MaxAttempts: c.OTPMaxAttempts}
-	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion), OTPIssuanceFailure: onOTPIssuanceFailure}, Auth: controlAuth, ViewerAuth: controlAuth, Views: controlService, Catalogs: controlService, Actions: controlService}
+	platform := controlapi.Platform{API: controlapi.Dispatcher{Auth: controlAuth, Service: controlService, Login: controlLogin, RateLimits: limits, ArchiveUploadBytes: resources.Limits.ArchiveUploadBytes, Compatibility: compatibility.Runtime(buildVersion), OTPIssuanceFailure: onOTPIssuanceFailure}, Auth: controlAuth, ViewerAuth: controlAuth, Views: controlService, Catalogs: controlService, Actions: controlService, PlatformHost: c.PlatformHost()}
 	if err := blobs.Reconcile(context.Background()); err != nil {
 		return nil, hub, insights, err
 	}
@@ -632,6 +632,8 @@ func run(args []string, out, errout *os.File) error {
 			return errors.New("tinkercloud: root_required")
 		}
 		return runUpdate(args[1:], out)
+	case "uninstall":
+		return runUninstall(args[1:], out, productionUninstallRuntime)
 	case "verify-artifact":
 		return runVerifyArtifact(args[1:], out)
 	case "recover":
@@ -723,15 +725,14 @@ func run(args []string, out, errout *os.File) error {
 			return err
 		}
 		defer store.Close()
+		logger := slog.New(slog.NewJSONHandler(errout, nil))
 		gates := deployments.GateFuncs{PolicyFunc: func(ctx context.Context, r deployments.Record) bool {
 			return store.CandidatePolicyReady(ctx, r)
 		}, CertificateFunc: func(ctx context.Context, r deployments.Record) bool {
 			return certificateReady(ctx, r.AppSlug+"."+cfg.AppSuffix(), &http.Client{Timeout: 5 * time.Second})
 		}, ProbeFunc: func(ctx context.Context, r deployments.Record) bool {
-			p, e := verification.ProbeCandidate(ctx, cfg, cfg.DataDirectory, r)
-			return e == nil && p.Passed()
+			return candidateProbePassed(ctx, logger, cfg, cfg.DataDirectory, r)
 		}}
-		logger := slog.New(slog.NewJSONHandler(errout, nil))
 		h, _, insights, err := buildHandler(cfg, secrets, store, gates, func(category controlapi.OTPIssuanceFailureCategory) {
 			requestlog.Service(logger, "cli_otp_issuance_"+string(category), "failed", 1)
 		})
@@ -866,4 +867,17 @@ func run(args []string, out, errout *os.File) error {
 	default:
 		return errors.New("tinkercloud: unknown_command")
 	}
+}
+
+func candidateProbePassed(ctx context.Context, logger *slog.Logger, cfg config.Config, dataRoot string, r deployments.Record) bool {
+	p, err := verification.ProbeCandidate(ctx, cfg, dataRoot, r)
+	if err != nil {
+		requestlog.Service(logger, "candidate_probe_"+string(verification.CandidateProbeStage(err)), "failed", 1)
+		return false
+	}
+	if !p.Passed() {
+		requestlog.Service(logger, "candidate_probe_result", "failed", 1)
+		return false
+	}
+	return true
 }

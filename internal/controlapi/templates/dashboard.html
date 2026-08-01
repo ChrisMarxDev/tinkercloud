@@ -89,6 +89,23 @@
 		  <p class="tinker-card__meta">Public static gate status is unavailable. No browser control is provided.</p>
 		{{end}}
       </section>
+
+      {{if .OperatorStartPrompt}}
+        <section class="tinker-section" aria-labelledby="get-started-title">
+          <div class="tinker-section-header">
+            <div><p class="tinker-eyebrow">Operator only</p><h2 id="get-started-title">Get started with a coding agent</h2></div>
+            <p>Copy a bounded deployment brief. The agent uses its own deployer login; this dashboard never shares credentials.</p>
+          </div>
+          <article class="tinker-card tinker-stack">
+            <div><h3>Ready-to-copy prompt</h3><p class="tinker-card__meta">The endpoint is derived from this Tinkercloud server’s validated configuration. Select the prompt if copying is unavailable.</p></div>
+            <textarea class="tinker-textarea tinker-code-block" id="operator-get-started-prompt" readonly rows="10" aria-label="Coding-agent deployment prompt">{{.OperatorStartPrompt}}</textarea>
+            <div class="tinker-cluster">
+              <button class="tinker-button tinker-button--secondary" type="button" data-tinker-copy-target="operator-get-started-prompt" data-tinker-copy-feedback="operator-get-started-feedback" hidden>Copy prompt</button>
+              <p class="tinker-card__meta" id="operator-get-started-feedback" data-tinker-copy-feedback role="status" aria-live="polite">Select the prompt to copy it manually.</p>
+            </div>
+          </article>
+        </section>
+      {{end}}
     {{end}}
 
     <section class="tinker-section" aria-labelledby="apps-title">
@@ -120,7 +137,7 @@
           </label>
           <p class="tinker-app-filter__count" data-tinker-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
         </div>
-        <div class="tinker-grid tinker-grid--2" id="app-list" data-tinker-app-list>
+        <div class="tinker-app-list" id="app-list" data-tinker-app-list>
           {{range .View.Apps}}
             {{$app := .}}
             {{$qr := tinkerQR .StableURL}}
@@ -136,16 +153,20 @@
                   {{end}}
                   <span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span>
                 </div>
-                <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}; tokens: {{len .Tokens}}</p>
+                <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}</p>
                 <section class="tinker-inset" aria-labelledby="insights-{{.Slug}}">
                   <div class="tinker-card__header"><div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div></div>
                   {{if .Insights.Available}}
-                    <div class="tinker-grid tinker-grid--2">
-                      <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">{{.Insights.Last7Days.ApproximateVisitors}}</p><p class="tinker-card__meta">Last 7 days · {{.Insights.Last7Days.PageViews}} page views</p></article>
-                      <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">{{.Insights.Last30Days.ApproximateVisitors}}</p><p class="tinker-card__meta">Last 30 days · {{.Insights.Last30Days.PageViews}} page views</p></article>
+                    <div class="tinker-insight-summary">
+                      <p><strong>Last 7 days</strong> · {{.Insights.Last7Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last7Days.ApproximateVisitors}}</p>
+                      <p><strong>Last 30 days</strong> · {{.Insights.Last30Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last30Days.ApproximateVisitors}}</p>
+                      <p>Last activity · {{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</p>
                     </div>
-                    <dl class="tinker-definition"><dt>Last activity</dt><dd>{{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</dd></dl>
-                    <div class="tinker-table-wrap"><table class="tinker-table"><caption>Last 30 UTC days</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody>{{range .Insights.Last30Days.Days}}<tr><td>{{.Day.Format "Jan 02"}}</td><td>{{.ApproximateVisitors}}</td><td>{{.PageViews}}</td></tr>{{end}}</tbody></table></div>
+                    <figure class="tinker-insight-chart" aria-labelledby="insight-chart-{{.Slug}}">
+                      <figcaption id="insight-chart-{{.Slug}}"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption>
+                      <div class="tinker-insight-chart__bars">{{range .Insights.Last30Days.Days}}<span class="tinker-insight-chart__day" data-page-level="{{insightLevel .PageViews}}" data-visitor-level="{{insightLevel .ApproximateVisitors}}" tabindex="0" role="img" aria-label="{{.Day.Format "2006-01-02"}}: {{.PageViews}} page views; {{.ApproximateVisitors}} approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">{{.Day.Format "Jan 02"}} · {{.PageViews}} page views · {{.ApproximateVisitors}} Approximate visitors</span></span>{{end}}</div>
+                    </figure>
+                    <div class="tinker-visually-hidden"><table><caption>Last 30 UTC days raw local insights values</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody>{{range .Insights.Last30Days.Days}}<tr><td>{{.Day.Format "2006-01-02"}}</td><td>{{.ApproximateVisitors}}</td><td>{{.PageViews}}</td></tr>{{end}}</tbody></table></div>
                   {{else}}
                     <div class="tinker-state tinker-state--unavailable" role="status"><div><h4>Local insights unavailable</h4><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; ask the operator to check the local insights setting.</p></div></div>
                   {{end}}
@@ -210,7 +231,7 @@
                         <span class="tinker-label">Allowed domains</span>
                         <textarea class="tinker-textarea" id="domains-{{$app.Slug}}" name="domains" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Domains}}{{.}}
 {{end}}</textarea>
-                        <span class="tinker-help">Use domains such as <code>acme.com</code>.</span>
+                        <span class="tinker-help">Use domains such as <code>example.com</code>.</span>
                       </label>
                       <label class="tinker-choice">
                         <input class="tinker-checkbox" type="checkbox" name="confirm_broadening" value="confirm">
@@ -218,37 +239,6 @@
                       </label>
                       <button class="tinker-button tinker-button--primary" type="submit">Replace current policy</button>
                     </form>
-                  </div>
-                </details>
-
-                <details class="tinker-details">
-                  <summary>Tokens</summary>
-                  <div class="tinker-details__body tinker-stack">
-                    <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/tokens">
-                      <input type="hidden" name="csrf" value="{{$.CSRF}}">
-                      <label class="tinker-field">
-                        <span class="tinker-label">Scopes</span>
-                        <input class="tinker-input tinker-mono" name="scopes" value="app:read">
-                        <span class="tinker-help">Comma-separated, least-privilege scopes.</span>
-                      </label>
-                      <label class="tinker-field">
-                        <span class="tinker-label">Lifetime in seconds</span>
-                        <input class="tinker-input tinker-mono" name="expires_in_seconds" value="3600" inputmode="numeric">
-                      </label>
-                      <button class="tinker-button tinker-button--primary" type="submit">Create display-once token</button>
-                    </form>
-                    {{range .Tokens}}
-                      <div class="tinker-cluster tinker-cluster--between">
-                        <div>
-                          <strong class="tinker-mono">{{.ID}}</strong>
-                          <p class="tinker-card__meta">{{range $index, $scope := .Scopes}}{{if $index}}, {{end}}{{$scope}}{{end}}</p>
-                        </div>
-                        <form method="post" action="/apps/{{$app.Slug}}/tokens/{{.ID}}/revoke">
-                          <input type="hidden" name="csrf" value="{{$.CSRF}}">
-                          <button class="tinker-button tinker-button--danger tinker-button--small" type="submit">Revoke</button>
-                        </form>
-                      </div>
-                    {{end}}
                   </div>
                 </details>
 

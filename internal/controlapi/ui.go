@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"sort"
 	"strconv"
@@ -37,7 +38,11 @@ type Platform struct {
 	// typed service boundary, with the actor always derived from the control
 	// cookie. They never replay browser credentials into the bearer API.
 	Actions UIActions
-	Now     func() time.Time
+	// PlatformHost is the current admin host derived at the composition root
+	// from validated server configuration. It is display-only guidance for an
+	// operator and is never accepted from a request, form, or query string.
+	PlatformHost string
+	Now          func() time.Time
 }
 
 // UIActions is the narrow, audited mutation surface used by the admin-host
@@ -443,6 +448,10 @@ func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
+	if a.Role != "operator" && a.Role != "deployer" {
+		p.errorPage(w, http.StatusForbidden, "Dashboard unavailable", "This dashboard is available only to active deployers and operators.", "/apps", "View available apps")
+		return
+	}
 	csrf := p.csrf(w, r, a)
 	v := DashboardView{Health: []DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinkercloud doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
 	unavailable := false
@@ -475,7 +484,37 @@ func (p Platform) dashboard(w http.ResponseWriter, r *http.Request) {
 	case "llm_grant_revoked":
 		notice = "LLM chat grant revoked. Future calls are denied."
 	}
-	p.render(w, "dashboard.html", dashboardPage{Actor: a, View: v, CSRF: csrf, Notice: notice, Unavailable: unavailable})
+	p.render(w, "dashboard.html", dashboardPage{Actor: a, View: v, CSRF: csrf, Notice: notice, Unavailable: unavailable, OperatorStartPrompt: operatorStartPrompt(a, p.PlatformHost)})
+}
+
+func operatorStartPrompt(actor Actor, platformHost string) string {
+	if actor.Role != "operator" || !validPlatformHost(platformHost) {
+		return ""
+	}
+	return "Build and deploy a small Tinkercloud app.\n\n" +
+		"Repository: https://github.com/ChrisMarxDev/tinkercloud\n" +
+		"Tinkercloud endpoint: https://" + platformHost + "\n\n" +
+		"Follow skills/tinkercloud-deployer/SKILL.md in the repository. Ask me only for the deployer email, then ask for the one-time code when it is sent. Use the normal email OTP flow to authenticate that deployer. Generate the app, build it, and deploy it with the fewest necessary questions. Do not ask for operator access, tokens, or secrets."
+}
+
+// validPlatformHost accepts only a canonical DNS hostname already derived from
+// server configuration. It keeps a malformed or accidentally widened config
+// value from becoming browser-visible deployment guidance.
+func validPlatformHost(host string) bool {
+	if host == "" || len(host) > 253 || !strings.HasPrefix(host, "admin.") || len(host) == len("admin.") || host != strings.ToLower(host) || strings.HasSuffix(host, ".") || strings.ContainsAny(host, " \t\r\n\x00:/?\\#@[]") || net.ParseIP(host) != nil {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-') {
+				return false
+			}
+		}
+	}
+	return true
 }
 func (p Platform) actor(w http.ResponseWriter, r *http.Request) (Actor, bool) {
 	if p.Auth == nil {
@@ -529,7 +568,9 @@ func (p Platform) errorPage(w http.ResponseWriter, status int, title, message, h
 	p.render(w, "error.html", errorPage{Title: title, Message: message, Href: href, Label: label})
 }
 func (p Platform) render(w http.ResponseWriter, name string, data any) {
-	t, err := template.New("base.html").Funcs(webui.FuncMap()).ParseFS(
+	funcs := webui.FuncMap()
+	funcs["insightLevel"] = insightLevel
+	t, err := template.New("base.html").Funcs(funcs).ParseFS(
 		templateFiles,
 		"templates/base.html",
 		"templates/"+name,
@@ -542,12 +583,34 @@ func (p Platform) render(w http.ResponseWriter, name string, data any) {
 	_ = t.ExecuteTemplate(w, "base", data)
 }
 
+// insightLevel keeps chart geometry bounded and presentation-only. Exact daily
+// values remain in the accessible text table and each bar's detail.
+func insightLevel(pageViews int64) int {
+	switch {
+	case pageViews <= 0:
+		return 0
+	case pageViews == 1:
+		return 1
+	case pageViews <= 3:
+		return 2
+	case pageViews <= 7:
+		return 3
+	case pageViews <= 15:
+		return 4
+	case pageViews <= 31:
+		return 5
+	default:
+		return 6
+	}
+}
+
 type dashboardPage struct {
-	Actor       Actor
-	View        DashboardView
-	CSRF        string
-	Notice      string
-	Unavailable bool
+	Actor               Actor
+	View                DashboardView
+	CSRF                string
+	Notice              string
+	Unavailable         bool
+	OperatorStartPrompt string
 }
 type tokenPage struct {
 	Actor Actor

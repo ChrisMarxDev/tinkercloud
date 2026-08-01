@@ -896,6 +896,10 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-UI-005:** Sensitive values MUST be write-only or display-once.
 - **FR-UI-006:** Destructive or access-broadening actions MUST show the exact
   target and require confirmation.
+- **FR-UI-007:** Operator and deployer dashboards MUST omit token counts,
+  inventory, scope/lifetime inputs, creation, and revocation until a dedicated
+  dashboard token-management design is accepted. Scoped control API and Tinker
+  CLI token workflows, including display-once creation, remain available.
 
 ### 8.14 Agent skills
 
@@ -1851,6 +1855,20 @@ This beta path MUST NOT publish npm, JSR, Homebrew, stable/latest channels,
 claim registry availability, change DNS, or enable silent updates. The committed
 beta authority MUST be replaced across every embedded trust anchor by a new
 operator-controlled production authority before the first stable release.
+
+### D11 — Dashboard token management deferred
+
+Do not render token counts, inventory, scope or lifetime fields, creation, or
+revocation in operator or deployer dashboards. The prior partial surface mixed
+operator-only presentation with owner-only mutations and did not provide the
+complete scope, expiry, last-use, and revocation context needed for safe use.
+
+Keep the scoped control API, Tinker CLI token workflow, display-once response,
+hash-at-rest persistence, authorization, audit, expiry, and immediate
+revocation behavior. Reintroducing browser token management requires a
+dedicated accepted design covering actor ownership, task-oriented scopes,
+lifetime defaults, complete credential state, display-once handoff, and exact
+revocation behavior.
 
 ## 23. Additional accepted defaults
 

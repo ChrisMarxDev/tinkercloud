@@ -873,7 +873,7 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		if x.currentDeploymentID != "" {
 			var state string
 			var manifest []byte
-			if e := s.Store.DB.QueryRowContext(ctx, "SELECT state,COALESCE(manifest_json,X'') FROM deployments WHERE id=? AND app_id=?", x.currentDeploymentID, x.id).Scan(&state, &manifest); e != nil || state != string(releases.Active) || app.Status != "active" {
+			if e := s.Store.DB.QueryRowContext(ctx, "SELECT state,COALESCE(manifest_json,X'') FROM deployments WHERE id=? AND app_id=?", x.currentDeploymentID, x.id).Scan(&state, &manifest); e != nil || state != string(releases.Active) || (app.Status != "active" && app.Status != "suspended") {
 				return v, ErrUnavailable
 			}
 			description, e := dashboardManifestDescription(manifest, state, app.Slug)
@@ -893,7 +893,9 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 			}
 			app.Access.Indexing = parsed.Indexing
 			app.Description = description
-			app.StableURL = stableAppURL(app.Slug, s.AppSuffix)
+			if app.Status == "active" {
+				app.StableURL = stableAppURL(app.Slug, s.AppSuffix)
+			}
 		}
 		accessRows, e := s.Store.DB.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=? ORDER BY kind,normalized_value", x.id, app.Access.Revision)
 		if e != nil {

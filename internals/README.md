@@ -15,6 +15,8 @@ separate from the user-facing README and `docs/`.
 
 - [AI development loop](ai-development-loop.md)
 - [Agent skill system](agent-skills.md)
+- [Local-only working material](local-private-work.md)
+- [Early decision history](decision-history-2026-07.md)
 - [Open-source readiness](open-source-readiness.md)
 - [Autonomous GitHub issue loop](../loop/README.md)
 - [Canonical platform skill](../skills/tinkercloud-platform/SKILL.md)

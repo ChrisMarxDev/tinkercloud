@@ -36,7 +36,7 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(html, /Private by default/);
   assert.match(html, /Agent-ready/);
   assert.match(html, /coding agents create dashboards, prototypes, reports, and utilities/i);
-  assert.match(html, /From folder to private\./);
+  assert.match(html, /From folder to secure webapp\./);
   assert.match(html, /The small essentials\./);
   assert.match(html, /Live sockets/);
   assert.match(html, /@tinkercloud\/sdk/);
@@ -48,7 +48,9 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   );
   assert.match(html, /one VPS you control/i);
   assert.match(html, /See one deploy/);
-  assert.match(html, /Operator setup/);
+  assert.match(html, /Setup on VPS/);
+  assert.match(html, /terminal-toolbar/);
+  assert.match(html, /terminal-lights/);
   assert.match(html, /Runs on your VPS/);
   assert.match(html, /Open source on GitHub/);
   assert.match(html, /View on GitHub/);
@@ -98,6 +100,7 @@ test("keeps the static landing page narrow and private by design", async () => {
   assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(styles, /receipt-|deploy-reveal/);
   assert.match(layout, /@fontsource-variable\/fredoka/);
+  assert.doesNotMatch(layout, /og\.png|summary_large_image/);
   await access(
     new URL("../public/tinkercloud-mark.svg", import.meta.url),
   );

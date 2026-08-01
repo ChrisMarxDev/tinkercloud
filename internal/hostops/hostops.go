@@ -44,6 +44,15 @@ func Build(operation, target, releaseBase string) (Plan, error) {
 			return Plan{}, ErrInvalid
 		}
 		return Plan{Args: append(baseArgs, "tinkercloud", "update", "--release-base", shellQuote(releaseBase))}, nil
+	case "uninstall":
+		if releaseBase != "" {
+			return Plan{}, ErrInvalid
+		}
+		// This is intentionally a complete remote command, rather than a shell
+		// fragment assembled from caller input. The workstation confirmation is
+		// performed by cmd/tinker; the root-local command retains its own fixed
+		// acknowledgement so a copied SSH plan cannot bypass the guard.
+		return Plan{Args: append(baseArgs, "tinkercloud", "uninstall", "--confirm-uninstall")}, nil
 	default:
 		return Plan{}, ErrInvalid
 	}

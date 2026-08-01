@@ -50,7 +50,7 @@ func installServiceFixture(t *testing.T) (root string, cfg config.Config, config
 	if err := os.WriteFile(configPath, body, 0640); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(credentialPath, []byte("RESEND_API_KEY=x\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
+	if err := os.WriteFile(credentialPath, []byte(credentialTestFixture("x")), 0600); err != nil {
 		t.Fatal(err)
 	}
 	return root, cfg, configPath, credentialPath, unitPath

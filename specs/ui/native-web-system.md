@@ -122,6 +122,16 @@ description without parsing candidate manifest bytes. An unknown release state,
 or an invalid manifest for an immutable state, makes the dashboard read model
 unavailable rather than guessing at metadata.
 
+A suspended app remains a visible durable dashboard row. Its current pointer
+may still reference an active immutable deployment, from which the dashboard
+may derive description, access metadata, and bounded release history. It has
+no stable launch URL or launch/QR affordance while suspended. Suspension does
+not restore gateway/static/capability authority, app sessions, app-scoped
+tokens, or live connections; a later resume does not resurrect those revoked
+app-scoped credentials. A missing,
+malformed, foreign, or non-active current deployment pointer remains a
+fail-closed dashboard read-model error.
+
 ## Post-V1 reach and insights surfaces
 
 - The viewer catalog is a distinct global-identity surface, not a weakened
@@ -142,6 +152,16 @@ unavailable rather than guessing at metadata.
   zero-filled 30-day daily series. Unavailable analytics renders as unavailable,
   never as zero. Viewers and unrelated
   deployers receive no analytics markup or serialized values.
+- Dashboard app lists use full-width compact rows, not a two-column card grid.
+  Owner/operator rows keep local insights secondary: compact 7-day and 30-day
+  totals, last activity, and a 30-day two-series chart with a visible legend.
+  Quantized page-view and approximate-visitor bars use bounded `data-*` levels
+  and local CSS only; no inline style, external chart runtime, request,
+  storage, or inferred value is permitted. Each day exposes its exact page
+  views and **Approximate visitors** in a hover-and-keyboard-focus detail,
+  while a semantic textual daily table remains available to assistive
+  technology. An unavailable result remains an explicit unavailable state and
+  never becomes a zero chart or zero totals.
 - Public-policy and operator-gate states use visible exact text. Enabling public
   authority states “Anyone on the internet can open this app” and requires the
   normal exact server-side broadening confirmation; color/icon styling is only
@@ -151,6 +171,23 @@ unavailable rather than guessing at metadata.
 - Deployer dashboard remains owned-app-only and list-oriented. Public policy
   mutation stays in the scoped CLI; operator gate mutation stays root-local in
   the first pilot. The dashboard may display their current effective states.
+- The operator-only dashboard may provide a ready-to-copy coding-agent prompt.
+  Its repository URL is fixed and its HTTPS admin endpoint comes only from
+  validated server configuration; no query, form, or browser-controlled value
+  selects it. A malformed host omits the prompt. The prompt contains no
+  credential, token, one-time-code value, or secret; it names the deployer
+  skill, asks first for the deployer email and then for the sent one-time code,
+  and directs normal deployer OTP plus minimal generate/build/deploy questions.
+  The prompt stays selectable without JavaScript; a labelled native copy
+  button and polite feedback are optional
+  clipboard-only enhancement.
+- Dashboard token management is deliberately absent until a dedicated
+  ownership-and-scope overhaul is accepted. Operator and deployer dashboards
+  render no token count, inventory, scope/lifetime field, create action, revoke
+  action, or token-management form. The scoped control API, Tinker CLI, and
+  successful display-once token response remain available; hiding the browser
+  surface must not weaken their authorization, expiry, revocation, or audit
+  checks.
 
 ## Security and denial charter
 
@@ -282,6 +319,27 @@ Before a styled happy path is accepted, tests must prove:
     Those management operations remain available through the scoped Tinker CLI.
     A failed app read model renders a visible unavailable state and never
     substitutes an empty owned-app list.
+25. The coding-agent prompt is operator-only dashboard guidance, never a
+    deployment credential or control path. It uses a fixed repository URL and
+    a composition-root-derived admin endpoint, rejects endpoint query overrides
+    by having no endpoint input at all, and omits all tokens, cookies,
+    one-time-code values, secrets, and browser identity material. “No OTP” means
+    no one-time-code value, not that the normal OTP flow may be omitted from the prompt. Its
+    no-JavaScript state remains selectable text; clipboard success or failure
+    is presentation-only.
+26. A compact local-insights chart is display-only. It may render only the
+    already authorized aggregate day series, carries no browser identity or
+    analytics marker, and performs no fetch, persistence, mutation, or
+    authorization. Every bar must reveal its exact daily values on both hover
+    and keyboard focus; the same values remain in an assistive semantic table.
+    The chart is absent for unavailable insights, which render explicit text
+    instead of zero-valued bars or totals.
+27. Dashboard rendering omits token management completely, even when its safe
+    read model contains token records. It emits no token count, ID, scope,
+    lifetime, last-use state, create/revoke control, or `/apps/{slug}/tokens`
+    form. Direct scoped API and CLI token behavior remains independently
+    authorized and tested; the omission is not a client-side hiding rule or an
+    authorization substitute.
 
 ## Accessibility contract
 
@@ -325,6 +383,9 @@ Before a styled happy path is accepted, tests must prove:
   statement that the value cannot be displayed or recovered. Every LLM limit
   has a visible label and numeric input mode; malformed or stale submissions
   produce a server-rendered safe error, not optimistic browser state.
+- Coding-agent prompt copy uses a native button with a polite status message;
+  when clipboard support or JavaScript is unavailable, the complete prompt
+  remains focusable and selectable as ordinary text.
 
 ## Non-goals
 

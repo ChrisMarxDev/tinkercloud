@@ -67,6 +67,12 @@ require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' \
 require "--latest=false" "beta latest-channel denial is missing"
 require 'TINKER_RELEASE_BASE="$release_base"' \
   "public installer smoke test is missing"
+require "printf 'tinker host install root@HOST\\n'" \
+  "beta release notes must document version-derived host installation"
+require 'embedded build version' \
+  "beta release notes must explain immutable version-derived host installation"
+require '--release-base %s' \
+  "beta release notes must retain explicit advanced release-base installation"
 require '"$release_base/tinkercloud-sdk-$VERSION.tgz"' \
   "public SDK tarball smoke test is missing"
 

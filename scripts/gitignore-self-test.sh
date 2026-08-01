@@ -28,11 +28,13 @@ ignored .tinker/vps/id_ed25519
 ignored .tinker/vps/id_ed25519.pub
 ignored .tinker/vps/known_hosts
 ignored .tinker/vps/ssh_config
+ignored .private/local-review.md
 ignored .hermes-task-loop/issues.json
 ignored GITHUB_TOKEN
 ignored landing/.wrangler/wrangler.log
 visible packaging/release-public-key.pem
 visible sdk/typescript/package-lock.json
 visible examples/live-presence/index.html
+visible internals/local-private-work.md
 visible loop/fetch-issues.sh
 echo "gitignore visibility assertions passed"

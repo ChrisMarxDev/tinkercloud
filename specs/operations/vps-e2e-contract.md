@@ -25,6 +25,7 @@ invalid values prevent the live run from starting.
 | `TINKERCLOUD_VPS_DEPLOYER_EMAIL` | Email authorized as the deployer used in the control login. |
 | `TINKERCLOUD_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply an identity distinct from both the deployer and operator; the suite later promotes it to the second fixture deployer for ownership isolation. |
 | `TINKERCLOUD_VPS_EMAIL_FROM` | Verified Resend sender. |
+| `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` | Exact normalized DNS domain allowed for the opt-in local OTP automation. It is mandatory, non-secret, has no default, and must match the configured deployer and viewer identities exactly. |
 | `TINKERCLOUD_VPS_RESEND_API_KEY_FILE` | Absolute path to the existing local Resend-key file. |
 | `TINKERCLOUD_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
 | `TINKERCLOUD_RESEND_READER_API_KEY_FILE` | Required by the shipped unattended Resend reader: absolute local mode-`0600`, non-symlink Resend key with sent-email read access. It must never be copied to the VPS. |
@@ -114,9 +115,11 @@ and does not alter the deployed gateway, its database, or its authentication
 flow. It calls only the fixed HTTPS `https://api.resend.com` origin with a
 local reader credential. Before reading the key or ledger or making a provider
 request, it accepts a deployer or viewer recipient only when its normalized
-domain is exactly `christopher-marx.de`; subdomains and lookalikes deny. This
-local-automation constraint does not restrict normal Tinkercloud human login.
-It then accepts only an exact recipient, exact configured sender, exact
+domain equals the mandatory normalized
+`TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN`; missing or malformed configuration,
+subdomains, and lookalikes deny. This local-automation constraint does not
+restrict normal Tinkercloud human login. It then accepts only an exact
+recipient, exact configured sender, exact
 `Your sign-in code` subject, a bounded recent
 timestamp, and exactly the derived `admin.<domain>` hostname for both deployer
 and viewer global-identity OTP flows, plus the exact

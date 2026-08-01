@@ -171,12 +171,9 @@ export default function Home() {
               target="_blank"
               rel="noreferrer"
               title="Repository is private for now"
-              aria-label="Operator setup"
+              aria-label="Setup on VPS"
             >
-              <span>
-                <small>Operator</small>
-                setup
-              </span>
+              <span>Setup on VPS</span>
               <ArrowUpRight size={18} weight="bold" aria-hidden="true" />
             </a>
           </div>
@@ -187,7 +184,7 @@ export default function Home() {
         <div className="how" id="how-it-works" aria-labelledby="how-title">
           <div className="section-heading">
             <p className="eyebrow">How it works</p>
-            <h2 id="how-title">From folder to private.</h2>
+            <h2 id="how-title">From folder to secure webapp.</h2>
           </div>
 
           <ol className="steps">

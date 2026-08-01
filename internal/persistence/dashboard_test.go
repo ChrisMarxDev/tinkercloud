@@ -222,6 +222,51 @@ func TestDashboardDescriptionsAreImmutableCurrentMetadataAndFailClosed(t *testin
 	}
 }
 
+func TestDashboardKeepsSuspendedCurrentReleaseMetadataWithoutLaunchURL(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now')); UPDATE applications SET status='active' WHERE id='b'"); err != nil {
+		t.Fatal(err)
+	}
+	alpha, _ := json.Marshal(releases.Manifest{Version: 1, Name: "alpha", Description: "Active companion"})
+	beta, _ := json.Marshal(releases.Manifest{Version: 1, Name: "beta", Description: "Suspended immutable release"})
+	if _, err := s.DB.Exec("INSERT INTO deployments(id,app_id,manifest_json,state,created_at) VALUES('alpha-current','a',?,'active',datetime('now')),('beta-current','b',?,'active',datetime('now')); UPDATE applications SET current_deployment_id='alpha-current' WHERE id='a'; UPDATE applications SET current_deployment_id='beta-current' WHERE id='b'", alpha, beta); err != nil {
+		t.Fatal(err)
+	}
+	svc := ControlService{Store: s, AppSuffix: "apps.example.test"}
+	if err := svc.SetAppStatus(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}, "beta", "suspended", "dashboard-suspend"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true})
+	if err != nil || len(v.Apps) != 2 {
+		t.Fatalf("suspended dashboard = %#v, %v", v.Apps, err)
+	}
+	for _, app := range v.Apps {
+		switch app.Slug {
+		case "alpha":
+			if app.Description != "Active companion" || app.StableURL != "https://alpha.apps.example.test/" {
+				t.Fatalf("active companion lost safe metadata: %#v", app)
+			}
+		case "beta":
+			if app.Status != "suspended" || app.Description != "Suspended immutable release" || app.StableURL != "" || len(app.Releases) != 1 || app.Releases[0].Description != "Suspended immutable release" {
+				t.Fatalf("suspended metadata/launch boundary = %#v", app)
+			}
+		}
+	}
+	if _, err := s.DB.Exec("UPDATE deployments SET state='superseded' WHERE id='beta-current'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}); err != ErrUnavailable {
+		t.Fatalf("non-active suspended pointer = %v", err)
+	}
+	if _, err := s.DB.Exec("UPDATE deployments SET state='active',manifest_json='not-json' WHERE id='beta-current'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}); err != ErrUnavailable {
+		t.Fatalf("malformed suspended pointer = %v", err)
+	}
+}
+
 func TestDashboardKeepsActiveMetadataWhenRejectedCandidateHasInvalidManifest(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()

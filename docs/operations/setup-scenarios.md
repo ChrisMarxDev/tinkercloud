@@ -13,9 +13,9 @@ topologies that are secure in principle but still need product work.
 The VPN is an additional network boundary. It does not replace Tinkercloud's
 per-app policy, viewer authentication, session, or authorization checks.
 
-## Accepted setup experience
+## Accepted planned setup experience
 
-The operator runs `sudo tinkercloud setup` on a fresh supported machine. The
+The future operator flow runs `sudo tinkercloud setup` on a fresh supported machine. The
 assistant asks for the root domain and initial operator email, then derives
 `admin.<domain>`, `<slug>.<domain>`, the sending address, and ACME contact. It asks only
 for values it cannot discover or safely default:

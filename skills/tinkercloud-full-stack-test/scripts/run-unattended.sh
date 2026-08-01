@@ -4,6 +4,8 @@
 # an env file, evaluates input as shell, or prints credentials.
 set -eu
 umask 077
+LC_ALL=C
+export LC_ALL
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd -P)
 reader="$repo_root/skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py"
@@ -37,6 +39,22 @@ private_0600_file() {
 single_line_value() {
   [ -n "$1" ] && case $1 in *'
 '*|*''*|*'\000'*) return 1;; esac
+}
+
+normalized_domain() {
+  value=$1
+  single_line_value "$value" || return 1
+  [ "${#value}" -le 253 ] || return 1
+  case $value in *[A-Z]*|*[!a-z0-9.-]*|.*|*.|*..*|*-.*|*.-*) return 1;; esac
+  case $value in *.*) ;; *) return 1;; esac
+  old_ifs=$IFS
+  IFS=.
+  set -- $value
+  IFS=$old_ifs
+  for label do
+    [ -n "$label" ] && [ "${#label}" -le 63 ] || return 1
+    case $label in *[!a-z0-9-]*|-*|*-) return 1;; esac
+  done
 }
 
 record() {
@@ -81,6 +99,7 @@ preflight() {
   single_line_value "${TINKERCLOUD_VPS_DEPLOYER_EMAIL:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_VIEWER_EMAIL:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_EMAIL_FROM:-}" || return 1
+  normalized_domain "${TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_RESEND_API_KEY_FILE:-}" || return 1
   single_line_value "${TINKERCLOUD_RESEND_READER_API_KEY_FILE:-}" || return 1
   single_line_value "${TINKERCLOUD_RESEND_OTP_LEDGER_FILE:-}" || return 1

@@ -88,12 +88,27 @@ the control-plane mark, stylesheet, or chrome.
   label “Approximate visitors.” Show page views, last activity, and textual
   daily values; unavailable is never rendered as zero. No viewer, app SDK,
   deployment-agent, or unrelated-deployer markup may contain analytics values.
+- Dashboard app lists are full-width compact rows, never a two-column app-card
+  grid. Keep owner/operator insights secondary: compact 7/30 totals and last
+  activity plus a local 30-day quantized CSS bar chart with a tiny visible
+  two-series page-view/Approximate-visitors legend. Bars reveal exact daily values on
+  hover and keyboard focus, while an assistive semantic daily table preserves
+  the raw series. No inline geometry, chart runtime, fetch, storage, marker,
+  identity, or authorization behavior is allowed. Unavailable remains explicit
+  and never renders as zero.
 - Dashboard release descriptions come only from a valid stored manifest on a
   `verified`, `active`, or `superseded` immutable release. Known
   `uploading`, `uploaded`, `validating`, `staged`, `rejected`, and `failed`
   candidate records stay description-less without parsing their manifest
   bytes. An unknown state or malformed immutable manifest makes the dashboard
   unavailable; do not guess at metadata.
+- A suspended app remains a visible metadata-only dashboard row when its
+  current pointer is an active immutable deployment: it may retain description,
+  access metadata, and bounded release history, but has no stable launch URL,
+  launch/QR affordance, gateway/static/capability authority, or revived app
+  session/app-scoped-token/live credential. A missing, malformed, foreign, or non-active
+  current pointer fails the dashboard read model closed; resuming never
+  resurrects revoked credentials.
 - Public publishing copy must state that anyone on the internet can open the
   app, keep indexing as a separate default-off fact, and retain exact
   server-side broadening confirmation. In the first pilot, UI displays the
@@ -115,6 +130,25 @@ the control-plane mark, stylesheet, or chrome.
   visually disabled operator dashboard. Render only owned app summaries and
   stable launch links; omit management forms and every operator surface.
   Deployer management remains in the scoped Tinker CLI.
+- Dashboard token management is deferred pending a dedicated ownership and
+  scope overhaul. Render no token count, inventory, scope/lifetime field,
+  create/revoke action, or hidden/disabled token form for any dashboard role.
+  Keep the scoped API, Tinker CLI, and display-once result intact; browser
+  omission is not authorization. A future reintroduction must first align
+  actor ownership, task-oriented scopes, expiry, last-use/revoked status,
+  display-once handling, and exact revocation behavior across contract,
+  guidance, showcase, tests, and this skill.
+- An operator-only coding-agent handoff is server-rendered guidance, never a
+  deployment control: its fixed repository URL and exact HTTPS admin endpoint
+  come from validated canonical server configuration, never a query/form/browser
+  value; omit it when that host is malformed. The prompt contains no token,
+  cookie, one-time-code value, secret, or browser identity data; it names
+  `skills/tinkercloud-deployer/SKILL.md`, asks first for the deployer email and
+  then for the sent one-time code, and directs normal OTP plus minimal
+  generate/build/deploy questions. “No OTP” forbids a code value, not mention
+  of the normal OTP flow. Keep the prompt focusable and selectable
+  without JavaScript. A labelled native copy button and polite feedback may
+  enhance it only through local clipboard behavior; deployer dashboards omit it.
 - Render the dashboard `Sign out of Tinkercloud` action as an ordinary labelled
   `POST /logout` form in the persistent top bar for every authenticated role.
   It carries the server-rendered CSRF value and must not clear browser cookies

@@ -24,6 +24,9 @@ URL, or GitHub setting that proves each item.
   production gates pass.
 - [x] The final public history will be created only after the Tinkercloud
   identity change is complete, as one reviewed initial commit.
+- [x] Tinkercloud is a sole-maintainer side project. The maintainer may perform
+  and record the publication sign-off without a mandatory second reviewer; an
+  independent review remains welcome if the project gains maintainers or risk.
 
 ## 1. Freeze the exact publication candidate
 
@@ -136,9 +139,11 @@ Manual searches:
 - [ ] Review direct and redistributed dependency licenses.
 - [ ] Generate complete third-party notices for every distributed binary,
   installer, npm/JSR package, and vendored asset that requires them.
-- [ ] Confirm every logo, icon, screenshot, font, illustration, example,
-  editable canvas, and copied design has original authorship or documented
-  redistribution rights.
+- [x] Record every current repository-owned logo, icon, social image, and
+  documentation illustration in `ASSET_PROVENANCE.md`; the operator confirmed
+  publication rights and the experimental video/stock-audio tree was removed.
+- [ ] Re-run the asset inventory at the frozen publication candidate and
+  document redistribution rights for anything added after this review.
 - [ ] Confirm contributions are accepted under the documented Apache-2.0 terms.
 - [ ] Add a `NOTICE` file if the final dependency or asset audit requires one.
 
@@ -205,21 +210,35 @@ task check:
 
 - [ ] Repository description, homepage, topics, social preview, license, and
   default branch are correct.
-- [ ] Enable private vulnerability reporting and verify its link while the
-  repository is still private.
+- [ ] After the repository becomes public and GitHub exposes the Social preview
+  control, create and upload a landing-native image under 1 MB. Do not reuse the
+  removed legacy `og.png`; keep sharing metadata text-only until the replacement
+  is reviewed and deployed.
+- [ ] Immediately after the repository becomes public, enable private
+  vulnerability reporting and verify its link from a signed-out browser. Keep
+  the fallback address in `SECURITY.md` active through that launch window.
 - [ ] Enable the dependency graph, Dependabot alerts, Dependabot security
   updates, secret scanning, and push protection.
-- [ ] Keep Actions default token permissions read-only.
+- [x] Keep Actions default token permissions read-only; live repository setting
+  verified as `read` with pull-request approval disabled.
 - [ ] Add an active `main` ruleset requiring pull requests, required CI,
   resolved review conversations, and blocking force pushes and branch deletion.
-- [ ] Require code-owner review when another maintainer exists.
+- [x] Approve the initial ruleset profile for setup after the history reset:
+  require pull requests, `ci / verify`, resolved review conversations, and block
+  force pushes and branch deletion; allow administrator bypass while there is
+  one maintainer and require zero approvals until a second maintainer exists.
+- [ ] Require code-owner review and at least one approval when another
+  maintainer exists.
 - [ ] Protect release environments and signing/publishing secrets.
 - [ ] Review collaborators, teams, bypass actors, deploy keys, webhooks,
   installed GitHub Apps, Actions secrets, environments, and organization
   policies.
-- [ ] Disable the wiki unless it has an explicit owner and purpose.
-- [ ] Decide whether Discussions is enabled and who moderates it.
-- [ ] Configure triage labels and milestones, then test every issue form.
+- [x] Disable the wiki unless it has an explicit owner and purpose.
+- [x] Keep Discussions disabled for the initial public launch; enable it later
+  only with an explicit owner and moderation purpose.
+- [ ] Configure triage labels and milestones, then test every issue form. The
+  required `inbox`, `open`, `pending`, `plan`, and `implement` labels exist;
+  milestone policy and issue-form testing remain.
 - [ ] Confirm forks cannot expose secrets through untrusted pull-request
   workflows.
 
@@ -227,15 +246,18 @@ Evidence:
 
 ```text
 Ruleset:
-Required checks:
-Security features:
-Access review:
+Required checks: ci / verify workflow committed; approved ruleset profile will be applied after the history reset
+Security features: dependency vulnerability alerts enabled; remaining public-only features pending
+Repository metadata: description set; homepage https://tinkercloud.fun; public-discovery topics set; wiki and Discussions disabled; merged branches auto-delete
+Access review: pending final collaborator/app/key/webhook review
 ```
 
 ## 9. Public-source launch
 
-- [ ] Obtain a second-person review of the exact tree, history, settings, and
-  privacy audit.
+- [x] Adopt sole-maintainer publication sign-off for the initial side-project
+  launch. Record the exact tree, history scan, settings, privacy/legal evidence,
+  and accepted risks; do not block publication solely for lack of a second
+  maintainer.
 - [ ] Change visibility only after sections 1–8 are complete.
 - [ ] From a signed-out browser, verify the repository, README, license,
   clone/build path, issue forms, and private security-report route.
@@ -261,6 +283,10 @@ Do not infer completion from the repository becoming public.
 - [ ] Verify checksums, signatures, provenance, compatibility metadata,
   third-party notices, and release notes.
 - [ ] Bind npm/JSR publishing to reviewed trusted-publisher workflows.
+- [ ] After the repository is public and before activating an npm/package
+  workflow, run `npm audit --package-lock-only` in the repository root and in
+  `landing/`, review the disclosed dependency graphs and results, and record the
+  evidence. This intentionally remains deferred until public-source launch.
 - [ ] Protect release environments and require explicit maintainer approval.
 - [ ] Run a clean install/update/uninstall test for every supported platform.
 - [ ] Run the destructive VPS acceptance suite on an acknowledged disposable
@@ -284,8 +310,9 @@ Denial evidence:
 Candidate commit:
 Candidate tree:
 Public repository URL:
-Source-publication reviewer:
-Security/privacy reviewer:
+Source-publication maintainer:
+Independent reviewer (optional):
+Security/privacy sign-off:
 Release reviewer (if applicable):
 Outstanding accepted risks:
 Decision: GO / NO-GO

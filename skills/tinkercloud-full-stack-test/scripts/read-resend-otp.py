@@ -29,7 +29,7 @@ MESSAGE_ID = re.compile(r"\A[A-Za-z0-9_-]{1,200}\Z")
 HOST = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
 EMAIL = re.compile(r"\A[^\s@]+@[^\s@]+\.[^\s@]+\Z")
 TIMESTAMP = re.compile(r"\A\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::\d{2})?)\Z")
-AUTOMATION_RECIPIENT_DOMAIN = "christopher-marx.de"
+AUTOMATION_RECIPIENT_DOMAIN_ENV = "TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN"
 
 
 class ReaderError(Exception):
@@ -38,6 +38,13 @@ class ReaderError(Exception):
 
 def fail(message: str) -> None:
     raise ReaderError(message)
+
+
+def automation_recipient_domain() -> str:
+    raw = os.environ.get(AUTOMATION_RECIPIENT_DOMAIN_ENV, "")
+    if not raw or raw != raw.strip() or raw != raw.lower() or not HOST.fullmatch(raw):
+        fail("invalid reader configuration")
+    return raw
 
 
 class RejectRedirect(urllib.request.HTTPRedirectHandler):
@@ -158,13 +165,14 @@ def normalize_recipients(raw: Any) -> list[str] | None:
 
 
 def validate_request(argv: list[str]) -> tuple[str, str, str, str]:
+    allowed_domain = automation_recipient_domain()
     if len(argv) != 4 or argv[1] not in {"deployer", "viewer"}:
         fail("invalid reader invocation")
     purpose, email, hostname = argv[1], argv[2].lower(), argv[3].lower()
     sender = os.environ.get("TINKERCLOUD_VPS_EMAIL_FROM", "")
     domain = os.environ.get("TINKERCLOUD_VPS_DOMAIN", "").lower()
     platform = "admin." + domain
-    if not EMAIL.fullmatch(email) or email.rsplit("@", 1)[1] != AUTOMATION_RECIPIENT_DOMAIN:
+    if not EMAIL.fullmatch(email) or email.rsplit("@", 1)[1] != allowed_domain:
         fail("invalid reader invocation")
     if not EMAIL.fullmatch(sender) or not HOST.fullmatch(hostname):
         fail("invalid reader invocation")

@@ -41,4 +41,8 @@ sed 's/gh release download "$tag"/gh release fetch "$tag"/' \
   "$source_workflow" >"$tmp/no-remote-download.yml"
 expect_denied "missing remote draft download" "$tmp/no-remote-download.yml"
 
+sed "s/printf 'tinker host install root@HOST\\\\n'/printf 'tinker host install root@HOST --release-base %s\\\\n'/" \
+  "$source_workflow" >"$tmp/no-version-derived-host-install.yml"
+expect_denied "missing version-derived host installation notes" "$tmp/no-version-derived-host-install.yml"
+
 echo "beta release workflow checker self-test passed"

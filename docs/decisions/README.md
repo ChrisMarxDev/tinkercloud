@@ -32,7 +32,7 @@
 | [0034](0034-update-denial-probe-capability-route.md) | Update denial health uses a protected capability route | Accepted for V1 |
 | [0030](0030-v1-lightweight-local-blob-storage.md) | Lightweight local blob storage behind a provider-neutral seam | Accepted for V1 |
 | [0031](0031-trusted-issue-loop-draft-prs.md) | Trusted issue loop proposes changes through draft pull requests | Accepted for repository delivery |
-| [0032](0032-local-resend-reader-for-unattended-vps-acceptance.md) | Local Resend reader for unattended VPS acceptance | Accepted for V1 acceptance evidence |
+| [0032](0032-local-resend-reader-for-unattended-vps-acceptance.md) | Local Resend reader for unattended VPS acceptance | Accepted for V1 acceptance evidence; recipient-domain detail superseded by 0056 |
 | [0033](0033-global-viewer-identity-app-bound-handoff.md) | Global viewer identity with app-bound handoffs | Handoff retained; naming/dashboard topology superseded by 0051 |
 | [0035](0035-bounded-update-listener-readiness.md) | Bounded local listener readiness before update health gates | Accepted for V1 |
 | [0036](0036-per-user-cli-credential-file.md) | Protected per-user CLI credential file | Accepted for V1 |
@@ -49,11 +49,13 @@
 | [0047](0047-operator-governed-llm-chat.md) | Operator-governed encrypted LLM chat capability | Accepted for post-V1 L1/L2 |
 | [0048](0048-per-app-sqlite-collections.md) | Per-app SQLite databases and bounded document collections | Accepted |
 | [0049](0049-typed-deployer-app-data-access.md) | Typed deployer access to managed app data | Accepted |
-| [0050](0050-local-deployer-workstation-otp-automation.md) | Local deployer-workstation OTP automation is not CI credentialing | Accepted for V1 test infrastructure |
+| [0050](0050-local-deployer-workstation-otp-automation.md) | Local deployer-workstation OTP automation is not CI credentialing | Accepted for V1 test infrastructure; recipient-domain detail superseded by 0056 |
 | [0051](0051-one-domain-single-browser-identity.md) | One root domain and a single browser identity broker | Accepted replacement architecture; implementation in progress |
 | [0052](0052-tinkercloud-product-identity.md) | Tinkercloud product and distribution identity | Accepted |
 | [0053](0053-stable-github-and-npm-cli-distribution.md) | Stable CLI distribution through GitHub Releases and one npm artifact | Accepted; activation gated |
 | [0054](0054-public-static-catalog-local-insights.md) | Operator-gated public static access, authorized catalog, and local insights | Accepted post-V1 extension |
+| [0055](0055-defer-dashboard-token-management.md) | Defer dashboard token management pending a dedicated overhaul | Accepted |
+| [0056](0056-configurable-local-automation-recipient-domain.md) | Configure the local automation recipient domain | Accepted |
 
 ## Decision rule
 

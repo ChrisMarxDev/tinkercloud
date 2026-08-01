@@ -568,9 +568,11 @@ mutation, confirm the exact target is a clean dedicated x86-64 Hetzner VPS
 running explicitly supported Ubuntu 24.04 LTS or 26.04 LTS. Ambiguous,
 interim, end-of-life, other-distribution, or future unverified releases deny.
 
-For a new server, start with the signed installer and resumable
-`tinkercloud setup`. Inspect first, then ask only for the controlled root domain,
-initial operator email, and Resend credential source that cannot be derived.
+For a new server, start with the signed installer and the implemented resumable
+`tinkercloud init --non-interactive` path. The minimum-question
+`tinkercloud setup` assistant remains planned and must not be invoked or claimed
+as current behavior. Inspect first, then collect only the controlled root domain,
+initial operator email, and root-readable Resend credential source that cannot be derived.
 Derive `admin.<domain>` and `<slug>.<domain>`, and persist the normalized
 operator email as the internal ACME contact; never ask for, accept, or override
 it through a separate ACME-contact flag, question, or environment input.
@@ -584,11 +586,25 @@ wildcard DNS setup without guessing or comparing a public VPS IP; a failure
 must stop before ACME and report the affected non-secret hostname or wildcard
 action.
 
-The workstation `tinker host install|status|doctor|update` commands may perform
+The workstation `tinker host install|status|doctor|update|uninstall` commands may perform
 the same root-local flow over an explicit `root@HOST` using normal OpenSSH
 host-key verification. They are not a remote control API: never add SSH
 options, arbitrary remote commands, automatic host-key acceptance, or a
-deployer bearer to that path.
+deployer bearer to that path. `tinker host uninstall root@HOST` removes the
+canonical Tinkercloud service, credentials, application state, and binary only
+after an exact local confirmation; use its explicit `--yes` only in a reviewed
+non-interactive operator workflow. It preserves `/var/lib/tinkercloud-acme` by
+default so reinstalling does not needlessly request certificates. Never add a
+path, remote-command, or certificate-deletion option to this workflow.
+The root command rejects owned mount points before stopping the service; after
+uninstall, the next canonical setup recreates the service identity and safely
+re-owns the preserved ACME cache.
+
+A released `tinker host install root@HOST` derives its pinned GitHub release
+directory from the installed CLI version. Development builds must receive an
+explicit `--release-base`; installing artifacts and initialization are
+intentionally separate. Use resumable `init --non-interactive` today; do not
+claim the planned `tinkercloud setup` assistant exists until it is implemented.
 
 Keep provider and Tinkercloud secrets in root-owned mode-0600 credential files or
 systemd credentials. Never accept them in argv, ordinary YAML, chat, browser

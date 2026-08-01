@@ -70,7 +70,12 @@ for artifact in ("tinkercloud-linux-amd64", "tinkercloud.service"):
         raise SystemExit("tinkercloud installer: invalid version")
     if hashlib.sha256(root.joinpath(artifact).read_bytes()).hexdigest() != meta["sha256"]:
         raise SystemExit("tinkercloud installer: artifact digest mismatch")
-    signature = base64.b64decode(root.joinpath(artifact + ".signature").read_bytes(), validate=True)
+    signature_text = root.joinpath(artifact + ".signature").read_bytes()
+    if len(signature_text) > 1024:
+        raise SystemExit("tinkercloud installer: invalid signature")
+    # Canonical release sidecars end in LF. Only outer ASCII transport
+    # whitespace is accepted; strict Base64 still denies interior tampering.
+    signature = base64.b64decode(signature_text.strip(b" \t\r\n"), validate=True)
     if len(signature) != 64:
         raise SystemExit("tinkercloud installer: invalid signature")
     root.joinpath(artifact + ".signed").write_bytes(

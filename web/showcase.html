@@ -19,7 +19,7 @@
       </a>
       <div class="tinker-topbar__account">
         <div class="tinker-account">
-          <strong>operator@acme.com</strong>
+          <strong>operator@example.com</strong>
           <span>operator</span>
         </div>
         <form class="tinker-inline-form" method="post" action="/logout">
@@ -36,7 +36,7 @@
           <h1>Small, warm, and secure.</h1>
           <p>
             Shared foundations and states for Tinkercloud login, dashboard,
-            diagnostics, tokens, and operations.
+            diagnostics, display-once credentials, and operations.
           </p>
         </div>
         <span class="tinker-status" data-state="active">Ready to use</span>
@@ -68,15 +68,12 @@
       <section class="tinker-section" aria-labelledby="insights-title">
         <div class="tinker-section-header">
           <div><p class="tinker-eyebrow">Owner and operator only</p><h2 id="insights-title">Local insights</h2></div>
-          <p>Bounded local aggregates; daily values remain textual at every width.</p>
+          <p>Bounded local aggregates; exact daily values remain available beyond the compact chart.</p>
         </div>
         <article class="tinker-card tinker-stack">
-          <div class="tinker-grid tinker-grid--2">
-            <div class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">12</p><p class="tinker-card__meta">Last 7 days · 38 page views</p></div>
-            <div class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">41</p><p class="tinker-card__meta">Last 30 days · 124 page views</p></div>
-          </div>
-          <dl class="tinker-definition"><dt>Last activity</dt><dd>2026-08-01 12:04 UTC</dd></dl>
-          <div class="tinker-table-wrap"><table class="tinker-table"><caption>Last 30 UTC days</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody><tr><td>Aug 01</td><td>2</td><td>4</td></tr><tr><td>Jul 31</td><td>0</td><td>0</td></tr></tbody></table></div>
+          <div class="tinker-insight-summary"><p><strong>Last 7 days</strong> · 38 page views · <strong>Approximate visitors</strong> 12</p><p><strong>Last 30 days</strong> · 124 page views · <strong>Approximate visitors</strong> 41</p><p>Last activity · 2026-08-01 12:04 UTC</p></div>
+          <figure class="tinker-insight-chart" aria-labelledby="showcase-insight-chart"><figcaption id="showcase-insight-chart"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption><div class="tinker-insight-chart__bars"><span class="tinker-insight-chart__day" data-page-level="4" data-visitor-level="3" tabindex="0" role="img" aria-label="Aug 01: 12 page views; 4 approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Aug 01 · 12 page views · 4 Approximate visitors</span></span><span class="tinker-insight-chart__day" data-page-level="0" data-visitor-level="0" tabindex="0" role="img" aria-label="Jul 31: 0 page views; 0 approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Jul 31 · 0 page views · 0 Approximate visitors</span></span><span class="tinker-insight-chart__day" data-page-level="2" data-visitor-level="1" tabindex="0" role="img" aria-label="Jul 30: 3 page views; 1 approximate visitor."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">Jul 30 · 3 page views · 1 Approximate visitor</span></span></div></figure>
+          <div class="tinker-visually-hidden"><table><caption>Last 30 UTC days raw local insights values</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody><tr><td>2026-08-01</td><td>4</td><td>12</td></tr><tr><td>2026-07-31</td><td>0</td><td>0</td></tr><tr><td>2026-07-30</td><td>1</td><td>3</td></tr></tbody></table></div>
         </article>
         <article class="tinker-state tinker-state--unavailable" role="status"><div><h3>Local insights unavailable</h3><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; check the local insights setting on the VPS.</p></div></article>
       </section>
@@ -145,13 +142,13 @@
             <summary>
               <span class="tinker-disclosure-card__summary">
                 <span class="tinker-disclosure-card__title">Access policy</span>
-                <span class="tinker-disclosure-card__meta">Owner + everyone at acme.com</span>
+                <span class="tinker-disclosure-card__meta">Owner + everyone at example.com</span>
               </span>
             </summary>
             <div class="tinker-disclosure-card__body">
               <dl class="tinker-definition">
-                <dt>Owner</dt><dd>operator@acme.com</dd>
-                <dt>Domain</dt><dd><code>acme.com</code></dd>
+                <dt>Owner</dt><dd>operator@example.com</dd>
+                <dt>Domain</dt><dd><code>example.com</code></dd>
                 <dt>Revision</dt><dd>8</dd>
               </dl>
             </div>
@@ -211,7 +208,7 @@
             </label>
             <label class="tinker-field">
               <span class="tinker-label">Allowed domains</span>
-              <textarea class="tinker-textarea">acme.com</textarea>
+              <textarea class="tinker-textarea">example.com</textarea>
               <span class="tinker-help">One normalized domain per line.</span>
             </label>
             <label class="tinker-field">
@@ -267,12 +264,12 @@
           </label>
           <p class="tinker-app-filter__count" data-tinker-app-filter-count role="status" aria-live="polite">All authorized apps are shown.</p>
         </div>
-        <div class="tinker-grid tinker-grid--2" id="showcase-app-list" data-tinker-app-list>
+        <div class="tinker-app-list" id="showcase-app-list" data-tinker-app-list>
           <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="payroll-preview" data-tinker-app-description="Payroll review for finance" data-tinker-app-status="active">
-            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><div class="tinker-app-card__actions"><a class="tinker-button tinker-button--secondary tinker-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tinker-status" data-state="active">active</span></div><p class="tinker-card__meta">Private policy r7 · 4 releases · 1 token</p></div>
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><div><h3>payroll-preview</h3><p class="tinker-card__meta">Payroll review for finance</p></div><div class="tinker-app-card__actions"><a class="tinker-button tinker-button--secondary tinker-icon-action" href="/" target="_blank" rel="noopener noreferrer" aria-label="Open payroll-preview in a new tab" title="Open payroll-preview in a new tab"><span aria-hidden="true">↗</span></a><button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="showcase-qr-dialog" aria-label="Show QR code for payroll-preview" title="Show QR code for payroll-preview"><span aria-hidden="true">▦</span></button></div><span class="tinker-status" data-state="active">active</span></div><p class="tinker-card__meta">Private policy r7 · 4 releases</p></div>
           </article>
           <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="migration-sandbox" data-tinker-app-description="Safe migration rehearsal" data-tinker-app-status="suspended">
-            <div class="tinker-app-card__summary"><div class="tinker-card__header"><h3>migration-sandbox</h3><span class="tinker-status" data-state="suspended">suspended</span></div><p class="tinker-card__meta">Private policy r3 · 1 release · 0 tokens</p></div>
+            <div class="tinker-app-card__summary"><div class="tinker-card__header"><h3>migration-sandbox</h3><span class="tinker-status" data-state="suspended">suspended</span></div><p class="tinker-card__meta">Private policy r3 · 1 release</p></div>
           </article>
         </div>
         <div class="tinker-empty tinker-app-filter__no-results" data-tinker-app-filter-empty hidden>
@@ -323,20 +320,19 @@
               <div><p class="tinker-eyebrow">Application</p><h3>payroll-preview</h3></div>
               <span class="tinker-status" data-state="active">active</span>
             </div>
-            <p class="tinker-card__meta">Private policy r7 · 4 releases · 1 token</p>
+            <p class="tinker-card__meta">Private policy r7 · 4 releases</p>
           </div>
           <div class="tinker-app-card__body">
             <details class="tinker-details" open>
               <summary>Access policy</summary>
               <div class="tinker-details__body">
                 <dl class="tinker-definition">
-                  <dt>Owner</dt><dd>operator@acme.com</dd>
-                  <dt>Domains</dt><dd><code>acme.com</code></dd>
+                  <dt>Owner</dt><dd>operator@example.com</dd>
+                  <dt>Domains</dt><dd><code>example.com</code></dd>
                   <dt>Revision</dt><dd>7</dd>
                 </dl>
               </div>
             </details>
-            <details class="tinker-details"><summary>Tokens</summary><div class="tinker-details__body"><p>One active app-scoped token.</p></div></details>
             <details class="tinker-details"><summary>Immutable releases</summary><div class="tinker-details__body"><p>Four immutable releases.</p></div></details>
           </div>
         </article>
@@ -405,6 +401,20 @@
           <h3>No apps yet.</h3>
           <p>Build a static app, then run <code>tinker deploy ./dist</code> to create its private URL.</p>
         </div>
+      </section>
+
+      <section class="tinker-section" aria-labelledby="agent-handoff-title">
+        <div class="tinker-section-header"><div><p class="tinker-eyebrow">Operator only</p><h2 id="agent-handoff-title">Get started with a coding agent</h2></div><p>Copy a bounded deployment brief without sharing dashboard credentials.</p></div>
+        <article class="tinker-card tinker-stack">
+          <div><h3>Ready-to-copy prompt</h3><p class="tinker-card__meta">The endpoint is server-derived. Select the prompt if copying is unavailable.</p></div>
+          <textarea class="tinker-textarea tinker-code-block" id="showcase-agent-prompt" readonly rows="10" aria-label="Coding-agent deployment prompt">Build and deploy a small Tinkercloud app.
+
+Repository: https://github.com/ChrisMarxDev/tinkercloud
+Tinkercloud endpoint: https://admin.example.test
+
+Follow skills/tinkercloud-deployer/SKILL.md in the repository. Ask me only for the deployer email, then ask for the one-time code when it is sent. Use the normal email OTP flow to authenticate that deployer. Generate the app, build it, and deploy it with the fewest necessary questions. Do not ask for operator access, tokens, or secrets.</textarea>
+          <div class="tinker-cluster"><button class="tinker-button tinker-button--secondary" type="button" data-tinker-copy-target="showcase-agent-prompt" data-tinker-copy-feedback="showcase-agent-feedback" hidden>Copy prompt</button><p class="tinker-card__meta" id="showcase-agent-feedback" data-tinker-copy-feedback role="status" aria-live="polite">Select the prompt to copy it manually.</p></div>
+        </article>
       </section>
 
       <section class="tinker-section" aria-labelledby="api-keys-showcase-title">

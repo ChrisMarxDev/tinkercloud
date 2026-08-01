@@ -13,10 +13,14 @@ the fixed acceptance identities and hosts defined by the
 
 ## Accepted build and environment
 
+Public hostnames and local report names in this record are deliberately
+replaced with reserved placeholders. The operator retains the exact redacted
+evidence outside the repository.
+
 - One fresh clean-host run with the strengthened catalog, policy-revocation,
   activation-failure, and dashboard-series assertions completed against the disposable
-  `testing.tinkercloud.fun` environment on 2026-08-01.
-- `admin.testing.tinkercloud.fun` and the stable one-label fixture app hosts
+  `testing.tinkercloud.example` environment on 2026-08-01.
+- `admin.testing.tinkercloud.example` and the stable one-label fixture app hosts
   resolved to the acknowledged VPS before the run.
 - The reset removed only the exact marked Tinkercloud installation and test
   state. The existing `/var/lib/tinkercloud-acme` cache remained a real,
@@ -24,15 +28,15 @@ the fixed acceptance identities and hosts defined by the
 - The checked-in unattended wrapper reported `preflight`, local OTP-reader
   tests, skill drift, the offline VPS package, diff validation, and the live
   VPS acceptance as passed. The owner-only redacted result is
-  `.tinker/vps/unattended-reports/vps-e2e-20260801T125303Z-70121.status`.
+  `.tinker/vps/unattended-reports/vps-e2e-<timestamp>-<run>.status`.
 - The complete local `go test ./... -count=1` suite, JavaScript syntax check,
   skill-drift check, OTP-reader tests, and `git diff --check` passed before the
   live run.
 - The guarded deployment-agent wrapper then performed exactly one explicit
   `--confirm-public` deployment of the tracked first-party
   `examples/public-static-product-story` as `dev@christopher-marx.de`. It used
-  the normal OTP flow and returned the safe public URL
-  [`https://public-static-product-story.testing.tinkercloud.fun/`](https://public-static-product-story.testing.tinkercloud.fun/).
+  the normal OTP flow and returned the expected public URL under the reserved
+  `testing.tinkercloud.example` placeholder used in this record.
 - One separate verification-only `TestPublicExampleAcceptance` pass compared
   the public HTML and CSS byte-for-byte with the tracked example, proved opt-in
   indexing and reserved-route denial, made two document requests in one fresh

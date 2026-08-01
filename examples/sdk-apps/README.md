@@ -9,6 +9,7 @@ SDK:
 | [`team-pulse`](team-pulse/) | Viewer-keyed current state, custom live channels, publish/subscribe, connection status, close, reconnect recovery through KV |
 | [`quick-poll`](quick-poll/) | Current poll state, viewer-keyed votes, prefix aggregation, vote changes/deletion, typed errors, ephemeral refresh hints |
 | [`attachment-shelf`](attachment-shelf/) | Blob capability discovery, bounded upload/download, cursor listing, deletion, cancellation, typed quota errors, and the local-VPS durability boundary |
+| [`llm-chat`](llm-chat/) | `llm.chat` capability discovery, external-provider disclosure, bounded tab-local conversation, cancellation, and safe unavailable/error states |
 
 All manifests are private and owner-only by default. Add viewer emails or
 domains to the selected app's `tinker.yaml` before sharing it.

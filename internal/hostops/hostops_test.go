@@ -20,6 +20,14 @@ func TestFixedHostPlans(t *testing.T) {
 	if err != nil || len(install.Stdin) == 0 || install.Args[len(install.Args)-1] != "'https://releases.example/v0.1.0/'" {
 		t.Fatalf("install plan = %#v, %v", install, err)
 	}
+	uninstall, err := Build("uninstall", "root@host.example", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantUninstall := []string{"-o", "BatchMode=yes", "-o", "ClearAllForwardings=yes", "-T", "--", "root@host.example", "tinkercloud", "uninstall", "--confirm-uninstall"}
+	if !reflect.DeepEqual(uninstall.Args, wantUninstall) || len(uninstall.Stdin) != 0 {
+		t.Fatalf("uninstall plan = %#v", uninstall)
+	}
 }
 
 func TestHostPlanDenials(t *testing.T) {
@@ -37,6 +45,9 @@ func TestHostPlanDenials(t *testing.T) {
 	}
 	if _, err := Build("exec", "root@host.example", ""); err == nil {
 		t.Fatal("accepted arbitrary operation")
+	}
+	if _, err := Build("uninstall", "root@host.example", "https://releases.example/v1"); err == nil {
+		t.Fatal("accepted uninstall release base")
 	}
 }
 

@@ -25,21 +25,12 @@ export async function generateMetadata(): Promise<Metadata> {
       description:
         "Self-hosted private app deployment with sign-in and access control built in.",
       type: "website",
-      images: [
-        {
-          url: "/og.png",
-          width: 1733,
-          height: 909,
-          alt: "Tinkercloud private app deployment",
-        },
-      ],
     },
     twitter: {
-      card: "summary_large_image",
+      card: "summary",
       title: "Tinkercloud — Turn small apps into trusted team tools",
       description:
         "Self-hosted private app deployment with sign-in and access control built in.",
-      images: ["/og.png"],
     },
   };
 }

@@ -214,8 +214,9 @@ jobs:
             printf '```\n\n'
             printf 'Install Tinkercloud on a reviewed SSH host after installing the CLI:\n\n'
             printf '```sh\n'
-            printf 'tinker host install root@HOST --release-base %s\n' "$release_base"
+            printf 'tinker host install root@HOST\n'
             printf '```\n\n'
+            printf 'The released CLI derives that exact immutable versioned release URL from its embedded build version. Development or advanced operator flows may pass `--release-base %s` explicitly.\n\n' "$release_base"
             printf 'Install the TypeScript SDK directly from this GitHub release:\n\n'
             printf '```sh\n'
             printf 'npm install %stinkercloud-sdk-%s.tgz\n' "$release_base" "$VERSION"

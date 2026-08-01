@@ -20,7 +20,7 @@ func TestAccessInputValidation(t *testing.T) {
 	if !validAccess(&AccessPolicyInput{Mode: "public", ExpectedRevision: 1}) {
 		t.Fatal("public mode is a valid access-rule maintenance shape")
 	}
-	for _, d := range []string{"bad domain", "a..b", "-a.com", "a@b.com"} {
+	for _, d := range []string{"bad domain", "a..b", "-a.com", "a@example.test"} {
 		x := AccessPolicyInput{Mode: "private", ExpectedRevision: 1}
 		x.Allow.Domains = []string{d}
 		if validAccess(&x) {

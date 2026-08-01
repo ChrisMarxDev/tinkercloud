@@ -61,3 +61,17 @@ func TestServiceLogsOnlyFixedCLIIssuerFailureCategory(t *testing.T) {
 		t.Fatalf("missing fixed issuer category: %s", got)
 	}
 }
+
+func TestServiceLogsOnlyFixedCandidateProbeStage(t *testing.T) {
+	var out bytes.Buffer
+	Service(slog.New(slog.NewJSONHandler(&out, nil)), "candidate_probe_release_evidence", "failed", 1)
+	got := out.String()
+	for _, forbidden := range []string{"/", "tinker.yaml", "sha256", "gemini", "manifest", "provider"} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("candidate diagnostic leaked %q: %s", forbidden, got)
+		}
+	}
+	if !strings.Contains(got, "service.candidate_probe_release_evidence") || !strings.Contains(got, `"outcome":"failed"`) {
+		t.Fatalf("missing fixed candidate stage: %s", got)
+	}
+}

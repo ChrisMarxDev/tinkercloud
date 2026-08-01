@@ -86,6 +86,7 @@ export TINKERCLOUD_VPS_OPERATOR_EMAIL='operator@example.com'
 export TINKERCLOUD_VPS_DEPLOYER_EMAIL='deployer@example.com'
 export TINKERCLOUD_VPS_VIEWER_EMAIL='viewer@example.com'
 export TINKERCLOUD_VPS_EMAIL_FROM='tinker@example.com'
+export TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN='example.com'
 export TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$PWD/.tinker/vps/resend-api-key"
 export TINKERCLOUD_RESEND_READER_API_KEY_FILE="$PWD/.tinker/vps/resend-reader-api-key"
 export TINKERCLOUD_RESEND_OTP_LEDGER_FILE="$PWD/.tinker/vps/resend-otp-consumed.json"
@@ -189,6 +190,10 @@ OTP, or reads VPS storage, SQLite, or logs as a substitute for gateway proof.
 For an unattended real-OTP test, keep a Resend reader key **only on this local
 machine**. It needs sent-email read access (Resend Full access) and must never
 be placed in the VPS secret file, server configuration, browser, SDK, or Git.
+Set `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` to the exact normalized domain
+controlled for the local deployer and viewer mailboxes. It is non-secret, has
+no default, and missing, malformed, subdomain, or lookalike values deny before
+the reader opens its key or contacts Resend.
 Create and lock down the file once:
 
 ```bash

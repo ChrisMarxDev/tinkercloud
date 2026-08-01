@@ -42,6 +42,7 @@ run() {
   TINKERCLOUD_VPS_DOMAIN=example.test \
   TINKERCLOUD_VPS_OPERATOR_EMAIL=operator@example.test TINKERCLOUD_VPS_DEPLOYER_EMAIL=deployer@example.test \
   TINKERCLOUD_VPS_VIEWER_EMAIL=viewer@example.test TINKERCLOUD_VPS_EMAIL_FROM=tinker@example.test \
+  TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN="${TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN_TEST-automation.example}" \
   TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$tmp/send-key" \
   TINKERCLOUD_RESEND_READER_API_KEY_FILE="$tmp/reader-key" TINKERCLOUD_RESEND_OTP_LEDGER_FILE="$tmp/ledger.json" \
   TINKERCLOUD_VPS_OTP_COMMAND="$root/skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py" "$runner"
@@ -71,6 +72,18 @@ failed=$(find "$tmp/reports" -type f -name '*.status' | sort | tail -n 1)
 grep -qx 'preflight=failed' "$failed"
 grep -qx 'result=failed' "$failed"
 [ ! -s "$log" ]
+
+for bad_domain in '' 'AUTOMATION.EXAMPLE' 'automation.example ' 'localhost'; do
+  : > "$log"
+  if TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN_TEST=$bad_domain run >/dev/null 2>&1; then
+    echo "invalid automation recipient domain unexpectedly succeeded" >&2
+    exit 1
+  fi
+  failed=$(find "$tmp/reports" -type f -name '*.status' | sort | tail -n 1)
+  grep -qx 'preflight=failed' "$failed"
+  grep -qx 'result=failed' "$failed"
+  [ ! -s "$log" ]
+done
 
 : > "$log"
 if (

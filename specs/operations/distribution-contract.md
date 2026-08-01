@@ -41,9 +41,12 @@ and stable mutations are separately governed by
   verification inputs from one HTTPS release origin, verifies them before
   replacement, installs the reviewed service unit, and leaves initialization
   as an explicit operator action.
-- `tinker host install` transports the reviewed bootstrap bundled into the
-  installed CLI over an operator-authenticated SSH connection. It does not
-  accept an arbitrary remote command or weaken host-key verification.
+- A released `tinker host install root@HOST` derives its immutable versioned
+  GitHub release base from the CLI build version, then transports the reviewed
+  bootstrap bundled into the installed CLI over an operator-authenticated SSH
+  connection. `--release-base URL` remains an explicit development or advanced
+  operator override. The command does not accept an arbitrary remote command
+  or weaken host-key verification.
 - Manual `tinkercloud update` remains the only V1 update action. Preparing
   distribution does not enable scheduled or silent updates.
 

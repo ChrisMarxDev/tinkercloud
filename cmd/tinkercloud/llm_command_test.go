@@ -37,7 +37,7 @@ func TestLLMEnableRetriesAfterConfigWriteFailureWithoutReplacingRoot(t *testing.
 	if err = os.WriteFile(configPath, b, 0640); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(credentialPath, []byte("RESEND_API_KEY=value\nTINKERCLOUD_HMAC_KEY=0123456789abcdef0123456789abcdef\n"), 0600); err != nil {
+	if err = os.WriteFile(credentialPath, []byte(credentialTestFixture("value")), 0600); err != nil {
 		t.Fatal(err)
 	}
 	oldUID, oldWrite, oldGroup, oldChown, oldChmod := effectiveUID, llmWritePrivate, llmLookupGroup, llmChown, llmChmod

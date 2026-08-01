@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 EMAIL = re.compile(r"\A[^\s@]+@[^\s@]+\.[^\s@]+\Z")
 HOST = re.compile(r"\A[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
-LOCAL_AUTOMATION_DEPLOYER_DOMAIN = "christopher-marx.de"
+AUTOMATION_RECIPIENT_DOMAIN_ENV = "TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN"
 TIMEOUT_SECONDS = 120
 MAX_JSON_OUTPUT_BYTES = 32 * 1024
 FORBIDDEN_CREDENTIAL_ENV = ("TINKER_TOKEN", "TINKER_OTP")
@@ -44,6 +44,13 @@ class DeploymentError(Exception):
 
 def fail(stage: str) -> None:
     raise DeploymentError(stage)
+
+
+def automation_recipient_domain() -> str:
+    raw = os.environ.get(AUTOMATION_RECIPIENT_DOMAIN_ENV, "")
+    if not raw or raw != raw.strip() or raw != raw.lower() or not HOST.fullmatch(raw):
+        fail("automation recipient domain is unavailable")
+    return raw
 
 
 def at_stage(stage: str, action: Callable[[], object]) -> object:
@@ -136,9 +143,12 @@ def reader_path() -> Path:
 
 def reader_environment(server_host: str) -> dict[str, str]:
     required = ("TINKERCLOUD_RESEND_READER_API_KEY_FILE", "TINKERCLOUD_RESEND_OTP_LEDGER_FILE",
-                "TINKERCLOUD_VPS_EMAIL_FROM", "TINKERCLOUD_VPS_DOMAIN")
+                "TINKERCLOUD_VPS_EMAIL_FROM", "TINKERCLOUD_VPS_DOMAIN",
+                AUTOMATION_RECIPIENT_DOMAIN_ENV)
     values = {key: os.environ.get(key, "") for key in required}
     if not all(values.values()) or not EMAIL.fullmatch(values["TINKERCLOUD_VPS_EMAIL_FROM"]):
+        fail("OTP reader configuration is unavailable")
+    if values[AUTOMATION_RECIPIENT_DOMAIN_ENV] != automation_recipient_domain():
         fail("OTP reader configuration is unavailable")
     domain = values["TINKERCLOUD_VPS_DOMAIN"].lower()
     if not HOST.fullmatch(domain) or server_host != "admin." + domain:
@@ -205,6 +215,7 @@ def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
                 login_driver: Callable[[Path, str, str, Path, dict[str, str]], None] = forced_login,
                 *, confirm_public: bool = False) -> dict:
     def validate_inputs() -> tuple[Path, Path, str, str, str]:
+        allowed_domain = automation_recipient_domain()
         if any(os.environ.get(name) for name in FORBIDDEN_CREDENTIAL_ENV):
             fail("credential environment input is forbidden")
         # Public reach is an authorization broadening.  A caller must provide
@@ -214,7 +225,7 @@ def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
             fail("public confirmation input is invalid")
         email = email_raw.lower()
         if (not EMAIL.fullmatch(email) or
-                email.rsplit("@", 1)[1] != LOCAL_AUTOMATION_DEPLOYER_DOMAIN):
+                email.rsplit("@", 1)[1] != allowed_domain):
             fail("required input is invalid")
         tinker, app = Path(tinker_raw), Path(app_raw)
         if not tinker.is_absolute() or not app.is_absolute():

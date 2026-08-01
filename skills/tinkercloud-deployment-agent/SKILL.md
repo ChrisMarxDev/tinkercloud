@@ -10,8 +10,9 @@ It deliberately completes the normal human deployer's OTP login and stores the
 ordinary local CLI credential. It is not production CI/noninteractive
 deployment-agent authentication: that path requires a separately provisioned,
 app-scoped deployer token and must not use this wrapper or an interactive OTP.
-It accepts requested deployer identities only in the local automation domain
-`christopher-marx.de`; normal CLI and human login policy are not restricted.
+It accepts requested deployer identities only in the mandatory local domain
+configured by `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN`; normal CLI and human
+login policy are not restricted.
 
 ## Boundary
 
@@ -34,7 +35,8 @@ Ask only for these non-secret values when they cannot be discovered safely:
 - exact absolute path to the `tinker` CLI;
 - exact HTTPS platform server URL;
 - exact deployer email; and
-- exact absolute app directory containing `tinker.yaml`.
+- exact absolute app directory containing `tinker.yaml`;
+- exact normalized domain controlled for local test-email automation.
 
 Private is the default: the wrapper sends a bare `tinker deploy` and never
 derives public reach from `tinker.yaml`. If, and only if, the caller has
@@ -68,7 +70,11 @@ python3 skills/tinkercloud-deployment-agent/scripts/deploy_once.py \
   --app-dir /absolute/path/to/app
 ```
 
-Before a forced login, export only the sibling reader's existing local settings:
+Before invoking the wrapper, export
+`TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` as the exact normalized domain of the
+requested deployer. It is non-secret, has no default, and must not contain
+uppercase, whitespace, a subdomain wildcard, or a URL. Before a forced login,
+export only the sibling reader's existing local settings:
 `TINKERCLOUD_RESEND_READER_API_KEY_FILE`, `TINKERCLOUD_RESEND_OTP_LEDGER_FILE`,
 `TINKERCLOUD_VPS_EMAIL_FROM`, and `TINKERCLOUD_VPS_DOMAIN`. The exact server must be
 `https://admin.<domain>`; the wrapper derives that admin host from the one root
@@ -87,9 +93,10 @@ permission cannot be obtained, stop and report the environment limitation
 without invoking the wrapper.
 
 Before checking any CLI/app path, reading reader configuration, or calling the
-CLI, the wrapper lowercases the requested email and requires its domain to be
-exactly `christopher-marx.de`. It rejects subdomains, suffix lookalikes, the
-hyphenless domain, and all unrelated domains. The wrapper then runs `tinker
+CLI, the wrapper validates the mandatory automation domain, lowercases the
+requested email, and requires its domain to equal that configuration exactly.
+It rejects missing or malformed configuration, subdomains, suffix lookalikes,
+the hyphenless domain, and all unrelated domains. The wrapper then runs `tinker
 whoami --json` against the explicit server. It reuses a saved credential only
 when the response is exact valid JSON and its identity exactly matches the
 requested deployer email. A missing/invalid saved login or a different exact

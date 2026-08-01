@@ -33,7 +33,13 @@ if not re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", meta["
     raise SystemExit("tinkercloud bootstrap: invalid installer version")
 if hashlib.sha256(root.joinpath("install-host.sh").read_bytes()).hexdigest() != meta["sha256"]:
     raise SystemExit("tinkercloud bootstrap: installer digest mismatch")
-signature = base64.b64decode(root.joinpath("install-host.sh.signature").read_bytes(), validate=True)
+signature_text = root.joinpath("install-host.sh.signature").read_bytes()
+if len(signature_text) > 1024:
+    raise SystemExit("tinkercloud bootstrap: invalid installer signature")
+# Release sidecars are canonical Base64 with one trailing LF. Accept only
+# surrounding ASCII transport whitespace; strict decoding still rejects any
+# interior whitespace or non-Base64 bytes.
+signature = base64.b64decode(signature_text.strip(b" \t\r\n"), validate=True)
 if len(signature) != 64:
     raise SystemExit("tinkercloud bootstrap: invalid installer signature")
 root.joinpath("signed").write_bytes(

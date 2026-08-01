@@ -27,12 +27,13 @@ marketing copy owns the outcome; the terminal does not simulate CLI output.
 - Name both teams and coding agents as sources of dashboards, prototypes,
   reports, and utilities without assigning authority to an agent implicitly.
 - State the one-VPS operator-ownership boundary.
-- Give deployers a direct path to the deploy explanation and operators a direct
-  path to setup documentation.
+- Give deployers a direct path to the deploy explanation and people setting up
+  the host a plain-language `Setup on VPS` path to setup documentation.
 - Render `tinker deploy . --allow '*@acme.com'` with the wildcard quoted so
   a shell cannot expand it.
-- Do not add simulated status output, a generated URL, terminal chrome, or
-  controls to the hero command.
+- Frame the command as a terminal with a compact title bar and three inert
+  window controls. Do not add simulated status output, a generated URL,
+  interactive terminal controls, or copy controls.
 - Describe the product as `AI-ready` by focusing on the private home it gives
   agent-created tools, without exposing roadmap status or claiming an embedded
   LLM runtime.

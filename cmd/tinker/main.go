@@ -141,7 +141,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		return runDev(args[1:], *jsonOutput, stdout, stderr)
 	}
 	if len(args) >= 1 && args[0] == "host" {
-		return runHost(args[1:], *jsonOutput, stdout, stderr)
+		return runHost(args[1:], *jsonOutput, stdout, stderr, deps.input)
 	}
 	if (len(args) == 1 || len(args) == 2) && args[0] == "init" {
 		project := "."

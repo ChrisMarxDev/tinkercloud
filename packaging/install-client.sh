@@ -87,7 +87,12 @@ try:
         raise ValueError('invalid metadata digest')
     if hashlib.sha256(root.joinpath(artifact).read_bytes()).hexdigest() != meta['sha256']:
         raise ValueError('metadata digest mismatch')
-    sig = base64.b64decode(root.joinpath(artifact + '.signature').read_bytes(), validate=True)
+    sig_text = root.joinpath(artifact + '.signature').read_bytes()
+    if len(sig_text) > 1024:
+        raise ValueError('invalid signature')
+    # Release-build emits a final LF. Trim only outer ASCII transport
+    # whitespace before strict decoding so embedded junk remains invalid.
+    sig = base64.b64decode(sig_text.strip(b' \t\r\n'), validate=True)
     if len(sig) != 64:
         raise ValueError('invalid signature')
     root.joinpath('signed').write_bytes(('\n'.join((meta['version'], meta['api'], meta['schema'], meta['sha256']))).encode())

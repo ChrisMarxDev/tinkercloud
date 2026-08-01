@@ -90,6 +90,11 @@ func safeOutcome(v string) string {
 }
 func safeEvent(v string) string {
 	if v == "release_cleanup" || v == "cli_otp_issuance_entropy" ||
+		v == "candidate_probe_release_evidence" || v == "candidate_probe_index" ||
+		v == "candidate_probe_session" || v == "candidate_probe_anonymous_denial" ||
+		v == "candidate_probe_authenticated_health" || v == "candidate_probe_unknown" ||
+		v == "candidate_probe_public_static_health" ||
+		v == "candidate_probe_result" ||
 		v == "cli_otp_issuance_persistence_begin_write_lock" ||
 		v == "cli_otp_issuance_persistence_invalidate" ||
 		v == "cli_otp_issuance_persistence_eligibility" ||

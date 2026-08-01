@@ -37,9 +37,9 @@ func TestWrongAttemptsDeny(t *testing.T) {
 	store := NewMemoryStore()
 	out := &capture{}
 	s := Service{Store: store, Outbox: out, Key: []byte("test-key"), TTL: time.Minute, MaxAttempts: 2}
-	_ = s.Request(context.Background(), "a", "a@b.co", true)
+	_ = s.Request(context.Background(), "a", "a@example.test", true)
 	for i := 0; i < 2; i++ {
-		if s.Verify(context.Background(), "a", "a@b.co", out.message.ChallengeID, "000000", func(Challenge) error { return nil }) == nil {
+		if s.Verify(context.Background(), "a", "a@example.test", out.message.ChallengeID, "000000", func(Challenge) error { return nil }) == nil {
 			t.Fatal("wrong code accepted")
 		}
 	}

@@ -4,7 +4,7 @@ Agent skills are a first-class product surface. They make the SDK, security
 model, deployment workflow, and verification rules available to coding agents
 without relying on a long prompt or scattered documentation.
 
-This follows the [Shopify Quick north star](../product/north-star-quick.md):
+This follows the [Shopify Quick north star](../docs/product/north-star-quick.md):
 agents receive the platform skills out of the box rather than expecting staff
 to read and relay API documentation.
 

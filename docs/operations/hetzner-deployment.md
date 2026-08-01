@@ -4,17 +4,26 @@ The canonical V1 topology is a dedicated public VPS with public DNS and inbound
 TCP 80/443. See [common setup scenarios](setup-scenarios.md) for the complete
 solo/startup flow and the current VPN-only support gap.
 
-## Target experience
+## Current installation
 
-On a clean Hetzner Cloud Ubuntu 24.04 LTS or Ubuntu 26.04 LTS x86-64 VPS
-dedicated to Tinkercloud:
+From an operator workstation with a released Tinker CLI, install the signed
+server binary and systemd unit onto a clean Hetzner Cloud Ubuntu 24.04 LTS or
+Ubuntu 26.04 LTS x86-64 VPS dedicated to Tinkercloud:
 
 ```bash
-sudo sh ./packaging/install.sh ./tinkercloud ./tinkercloud.json ./tinkercloud.sig
-sudo tinkercloud setup
+tinker host install root@HOST
 ```
 
-The guided setup discovers the host, asks for one controlled base domain and
+The released CLI derives its exact immutable GitHub release directory from its
+embedded version. A development CLI must pass a reviewed explicit
+`--release-base HTTPS_RELEASE_DIRECTORY`.
+
+Installation does not guess platform configuration. Initialize the installed
+host with the deterministic command below. The minimum-question
+`tinkercloud setup` assistant described in the target flow is still planned
+and must not be documented as current behavior.
+
+The planned guided setup will discover the host, ask for one controlled base domain and
 the initial operator email, derives conventional platform/app/sender values,
 and pauses with exact DNS and Resend actions. It resumes without asking for
 prior valid answers, ingests the provider key into the root-owned credential
@@ -30,10 +39,10 @@ The install script is a thin convenience wrapper. It:
 4. Installs the binary in a standard executable path.
 5. Runs `tinkercloud install-service`.
 
-All meaningful setup logic lives in the signed binary, not a large mutable
-shell script. Operators may download and verify the binary manually instead.
-Generated config is the resulting system record and automation interface, not a
-document the human must author before setup.
+All meaningful initialization logic lives in the signed binary, not a large
+mutable shell script. Operators may download and verify the binary manually
+instead. Generated config is the resulting system record and automation
+interface, not a document the human must author before setup.
 
 ## Deterministic non-interactive initialization
 
@@ -50,8 +59,8 @@ sudo tinkercloud init --non-interactive \
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
 secret files. It derives the internal ACME contact from the required normalized
-operator email; it never accepts a separate ACME-contact flag. The human `setup`
-assistant generates these inputs and may accept the Resend secret through a
+operator email; it never accepts a separate ACME-contact flag. The planned human
+`setup` assistant will generate these inputs and may accept the Resend secret through a
 no-echo prompt only if that path passes the supported-shell secret-handling
 audit; otherwise it guides creation/selection of a protected file. Neither path
 places a secret in argv, ordinary config, or terminal output. Initialization

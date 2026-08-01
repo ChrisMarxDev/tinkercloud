@@ -136,4 +136,49 @@ if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_RELEASE_BASE=https://rel
   echo "client installer accepted unsupported platform" >&2
   exit 1
 fi
+
+# A release-build sidecar ends with LF. Verify that the real non-root client
+# installer accepts that canonical form but still rejects whitespace injected
+# into the Base64 payload. A disposable authority avoids reading any release
+# private key.
+openssl genpkey -algorithm ED25519 -out "$tmp/client-private.pem" >/dev/null 2>&1
+openssl pkey -in "$tmp/client-private.pem" -pubout -out "$tmp/client-public.pem" >/dev/null 2>&1
+awk -v key="$tmp/client-public.pem" '
+  BEGIN {
+    while ((getline line < key) > 0) replacement = replacement line "\n"
+    close(key)
+  }
+  $0 == "-----BEGIN PUBLIC KEY-----" { in_key = 1; printf "%s", replacement; next }
+  in_key && $0 == "-----END PUBLIC KEY-----" { in_key = 0; next }
+  !in_key { print }
+' "$root/packaging/install-client.sh" >"$tmp/install-client-valid.sh"
+chmod +x "$tmp/install-client-valid.sh"
+rm -rf "$tmp/client-release" "$tmp/client-home"
+mkdir "$tmp/client-release" "$tmp/client-home"
+printf '#!/bin/sh\necho inert client\n' >"$tmp/client-release/tinker-linux-amd64"
+client_digest=$(sha256sum "$tmp/client-release/tinker-linux-amd64" | awk '{print $1}')
+printf '{"version":"0.1.0","api":"1","schema":"1","sha256":"%s"}\n' "$client_digest" >"$tmp/client-release/tinker-linux-amd64.metadata.json"
+printf '0.1.0\n1\n1\n%s' "$client_digest" >"$tmp/client-signed"
+openssl pkeyutl -sign -inkey "$tmp/client-private.pem" -rawin -in "$tmp/client-signed" -out "$tmp/client-signature.raw" >/dev/null 2>&1
+base64 <"$tmp/client-signature.raw" | tr -d '\n' >"$tmp/client-release/tinker-linux-amd64.signature"
+printf '\n' >>"$tmp/client-release/tinker-linux-amd64.signature"
+(cd "$tmp/client-release" && sha256sum tinker-linux-amd64 tinker-linux-amd64.metadata.json tinker-linux-amd64.signature >SHA256SUMS)
+printf '#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo x86_64;; esac\n' >"$tmp/bin/uname"
+chmod +x "$tmp/bin/uname"
+# Earlier privileged-installer evidence deliberately shadows these commands.
+# The unprivileged client test may safely use the real tools inside its temp
+# HOME; otherwise the fake privileged installer would require its marker.
+rm -f "$tmp/bin/install" "$tmp/bin/mv" "$tmp/bin/systemctl"
+PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_RELEASE="$tmp/client-release" \
+  TINKER_RELEASE_BASE=https://releases.example.test/v1 "$tmp/install-client-valid.sh" >/dev/null
+test -f "$tmp/client-home/.local/bin/tinker" || { echo "client installer rejected canonical trailing newline" >&2; exit 1; }
+sed 's/./& /2' "$tmp/client-release/tinker-linux-amd64.signature" >"$tmp/client-inner-signature"
+mv "$tmp/client-inner-signature" "$tmp/client-release/tinker-linux-amd64.signature"
+(cd "$tmp/client-release" && sha256sum tinker-linux-amd64 tinker-linux-amd64.metadata.json tinker-linux-amd64.signature >SHA256SUMS)
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_RELEASE="$tmp/client-release" \
+  TINKER_RELEASE_BASE=https://releases.example.test/v1 "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+  echo "client installer accepted internal signature whitespace" >&2
+  exit 1
+fi
 echo "installer denial tests passed"
+"$root/packaging/host-bootstrap_test.sh"

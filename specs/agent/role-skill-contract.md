@@ -12,15 +12,17 @@ Tinkercloud ships two self-contained role-facing coding-agent skills:
 `tinkercloud-platform` remains the canonical authoring source for copied role guidance.
 It is not a runtime dependency and does not create a third human role workflow.
 Internal acceptance-test, Tinkercloud-owned UI, and opt-in local
-deployer-workstation test skills may remain separate. The latter must reject a
-requested deployer identity unless its normalized domain is exactly
-`christopher-marx.de`, before path checks, credential reuse, reader/key access,
-or network action; this local-wrapper restriction does not change direct CLI or
-normal human-login policy. It may then drive the normal CLI OTP flow only with
-an exact deployer's controlled local Resend test mailbox; it is not production
-CI/noninteractive deployment-agent authentication. A production deployment
-agent uses a separately provisioned app-scoped deployer token and never an
-implicit credential write or prompt.
+deployer-workstation test skills may remain separate. The latter must require a
+valid normalized domain in `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` and reject
+a requested deployer identity unless its normalized domain equals that value
+exactly. Missing or malformed configuration and mismatched identities deny
+before path checks, credential reuse, reader/key access, or network action;
+this local-wrapper restriction does not change direct CLI or normal human-login
+policy. It may then drive the normal CLI OTP flow only with an exact deployer's
+controlled local Resend test mailbox; it is not production CI/noninteractive
+deployment-agent authentication. A production deployment agent uses a
+separately provisioned app-scoped deployer token and never an implicit
+credential write or prompt.
 Maintainer-facing release work is also separate: the
 [`distribution-skill contract`](distribution-skill-contract.md) governs the
 CLI and client-package distribution skills without changing the two human role

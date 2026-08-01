@@ -16,6 +16,7 @@ export TINKERCLOUD_VPS_OPERATOR_EMAIL=operator@example.com
 export TINKERCLOUD_VPS_DEPLOYER_EMAIL=deployer@example.com
 export TINKERCLOUD_VPS_VIEWER_EMAIL=viewer@example.com
 export TINKERCLOUD_VPS_EMAIL_FROM=operator@example.com
+export TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN=example.com
 export TINKERCLOUD_VPS_RESEND_API_KEY_FILE=/absolute/path/to/resend-key
 export TINKERCLOUD_RESEND_READER_API_KEY_FILE=/absolute/path/to/local-resend-reader-key
 export TINKERCLOUD_RESEND_OTP_LEDGER_FILE=/absolute/path/to/local-consumed-otp-ledger.json
@@ -29,8 +30,9 @@ After exporting the required values, the sole noninteractive wrapper is:
 skills/tinkercloud-full-stack-test/scripts/run-unattended.sh
 ```
 
-It does not load an env file. It fail-closes on an unsafe reader key/ledger,
-untrusted SSH input, acknowledgement mismatch, or failed offline gate; then it
+It does not load an env file. It fail-closes on a missing or malformed
+`TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN`, unsafe reader key/ledger, untrusted
+SSH input, acknowledgement mismatch, or failed offline gate; then it
 runs exactly one real `TestVPSAcceptance` pass (the offline package gate
 explicitly skips it). Its private timestamped status
 artifact defaults to `.tinker/vps/unattended-reports/`; override that location

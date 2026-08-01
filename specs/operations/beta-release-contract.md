@@ -66,7 +66,11 @@ retires the beta authority. Beta trust never silently becomes stable trust.
 6. Download the draft assets into a fresh directory and verify them again.
 7. Publish the verified draft as a prerelease without promoting it to latest.
 8. Exercise the public client installer into a temporary non-root directory and
-   prove `tinker version` equals the release version.
+   prove `tinker version` equals the release version. The release notes then
+   document `tinker host install root@HOST`: the released CLI derives the same
+   immutable versioned release base from that embedded build version. The
+   explicit `--release-base URL` form remains available for development and
+   advanced operator flows.
 
 The workflow creates no package-manager candidate and invokes no registry or
 tap publisher.
@@ -91,7 +95,9 @@ https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
 ```
 
 The public client bootstrap downloads `install-client.sh` from that versioned
-base. `tinker host install` and `tinker host update` use the same exact release
+base. A released `tinker host install root@HOST` derives that exact base from
+its embedded release version; development builds must use the explicit
+`--release-base URL` form. `tinker host update` uses an explicit exact release
 base. TypeScript consumers may install the exact
 `tinkercloud-sdk-VERSION.tgz` GitHub asset by URL without publishing it to an npm
 or JSR registry. Consumers must opt into the beta explicitly; documentation

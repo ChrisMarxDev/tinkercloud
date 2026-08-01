@@ -21,6 +21,11 @@ vulnerability.
 
 Use GitHub's
 [private vulnerability report](https://github.com/ChrisMarxDev/tinkercloud/security/advisories/new).
+If that form is not yet available during the repository-publication window,
+email `dev@christopher-marx.de` with the subject `Tinkercloud security report`.
+Do not send live credentials, private keys, OTPs, session values, or production
+data by email; arrange a safer transfer method first when such evidence is
+essential.
 Include:
 
 - the affected commit or version;

@@ -190,6 +190,13 @@ The complete one-time setup and dispatch commands are in
 are in the [stable release contract](../../specs/operations/stable-release-contract.md)
 and [denial charter](../../specs/operations/stable-distribution-denial-charter.md).
 
+After the source repository is public, and before either npm publishing or the
+planned package-maintenance workflow is activated, run
+`npm audit --package-lock-only` from both the repository root and `landing/`.
+Review and record both results as release evidence. This is deliberately not a
+pre-public gate because the registry request discloses each dependency graph to
+npm; publishing remains denied until the post-public audit is complete.
+
 ## Install the deployer client
 
 Deployer machines install only `tinker`, never the privileged server binary. The
@@ -258,16 +265,21 @@ The workstation CLI may transport only the reviewed fixed host grammar over
 normal host-key-verified SSH:
 
 ```sh
-tinker host install root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host install root@HOST
 tinker host status root@HOST
 tinker host doctor root@HOST
 tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host uninstall root@HOST
 ```
 
 Install sends the embedded bootstrap, which verifies the signed full installer
 before executing it. Existing servers refuse the install path and use the local
 rollback-capable updater. `tinker host` does not store root credentials, weaken
 known-host verification, accept arbitrary SSH options, or expose remote exec.
+A released CLI derives the exact immutable install release from its embedded
+version; development builds require an explicit `--release-base`. Uninstall
+requires confirmation of the exact host and preserves the ACME cache by
+default.
 
 After interactive OTP verification, `tinker login` saves its server-bound bearer
 in `os.UserConfigDir()/tinker/<sha256(normalized-server)>.json`. The platform

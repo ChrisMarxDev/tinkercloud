@@ -2,8 +2,33 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+![Tinkercloud turns a folder into a protected team app](docs/assets/readme-deploy-flow.webp)
+
+## Overview
+
 Tinkercloud is a self-hosted private micro-app platform: one operator runs one
 gateway, deployers publish small apps, and viewers authenticate by email.
+
+For a deployer, the shortest useful path is preview, then publish the current
+project directory:
+
+```sh
+tinker dev
+tinker deploy .
+```
+
+For an operator, signed installation and everyday host checks stay equally
+direct:
+
+```sh
+tinker host install root@HOST
+tinker host status root@HOST
+tinker host doctor root@HOST
+```
+
+The first `tinker deploy .` asks only for required information it cannot safely
+derive, including optional viewer emails or domains. With no viewer rule, the
+app remains private to its owner.
 
 The defining guarantee is stronger than “apps include authentication”:
 
@@ -14,18 +39,71 @@ Tinkercloud includes a Go gateway, deployer CLI, SQLite-backed capabilities,
 browser SDK, and local operational commands. It is pre-release software: use it
 for replaceable toy, prototype, and utility apps—not business-critical data.
 
-## Operator first: run the platform
+## Install the Tinker CLI
 
-The target operator path is `sudo tinkercloud setup`: discover the host, ask
-only for the controlled base domain, initial operator email, and necessary
-protected provider credential source, then generate configuration and resume
-across external DNS/email checkpoints.
+Tinker is installed directly from an exact GitHub release. Replace `VERSION`
+with a published beta version; beta installation never follows a mutable
+`latest` channel.
 
 ```sh
-sudo tinkercloud setup
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/ sh
+```
+
+The installer selects the macOS or Linux binary for the local architecture,
+verifies its checksum and Ed25519 signature, and installs `tinker` into
+`~/.local/bin`. Run it as the current user, never with `sudo`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+tinker version
+```
+
+## Operator first: run the platform
+
+From the operator workstation, the same CLI installs and administers the
+Tinkercloud server over the existing root SSH trust boundary:
+
+```sh
+tinker host install root@HOST
+tinker host status root@HOST
+tinker host doctor root@HOST
+tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host uninstall root@HOST
+```
+
+The released CLI derives the exact immutable GitHub release URL from its own
+signed build version. A local development build instead requires the explicit
+`--release-base` form. Installation places the verified server binary and
+systemd unit; it does not guess the domain, operator identity, or protected
+email credential needed to initialize an instance.
+
+`tinker host update` invokes the server's signed self-updater. The host verifies
+the complete compatibility evidence, restarts the service, runs health and
+anonymous-denial checks, and automatically restores the previous binary if a
+gate fails. Tinker uses a fixed SSH command grammar; it stores no root
+credential and exposes no arbitrary remote shell.
+
+`tinker host uninstall` requires confirmation of the exact SSH target. It
+permanently removes Tinkercloud configuration, credentials, apps, data,
+service, binary, and service identity while preserving the ACME cache so a
+manual reinstall does not request the same certificates again.
+
+After installing the host binary, initialize the instance through the current
+deterministic operator contract:
+
+```sh
+sudo tinkercloud init --non-interactive \
+  --domain example.com \
+  --operator-email operator@example.com \
+  --email-from access@example.com \
+  --resend-api-key-file /root/tinkercloud-resend.key \
+  --hmac-key-file /root/tinkercloud-hmac.key
 sudo tinkercloud status
 sudo tinkercloud doctor
 ```
+
+The minimum-question `tinkercloud setup` assistant remains planned; the README
+does not treat it as implemented installation behavior.
 
 `status` reports redacted local health for SQLite, disk, permissions, clock,
 service state, listeners, version, and rollback state. `doctor` performs bounded
@@ -94,7 +172,8 @@ maintenance material lives under [`internals/`](internals/README.md) and
 
 ## License and community
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE) and the repository-owned
+[asset provenance](ASSET_PROVENANCE.md).
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md),
 [security policy](SECURITY.md), [support guide](SUPPORT.md), and

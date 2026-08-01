@@ -193,7 +193,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   labels satisfy the current compatibility contract. The complete signed
   release manifest binds the CLI and SDK ranges used by runtime HTTP and
   WebSocket negotiation.
-- The workstation `tinker host install|status|doctor|update` surface is only a
+- The workstation `tinker host install|status|doctor|update|uninstall` surface is only a
   fixed SSH adapter to these root-local operations. It opens no listener,
   stores no root credential, preserves normal host-key verification, and
   accepts no arbitrary remote command.

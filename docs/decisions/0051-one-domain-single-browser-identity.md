@@ -93,11 +93,11 @@ path-plus-query preservation, and DNS/TLS readiness.
 ## Implementation evidence
 
 The signed `0.1.0` build completed the guarded clean-host VPS acceptance run on
-2026-07-31 at `testing.tinkercloud.fun`. The black-box run proved one dashboard
+2026-07-31 at the public-safe `testing.tinkercloud.example` placeholder. The black-box run proved one dashboard
 OTP identity across two allowed app hosts without a second OTP, independent
 host-only app sessions, preserved path and query state, replay and wrong-app
 handoff denial, app-local logout, global logout with child-session revocation,
 account switching, private static denial, cross-app data isolation, and
 restart persistence. The redacted owner-only result is retained under
 `.tinker/vps/unattended-reports/` as
-`vps-e2e-20260731T145714Z-74715.status`.
+`vps-e2e-<timestamp>-<run>.status`.

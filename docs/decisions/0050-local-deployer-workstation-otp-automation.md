@@ -1,6 +1,6 @@
 # ADR 0050: Local deployer-workstation OTP automation is not CI credentialing
 
-**Status:** Accepted for V1 test infrastructure
+**Status:** Accepted for V1 test infrastructure; recipient-domain detail superseded by ADR 0056
 
 ## Context
 
@@ -22,11 +22,13 @@ app directory as arguments. Keys, OTPs, and bearers never enter arguments,
 output, project files, or a VPS.
 
 Before any CLI/app path check, saved-credential inspection, reader/key access,
-or network action, the wrapper normalizes the requested deployer email and
-requires its domain to equal exactly `christopher-marx.de`. It rejects
-subdomains, suffix lookalikes, the hyphenless domain, and unrelated domains.
-This restriction is only on the opt-in local wrapper, not on direct CLI use,
-saved CLI credentials, or normal Tinkercloud human login.
+or network action, the wrapper requires the mandatory local configuration
+defined by [ADR 0056](0056-configurable-local-automation-recipient-domain.md),
+normalizes the requested deployer email, and requires its domain to equal that
+configuration exactly. It rejects subdomains, suffix lookalikes, the hyphenless
+domain, and unrelated domains. This restriction is only on the opt-in local
+wrapper, not on direct CLI use, saved CLI credentials, or normal Tinkercloud
+human login.
 
 This wrapper is explicitly not production CI/noninteractive deployment-agent
 authentication. That authority continues to require a separately provisioned

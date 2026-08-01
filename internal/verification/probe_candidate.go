@@ -26,6 +26,36 @@ import (
 
 var probeRequestID = regexp.MustCompile(`^req_[0-9a-f]{24}$`)
 
+type CandidateProbeFailureStage string
+
+const (
+	CandidateProbeReleaseEvidence     CandidateProbeFailureStage = "release_evidence"
+	CandidateProbeIndex               CandidateProbeFailureStage = "index"
+	CandidateProbeSession             CandidateProbeFailureStage = "session"
+	CandidateProbeAnonymousDenial     CandidateProbeFailureStage = "anonymous_denial"
+	CandidateProbeAuthenticatedHealth CandidateProbeFailureStage = "authenticated_health"
+	CandidateProbePublicStaticHealth  CandidateProbeFailureStage = "public_static_health"
+	CandidateProbeUnknown             CandidateProbeFailureStage = "unknown"
+)
+
+type candidateProbeError struct{ stage CandidateProbeFailureStage }
+
+func (e candidateProbeError) Error() string { return "candidate probe failed" }
+
+// CandidateProbeStage returns only a fixed non-secret diagnostic category.
+// Callers must not log the underlying probe error or candidate metadata.
+func CandidateProbeStage(err error) CandidateProbeFailureStage {
+	var probeErr candidateProbeError
+	if errors.As(err, &probeErr) {
+		return probeErr.stage
+	}
+	return CandidateProbeUnknown
+}
+
+func candidateProbeFailed(stage CandidateProbeFailureStage) error {
+	return candidateProbeError{stage: stage}
+}
+
 type protectedProbeSpy struct{ calls int }
 
 func (s *protectedProbeSpy) Dispatch(appauth.AuthorizationContext, gateway.Endpoint, http.ResponseWriter, *http.Request) {
@@ -76,17 +106,17 @@ func safeReservedDenial(w *httptest.ResponseRecorder) bool {
 func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r deployments.Record) (Probe, error) {
 	root, e := CandidateFilesystem(dataRoot, r)
 	if e != nil {
-		return Probe{}, e
+		return Probe{}, candidateProbeFailed(CandidateProbeReleaseEvidence)
 	}
 	index, e := os.ReadFile(filepath.Join(root, "index.html"))
 	if e != nil {
-		return Probe{}, errors.New("candidate index unavailable")
+		return Probe{}, candidateProbeFailed(CandidateProbeIndex)
 	}
 	v := identity.Identity{ID: "probe@invalid", Email: "probe@invalid"}
 	ss := sessions.NewMemoryStore()
 	token, _, e := ss.Create(r.AppID, v, time.Now().Add(time.Minute))
 	if e != nil {
-		return Probe{}, e
+		return Probe{}, candidateProbeFailed(CandidateProbeSession)
 	}
 	mode := r.Manifest.AccessMode
 	if mode == "" {
@@ -105,14 +135,14 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	g.ServeHTTP(aw, anon)
 	if mode == "public" {
 		if aw.Code != http.StatusOK || !bytes.Equal(aw.Body.Bytes(), index) || aw.Header().Get("Cache-Control") != "no-store" {
-			return Probe{}, errors.New("public candidate probe failed")
+			return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 		}
 		wantRobots := "noindex, nofollow"
 		if r.Manifest.Indexing {
 			wantRobots = ""
 		}
 		if aw.Header().Get("X-Robots-Tag") != wantRobots {
-			return Probe{}, errors.New("public indexing probe failed")
+			return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 		}
 		var assetPath, assetHash string
 		var rootBytes, assetBytes int64
@@ -124,19 +154,19 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 			}
 		}
 		if int64(len(index)) != rootBytes {
-			return Probe{}, errors.New("public root evidence mismatch")
+			return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 		}
 		if assetPath != "" {
 			asset, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(assetPath)))
 			if err != nil || int64(len(asset)) != assetBytes || fmt.Sprintf("%x", sha256.Sum256(asset)) != assetHash {
-				return Probe{}, errors.New("public asset evidence mismatch")
+				return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 			}
 			q := httptest.NewRequest(http.MethodGet, "https://"+host+"/"+assetPath, nil)
 			q.Host = host
 			w := httptest.NewRecorder()
 			g.ServeHTTP(w, q)
 			if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), asset) || w.Header().Get("Set-Cookie") != "" || w.Header().Get("Location") != "" {
-				return Probe{}, errors.New("public asset probe failed")
+				return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 			}
 		}
 		for _, route := range representativeReservedProbeRoutes {
@@ -145,16 +175,16 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 			w := httptest.NewRecorder()
 			g.ServeHTTP(w, q)
 			if !safeReservedDenial(w) {
-				return Probe{}, errors.New("public reserved probe failed")
+				return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 			}
 		}
 		if protected.calls != 0 || preauth.calls != 0 {
-			return Probe{}, errors.New("public reserved dispatcher invoked")
+			return Probe{}, candidateProbeFailed(CandidateProbePublicStaticHealth)
 		}
 		return Probe{URL: "https://" + host, PublicReachable: true, ReservedDenied: true, Posture: "public_static", RootSHA256: fmt.Sprintf("%x", sha256.Sum256(index)), RootBytes: rootBytes, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes, Indexing: r.Manifest.Indexing}, nil
 	}
 	if aw.Code != http.StatusUnauthorized || bytes.Contains(aw.Body.Bytes(), index) {
-		return Probe{}, errors.New("anonymous probe failed")
+		return Probe{}, candidateProbeFailed(CandidateProbeAnonymousDenial)
 	}
 	auth := httptest.NewRequestWithContext(ctx, "GET", "https://"+host+"/", nil)
 	auth.Host = host
@@ -162,7 +192,7 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	rw := httptest.NewRecorder()
 	g.ServeHTTP(rw, auth)
 	if rw.Code != http.StatusOK || !bytes.Equal(rw.Body.Bytes(), index) {
-		return Probe{}, errors.New("authenticated probe failed")
+		return Probe{}, candidateProbeFailed(CandidateProbeAuthenticatedHealth)
 	}
 	return Probe{URL: "https://" + host, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
 }
