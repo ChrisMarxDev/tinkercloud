@@ -44,6 +44,8 @@ require 'git merge-base --is-ancestor "$source_commit" origin/main' \
   "reviewed main ancestry gate is missing"
 require 'gh release view "$tag"' "existing-release denial gate is missing"
 require 'visibility" != "PUBLIC"' "public repository gate is missing"
+require 'sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)' \
+  "portable exact SDK version extraction is missing"
 require "TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64" "beta signing secret is missing"
 test "$(grep -c -F -- 'TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64' "$workflow")" = 1 || {
   echo "beta signing secret has more than one workflow exposure" >&2

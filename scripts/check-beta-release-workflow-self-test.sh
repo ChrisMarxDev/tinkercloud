@@ -45,4 +45,8 @@ sed "s/printf 'tinker host install root@HOST\\\\n'/printf 'tinker host install r
   "$source_workflow" >"$tmp/no-version-derived-host-install.yml"
 expect_denied "missing version-derived host installation notes" "$tmp/no-version-derived-host-install.yml"
 
+sed 's#sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)#sdk_version=0.0.0#' \
+  "$source_workflow" >"$tmp/no-portable-version-extraction.yml"
+expect_denied "missing portable exact SDK version extraction" "$tmp/no-portable-version-extraction.yml"
+
 echo "beta release workflow checker self-test passed"

@@ -83,7 +83,7 @@ jobs:
           fi
           package_version=$(node -p "require('./sdk/typescript/package.json').version")
           jsr_version=$(node -p "require('./sdk/typescript/jsr.json').version")
-          sdk_version=$(sed -n 's/^export const SDK_VERSION = "\([^"]*\)";.*/\1/p' sdk/typescript/src/index.ts)
+          sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)
           if [[ "$package_version" != "$VERSION" || "$jsr_version" != "$VERSION" || "$sdk_version" != "$VERSION" ]]; then
             echo "stable version declarations do not match $VERSION" >&2
             exit 1
