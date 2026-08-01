@@ -11,11 +11,12 @@ documentation fixes, tests, and focused implementation changes.
 - Use the question form for setup and usage help.
 - Search existing issues before opening a duplicate.
 
-New issue-form submissions enter the `inbox` state for maintainer/agent
-triage. Refinement to `open` means the issue is ready, not that implementation
-is authorized. Only a trusted maintainer may apply `implement`; `pending`
-always blocks work. Approved agent work is proposed through a draft pull
-request and remains subject to normal review and CI.
+New issue-form submissions enter `status/needs-triage`. Triage assigns one
+`type/*` label and moves the issue to `status/needs-info`, `status/accepted`,
+`status/blocked`, or `status/in-progress`. Acceptance does not authorize code.
+Only a trusted maintainer may apply `agent/plan` or `agent/implement`, and each
+approved implementation is proposed through an isolated worktree, ordered
+Conventional Commits, and a draft pull request subject to normal review and CI.
 
 Tinkercloud is pre-release and V1 scope is intentionally narrow. A proposal that
 adds public apps, backend runtimes, a second public listener, a second storage
@@ -77,7 +78,9 @@ evidence.
 ## Pull requests
 
 - Keep changes focused; do not combine an unrelated refactor with a behavior change.
-- Use conventional commit subjects, such as `fix: deny stale app sessions`.
+- Use a dedicated worktree for each independent issue or pull request.
+- Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+  and keep each commit coherent, ordered, and reviewable.
 - Run formatting and the relevant tests before requesting review.
 - Fill in the pull request template, including explicit non-goals.
 - Update docs, contracts, examples, migrations, and skills in the same change

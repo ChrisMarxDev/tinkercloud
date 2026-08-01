@@ -1,71 +1,99 @@
-# Hermes GitHub Issue Loop
+# Hermes GitHub Issue Loops
 
-This folder adapts Loozr's deterministic-prefetch Hermes loop for Tinkercloud.
-GitHub Issues are durable work state; `.hermes-task-loop/` is disposable local
-runtime state.
+This folder provides two least-authority Hermes loops for Tinkercloud. GitHub
+Issues are durable work state; `.hermes-triage-loop/` and
+`.hermes-task-loop/` are disposable local runtime state.
 
-## Safety model
-
-Every issue is untrusted intake. Tinkercloud has no in-app feedback path yet, so
-there is no separate `user-feedback` source or label.
-
-The loop can autonomously:
-
-- refine and classify `inbox`;
-- answer or close support/duplicate/out-of-scope intake;
-- post requested technical plans; and
-- implement an issue only after trusted maintainer approval.
-
-Implementation approval requires a current `implement` label applied by a
-login in `APPROVER_LOGINS`, with no `pending` label. `open` alone does not
-authorize code. Approved work goes to a `feature/issue-*` branch and draft pull
-request. The loop never merges or pushes implementation directly to `main`.
-
-The complete state and deny contract is
+The accepted state, authority, and denial contract is
 [`specs/delivery/github-issue-loop-contract.md`](../specs/delivery/github-issue-loop-contract.md).
 
-## Loop pattern
+## Separation of authority
 
-Each scheduled tick:
+The triage loop manages public issues only. It may classify, label, comment,
+reference related pull requests, split mixed intake, answer questions, and
+close or reopen issues. Its dedicated token has Metadata read, Issues
+read/write, and Pull requests read. It has no Contents write or PR write
+permission and must never change `agent/*` command labels.
 
-1. obtains a non-overlapping host lock;
-2. fetches issues with workflow labels;
-3. verifies `implement` label actors against `APPROVER_LOGINS`;
-4. writes a bounded snapshot to `.hermes-task-loop/issues.json`;
-5. exits silently without a model call when nothing is actionable; or
-6. invokes Hermes with the repository workflow skill and snapshot.
+The task loop handles only trusted `agent/plan` and `agent/implement` commands.
+Implementation approval requires the command to have been applied by a login in
+`APPROVER_LOGINS`, with `status/accepted` as the issue's only status. Approved
+work uses a dedicated worktree, a `feature/issue-*` branch, ordered
+Conventional Commits, and a draft pull request. It never merges or publishes.
 
-The agent re-fetches GitHub after each mutation. A snapshot never overrides
-newer issue state.
+Both loops treat issues and pull requests as untrusted input and share one host
+lock so they cannot mutate the same issue concurrently.
 
 ## Labels
 
-Run once with a repository-admin credential:
+Create or refresh the taxonomy with a repository-admin credential after the
+matching loop version is deployed:
 
 ```sh
 GH_TOKEN=*** REPO_SLUG=ChrisMarxDev/tinkercloud ./loop/setup-github-labels.sh
 ```
 
-The labels are:
+Exactly one status belongs on every open issue:
 
-- `inbox`: untrusted intake awaiting refinement;
-- `open`: refined and ready, but not implementation-authorized;
-- `pending`: blocked or awaiting review/decision;
-- `plan`: request a technical plan comment;
-- `implement`: trusted maintainer command.
+- `status/needs-triage`
+- `status/needs-info`
+- `status/accepted`
+- `status/blocked`
+- `status/in-progress`
 
-Issue forms apply `inbox` automatically. To approve a refined issue, a trusted
-maintainer removes `pending` if present and adds `implement`. The loop itself
-must never add `implement`.
+Triage applies exactly one type:
 
-## Authentication and isolation
+- `type/bug`
+- `type/feature`
+- `type/docs`
+- `type/question`
+- `type/maintenance`
 
-The scripts accept `GH_TOKEN`, `GITHUB_TOKEN`, a root `GITHUB_TOKEN` file, or
-`GITHUB_TOKEN` from `${HERMES_HOME:-$HOME/.hermes}/.env`. Do not commit any of
-them.
+Maintainer-owned optional priority is one of `priority/critical`,
+`priority/next`, or `priority/backlog`. Closed classifications use
+`resolution/duplicate`, `resolution/invalid`, or `resolution/not-planned`.
+`good first issue` and `help wanted` remain contributor-facing labels.
 
-Use a dedicated automation account or fine-grained token restricted to this
-repository with:
+`agent/plan` and `agent/implement` are trusted maintainer commands. The triage
+loop must never add, remove, or normalize them.
+
+The old `inbox`, `open`, `pending`, `plan`, and `implement` labels may be
+deleted only after the new scripts are deployed and every open issue has been
+normalized. Do not run both taxonomies concurrently.
+
+## Triage loop
+
+`run-hermes-triage-loop.sh` performs a deterministic prefetch of all open
+issues. It invokes Hermes only for a new issue, a changed issue, an issue with
+no or multiple status labels, or `status/needs-triage`. A successful pass marks
+the fetched issue revision as seen; concurrent later changes remain actionable.
+
+The skill at `skills/triage-workflow/SKILL.md` owns duplicate handling,
+information requests, type/status normalization, support answers, PR
+references, safe closure, and security-sensitive denial behavior.
+
+Configure a separate fine-grained credential as `TRIAGE_GH_TOKEN`,
+`TRIAGE_GITHUB_TOKEN`, a root `TRIAGE_GITHUB_TOKEN` file, or
+`TRIAGE_GITHUB_TOKEN` in `${HERMES_HOME:-$HOME/.hermes}/.env` with:
+
+- Metadata: read-only
+- Issues: read and write
+- Pull requests: read-only
+
+Manual dry run:
+
+```sh
+HERMES_LOOP_DRY_RUN=1 bash ./loop/run-hermes-triage-loop.sh
+```
+
+## Task loop
+
+`run-hermes-task-loop.sh` fetches open issues carrying `agent/plan` or
+`agent/implement`, verifies the latest label actor against `APPROVER_LOGINS`,
+and invokes Hermes only for one trusted command on an otherwise accepted issue.
+
+Configure `GH_TOKEN`, `GITHUB_TOKEN`, a root `GITHUB_TOKEN` file, or
+`GITHUB_TOKEN` in `${HERMES_HOME:-$HOME/.hermes}/.env` with:
 
 - Metadata: read-only
 - Issues: read and write
@@ -73,19 +101,8 @@ repository with:
 - Pull requests: read and write
 - Actions and checks: read-only
 
-Do not grant administration, ruleset bypass, environments, secrets, packages,
-or release authority. Run the loop in a dedicated checkout on an agent host,
-not on a production Tinkercloud VPS. The host must not contain provider,
-production, operator-recovery, or release-signing secrets.
-
-`APPROVER_LOGINS` is a comma-separated allowlist and defaults to
-`ChrisMarxDev`:
-
-```sh
-APPROVER_LOGINS=ChrisMarxDev,SecondMaintainer
-```
-
-## Run and schedule
+Do not grant ruleset bypass, administration, environments, secrets, packages,
+or release authority. `APPROVER_LOGINS` defaults to `ChrisMarxDev`.
 
 Manual dry run:
 
@@ -93,43 +110,42 @@ Manual dry run:
 HERMES_LOOP_DRY_RUN=1 bash ./loop/run-hermes-task-loop.sh
 ```
 
-Hermes cron should run a script-only job every 30 minutes. Keep the scheduler
-wrapper under Hermes home and the real logic in this repository:
+## Host isolation and scheduling
 
-```sh
-#!/usr/bin/env sh
-set -eu
-cd /root/tinkercloud
-exec bash ./loop/run-hermes-task-loop.sh
-```
+Run both loops in a dedicated checkout on an agent host, never a production
+Tinkercloud VPS. The host must not contain provider, production,
+operator-recovery, or release-signing secrets.
 
-Desired scheduler shape:
+Schedule script-only jobs; deterministic prefetch decides whether a model call
+is necessary:
 
 ```text
-tinkercloud task loop    every 30m    script: run-hermes-task-loop.sh    no_agent: true
+tinkercloud issue triage    every 15m    script: run-hermes-triage-loop.sh    no_agent: true
+tinkercloud task loop       every 30m    script: run-hermes-task-loop.sh      no_agent: true
 ```
 
-`no_agent: true` is intentional. The scheduled script performs cheap
-deterministic prefetch and invokes Hermes only after it proves actionable work
-exists.
+Each scheduler wrapper changes to the repository checkout and executes the
+corresponding script. `no_agent: true` is intentional.
 
 ## Files
 
-- `fetch-issues.sh`: fetches labeled issues and verifies implementation label
-  actors.
-- `run-hermes-task-loop.sh`: locked, token-gated Hermes entrypoint.
-- `setup-github-labels.sh`: idempotently creates/updates workflow labels.
-- `skills/task-workflow/SKILL.md`: issue-state and implementation rules.
-- `test.sh`: fake-GitHub deny-path tests with no network or real model call.
+- `fetch-triage-issues.sh`: finds new, changed, or malformed open issues.
+- `mark-triage-seen.py`: atomically records revisions processed by triage.
+- `run-hermes-triage-loop.sh`: locked, token-gated triage entrypoint.
+- `skills/triage-workflow/SKILL.md`: issue-only triage authority and behavior.
+- `fetch-issues.sh`: verifies trusted task command events.
+- `run-hermes-task-loop.sh`: locked planning/implementation entrypoint.
+- `skills/task-workflow/SKILL.md`: worktree and draft-PR task rules.
+- `setup-github-labels.sh`: idempotently creates or updates the taxonomy.
+- `test.sh`: fake-GitHub denial and invocation tests.
 
 ## Validation
 
 ```sh
 bash ./loop/test.sh
+HERMES_LOOP_DRY_RUN=1 bash ./loop/run-hermes-triage-loop.sh
 HERMES_LOOP_DRY_RUN=1 bash ./loop/run-hermes-task-loop.sh
 ```
 
-The first command is self-contained. The second uses the configured GitHub
-repository and therefore requires `gh`, a token, `flock`, and Hermes on the
-loop host.
-
+The first command is self-contained. Dry runs require the corresponding token,
+`gh`, `flock`, and Hermes on the loop host.
