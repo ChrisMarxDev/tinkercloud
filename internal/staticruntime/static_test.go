@@ -69,7 +69,7 @@ func TestServeVerifiesImmutableEvidenceAfterAuthorization(t *testing.T) {
 	})
 	defer restore()
 	w := httptest.NewRecorder()
-	Serve(auth, w, httptest.NewRequest(http.MethodGet, "https://alpha.test/", nil))
+	Serve(appauth.PrivateStatic(auth), w, httptest.NewRequest(http.MethodGet, "https://alpha.test/", nil))
 	if w.Code != http.StatusOK || w.Body.String() != "private" || reads != 1 {
 		t.Fatalf("verified serve: code=%d body=%q reads=%d", w.Code, w.Body.String(), reads)
 	}
@@ -77,7 +77,7 @@ func TestServeVerifiesImmutableEvidenceAfterAuthorization(t *testing.T) {
 		t.Fatal(err)
 	}
 	w = httptest.NewRecorder()
-	Serve(auth, w, httptest.NewRequest(http.MethodGet, "https://alpha.test/", nil))
+	Serve(appauth.PrivateStatic(auth), w, httptest.NewRequest(http.MethodGet, "https://alpha.test/", nil))
 	if w.Code != http.StatusNotFound || w.Body.String() == "tampered" || reads != 2 {
 		t.Fatalf("corrupt release served: code=%d body=%q reads=%d", w.Code, w.Body.String(), reads)
 	}
@@ -112,13 +112,13 @@ func TestServeSPAFallbackRequiresExplicitAppOptIn(t *testing.T) {
 	}
 
 	denied := httptest.NewRecorder()
-	Serve(authorize(false), denied, request())
+	Serve(appauth.PrivateStatic(authorize(false)), denied, request())
 	if denied.Code != http.StatusNotFound || denied.Body.String() == "SPA-PRIVATE" {
 		t.Fatalf("undeclared SPA fallback served route: status=%d body=%q", denied.Code, denied.Body.String())
 	}
 
 	allowed := httptest.NewRecorder()
-	Serve(authorize(true), allowed, request())
+	Serve(appauth.PrivateStatic(authorize(true)), allowed, request())
 	if allowed.Code != http.StatusOK || allowed.Body.String() != "SPA-PRIVATE" {
 		t.Fatalf("declared SPA fallback did not serve route: status=%d body=%q", allowed.Code, allowed.Body.String())
 	}

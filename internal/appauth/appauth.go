@@ -33,6 +33,23 @@ type AuthorizationContext interface {
 	authorizedContext()
 }
 
+// StaticAccessContext is the only authority accepted by staticruntime.  Its
+// two implementations are deliberately private to this package: a private
+// viewer context and a capability-free public static context.
+type StaticAccessContext interface {
+	AppID() string
+	DeploymentID() string
+	AppSlug() string
+	ReleaseRoot() string
+	ReleaseEvidence() releases.FileManifest
+	SPAFallback() bool
+	PolicyRevision() uint64
+	PublicGateRevision() uint64
+	Public() bool
+	Indexing() bool
+	staticAuthorizedContext()
+}
+
 // DataAuthorizationContext is the narrower, sealed trust seam for app-local
 // persistence and best-effort freshness hints. It deliberately has no viewer
 // identity or session: a deployer acting through the control plane is not
@@ -71,6 +88,43 @@ func (c authorizationContext) authorizedContext()          {}
 func (c authorizationContext) DataActorKind() string       { return "viewer" }
 func (c authorizationContext) DataActorID() string         { return c.session.Identity.ID }
 func (c authorizationContext) dataAuthorizedContext()      {}
+
+type privateStaticContext struct{ AuthorizationContext }
+
+func (privateStaticContext) DeploymentID() string { return "" }
+
+func (privateStaticContext) PublicGateRevision() uint64 { return 0 }
+func (privateStaticContext) Public() bool               { return false }
+func (privateStaticContext) Indexing() bool             { return false }
+func (privateStaticContext) staticAuthorizedContext()   {}
+
+// PrivateStatic wraps an already gateway-produced private context for the
+// static dispatcher. It cannot manufacture viewer authority because its input
+// is itself sealed.
+func PrivateStatic(auth AuthorizationContext) StaticAccessContext {
+	if auth == nil {
+		return nil
+	}
+	return privateStaticContext{auth}
+}
+
+type publicStaticContext struct {
+	app                          apps.App
+	policyRevision, gateRevision uint64
+	indexing                     bool
+}
+
+func (c publicStaticContext) AppID() string                          { return c.app.ID }
+func (c publicStaticContext) DeploymentID() string                   { return c.app.DeploymentID }
+func (c publicStaticContext) AppSlug() string                        { return c.app.Slug }
+func (c publicStaticContext) ReleaseRoot() string                    { return c.app.ReleaseRoot }
+func (c publicStaticContext) ReleaseEvidence() releases.FileManifest { return c.app.ReleaseEvidence }
+func (c publicStaticContext) SPAFallback() bool                      { return c.app.SPAFallback }
+func (c publicStaticContext) PolicyRevision() uint64                 { return c.policyRevision }
+func (c publicStaticContext) PublicGateRevision() uint64             { return c.gateRevision }
+func (c publicStaticContext) Public() bool                           { return true }
+func (c publicStaticContext) Indexing() bool                         { return c.indexing }
+func (c publicStaticContext) staticAuthorizedContext()               {}
 
 type deployerDataAuthorizationContext struct {
 	appID, slug, actorID, requestID string
@@ -115,11 +169,31 @@ func (a Authorizer) Authorize(ctx context.Context, app apps.App, token, requestI
 		return nil, ErrDenied
 	}
 	p, err := a.Policies.Current(ctx, app.ID)
-	if err != nil || !p.Valid || p.AppID != app.ID {
+	if err != nil || !p.Valid || p.AppID != app.ID || (p.Mode != "" && p.Mode != "private" && p.Mode != "public") {
 		return nil, ErrDenied
 	}
 	if policies.Evaluate(p, s.Identity) != policies.Allow {
 		return nil, ErrDenied
 	}
 	return authorizationContext{app: app, session: s, revision: p.Revision, requestID: requestID}, nil
+}
+
+// AuthorizeStatic first preserves private viewer access.  Anonymous public
+// access is possible only for a current public policy, a current enabled gate,
+// and a release with no browser capability.  All failures are denial.
+func (a Authorizer) AuthorizeStatic(ctx context.Context, app apps.App, token, requestID string) (StaticAccessContext, error) {
+	gateStore, ok := a.Policies.(policies.PublicGateStore)
+	if ok && !app.KVEnabled && !app.BlobsEnabled && !app.RealtimeEnabled && !app.LLMChatRequested && app.DeploymentID != "" && app.ReleaseRoot != "" && app.ReleaseEvidence.Hash != "" {
+		p, err := a.Policies.Current(ctx, app.ID)
+		if err == nil && p.Valid && p.AppID == app.ID && p.Mode == "public" {
+			gate, err := gateStore.CurrentPublicGate(ctx)
+			if err == nil && gate.Valid && gate.Enabled && gate.Revision > 0 {
+				return publicStaticContext{app: app, policyRevision: p.Revision, gateRevision: gate.Revision, indexing: app.PublicIndexing}, nil
+			}
+		}
+	}
+	if private, err := a.Authorize(ctx, app, token, requestID); err == nil {
+		return privateStaticContext{private}, nil
+	}
+	return nil, ErrDenied
 }

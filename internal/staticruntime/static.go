@@ -22,7 +22,7 @@ import (
 // response observer confirms a successful 200 response.
 type Outcome struct{ DocumentCandidate bool }
 
-func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request, beforeDocument ...func()) Outcome {
+func Serve(auth appauth.StaticAccessContext, w http.ResponseWriter, r *http.Request, beforeDocument ...func()) Outcome {
 	if r.Method != "GET" && r.Method != "HEAD" {
 		http.NotFound(w, r)
 		return Outcome{}
@@ -49,7 +49,15 @@ func Serve(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Req
 	}
 	defer f.Close()
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, no-store")
+	if auth.Public() {
+		w.Header().Set("Cache-Control", "no-store")
+		if !auth.Indexing() {
+			w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		}
+	} else {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	}
 	etag := fmt.Sprintf("W/\"%x-%x\"", info.Size(), info.ModTime().UnixNano())
 	w.Header().Set("ETag", etag)
 	if r.Header.Get("If-None-Match") == etag {
@@ -81,7 +89,7 @@ func SetInspectorForTest(fn func(string) (releases.FileManifest, error)) func() 
 	return func() { inspectRelease = previous }
 }
 
-func verifyRelease(auth appauth.AuthorizationContext) bool {
+func verifyRelease(auth appauth.StaticAccessContext) bool {
 	evidence := auth.ReleaseEvidence()
 	if evidence.Hash == "" || auth.ReleaseRoot() == "" {
 		return false

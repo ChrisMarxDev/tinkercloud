@@ -15,6 +15,9 @@ type Probe struct {
 	AnonymousDenied      bool
 	AuthenticatedHealthy bool
 	Detail               string
+	Posture              string
+	RootSHA256           string
+	Indexing             bool
 }
 
 func (p Probe) Passed() bool { return p.URL != "" && p.AnonymousDenied && p.AuthenticatedHealthy }

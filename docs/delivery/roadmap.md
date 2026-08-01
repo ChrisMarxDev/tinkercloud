@@ -27,6 +27,16 @@ Delivery order:
 5. **L4 release evidence:** first-party public examples plus the complete
    two-owner/two-app private/public/catalog/insights clean-VPS matrix.
 
+L4 implementation evidence includes the capability-free, deliberately indexed
+[`public-static-product-story`](../../examples/public-static-product-story/)
+example. It does not make the starter or SDK gallery public: those remain
+private owner-only examples. Release evidence is complete only when the local
+real-listener and opt-in clean-VPS matrices prove the gate/default-denial,
+explicit acknowledgement, exact static/indexing behavior, reserved-route
+denials, catalog filtering, approximate-visitor aggregation, next-request
+transitions, two-owner isolation, restart persistence, and malformed/failure
+paths listed in the VPS contract and denial charter.
+
 Exit evidence is the acceptance list in
 [`concept/features/public-reach-and-local-insights.html`](../../concept/features/public-reach-and-local-insights.html)
 and the executable obligations in

@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/collections"
 	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
@@ -96,9 +97,30 @@ type AccessPolicyInput struct {
 	} `json:"allow"`
 }
 type Upload struct {
-	Reader        io.Reader
-	ContentLength int64
-	ContentType   string
+	Reader             io.Reader
+	ContentLength      int64
+	ContentType        string
+	PublicAcknowledged bool
+}
+
+// ActivationPosture is a receipt classification, not authorization. It lets a
+// deployer independently verify the correct gateway posture without receiving
+// a release path, capability state, or policy internals.
+type ActivationPosture string
+
+const (
+	ActivationPrivate      ActivationPosture = "private"
+	ActivationPublicStatic ActivationPosture = "public_static"
+)
+
+// PublicStaticEvidence is immutable candidate evidence safe to return to the
+// authenticated deployer. Paths are release-relative evidence labels, never
+// storage locations or URLs.
+type PublicStaticEvidence struct {
+	RootSHA256  string `json:"root_sha256"`
+	AssetPath   string `json:"asset_path,omitempty"`
+	AssetSHA256 string `json:"asset_sha256,omitempty"`
+	Indexing    bool   `json:"indexing"`
 }
 type ActivationResult struct {
 	DeploymentID string `json:"deployment_id"`
@@ -106,11 +128,13 @@ type ActivationResult struct {
 	// Domain is server-derived deployment evidence. It lets a deployer verify
 	// the returned app hostname without assuming the dashboard host from its
 	// control client URL.
-	Domain               string `json:"domain"`
-	PolicyReady          bool   `json:"policy_ready"`
-	TLSReady             bool   `json:"tls_ready"`
-	AnonymousDenied      bool   `json:"anonymous_denied"`
-	AuthenticatedHealthy bool   `json:"authenticated_healthy"`
+	Domain               string                `json:"domain"`
+	PolicyReady          bool                  `json:"policy_ready"`
+	TLSReady             bool                  `json:"tls_ready"`
+	AnonymousDenied      bool                  `json:"anonymous_denied"`
+	AuthenticatedHealthy bool                  `json:"authenticated_healthy"`
+	Posture              ActivationPosture     `json:"posture"`
+	PublicStatic         *PublicStaticEvidence `json:"public_static,omitempty"`
 }
 type Dispatcher struct {
 	Auth       Authenticator
@@ -184,6 +208,7 @@ type CatalogReader interface {
 type CatalogApp struct {
 	Slug, StableURL, Description string
 	Tags                         []string
+	Posture                      string
 }
 
 type DashboardView struct {
@@ -200,6 +225,9 @@ type DashboardView struct {
 	LLMKeyManagementReady bool
 	LLMProfiles           []LLMProfile
 	LLMGrants             []LLMGrant
+	// PublicGate is operator-only current state. The dashboard deliberately
+	// displays it without offering a browser mutation path.
+	PublicGate DashboardPublicGate
 }
 type LLMConnection struct{ ID, DisplayName, Provider, Status string }
 type LLMProfile struct {
@@ -223,9 +251,29 @@ type DashboardApp struct {
 	Access                               DashboardAccess
 	Releases                             []DashboardRelease
 	Tokens                               []DashboardToken
+	Insights                             DashboardInsights
 	// LLMGrant is a credential-free operator-only read model. It is attached
 	// to the app rather than selected from a browser-provided app identifier.
 	LLMGrant *LLMGrant
+}
+
+// DashboardInsights is a bounded, aggregate-only view. It deliberately has
+// no browser marker, identity, request, or other tracking material.
+type DashboardInsights struct {
+	Available  bool
+	Last7Days  DashboardInsightPeriod
+	Last30Days DashboardInsightPeriod
+}
+type DashboardInsightPeriod struct {
+	PageViews           int64
+	ApproximateVisitors int64
+	LastActivity        time.Time
+	Days                []DashboardInsightDay
+}
+type DashboardInsightDay struct {
+	Day                 time.Time
+	PageViews           int64
+	ApproximateVisitors int64
 }
 
 // LLMProfileInput contains only operator-selected safe profile limits. IDs for
@@ -246,6 +294,12 @@ type DashboardAccess struct {
 	Revision uint64
 	Emails   []string
 	Domains  []string
+	Indexing bool
+}
+type DashboardPublicGate struct {
+	Available bool
+	Enabled   bool
+	Revision  uint64
 }
 type DashboardToken struct {
 	ID, ExpiresAt string
@@ -573,8 +627,13 @@ func (d Dispatcher) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Content-Length is attacker-controlled and may be absent. Limit the
 			// streaming body to one byte beyond the configured boundary so the
 			// domain can discard staging while the transport returns 413.
+			acknowledged, validAcknowledgement := publicAcknowledgement(r)
+			if !validAcknowledgement {
+				write(w, 400, nil, "validation_failed")
+				return
+			}
 			stream := &uploadReader{r: r.Body, remaining: limit + 1, limit: limit}
-			out, e := d.Service.CreateDeployment(r.Context(), a, app, key(r), Upload{Reader: stream, ContentLength: r.ContentLength, ContentType: r.Header.Get("Content-Type")})
+			out, e := d.Service.CreateDeployment(r.Context(), a, app, key(r), Upload{Reader: stream, ContentLength: r.ContentLength, ContentType: r.Header.Get("Content-Type"), PublicAcknowledged: acknowledged})
 			if stream.tooLarge {
 				write(w, 413, nil, "validation_failed")
 				return
@@ -625,6 +684,20 @@ func (d Dispatcher) archiveUploadLimit() int64 {
 		return d.ArchiveUploadBytes
 	}
 	return MaxBody
+}
+
+// publicAcknowledgement accepts one exact bounded transport value. Absence is
+// deliberate false; duplicate, whitespace-padded, or alternate truthy values
+// are malformed rather than silently broadening a deployment request.
+func publicAcknowledgement(r *http.Request) (bool, bool) {
+	values, present := r.Header["X-Tinker-Public-Acknowledged"]
+	if !present {
+		return false, true
+	}
+	if len(values) != 1 || values[0] != "true" {
+		return false, false
+	}
+	return true, true
 }
 
 // uploadReader bounds unknown-length request bodies without granting the
@@ -679,7 +752,7 @@ func validTokenID(id string) bool {
 	return true
 }
 func validAccess(v *AccessPolicyInput) bool {
-	if v.Mode != "private" || v.ExpectedRevision == 0 {
+	if (v.Mode != "private" && v.Mode != "public") || v.ExpectedRevision == 0 {
 		return false
 	}
 	emails := map[string]bool{}

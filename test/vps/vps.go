@@ -60,6 +60,8 @@ const (
 	vpsPrimaryAppSlug   = "vps-e2e-primary"
 	vpsIsolationAppSlug = "vps-e2e-isolation"
 	vpsDeniedAppSlug    = "vps-e2e-denied"
+	vpsPublicAppSlug    = "vps-e2e-public"
+	vpsPublicOtherSlug  = "vps-e2e-public-other"
 )
 
 var vpsFixtureSlugs = [...]string{
@@ -67,6 +69,8 @@ var vpsFixtureSlugs = [...]string{
 	vpsPrimaryAppSlug,
 	vpsIsolationAppSlug,
 	vpsDeniedAppSlug,
+	vpsPublicAppSlug,
+	vpsPublicOtherSlug,
 }
 
 var numericCode = regexp.MustCompile(`^[0-9]{4,12}$`)

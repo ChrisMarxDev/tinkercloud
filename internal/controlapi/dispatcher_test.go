@@ -152,6 +152,49 @@ func TestDispatcherSuccessPropagatesActor(t *testing.T) {
 	}
 }
 
+func TestDispatcherUploadPublicAcknowledgementIsExactAndBounded(t *testing.T) {
+	a := &authFake{a: Actor{ID: "u", Active: true}}
+	var got []bool
+	s := &svcFake{upload: func(u Upload) { got = append(got, u.PublicAcknowledged) }}
+	d := Dispatcher{Auth: a, Service: s}
+	for _, tc := range []struct {
+		name, value string
+		want        int
+	}{
+		{name: "absent", want: http.StatusAccepted},
+		{name: "exact", value: "true", want: http.StatusAccepted},
+		{name: "false", value: "false", want: http.StatusBadRequest},
+		{name: "space", value: " true", want: http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/api/v1/apps/a/deployments", strings.NewReader("x"))
+			r.Header.Set("Content-Type", "application/gzip")
+			r.Header.Set("Idempotency-Key", "key-"+tc.name)
+			if tc.value != "" {
+				r.Header.Set("X-Tinker-Public-Acknowledged", tc.value)
+			}
+			w := httptest.NewRecorder()
+			d.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+			}
+		})
+	}
+	if len(got) != 2 || got[0] || !got[1] {
+		t.Fatalf("acknowledgements=%v", got)
+	}
+	// Duplicate fields are ambiguous even when their values match.
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/apps/a/deployments", strings.NewReader("x"))
+	r.Header["X-Tinker-Public-Acknowledged"] = []string{"true", "true"}
+	r.Header.Set("Content-Type", "application/gzip")
+	r.Header.Set("Idempotency-Key", "duplicate")
+	w := httptest.NewRecorder()
+	d.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest || len(got) != 2 {
+		t.Fatalf("duplicate status=%d acknowledgements=%v", w.Code, got)
+	}
+}
+
 func TestDispatcherActivationFailureIsSafeAndCarriesGatewayRequestID(t *testing.T) {
 	a := &authFake{a: Actor{ID: "u", Active: true}}
 	s := &svcFake{err: deployments.CertificateNotReady}

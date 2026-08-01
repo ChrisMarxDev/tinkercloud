@@ -90,3 +90,34 @@ func TestCatalogFailsClosedForMalformedAuthorizedActiveManifest(t *testing.T) {
 		t.Fatalf("malformed active manifest catalog error=%v", err)
 	}
 }
+
+func TestCatalogIncludesOnlyEffectivePublicStaticApps(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	seedCatalogApp(t, s, "public-catalog", "u", "public-catalog", releases.Manifest{Version: 2, Name: "public-catalog", Description: "Public proof", Tags: []string{"demo"}, AccessMode: "public"}, "", "")
+	if _, err := s.DB.Exec("UPDATE access_policies SET mode='public' WHERE app_id='public-catalog'"); err != nil {
+		t.Fatal(err)
+	}
+	svc := ControlService{Store: s, AppSuffix: "apps.example.test"}
+	viewer := controlapi.ViewerIdentity{IdentityID: "viewer", Email: "viewer@example.test"}
+	apps, err := svc.Catalog(context.Background(), viewer)
+	if err != nil || len(apps) != 0 {
+		t.Fatalf("gate-off catalog=%#v err=%v", apps, err)
+	}
+	if _, err := s.DB.Exec("UPDATE public_static_settings SET enabled=1,revision=2 WHERE singleton=1"); err != nil {
+		t.Fatal(err)
+	}
+	apps, err = svc.Catalog(context.Background(), viewer)
+	if err != nil || len(apps) != 1 || apps[0].Slug != "public-catalog" || apps[0].Posture != "public" {
+		t.Fatalf("public catalog=%#v err=%v", apps, err)
+	}
+	// An unavailable gate may not accidentally turn a public row into a
+	// discoverable one, even though public metadata remains in SQLite.
+	if _, err := s.DB.Exec("DELETE FROM public_static_settings"); err != nil {
+		t.Fatal(err)
+	}
+	apps, err = svc.Catalog(context.Background(), viewer)
+	if err != nil || len(apps) != 0 {
+		t.Fatalf("missing-gate catalog=%#v err=%v", apps, err)
+	}
+}

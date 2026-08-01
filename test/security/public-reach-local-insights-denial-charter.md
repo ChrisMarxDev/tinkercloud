@@ -21,6 +21,10 @@ applicable.
 - Public candidate proof fails on redirects, wrong host/scheme, unexpected
   bytes, missing assets, mismatched indexing headers, or any usable reserved
   route and preserves the previous active release.
+- The real-listener and VPS checks exercise representative `/_tinker` auth,
+  identity, SDK/capability, KV, collection, blob, live/WebSocket, and LLM
+  paths, and each denial contains neither the public document nor an asset
+  marker. A public cookie must not turn any reserved route into an allow.
 
 ## Catalog
 
@@ -57,3 +61,8 @@ applicable.
 Run two-app/two-owner, anonymous, revoked, malformed, database-failure,
 restart, activation-failure, public/private transition, and operator-gate
 transition matrices on a real listener and clean VPS before general release.
+
+For insights, the matrix also proves two successful top-level HTML requests in
+one app-host cookie jar produce two page views but one approximate visitor in
+the owner/operator read model; a second app or owner cannot observe those
+aggregates.

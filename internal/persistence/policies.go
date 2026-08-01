@@ -11,10 +11,11 @@ func (s *SQLiteStore) Current(ctx context.Context, appID string) (policies.Polic
 	var p policies.Policy
 	var mode string
 	e := s.DB.QueryRowContext(ctx, "SELECT a.id,a.policy_revision,p.mode,u.normalized_email FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision JOIN users u ON u.id=a.owner_user_id WHERE a.id=? AND a.status='active'", appID).Scan(&p.AppID, &p.Revision, &mode, &p.OwnerIdentityID)
-	if e != nil || mode != "private" {
+	if e != nil || (mode != "private" && mode != "public") {
 		return policies.Policy{}, policies.ErrUnavailable
 	}
 	p.Valid = true
+	p.Mode = mode
 	p.Emails = map[string]struct{}{}
 	p.Domains = map[string]struct{}{}
 	rows, e := s.DB.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=?", appID, p.Revision)
@@ -41,6 +42,49 @@ func (s *SQLiteStore) Current(ctx context.Context, appID string) (policies.Polic
 		return policies.Policy{}, policies.ErrUnavailable
 	}
 	return p, nil
+}
+
+// CurrentPublicGate is intentionally a single durable read with no cache.
+// Missing, malformed, or unavailable settings are represented as unavailable.
+func (s *SQLiteStore) CurrentPublicGate(ctx context.Context) (policies.PublicGate, error) {
+	var enabled int
+	var revision uint64
+	if s == nil || s.DB == nil || s.DB.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&enabled, &revision) != nil || (enabled != 0 && enabled != 1) || revision == 0 {
+		return policies.PublicGate{}, policies.ErrUnavailable
+	}
+	return policies.PublicGate{Enabled: enabled == 1, Revision: revision, Valid: true}, nil
+}
+
+// SetPublicGate is the narrow operator-only mutation seam.  Compare-and-swap
+// prevents an operator UI from accidentally overwriting a newer decision.
+func (s *SQLiteStore) SetPublicGate(ctx context.Context, actor string, enabled bool, expectedRevision uint64, requestID string) error {
+	if actor == "" || requestID == "" {
+		return policies.ErrUnavailable
+	}
+	return s.Write(ctx, func(tx *sql.Tx) error {
+		var role, status string
+		if err := tx.QueryRowContext(ctx, "SELECT role,status FROM users WHERE id=?", actor).Scan(&role, &status); err != nil || role != "operator" || status != "active" {
+			return policies.ErrUnavailable
+		}
+		var revision uint64
+		var old int
+		if err := tx.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&old, &revision); err != nil || (old != 0 && old != 1) || revision == 0 || revision != expectedRevision {
+			return policies.ErrUnavailable
+		}
+		next := 0
+		if enabled {
+			next = 1
+		}
+		res, err := tx.ExecContext(ctx, "UPDATE public_static_settings SET enabled=?,revision=?,updated_at=datetime('now') WHERE singleton=1 AND revision=?", next, revision+1, revision)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
+			return policies.ErrUnavailable
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'operator',?,'public_static_gate.set','success',?)", actor, requestID)
+		return err
+	})
 }
 func (s *SQLiteStore) ReplacePolicy(ctx context.Context, actor, appID string, emails, domains []string, requestID string) error {
 	return s.Write(ctx, func(tx *sql.Tx) error {

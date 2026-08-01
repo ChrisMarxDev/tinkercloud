@@ -260,10 +260,17 @@ func (p Platform) formAction(w http.ResponseWriter, r *http.Request) bool {
 		err = p.Actions.SetLLMGrantStatus(r.Context(), a, slug, status, expected)
 		return p.actionResult(w, r, err, "llm_grant_"+status)
 	case len(parts) == 3 && action == "access":
-		v := AccessPolicyInput{Mode: "private"}
+		mode := r.FormValue("mode")
+		// Older rendered pages remain safe: omission can only request the
+		// historical private mode, and the service still compares it with the
+		// current server policy before writing anything.
+		if mode == "" {
+			mode = "private"
+		}
+		v := AccessPolicyInput{Mode: mode}
 		revision, scan := strconv.ParseUint(r.FormValue("expected_revision"), 10, 64)
 		if scan != nil || revision == 0 {
-			p.errorPage(w, http.StatusBadRequest, "Policy needs review", "Refresh the dashboard and review the current private policy before trying again.", "/dashboard", "Refresh dashboard")
+			p.errorPage(w, http.StatusBadRequest, "Policy needs review", "Refresh the dashboard and review the current access policy before trying again.", "/dashboard", "Refresh dashboard")
 			return true
 		}
 		v.ExpectedRevision = revision

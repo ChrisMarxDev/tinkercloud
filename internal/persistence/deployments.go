@@ -32,7 +32,7 @@ func (s DeploymentRepository) RecoveryRecords(ctx context.Context) ([]deployment
         COALESCE(CAST(d.created_by AS TEXT), ''),
         COALESCE(CAST(d.idempotency_key AS TEXT), ''),
         COALESCE(CAST(d.release_hash AS TEXT), ''),
-        COALESCE(CAST(d.manifest_json AS BLOB), X''), CAST(d.state AS TEXT)
+        COALESCE(CAST(d.manifest_json AS BLOB), X''), CAST(d.public_acknowledged AS TEXT), CAST(d.state AS TEXT)
         FROM deployments d JOIN applications a ON a.id=d.app_id
         ORDER BY d.app_id,d.id`)
 	if err != nil {
@@ -48,11 +48,12 @@ func (s DeploymentRepository) RecoveryRecords(ctx context.Context) ([]deployment
 	for rows.Next() {
 		var r deployments.Record
 		var manifest []byte
-		var state string
-		if err := rows.Scan(&r.ID, &r.AppID, &r.AppSlug, &r.OwnerID, &r.IdempotencyKey, &r.ReleaseHash, &manifest, &state); err != nil {
+		var state, acknowledged string
+		if err := rows.Scan(&r.ID, &r.AppID, &r.AppSlug, &r.OwnerID, &r.IdempotencyKey, &r.ReleaseHash, &manifest, &acknowledged, &state); err != nil {
 			return nil, err
 		}
 		r.State = releases.State(state)
+		r.PublicAcknowledged = acknowledged == "1"
 		raw = append(raw, rawRecord{record: r, manifest: manifest})
 	}
 	if err := rows.Err(); err != nil {
@@ -162,7 +163,7 @@ func (s DeploymentRepository) Create(ctx context.Context, r deployments.Record) 
 			if oldID != r.ID {
 				return deployments.ErrIdempotency
 			}
-			_, e = tx.ExecContext(ctx, "UPDATE deployments SET created_by=?,archive_hash=?,release_hash=?,manifest_json=?,state=? WHERE id=? AND app_id=?", r.OwnerID, r.ArchiveHash[:], r.ReleaseHash, manifest, string(r.State), r.ID, r.AppID)
+			_, e = tx.ExecContext(ctx, "UPDATE deployments SET created_by=?,archive_hash=?,release_hash=?,manifest_json=?,public_acknowledged=?,state=? WHERE id=? AND app_id=?", r.OwnerID, r.ArchiveHash[:], r.ReleaseHash, manifest, boolInt(r.PublicAcknowledged), string(r.State), r.ID, r.AppID)
 			if e != nil {
 				return e
 			}
@@ -171,7 +172,7 @@ func (s DeploymentRepository) Create(ctx context.Context, r deployments.Record) 
 		if e != sql.ErrNoRows {
 			return e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO deployments(id,app_id,created_by,idempotency_key,archive_hash,release_hash,manifest_json,state,created_at) VALUES(?,?,?,?,?,?,?,?,datetime('now'))", r.ID, r.AppID, r.OwnerID, r.IdempotencyKey, r.ArchiveHash[:], r.ReleaseHash, manifest, string(r.State))
+		_, e = tx.ExecContext(ctx, "INSERT INTO deployments(id,app_id,created_by,idempotency_key,archive_hash,release_hash,manifest_json,public_acknowledged,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,datetime('now'))", r.ID, r.AppID, r.OwnerID, r.IdempotencyKey, r.ArchiveHash[:], r.ReleaseHash, manifest, boolInt(r.PublicAcknowledged), string(r.State))
 		if e != nil {
 			return e
 		}
@@ -211,7 +212,8 @@ func (s DeploymentRepository) Get(ctx context.Context, id string) (deployments.R
 	var hash []byte
 	var state string
 	var manifest []byte
-	e := s.Store.DB.QueryRowContext(ctx, "SELECT d.id,d.app_id,a.slug,COALESCE(d.created_by,''),COALESCE(d.idempotency_key,''),COALESCE(d.archive_hash,X''),COALESCE(d.release_hash,''),COALESCE(d.manifest_json,X''),d.state FROM deployments d JOIN applications a ON a.id=d.app_id WHERE d.id=?", id).Scan(&r.ID, &r.AppID, &r.AppSlug, &r.OwnerID, &r.IdempotencyKey, &hash, &r.ReleaseHash, &manifest, &state)
+	var acknowledged int
+	e := s.Store.DB.QueryRowContext(ctx, "SELECT d.id,d.app_id,a.slug,COALESCE(d.created_by,''),COALESCE(d.idempotency_key,''),COALESCE(d.archive_hash,X''),COALESCE(d.release_hash,''),COALESCE(d.manifest_json,X''),d.public_acknowledged,d.state FROM deployments d JOIN applications a ON a.id=d.app_id WHERE d.id=?", id).Scan(&r.ID, &r.AppID, &r.AppSlug, &r.OwnerID, &r.IdempotencyKey, &hash, &r.ReleaseHash, &manifest, &acknowledged, &state)
 	if e == sql.ErrNoRows {
 		return deployments.Record{}, os.ErrNotExist
 	}
@@ -220,6 +222,7 @@ func (s DeploymentRepository) Get(ctx context.Context, id string) (deployments.R
 	}
 	copy(r.ArchiveHash[:], hash)
 	r.State = releases.State(state)
+	r.PublicAcknowledged = acknowledged == 1
 	if r.State == releases.Verified || r.State == releases.Active || r.State == releases.Superseded {
 		if len(manifest) == 0 || json.Unmarshal(manifest, &r.Manifest) != nil || r.Manifest.Name == "" {
 			return deployments.Record{}, errors.New("corrupt deployment manifest")
@@ -300,7 +303,14 @@ func (s *SQLiteStore) CandidatePolicyReady(ctx context.Context, r deployments.Re
 	}
 	var owner, status string
 	err := s.DB.QueryRowContext(ctx, "SELECT owner_user_id,status FROM applications WHERE id=?", r.AppID).Scan(&owner, &status)
-	return err == nil && owner == r.OwnerID && status == "active"
+	if err != nil || owner != r.OwnerID || status != "active" {
+		return false
+	}
+	if r.Manifest.AccessMode == "public" {
+		g, err := s.CurrentPublicGate(ctx)
+		return err == nil && g.Valid && g.Enabled
+	}
+	return true
 }
 
 // canonicalManifestPolicy validates the server-persisted deployment manifest.
@@ -312,17 +322,13 @@ func canonicalManifestPolicy(r deployments.Record) ([]string, []string, error) {
 	if (m.Version != 1 && m.Version != 2) || m.Name == "" || !releases.ValidSlug(m.Name) || (r.AppSlug != "" && m.Name != r.AppSlug) {
 		return nil, nil, errors.New("invalid candidate policy")
 	}
-	// V2 can be parsed before public reach exists, but this L2 slice has no
-	// public authorization variant or gateway serving path. A public request
-	// must therefore fail activation rather than being silently installed as a
-	// private policy with a misleading immutable receipt.
 	if m.AccessMode == "" {
 		m.AccessMode = "private"
 	}
 	if m.Version == 1 && (m.AccessMode != "private" || m.Indexing || len(m.Tags) != 0) {
 		return nil, nil, errors.New("invalid v1 candidate policy")
 	}
-	if m.Version == 2 && (m.AccessMode != "private" || m.Indexing) {
+	if m.Version == 2 && (m.AccessMode != "private" && m.AccessMode != "public" || m.AccessMode != "public" && m.Indexing || m.AccessMode == "public" && (!r.PublicAcknowledged || m.HasBrowserCapability())) {
 		return nil, nil, errors.New("invalid v2 candidate policy")
 	}
 	emails := append([]string(nil), m.Emails...)
@@ -366,7 +372,11 @@ func installManifestPolicy(ctx context.Context, tx *sql.Tx, appID, actor string,
 	if err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,?, 'private', ?, datetime('now'))", appID, revision, actor); err != nil {
+	mode := r.Manifest.AccessMode
+	if mode == "" {
+		mode = "private"
+	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,?, ?, ?, datetime('now'))", appID, revision, mode, actor); err != nil {
 		return err
 	}
 	for _, value := range emails {
@@ -419,6 +429,13 @@ func (s DeploymentRepository) CommitActivation(ctx context.Context, next deploym
 		}
 		if old != nil && (old.AppID != next.AppID || old.State != releases.Active) {
 			return releases.ErrTransition
+		}
+		if next.Manifest.AccessMode == "public" {
+			var enabled int
+			var gateRevision uint64
+			if err := tx.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&enabled, &gateRevision); err != nil || enabled != 1 || gateRevision == 0 || next.Manifest.HasBrowserCapability() || !next.PublicAcknowledged {
+				return deployments.ErrDenied
+			}
 		}
 		if err := installManifestPolicy(ctx, tx, next.AppID, next.OwnerID, policyRevision+1, next); err != nil {
 			return err

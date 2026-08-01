@@ -57,7 +57,7 @@
         {{else}}
           <p class="tinker-eyebrow">Deployer overview</p>
           <h1>Your apps.</h1>
-          <p>Only the private apps you own are shown here. Use the Tinker CLI to deploy and manage them.</p>
+          <p>Only the apps you own are shown here. Use the Tinker CLI to deploy and manage them.</p>
         {{end}}
       </div>
       <span class="tinker-status" data-state="active">Control plane active</span>
@@ -83,13 +83,18 @@
           <article class="tinker-card tinker-stat"><p class="tinker-stat__label">Active deployers</p><p class="tinker-stat__value">{{len .View.ActiveDeployerEmails}}</p></article>
           <article class="tinker-card tinker-stat"><p class="tinker-stat__label">Health checks</p><p class="tinker-stat__value">{{len .View.Health}}</p></article>
         </div>
+		{{if .View.PublicGate.Available}}
+		  <p class="tinker-card__meta">Public static gate: {{if .View.PublicGate.Enabled}}enabled{{else}}disabled{{end}} (revision {{.View.PublicGate.Revision}}). Root authority changes this only with <code>tinkercloud public enable</code> or <code>tinkercloud public disable</code>.</p>
+		{{else}}
+		  <p class="tinker-card__meta">Public static gate status is unavailable. No browser control is provided.</p>
+		{{end}}
       </section>
     {{end}}
 
     <section class="tinker-section" aria-labelledby="apps-title">
       <div class="tinker-section-header">
-        <div><p class="tinker-eyebrow">Private applications</p><h2 id="apps-title">Your apps</h2></div>
-        {{if eq .Actor.Role "operator"}}<p>Every active app stays behind its current owner and allowlist policy.</p>{{else}}<p>This list is derived from your current deployer account.</p>{{end}}
+        <div><p class="tinker-eyebrow">Applications</p><h2 id="apps-title">Your apps</h2></div>
+        {{if eq .Actor.Role "operator"}}<p>Every app stays behind its current gateway policy and release posture.</p>{{else}}<p>This list is derived from your current deployer account.</p>{{end}}
       </div>
       {{if .Unavailable}}
         <div class="tinker-state tinker-state--unavailable" role="alert">
@@ -131,7 +136,20 @@
                   {{end}}
                   <span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span>
                 </div>
-                <p class="tinker-card__meta">Current policy: {{.Access.Mode}} (revision {{.Access.Revision}}); releases: {{len .Releases}}; tokens: {{len .Tokens}}</p>
+                <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}; tokens: {{len .Tokens}}</p>
+                <section class="tinker-inset" aria-labelledby="insights-{{.Slug}}">
+                  <div class="tinker-card__header"><div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div></div>
+                  {{if .Insights.Available}}
+                    <div class="tinker-grid tinker-grid--2">
+                      <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">{{.Insights.Last7Days.ApproximateVisitors}}</p><p class="tinker-card__meta">Last 7 days · {{.Insights.Last7Days.PageViews}} page views</p></article>
+                      <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">{{.Insights.Last30Days.ApproximateVisitors}}</p><p class="tinker-card__meta">Last 30 days · {{.Insights.Last30Days.PageViews}} page views</p></article>
+                    </div>
+                    <dl class="tinker-definition"><dt>Last activity</dt><dd>{{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</dd></dl>
+                    <div class="tinker-table-wrap"><table class="tinker-table"><caption>Last 30 UTC days</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody>{{range .Insights.Last30Days.Days}}<tr><td>{{.Day.Format "Jan 02"}}</td><td>{{.ApproximateVisitors}}</td><td>{{.PageViews}}</td></tr>{{end}}</tbody></table></div>
+                  {{else}}
+                    <div class="tinker-state tinker-state--unavailable" role="status"><div><h4>Local insights unavailable</h4><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; ask the operator to check the local insights setting.</p></div></div>
+                  {{end}}
+                </section>
               </div>
               {{if $qr}}
                 <dialog class="tinker-dialog tinker-dialog--compact" id="qr-{{.Slug}}" aria-labelledby="qr-title-{{.Slug}}">
@@ -181,6 +199,7 @@
                     <form class="tinker-stack" method="post" action="/apps/{{.Slug}}/access">
                       <input type="hidden" name="csrf" value="{{$.CSRF}}">
                       <input type="hidden" name="expected_revision" value="{{.Access.Revision}}">
+					  <input type="hidden" name="mode" value="{{.Access.Mode}}">
                       <label class="tinker-field" for="emails-{{$app.Slug}}">
                         <span class="tinker-label">Allowed emails</span>
                         <textarea class="tinker-textarea" id="emails-{{$app.Slug}}" name="emails" aria-describedby="policy-help-{{$app.Slug}}">{{range .Access.Emails}}{{.}}

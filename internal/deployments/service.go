@@ -53,6 +53,9 @@ type Record struct {
 	ArchiveHash                               [32]byte
 	Manifest                                  releases.Manifest
 	Files                                     []releases.File
+	// PublicAcknowledged is transport-neutral explicit deployer evidence. A
+	// public manifest without it is never installed as a private policy.
+	PublicAcknowledged bool
 	// RecoveryCorrupt is set only by the database-led recovery reader when a
 	// durable row cannot be safely reconstructed. It deliberately remains part
 	// of the record passed to recovery rather than turning one bad historical
@@ -182,7 +185,7 @@ func (s *Service) reject(ctx context.Context, r *Record) error {
 	r.State = releases.Rejected
 	return s.Repo.Create(ctx, *r)
 }
-func (s *Service) Create(ctx context.Context, a Actor, app, slug, id, key string) (Record, error) {
+func (s *Service) Create(ctx context.Context, a Actor, app, slug, id, key string, publicAcknowledged ...bool) (Record, error) {
 	if !a.Active || a.ID == "" || key == "" || !releases.ValidSlug(slug) {
 		return Record{}, ErrDenied
 	}
@@ -206,7 +209,8 @@ func (s *Service) Create(ctx context.Context, a Actor, app, slug, id, key string
 			}
 		}
 	}
-	r := Record{Deployment: releases.Deployment{ID: id, AppID: app, State: releases.Uploading}, OwnerID: a.ID, AppSlug: slug, IdempotencyKey: key}
+	acknowledged := len(publicAcknowledged) == 1 && publicAcknowledged[0]
+	r := Record{Deployment: releases.Deployment{ID: id, AppID: app, State: releases.Uploading}, OwnerID: a.ID, AppSlug: slug, IdempotencyKey: key, PublicAcknowledged: acknowledged}
 	if err := s.Repo.Create(ctx, r); err != nil {
 		return Record{}, err
 	}

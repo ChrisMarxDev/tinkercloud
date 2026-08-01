@@ -744,8 +744,6 @@ func (s ControlService) Apps(ctx context.Context, a controlapi.Actor) any {
 // Catalog returns only the current, bounded, server-authorized view of apps
 // for a verified global viewer identity. It intentionally has no dashboard
 // role argument and does not load a broad app list for browser filtering.
-// Public apps are not included yet: v2 may record public intent, but effective
-// public policy/gateway authorization is outside this L2 slice.
 func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIdentity) ([]controlapi.CatalogApp, error) {
 	if s.Store == nil || viewer.IdentityID == "" || viewer.Email == "" {
 		return nil, ErrUnavailable
@@ -755,18 +753,24 @@ func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIde
 		return nil, ErrUnavailable
 	}
 	domain := identity.Domain(normalized)
-	rows, err := s.Store.DB.QueryContext(ctx, `SELECT a.slug,COALESCE(CAST(d.manifest_json AS BLOB),X'')
+	publicEnabled := false
+	if gate, gateErr := s.Store.CurrentPublicGate(ctx); gateErr == nil && gate.Valid && gate.Enabled {
+		publicEnabled = true
+	}
+	rows, err := s.Store.DB.QueryContext(ctx, `SELECT a.slug,p.mode,COALESCE(CAST(d.manifest_json AS BLOB),X'')
 		FROM applications a
 		JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
 		JOIN users owner ON owner.id=a.owner_user_id
 		JOIN deployments d ON d.id=a.current_deployment_id AND d.app_id=a.id
-		WHERE a.status='active' AND p.mode='private' AND d.state='active'
-		  AND ( (owner.status='active' AND owner.normalized_email=?)
+		WHERE a.status='active' AND d.state='active' AND (
+		  (p.mode='private' AND ((owner.status='active' AND owner.normalized_email=?)
 		    OR EXISTS (SELECT 1 FROM access_rules r
 		      WHERE r.app_id=a.id AND r.policy_revision=a.policy_revision
-		        AND ((r.kind='email' AND r.normalized_value=?) OR (r.kind='domain' AND r.normalized_value=?)) ) )
+		        AND ((r.kind='email' AND r.normalized_value=?) OR (r.kind='domain' AND r.normalized_value=?)) ) ))
+		  OR (p.mode='public' AND ?)
+		)
 		ORDER BY a.slug
-		LIMIT 101`, normalized, normalized, domain)
+		LIMIT 101`, normalized, normalized, domain, publicEnabled)
 	if err != nil {
 		return nil, ErrUnavailable
 	}
@@ -774,12 +778,20 @@ func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIde
 	apps := make([]controlapi.CatalogApp, 0)
 	for rows.Next() {
 		var slug string
+		var mode string
 		var manifest []byte
-		if err := rows.Scan(&slug, &manifest); err != nil {
+		if err := rows.Scan(&slug, &mode, &manifest); err != nil {
 			return nil, ErrUnavailable
 		}
 		var parsed releases.Manifest
-		if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) || parsed.AccessMode != "" && parsed.AccessMode != "private" || parsed.Indexing {
+		if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) || (mode != "private" && mode != "public") {
+			return nil, ErrUnavailable
+		}
+		manifestMode := parsed.AccessMode
+		if manifestMode == "" {
+			manifestMode = "private"
+		}
+		if manifestMode != mode || (mode == "private" && parsed.Indexing) || (mode == "public" && !publicEnabled) {
 			return nil, ErrUnavailable
 		}
 		url := stableAppURL(slug, s.AppSuffix)
@@ -791,6 +803,7 @@ func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIde
 			StableURL:   url,
 			Description: parsed.Description,
 			Tags:        append([]string(nil), parsed.Tags...),
+			Posture:     mode,
 		})
 	}
 	if err := rows.Err(); err != nil || len(apps) > 100 {
@@ -803,10 +816,19 @@ func (s ControlService) Catalog(ctx context.Context, viewer controlapi.ViewerIde
 // platform UI. It uses server-derived ownership and never returns raw token
 // values, hashes, release paths, configuration secrets, or provider details.
 func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (controlapi.DashboardView, error) {
-	if !a.Active || s.Store == nil {
+	if !a.Active || s.Store == nil || (a.Role != "operator" && a.Role != "deployer") {
 		return controlapi.DashboardView{}, ErrUnavailable
 	}
 	v := controlapi.DashboardView{Health: []controlapi.DashboardHealth{{Name: "host diagnostics", State: "local", Detail: "Run tinkercloud doctor on the VPS for database, disk, DNS, TLS, and email diagnostics."}}}
+	if a.Role == "operator" {
+		if gate, gateErr := s.Store.CurrentPublicGate(ctx); gateErr == nil && gate.Valid {
+			v.PublicGate = controlapi.DashboardPublicGate{Available: true, Enabled: gate.Enabled, Revision: gate.Revision}
+		}
+	}
+	// A disabled or unavailable recorder is not an empty analytics window.
+	// Preserve that distinction in every card rather than inventing zeroes.
+	insightsEnabled, insightsErr := s.Store.InsightsEnabled(ctx)
+	insightsNow := time.Now().UTC()
 	query, args := "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.owner_user_id=? AND a.status <> 'deleted' ORDER BY a.slug LIMIT 100", []any{a.ID}
 	if a.Role == "operator" {
 		query, args = "SELECT a.id,a.owner_user_id,a.slug,a.status,a.policy_revision,p.mode,a.current_deployment_id FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.status <> 'deleted' ORDER BY a.slug LIMIT 100", nil
@@ -828,7 +850,7 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 			rows.Close()
 			return v, err
 		}
-		if !mode.Valid || mode.String != "private" {
+		if !mode.Valid || (mode.String != "private" && mode.String != "public") {
 			rows.Close()
 			return v, ErrUnavailable
 		}
@@ -858,6 +880,18 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 			if e != nil {
 				return v, ErrUnavailable
 			}
+			var parsed releases.Manifest
+			if json.Unmarshal(manifest, &parsed) != nil || !releases.ValidStoredManifest(parsed) {
+				return v, ErrUnavailable
+			}
+			manifestMode := parsed.AccessMode
+			if manifestMode == "" {
+				manifestMode = "private"
+			}
+			if manifestMode != app.Access.Mode || (app.Access.Mode == "private" && parsed.Indexing) {
+				return v, ErrUnavailable
+			}
+			app.Access.Indexing = parsed.Indexing
 			app.Description = description
 			app.StableURL = stableAppURL(app.Slug, s.AppSuffix)
 		}
@@ -936,6 +970,17 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 			return v, e
 		}
 		tokensRows.Close()
+		if insightsErr == nil && insightsEnabled {
+			seven, sevenErr := s.Store.InsightSummary(ctx, x.id, 7, insightsNow)
+			thirty, thirtyErr := s.Store.InsightSummary(ctx, x.id, 30, insightsNow)
+			if sevenErr == nil && thirtyErr == nil {
+				app.Insights = controlapi.DashboardInsights{
+					Available:  true,
+					Last7Days:  dashboardInsightPeriod(seven),
+					Last30Days: dashboardInsightPeriod(thirty),
+				}
+			}
+		}
 		v.Apps = append(v.Apps, app)
 	}
 	if a.Role != "operator" {
@@ -1011,6 +1056,23 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 	err = audit.Err()
 	audit.Close()
 	return v, err
+}
+
+func dashboardInsightPeriod(in InsightSummary) controlapi.DashboardInsightPeriod {
+	out := controlapi.DashboardInsightPeriod{
+		PageViews:           in.PageViews,
+		ApproximateVisitors: in.ApproximateVisitors,
+		LastActivity:        in.LastActivity,
+		Days:                make([]controlapi.DashboardInsightDay, 0, len(in.Days)),
+	}
+	for _, day := range in.Days {
+		out.Days = append(out.Days, controlapi.DashboardInsightDay{
+			Day:                 day.Day,
+			PageViews:           day.PageViews,
+			ApproximateVisitors: day.ApproximateVisitors,
+		})
+	}
+	return out
 }
 
 func dashboardManifestDescription(manifest []byte, state, slug string) (string, error) {
@@ -1178,8 +1240,17 @@ func (s ControlService) ReplaceAccess(ctx context.Context, a controlapi.Actor, s
 			return e
 		}
 		var rev uint64
-		e = tx.QueryRowContext(ctx, "SELECT id,policy_revision FROM applications WHERE slug=? AND owner_user_id=? AND status='active'", slug, a.ID).Scan(&appID, &rev)
+		var currentMode string
+		e = tx.QueryRowContext(ctx, `SELECT a.id,a.policy_revision,p.mode FROM applications a
+			JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
+			WHERE a.slug=? AND a.owner_user_id=? AND a.status='active'`, slug, a.ID).Scan(&appID, &rev, &currentMode)
 		if e != nil {
+			return ErrUnavailable
+		}
+		// Access-rule maintenance never changes public/private posture. That
+		// transition is sealed into an immutable deployment and reverified by
+		// activation, so a browser/API replacement cannot bypass that gate.
+		if (currentMode != "private" && currentMode != "public") || in.Mode != currentMode {
 			return ErrUnavailable
 		}
 		if rev != in.ExpectedRevision {
@@ -1223,7 +1294,7 @@ func (s ControlService) ReplaceAccess(ctx context.Context, a controlapi.Actor, s
 			return ErrUnavailable
 		}
 		rev++
-		if _, e = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,?,'private',?,datetime('now'))", appID, rev, a.ID); e != nil {
+		if _, e = tx.ExecContext(ctx, "INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,?,?,?,datetime('now'))", appID, rev, currentMode, a.ID); e != nil {
 			return e
 		}
 		for _, x := range in.Allow.Emails {
@@ -1497,7 +1568,7 @@ func (s ControlService) CreateDeployment(ctx context.Context, a controlapi.Actor
 		return nil, e
 	}
 	did := "dep_" + base64.RawURLEncoding.EncodeToString(b)
-	if _, e := s.Deployments.Create(ctx, deployments.Actor{ID: a.ID, Active: a.Active}, id, slug, did, key); e != nil {
+	if _, e := s.Deployments.Create(ctx, deployments.Actor{ID: a.ID, Active: a.Active}, id, slug, did, key, u.PublicAcknowledged); e != nil {
 		return nil, e
 	}
 	if e := s.Deployments.Upload(ctx, deployments.Actor{ID: a.ID, Active: a.Active}, did, u.ContentType, u.Reader); e != nil {
@@ -1529,7 +1600,7 @@ func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, 
 		return controlapi.ActivationResult{}, e
 	}
 	if replayed {
-		return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", Domain: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
+		return activationReceipt(r, s.AppSuffix)
 	}
 	e = s.Deployments.Activate(ctx, deployments.Actor{ID: a.ID, Active: true}, id, key)
 	if e != nil {
@@ -1540,5 +1611,52 @@ func (s ControlService) Activate(ctx context.Context, a controlapi.Actor, slug, 
 	if s.Live != nil {
 		s.Live.Revoke(appID, "")
 	}
-	return controlapi.ActivationResult{DeploymentID: id, URL: "https://" + slug + "." + s.AppSuffix + "/", Domain: s.AppSuffix, PolicyReady: true, TLSReady: true, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
+	return activationReceipt(r, s.AppSuffix)
+}
+
+// activationReceipt exposes only the post-activation evidence a deployer can
+// use to independently check the server-derived stable origin. In particular,
+// public static proof is not represented as anonymous denial: it is exact
+// immutable document/asset evidence plus the indexing choice.
+func activationReceipt(r deployments.Record, domain string) (controlapi.ActivationResult, error) {
+	if r.ID == "" || r.AppSlug == "" || domain == "" {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	result := controlapi.ActivationResult{
+		DeploymentID: r.ID,
+		URL:          "https://" + r.AppSlug + "." + domain + "/",
+		Domain:       domain,
+		PolicyReady:  true,
+		TLSReady:     true,
+	}
+	mode := r.Manifest.AccessMode
+	if mode == "" {
+		mode = "private"
+	}
+	if mode == "private" {
+		result.Posture = controlapi.ActivationPrivate
+		result.AnonymousDenied = true
+		result.AuthenticatedHealthy = true
+		return result, nil
+	}
+	if mode != "public" || !r.PublicAcknowledged {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	var root string
+	var assetPath, assetHash string
+	for _, file := range r.Files {
+		if file.Path == "index.html" {
+			root = file.Hash
+			continue
+		}
+		if assetPath == "" {
+			assetPath, assetHash = file.Path, file.Hash
+		}
+	}
+	if len(root) != 64 || (assetPath == "") != (assetHash == "") || (assetHash != "" && len(assetHash) != 64) {
+		return controlapi.ActivationResult{}, ErrUnavailable
+	}
+	result.Posture = controlapi.ActivationPublicStatic
+	result.PublicStatic = &controlapi.PublicStaticEvidence{RootSHA256: root, AssetPath: assetPath, AssetSHA256: assetHash, Indexing: r.Manifest.Indexing}
+	return result, nil
 }

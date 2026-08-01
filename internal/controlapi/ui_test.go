@@ -9,9 +9,27 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
 )
+
+func TestPlatformUIInsightsRenderAggregateTextOrUnavailableNeverZero(t *testing.T) {
+	day := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	available := DashboardInsights{Available: true, Last7Days: DashboardInsightPeriod{PageViews: 4, ApproximateVisitors: 2}, Last30Days: DashboardInsightPeriod{PageViews: 9, ApproximateVisitors: 3, LastActivity: day, Days: []DashboardInsightDay{{Day: day, PageViews: 4, ApproximateVisitors: 2}}}}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "deployer", Email: "deployer@example.test", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Status: "active", Access: DashboardAccess{Mode: "private", Revision: 1}, Insights: available}}}}}
+	w := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	for _, required := range []string{"Approximate visitors", "Last 7 days", "Last 30 days", "Last activity", "Last 30 UTC days", ">2</td>", ">4</td>"} {
+		if !strings.Contains(w.Body.String(), required) {
+			t.Fatalf("available insight markup missing %q: %s", required, w.Body.String())
+		}
+	}
+	p.Views = &uiViews{value: DashboardView{Apps: []DashboardApp{{Slug: "owned-app", Status: "active", Access: DashboardAccess{Mode: "private", Revision: 1}}}}}
+	w = uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	if !strings.Contains(w.Body.String(), "Local insights unavailable") || strings.Contains(w.Body.String(), "Approximate visitors</p><p class=\"tinker-stat__value\">0") {
+		t.Fatalf("unavailable insight was rendered as zero: %s", w.Body.String())
+	}
+}
 
 type uiAuth struct {
 	actor Actor
@@ -183,6 +201,14 @@ func TestPlatformUICatalogUnavailableDoesNotSubstituteEmptyCatalog(t *testing.T)
 	w := uiRequest(t, p, http.MethodGet, "/apps", "")
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "The app catalog is unavailable.") || strings.Contains(w.Body.String(), "No apps available yet.") {
 		t.Fatalf("catalog unavailable state=%d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUICatalogRendersServerDerivedPublicPostureOnly(t *testing.T) {
+	p := Platform{ViewerAuth: uiViewerAuth{viewer: ViewerIdentity{IdentityID: "viewer", Email: "viewer@example.test"}}, Catalogs: &uiCatalogs{apps: []CatalogApp{{Slug: "public-proof", StableURL: "https://public-proof.apps.example.test/", Posture: "public"}}}}
+	body := uiRequest(t, p, http.MethodGet, "/apps", "").Body.String()
+	if !strings.Contains(body, ">Public<") || strings.Contains(body, "access_rules") || strings.Contains(body, "deployment_id") {
+		t.Fatalf("catalog public posture=%s", body)
 	}
 }
 
@@ -573,7 +599,7 @@ func TestPlatformUIDashboardShowsAndRoundTripsCurrentAccessPolicy(t *testing.T) 
 		t.Fatal(w.Code)
 	}
 	body := w.Body.String()
-	for _, want := range []string{"Current policy: private (revision 7)", "alice@example.test", "example.test", "You are always an implicit viewer.", "A future deployment can replace this policy", "name=\"emails\"", "name=\"domains\""} {
+	for _, want := range []string{"Current posture: private (policy revision 7)", "alice@example.test", "example.test", "You are always an implicit viewer.", "A future deployment can replace this policy", "name=\"mode\" value=\"private\"", "name=\"emails\"", "name=\"domains\""} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("dashboard missing %q: %s", want, body)
 		}
@@ -609,6 +635,19 @@ func TestPlatformUIDashboardLabelsEmptyAccessAsOwnerOnly(t *testing.T) {
 	w := uiRequest(t, p, http.MethodGet, "/", "")
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "This app is owner-only: no additional email or domain viewers are allowed.") {
 		t.Fatalf("owner-only dashboard = %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestPlatformUIDashboardShowsPublicPostureAndGateWithoutBrowserMutation(t *testing.T) {
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{PublicGate: DashboardPublicGate{Available: true, Enabled: true, Revision: 4}, Apps: []DashboardApp{{Slug: "alpha", Access: DashboardAccess{Mode: "public", Revision: 2, Indexing: false}}}}}}
+	body := uiRequest(t, p, http.MethodGet, "/dashboard", "").Body.String()
+	for _, want := range []string{"Current posture: public", "indexing disabled", "Public static gate: enabled", "tinkercloud public enable", `name="mode" value="public"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dashboard missing %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "public/enable") || strings.Contains(body, "public/disable") {
+		t.Fatalf("dashboard exposed public gate mutation: %s", body)
 	}
 }
 

@@ -8,6 +8,15 @@ person's first Tinkercloud app.
 
 Follow the [human setup guide](../docs/getting-started/first-app.md) to host it.
 
+## Public static example
+
+[`public-static-product-story/`](public-static-product-story/) is a deliberately
+capability-free v2 public-static product story. It opts into search indexing to
+demonstrate that indexing is a separate, reviewed release choice. It is not a
+starter: deployment requires an operator-enabled public gate and the deployer's
+explicit public acknowledgement. The starter app and SDK gallery remain private
+and owner-only by default.
+
 ## SDK application gallery
 
 [`sdk-apps/`](sdk-apps/) contains three polished, deployable private apps that

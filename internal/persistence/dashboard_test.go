@@ -5,10 +5,71 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/analytics"
 	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
+
+func TestDashboardInsightsAreOwnerScopedAndUnavailableWhenDisabled(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	now := time.Now().UTC()
+	if _, err := s.DB.Exec("INSERT INTO users VALUES('op','operator@example.com','operator','active',datetime('now')),('other-owner','other@example.com','deployer','active',datetime('now')); INSERT INTO applications(id,owner_user_id,slug,status,policy_revision,created_at,updated_at) VALUES('other','other-owner','other-app','active',1,datetime('now'),datetime('now')); INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now')),('other',1,'private',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range []analytics.Event{
+		{AppID: "a", Occurred: now.AddDate(0, 0, -1)},
+		{AppID: "a", Occurred: now, HasMarker: true, Marker: [32]byte{1}},
+		{AppID: "other", Occurred: now, HasMarker: true, Marker: [32]byte{2}},
+	} {
+		if err := s.RecordInsight(context.Background(), event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	svc := ControlService{Store: s}
+	deployer, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, app := range deployer.Apps {
+		if app.Slug == "other-app" {
+			t.Fatal("unrelated deployer app leaked")
+		}
+		if app.Slug == "alpha" && (!app.Insights.Available || app.Insights.Last7Days.PageViews != 2 || app.Insights.Last7Days.ApproximateVisitors != 1 || len(app.Insights.Last30Days.Days) != 30) {
+			t.Fatalf("alpha insights=%#v", app.Insights)
+		}
+	}
+	operator, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundOther := false
+	for _, app := range operator.Apps {
+		if app.Slug == "other-app" {
+			foundOther = app.Insights.Available && app.Insights.Last30Days.PageViews == 1
+		}
+	}
+	if !foundOther {
+		t.Fatal("operator did not receive all-app aggregate-only insights")
+	}
+	if err := s.SetInsightsEnabled(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, app := range disabled.Apps {
+		if app.Insights.Available {
+			t.Fatalf("disabled insights rendered as available for %s", app.Slug)
+		}
+	}
+	if _, err := svc.Dashboard(context.Background(), controlapi.Actor{ID: "viewer", Role: "viewer", Active: true}); err != ErrUnavailable {
+		t.Fatalf("viewer dashboard insight read=%v", err)
+	}
+}
 
 func TestDashboardReadModelRoleBoundAndSafe(t *testing.T) {
 	s := seeded(t)
@@ -203,8 +264,8 @@ func TestDashboardPolicyStateFailsClosed(t *testing.T) {
 			_, _ = s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now'))")
 			_, _ = s.DB.Exec("UPDATE applications SET policy_revision=2 WHERE id='a'")
 		}},
-		{"non-private current policy", func(_ *testing.T, s *SQLiteStore) {
-			_, _ = s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now')),('b',1,'private',datetime('now'))")
+		{"unsupported current policy", func(_ *testing.T, s *SQLiteStore) {
+			_, _ = s.DB.Exec("PRAGMA ignore_check_constraints=ON; INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'unsupported',datetime('now')),('b',1,'private',datetime('now'))")
 		}},
 		{"unknown current rule", func(t *testing.T, s *SQLiteStore) {
 			if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now')); PRAGMA ignore_check_constraints=ON; INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_at) VALUES('unknown','a',1,'unknown','bad',datetime('now'))"); err != nil {

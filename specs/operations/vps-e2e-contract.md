@@ -167,8 +167,9 @@ result never claims to reverse the durable mutation.
    that deployer through the control OTP flow. Immediately list that
    deployer's apps and remove only previously listed suite-owned fixture slugs,
    each with a fresh idempotency key. The complete fixed set is
-   `vps-e2e-update-probe`, `vps-e2e-primary`, `vps-e2e-isolation`, and
-   `vps-e2e-denied`; an absent fixture is not an error, while a list or delete
+   `vps-e2e-update-probe`, `vps-e2e-primary`, `vps-e2e-isolation`,
+   `vps-e2e-denied`, `vps-e2e-public`, and `vps-e2e-public-other`; an absent
+   fixture is not an error, while a list or delete
    failure is terminal. The suite never deletes an unlisted or unrelated app.
 4. Create the fixed `vps-e2e-primary` app, restrict its access policy to
    `TINKERCLOUD_VPS_VIEWER_EMAIL`, and build the smoke archive with the same
@@ -238,6 +239,28 @@ result never claims to reverse the durable mutation.
    `tinkercloud doctor`. Never call a provider or read/print the LLM root,
    re-run init, or remove existing host state. A temporary E2E signing
    authority is therefore forbidden with reuse.
+10. Exercise the accepted post-V1 public-static matrix through the existing
+   HTTPS gateway only. The stable fixture names are `vps-e2e-public` and
+   `vps-e2e-public-other`; cleanup may delete them only when the authenticated
+   fixture deployer lists them. Before the root-local operator gate is enabled,
+   a capability-free public candidate and its anonymous root/asset requests
+   must deny and leave the earlier private active release usable. A malformed,
+   unacknowledged, or capability-bearing public candidate must fail activation
+   and preserve that earlier release. Enable the root gate, deploy a v2 public
+   fixture with explicit CLI acknowledgement, and prove anonymous exact HTML
+   and immutable asset bytes plus its expected indexing header. In the same
+   anonymous client, deny representative `/_tinker` auth, identity, SDK/KV,
+   collection, blob, live/WebSocket, and LLM routes without fixture bytes.
+   Authenticate a verified viewer and prove the effective catalog contains the
+   permitted public/private cards but no other owner's app. Two top-level HTML
+   views with one host-only analytics cookie must show two page views and one
+   approximate visitor in the owner/operator dashboard. Disable the gate and
+   prove next-request anonymous denial while normal private owner access still
+   works; re-enable it, then transition the app public-to-private and prove
+   next-request anonymous denial. Prove two-owner/two-app catalog and insights
+   isolation, restart persistence, and malformed/failure paths. Do not create
+   randomized certificate hostnames, query VPS storage/SQLite/logs, bypass OTP,
+   or make more than the one live suite pass.
 
 On any failed step, the suite exits non-zero and leaves the VPS state in place
 for operator investigation.

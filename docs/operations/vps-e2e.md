@@ -129,9 +129,10 @@ With `TINKERCLOUD_VPS_REUSE=1`, it also refuses before offline gates unless
 non-symlink directory; the live suite still verifies the release signature.
 
 The suite confirms the 80/443 listeners belong to Tinkercloud, then after deployer
-login lists that deployer's apps and deletes only its four fixed fixture names
+login lists that deployer's apps and deletes only its six fixed fixture names
 when they are present: `vps-e2e-update-probe`, `vps-e2e-primary`,
-`vps-e2e-isolation`, and `vps-e2e-denied`. It uses a fresh idempotency key for
+`vps-e2e-isolation`, `vps-e2e-denied`, `vps-e2e-public`, and
+`vps-e2e-public-other`. It uses a fresh idempotency key for
 each deletion and stops on a list or deletion error; it never deletes an
 unrelated app. It deploys those stable-host fixtures while keeping randomized
 archive markers, denies anonymous HTML/asset/API/WebSocket access without a
@@ -169,6 +170,19 @@ manifest fixture and documentation example. The live suite creates a fresh
 archive with a randomized marker for every run, but always deploys it to the
 same bounded fixture hostnames so repeat runs reuse their cached exact-host
 certificates.
+
+The post-V1 public-static extension uses only the two additional fixed public
+fixture names above. Its one-pass matrix proves the default-off root gate,
+rejected malformed/unacknowledged/capability-bearing candidates preserving the
+old private release, root enable, explicit CLI acknowledgement, anonymous
+exact HTML/asset and indexing headers, and no app bytes from representative
+reserved identity/SDK/KV/db/blob/live/LLM routes. It then proves a verified
+viewer catalog, two document views in one cookie jar becoming two page views
+and one approximate visitor, gate disable on the next anonymous request while
+private owner access remains, re-enable, public-to-private transition,
+two-owner/two-app isolation, restart persistence, and malformed/failure paths.
+It never creates a random certificate hostname, retries the live suite, weakens
+OTP, or reads VPS storage, SQLite, or logs as a substitute for gateway proof.
 
 ## Unattended Resend OTP reading
 

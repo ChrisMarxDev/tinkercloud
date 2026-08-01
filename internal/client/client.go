@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -81,6 +83,9 @@ type DefaultServerStore interface {
 type Client struct {
 	Base, Token string
 	HTTP        *http.Client
+	// PublicAcknowledged is explicit deployer confirmation carried to the
+	// control request; a public manifest never implies this value.
+	PublicAcknowledged bool
 
 	// These private controls keep production retry bounds fixed while allowing
 	// package tests to exercise retries without sleeping for real-world DNS/TLS
@@ -258,13 +263,31 @@ type LoginResult struct {
 	APIVersion int    `json:"api_version"`
 }
 type DeploymentResult struct {
-	DeploymentID         string `json:"deployment_id"`
-	URL                  string `json:"url"`
-	Domain               string `json:"domain"`
-	PolicyReady          bool   `json:"policy_ready"`
-	TLSReady             bool   `json:"tls_ready"`
-	AnonymousDenied      bool   `json:"anonymous_denied"`
-	AuthenticatedHealthy bool   `json:"authenticated_healthy"`
+	DeploymentID         string                `json:"deployment_id"`
+	URL                  string                `json:"url"`
+	Domain               string                `json:"domain"`
+	PolicyReady          bool                  `json:"policy_ready"`
+	TLSReady             bool                  `json:"tls_ready"`
+	AnonymousDenied      bool                  `json:"anonymous_denied"`
+	AuthenticatedHealthy bool                  `json:"authenticated_healthy"`
+	Posture              DeploymentPosture     `json:"posture,omitempty"`
+	PublicStatic         *PublicStaticEvidence `json:"public_static,omitempty"`
+}
+
+type DeploymentPosture string
+
+const (
+	PosturePrivate      DeploymentPosture = "private"
+	PosturePublicStatic DeploymentPosture = "public_static"
+)
+
+// PublicStaticEvidence contains only immutable candidate evidence, never a
+// release path or credential. Hashes are lowercase SHA-256 hex.
+type PublicStaticEvidence struct {
+	RootSHA256  string `json:"root_sha256"`
+	AssetPath   string `json:"asset_path,omitempty"`
+	AssetSHA256 string `json:"asset_sha256,omitempty"`
+	Indexing    bool   `json:"indexing"`
 }
 
 var ErrDeploymentFailed = errors.New("deployment failed")
@@ -347,6 +370,9 @@ func (c Client) Deploy(ctx context.Context, slug string, archive io.Reader, size
 	setCompatibilityHeaders(req)
 	req.Header.Set("Idempotency-Key", key)
 	req.Header.Set("Authorization", "Bearer "+c.Token)
+	if c.PublicAcknowledged {
+		req.Header.Set("X-Tinker-Public-Acknowledged", "true")
+	}
 	h := c.deploymentHTTPClient()
 	res, e := h.Do(req)
 	if e != nil {
@@ -572,7 +598,13 @@ func (c Client) verifyPublicDeployment(ctx context.Context, slug string, result 
 		if probeCtx.Err() != nil {
 			return publicEvidenceError(EvidencePublicProbeCancelled, false)
 		}
-		err = c.probePublicDeploymentOnce(probeCtx, probeURL)
+		if result.Posture == PosturePublicStatic {
+			err = c.probePublicStaticOnce(probeCtx, probeURL, result.PublicStatic)
+		} else if result.Posture == "" || result.Posture == PosturePrivate {
+			err = c.probePublicDeploymentOnce(probeCtx, probeURL)
+		} else {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
 		if err == nil {
 			return nil
 		}
@@ -595,6 +627,71 @@ func (c Client) verifyPublicDeployment(ctx context.Context, slug string, result 
 		}
 	}
 	return last
+}
+
+func (c Client) probePublicStaticOnce(ctx context.Context, root *url.URL, evidence *PublicStaticEvidence) error {
+	if evidence == nil || len(evidence.RootSHA256) != 64 || (evidence.AssetPath == "") != (evidence.AssetSHA256 == "") || (evidence.AssetSHA256 != "" && len(evidence.AssetSHA256) != 64) {
+		return publicEvidenceError(EvidencePublicProbeInvalid, false)
+	}
+	check := func(u *url.URL, hash string, document bool) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		if err != nil {
+			return publicEvidenceError(EvidencePublicProbeURL, false)
+		}
+		resp, err := c.anonymousHTTPClient().Do(req)
+		if err != nil {
+			return publicEvidenceError(EvidencePublicProbeTransport, true)
+		}
+		defer resp.Body.Close()
+		if resp.Request == nil || resp.Request.URL.String() != req.URL.String() || resp.StatusCode != http.StatusOK || resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("Location") != "" {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
+		if document {
+			want := "noindex, nofollow"
+			if evidence.Indexing {
+				want = ""
+			}
+			if resp.Header.Get("X-Robots-Tag") != want {
+				return publicEvidenceError(EvidencePublicProbeInvalid, false)
+			}
+		}
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxAnonymousDenyEvidenceBytes+1))
+		if err != nil || len(body) > int(maxAnonymousDenyEvidenceBytes) {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
+		got := fmt.Sprintf("%x", sha256.Sum256(body))
+		if got != hash {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
+		return nil
+	}
+	if err := check(root, evidence.RootSHA256, true); err != nil {
+		return err
+	}
+	if evidence.AssetPath != "" {
+		asset := *root
+		asset.Path = "/" + strings.TrimPrefix(evidence.AssetPath, "/")
+		if err := check(&asset, evidence.AssetSHA256, false); err != nil {
+			return err
+		}
+	}
+	for _, p := range []string{"/_tinker/auth/login", "/_tinker/api/v1/app", "/_tinker/api/v1/kv", "/_tinker/ws/v1"} {
+		u := *root
+		u.Path = p
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		resp, err := c.anonymousHTTPClient().Do(req)
+		if err != nil {
+			return publicEvidenceError(EvidencePublicProbeTransport, true)
+		}
+		if resp.Body != nil {
+			io.Copy(io.Discard, io.LimitReader(resp.Body, maxAnonymousDenyEvidenceBytes))
+			resp.Body.Close()
+		}
+		if resp.StatusCode < 400 || resp.StatusCode >= 500 || resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("Location") != "" {
+			return publicEvidenceError(EvidencePublicProbeInvalid, false)
+		}
+	}
+	return nil
 }
 
 func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL) error {
@@ -730,7 +827,19 @@ func (c Client) deploymentHTTPClient() *http.Client {
 }
 
 func (r DeploymentResult) Verified() error {
-	if r.DeploymentID == "" || r.URL == "" || !r.PolicyReady || !r.TLSReady || !r.AnonymousDenied || !r.AuthenticatedHealthy {
+	if r.DeploymentID == "" || r.URL == "" || !r.PolicyReady || !r.TLSReady {
+		return ErrDeploymentEvidence
+	}
+	if r.Posture == PosturePublicStatic {
+		if r.PublicStatic == nil || len(r.PublicStatic.RootSHA256) != 64 {
+			return ErrDeploymentEvidence
+		}
+		return nil
+	}
+	if r.Posture != "" && r.Posture != PosturePrivate {
+		return ErrDeploymentEvidence
+	}
+	if !r.AnonymousDenied || !r.AuthenticatedHealthy {
 		return ErrDeploymentEvidence
 	}
 	return nil

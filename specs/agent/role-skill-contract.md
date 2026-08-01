@@ -35,7 +35,10 @@ checkout, hidden prompt, or remembered Tinkercloud knowledge.
 Each role skill MUST:
 
 - identify its actor and refuse to transfer authority from another role;
-- state the V1 private-only and utility-grade persistence boundaries;
+- state the V1 private-only historical boundary, utility-grade persistence
+  limits, and (where documenting the accepted post-V1 extension) that public
+  static access is default-off, operator-gated, explicitly acknowledged, and
+  capability-free;
 - route work through the supported `tinker` or `tinkercloud` command surface;
 - keep secrets out of chat, argv, app code, manifests, logs, and browser state;
 - fail closed on missing, malformed, redirected, or ambiguous security state;

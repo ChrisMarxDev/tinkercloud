@@ -17,8 +17,10 @@ It accepts requested deployer identities only in the local automation domain
 
 The deployment agent is non-human automation acting through deployer authority.
 It cannot act as an operator or viewer, create a bearer, choose an app identity,
-or broaden access. Tinkercloud remains private-only; the gateway owns activation,
-the anonymous public-denial proof, and app identity.
+or infer an access broadening. V1 is historically private-only; the accepted
+post-V1 public-static extension still requires a capability-free manifest,
+current operator gate, and explicit deployer acknowledgement. The gateway owns
+activation, public/private proof, and app identity.
 
 Never accept or print a bearer, OTP, Resend key, provider secret, app ID, or
 viewer identity. Keep the reader key and consumed-message ledger local; never

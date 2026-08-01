@@ -78,3 +78,29 @@ func TestReplaceAccessRevisionConflictAndBroadeningConfirmationDoNotMutate(t *te
 		t.Fatalf("audits=%d revocations=%d err=%v", audits, spy.n, err)
 	}
 }
+
+func TestReplaceAccessPublicAppPreservesPostureAndRejectsModeTransition(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	svc := ControlService{Store: s}
+	private := controlapi.AccessPolicyInput{Mode: "private", ExpectedRevision: 1}
+	if err := svc.ReplaceAccess(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", private, "mode-transition"); err == nil {
+		t.Fatal("public-to-private access replacement bypassed deployment activation")
+	}
+	public := controlapi.AccessPolicyInput{Mode: "public", ExpectedRevision: 1, ConfirmBroadening: true}
+	public.Allow.Emails = []string{"viewer@example.test"}
+	if err := svc.ReplaceAccess(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha", public, "public-allowlist"); err != nil {
+		t.Fatalf("public allowlist update=%v", err)
+	}
+	var mode string
+	var revision int
+	if err := s.DB.QueryRow("SELECT mode FROM access_policies WHERE app_id='a' AND revision=2").Scan(&mode); err != nil || mode != "public" {
+		t.Fatalf("replacement mode=%q err=%v", mode, err)
+	}
+	if err := s.DB.QueryRow("SELECT policy_revision FROM applications WHERE id='a'").Scan(&revision); err != nil || revision != 2 {
+		t.Fatalf("policy revision=%d err=%v", revision, err)
+	}
+}

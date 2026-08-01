@@ -18,7 +18,7 @@ const (
 )
 
 type App struct {
-	ID, Slug, OwnerIdentityID, ReleaseRoot string
+	ID, Slug, OwnerIdentityID, ReleaseRoot, DeploymentID string
 	// ReleaseEvidence is database-derived metadata for the currently active
 	// immutable release. Resolving an app intentionally does not inspect this
 	// path: the static dispatcher verifies it only after authorization.
@@ -26,6 +26,7 @@ type App struct {
 	Status                                                     Status
 	SPAFallback                                                bool
 	KVEnabled, BlobsEnabled, RealtimeEnabled, LLMChatRequested bool
+	PublicIndexing                                             bool // immutable metadata of the currently active release
 }
 
 var ErrNotFound = errors.New("app not found")

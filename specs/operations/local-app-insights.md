@@ -51,6 +51,11 @@ in bounded pages. Hard app
 deletion removes both aggregates and markers transactionally with app-owned
 control state. Analytics has one operator-controlled global disable switch;
 disabled or unavailable means no new tracking and no response failure.
+The switch defaults enabled and is mutated only on the VPS through
+`tinkercloud insights enable|disable`. The root command delegates the SQLite
+write to the `tinkercloud` service identity, then refreshes only an already
+active service after the durable write succeeds; it never exposes a browser or
+remote mutation route.
 
 ## Read authorization
 
@@ -59,6 +64,11 @@ summary: page views, approximate visitors, last activity, and a zero-filled UTC
 daily series. Viewers, public visitors, app JavaScript/SDK sessions,
 deployment-agent tokens, revoked users, and unrelated deployers are denied
 before aggregate data is queried.
+
+The native dashboard presents the 7-day and 30-day totals with the exact label
+`Approximate visitors`, plus one zero-filled 30-day textual daily table. A
+verified empty window displays zero; a disabled or unavailable read displays an
+unavailable state and never substitutes zero.
 
 Malformed app targets, ranges, dates, cookies, and digests fail within fixed
 bounds. Responses and logs never expose raw tracking material or forbidden

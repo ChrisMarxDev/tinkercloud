@@ -393,6 +393,8 @@ func TestVPSE2EFixtureSlugsAreStableAndBounded(t *testing.T) {
 		"vps-e2e-primary",
 		"vps-e2e-isolation",
 		"vps-e2e-denied",
+		"vps-e2e-public",
+		"vps-e2e-public-other",
 	}
 	if got := vpsFixtureSlugs[:]; !slices.Equal(got, want) {
 		t.Fatalf("fixture slugs = %v, want %v", got, want)

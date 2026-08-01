@@ -68,7 +68,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	// positional arguments. Command-specific --file remains in argv.
 	var globals, rest []string
 	for i := 0; i < len(argv); i++ {
-		if argv[i] == "--json" || argv[i] == "--force" {
+		if argv[i] == "--json" || argv[i] == "--force" || argv[i] == "--confirm-public" {
 			globals = append(globals, argv[i])
 			continue
 		}
@@ -84,6 +84,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 	flag.CommandLine.SetOutput(stderr)
 	jsonOutput := flag.Bool("json", false, "write deterministic JSON")
 	forceLogin := flag.Bool("force", false, "ignore a saved login and authenticate again")
+	confirmPublic := flag.Bool("confirm-public", false, "acknowledge anonymous public static access")
 	server := flag.String("server", "", "platform server")
 	if err := flag.CommandLine.Parse(argv); err != nil {
 		return 2
@@ -401,6 +402,19 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_manifest", "Manifest does not meet the V1 contract."}})
 			return 1
 		}
+		if m.AccessMode == "public" {
+			if *jsonOutput && !*confirmPublic {
+				writeTo(stdout, stderr, true, result{Error: &cliError{"confirmation_required", "Public access requires --confirm-public."}})
+				return 1
+			}
+			if !*jsonOutput && !*confirmPublic {
+				answer, err := deps.prompt.Ask("Type public:" + m.Name + " to confirm anonymous access: ")
+				if err != nil || answer != "public:"+m.Name {
+					writeTo(stdout, stderr, false, result{Error: &cliError{"confirmation_required", "Public access was not confirmed."}})
+					return 1
+				}
+			}
+		}
 		token, e := ensureDeployCredential(context.Background(), base, *jsonOutput, deps)
 		if e != nil {
 			code, message := loginFailure(e)
@@ -428,6 +442,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		if deps.newClient != nil {
 			deployer = deps.newClient(base, token)
 		}
+		deployer.PublicAcknowledged = m.AccessMode == "public"
 		// The manifest owns the stable slug and the candidate policy. Ensure the
 		// caller owns that slug before streaming; a foreign-slug conflict is not
 		// a successful deployment and is intentionally kept indistinguishable.

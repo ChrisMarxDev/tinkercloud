@@ -51,7 +51,7 @@
               <div class="tinker-app-card__summary">
                 <div class="tinker-card__header">
                   <div><p class="tinker-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}</div>
-                  <span class="tinker-status" data-state="active">Private</span>
+				  <span class="tinker-status" data-state="active">{{if eq .Posture "public"}}Public{{else}}Private{{end}}</span>
                 </div>
                 {{if .Tags}}<p class="tinker-card__meta">Tags: {{range $index, $tag := .Tags}}{{if $index}}, {{end}}{{$tag}}{{end}}</p>{{end}}
                 <a class="tinker-button tinker-button--secondary" href="{{.StableURL}}">Open {{.Slug}}</a>

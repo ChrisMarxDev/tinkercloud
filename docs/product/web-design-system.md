@@ -287,9 +287,12 @@ is unavailable.
 Local insights answer only three questions: approximately how many browser
 cookies returned, how many document views succeeded, and when the last view
 occurred. Reuse stat/definition/table primitives, label “Approximate visitors”
-in full, and keep the daily values available as text at every width. A future
-chart may supplement but never replace those values. Empty means a verified
-zero; unavailable has its own state and next step.
+in full, show bounded 7-day and 30-day totals, and keep the zero-filled 30-day
+daily values available as text at every width. A future chart may supplement
+but never replace those values. Empty means a verified zero; unavailable has
+its own state and next step. The global tracking switch remains a root-local
+`tinkercloud insights enable|disable` operation; the browser only displays
+server-derived read state.
 
 Public publishing is an access broadening, not a decorative status toggle. The
 confirmation copy names the app and says that anyone on the internet can open

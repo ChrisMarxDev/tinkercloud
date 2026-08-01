@@ -349,6 +349,14 @@ var deployerServiceTryRestart = func() error {
 }
 
 const internalDeployerMutationCommand = "deployer-mutate-internal"
+const internalInsightsMutationCommand = "insights-mutate-internal"
+const internalPublicMutationCommand = "public-mutate-internal"
+
+// insightsMutationRunner follows the same service-user writer pattern as the
+// other root-local recovery mutations: root retains only systemd authority,
+// while the child drops privilege before SQLite opens any durable artifact.
+var insightsMutationRunner = runInsightsMutationChild
+var publicMutationRunner = runPublicMutationChild
 
 func runDeployerMutationChild(ctx context.Context, databasePath, email, status, action string) error {
 	executable, err := os.Executable()
@@ -370,6 +378,63 @@ func runDeployerMutationInProcess(ctx context.Context, databasePath, email, stat
 	closeErr := store.Close()
 	if mutationErr != nil {
 		return mutationErr
+	}
+	return closeErr
+}
+
+func runInsightsMutationChild(ctx context.Context, databasePath string, enabled bool) error {
+	executable, err := os.Executable()
+	if err != nil || executable == "" {
+		return errors.New("insights mutation unavailable")
+	}
+	return exec.CommandContext(ctx, executable, internalInsightsMutationCommand, "--database", databasePath, "--enabled="+strconv.FormatBool(enabled)).Run()
+}
+
+func runInsightsMutationInProcess(ctx context.Context, databasePath string, enabled bool) error {
+	if err := dropToTinkercloudIdentity(); err != nil {
+		return err
+	}
+	store, err := openDeployerSQLite(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	mutationErr := store.SetInsightsEnabled(ctx, enabled)
+	closeErr := store.Close()
+	if mutationErr != nil {
+		return mutationErr
+	}
+	return closeErr
+}
+
+func runPublicMutationChild(ctx context.Context, databasePath string, enabled bool) error {
+	executable, err := os.Executable()
+	if err != nil || executable == "" {
+		return errors.New("public mutation unavailable")
+	}
+	return exec.CommandContext(ctx, executable, internalPublicMutationCommand, "--database", databasePath, "--enabled="+strconv.FormatBool(enabled)).Run()
+}
+
+func runPublicMutationInProcess(ctx context.Context, databasePath string, enabled bool) error {
+	if err := dropToTinkercloudIdentity(); err != nil {
+		return err
+	}
+	store, err := openDeployerSQLite(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	var operatorID string
+	err = store.DB.QueryRowContext(ctx, "SELECT id FROM users WHERE role='operator' AND status='active' ORDER BY id LIMIT 1").Scan(&operatorID)
+	if err == nil {
+		gate, gateErr := store.CurrentPublicGate(ctx)
+		if gateErr != nil {
+			err = gateErr
+		} else {
+			err = store.SetPublicGate(ctx, operatorID, enabled, gate.Revision, "root_public_gate_"+strconv.FormatInt(time.Now().UnixNano(), 10))
+		}
+	}
+	closeErr := store.Close()
+	if err != nil {
+		return err
 	}
 	return closeErr
 }
@@ -405,6 +470,36 @@ func run(args []string, out, errout *os.File) error {
 		return errors.New("tinkercloud: usage")
 	}
 	switch args[0] {
+	case internalInsightsMutationCommand:
+		if effectiveUID() != 0 {
+			return errors.New("tinkercloud: root_required")
+		}
+		fs := flag.NewFlagSet(internalInsightsMutationCommand, flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		databasePath := fs.String("database", "", "")
+		enabled := fs.String("enabled", "", "")
+		if fs.Parse(args[1:]) != nil || len(fs.Args()) != 0 || *databasePath == "" || (*enabled != "true" && *enabled != "false") {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		if err := runInsightsMutationInProcess(context.Background(), *databasePath, *enabled == "true"); err != nil {
+			return errors.New("tinkercloud: insights_failed")
+		}
+		return nil
+	case internalPublicMutationCommand:
+		if effectiveUID() != 0 {
+			return errors.New("tinkercloud: root_required")
+		}
+		fs := flag.NewFlagSet(internalPublicMutationCommand, flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		databasePath := fs.String("database", "", "")
+		enabled := fs.String("enabled", "", "")
+		if fs.Parse(args[1:]) != nil || len(fs.Args()) != 0 || *databasePath == "" || (*enabled != "true" && *enabled != "false") {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		if err := runPublicMutationInProcess(context.Background(), *databasePath, *enabled == "true"); err != nil {
+			return errors.New("tinkercloud: public_failed")
+		}
+		return nil
 	case internalDeployerMutationCommand:
 		if effectiveUID() != 0 {
 			return errors.New("tinkercloud: root_required")
@@ -426,6 +521,67 @@ func run(args []string, out, errout *os.File) error {
 			return errors.New("tinkercloud: invalid_arguments")
 		}
 		return runLLMEnable(args[2:], out)
+	case "insights":
+		if effectiveUID() != 0 {
+			return errors.New("tinkercloud: root_required")
+		}
+		if len(args) < 2 || (args[1] != "enable" && args[1] != "disable") {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		fs := flag.NewFlagSet("insights", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		cfgPath := fs.String("config", defaultConfigPath, "")
+		if fs.Parse(args[2:]) != nil || len(fs.Args()) != 0 {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		cfg, err := config.LoadYAML(*cfgPath)
+		if err != nil {
+			return errors.New("tinkercloud: config_invalid")
+		}
+		databasePath := filepath.Join(cfg.DataDirectory, "tinkercloud.db")
+		if err = prepareDeployerDatabaseOwnership(databasePath); err != nil {
+			return errors.New("tinkercloud: service_identity_failed")
+		}
+		enabled := args[1] == "enable"
+		if err = insightsMutationRunner(context.Background(), databasePath, enabled); err != nil {
+			return errors.New("tinkercloud: insights_failed")
+		}
+		// The running recorder caches the durable switch. It is refreshed only
+		// after the service-user mutation has closed successfully.
+		if err = refreshRunningDeployerService(); err != nil {
+			return errors.New("tinkercloud: insights_applied_service_refresh_failed")
+		}
+		fmt.Fprintf(out, "local insights %s\n", args[1]+"d")
+		return nil
+	case "public":
+		if effectiveUID() != 0 {
+			return errors.New("tinkercloud: root_required")
+		}
+		if len(args) < 2 || (args[1] != "enable" && args[1] != "disable") {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		fs := flag.NewFlagSet("public", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		cfgPath := fs.String("config", defaultConfigPath, "")
+		if fs.Parse(args[2:]) != nil || len(fs.Args()) != 0 {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		cfg, err := config.LoadYAML(*cfgPath)
+		if err != nil {
+			return errors.New("tinkercloud: config_invalid")
+		}
+		databasePath := filepath.Join(cfg.DataDirectory, "tinkercloud.db")
+		if err = prepareDeployerDatabaseOwnership(databasePath); err != nil {
+			return errors.New("tinkercloud: service_identity_failed")
+		}
+		if err = publicMutationRunner(context.Background(), databasePath, args[1] == "enable"); err != nil {
+			return errors.New("tinkercloud: public_failed")
+		}
+		if err = refreshRunningDeployerService(); err != nil {
+			return errors.New("tinkercloud: public_applied_service_refresh_failed")
+		}
+		fmt.Fprintf(out, "public static access %s\n", args[1]+"d")
+		return nil
 	case "install-service":
 		return runInstallService(args[1:])
 	case "update":

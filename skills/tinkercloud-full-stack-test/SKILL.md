@@ -11,7 +11,10 @@ authorized to create and manage their own apps, and `viewer` for a person who
 accesses an app. A deployment agent is automation acting through deployer
 authority. Never transfer credentials or authority between these roles.
 
-Tinkercloud V1 hosts private static apps. The gateway owns TLS, app routing,
+Tinkercloud V1 hosts private static apps. The accepted post-V1 public-static
+extension remains gateway-only: it permits only reviewed, capability-free,
+immutable static files after both a current app policy and a default-off,
+revisioned operator gate succeed. The gateway owns TLS, app routing,
 viewer authentication, access policy, static files, SDK capabilities, and
 deployment activation. It derives the app from the hostname and the viewer from
 an opaque app-host session. App code must never select either identity.
@@ -21,8 +24,13 @@ security state is a denial, not a value to guess. Never expose or request a
 deployer token, OTP, provider secret, database credential, app ID, or viewer ID
 in chat, argv, source code, `tinker.yaml`, browser storage, logs, or output.
 
-V1 is private-only. The app owner is always an implicit viewer. There is no
-public mode. Each app has its own private SQLite data file for KV and bounded
+V1's historical release boundary is private-only, and the app owner is always
+an implicit viewer. In the accepted post-V1 extension, public is never a
+default or a capability grant: a public release needs `access.mode: public`,
+no browser capabilities, explicit deployer acknowledgement, and the current
+operator gate. Reserved `/_tinker/*` routes remain private-viewer-only; a
+public release cannot expose identity, SDK, KV, collections, blobs, realtime,
+or LLM access. Each app has its own private SQLite data file for KV and bounded
 JSON document collections; blobs and that data are utility-grade state on one
 VPS, so losing the VPS can lose them. Realtime is app-scoped, in-memory,
 best-effort notification with no history, replay, ordering, or delivery
@@ -44,9 +52,10 @@ for a required value or decision that is still unknown, cannot be discovered,
 and cannot be defaulted safely. Group unresolved optional choices into one
 review. Never infer broader authority.
 
-Do not report success from a happy path alone. A deployment is complete only
-after a fresh anonymous request through the real HTTPS gateway proves that no
-app content is exposed.
+Do not report success from a happy path alone. A private deployment is complete
+only after a fresh anonymous HTTPS request proves no app content is exposed. A
+public-static deployment additionally needs the exact anonymous document/asset
+and indexing proof plus denial of every reserved route through that gateway.
 <!-- shared:role-common:end -->
 
 ## Unattended VPS workflow
@@ -99,7 +108,8 @@ app content is exposed.
    retain its canonical private policy, and pass anonymous denial again. A
    After deployer login, list only that deployer's apps and delete only the
    listed fixed acceptance fixtures (`vps-e2e-update-probe`,
-   `vps-e2e-primary`, `vps-e2e-isolation`, and `vps-e2e-denied`), using a
+   `vps-e2e-primary`, `vps-e2e-isolation`, `vps-e2e-denied`,
+   `vps-e2e-public`, and `vps-e2e-public-other`), using a
    fresh idempotency key per deletion. Do not delete unknown, absent, or
    unrelated apps; list and deletion errors are terminal. Their stable hosts
    are intentional and must be reused across clean and reuse runs so the
@@ -160,6 +170,19 @@ app content is exposed.
    ```bash
    go test ./test/vps -run TestVPSAcceptance -count=1 -v
    ```
+
+11. For the accepted post-V1 public-static slice, use only the stable public
+    fixture hosts. Prove gate-off and malformed/unacknowledged/capability-bearing
+    public candidates retain the prior private release; then root-enable the
+    gate and deploy with explicit CLI acknowledgement. Assert anonymous exact
+    HTML/asset bytes and indexing behavior while every representative reserved
+    auth, identity, SDK/KV, db, blob, live/WebSocket, and LLM route denies with
+    no app bytes. Verify policy-filtered catalog, two page views/one approximate
+    visitor for one cookie jar, gate disable next-request denial with private
+    owner access intact, re-enable, public-to-private transition, two-owner
+    isolation, restart persistence, and malformed/failure paths. Never add a
+    listener, use a randomized ACME host, inspect VPS state, bypass OTP, or
+    make another live pass.
 
 Do not create an infinite deploy loop. On ambiguity, malformed provider data,
 timeouts, unsafe local state, or any failed denial assertion, stop and retain

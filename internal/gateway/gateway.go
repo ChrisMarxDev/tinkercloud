@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/appnamespace"
 	"github.com/ChrisMarxDev/tinkercloud/internal/apps"
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
 	"github.com/ChrisMarxDev/tinkercloud/internal/staticruntime"
 	webui "github.com/ChrisMarxDev/tinkercloud/web"
 )
@@ -164,7 +166,16 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		denyJSON(w, http.StatusNotFound, "not_found", id)
 		return
 	}
-	switch ClassifyRoute(r.Method, r.URL.Path) {
+	endpoint := ClassifyRoute(r.Method, r.URL.Path)
+	// Public apps never expose a gateway-owned reserved/auth surface to an
+	// anonymous caller.  Resolve current policy/gate before any dispatcher.
+	if endpoint != ProtectedStatic {
+		if g.isEffectivePublic(r.Context(), app) {
+			denyJSON(w, http.StatusNotFound, "not_found", id)
+			return
+		}
+	}
+	switch endpoint {
 	case AppLogin, AppLogout, AppIdentityCallback:
 		if g.PreAuth != nil {
 			g.PreAuth.DispatchPreAuth(app, ClassifyRoute(r.Method, r.URL.Path), w, r)
@@ -181,6 +192,31 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if c, e := r.Cookie(g.Config.SessionCookie); e == nil {
 		token = c.Value
 	}
+	if endpoint == ProtectedStatic {
+		staticAuth, err := g.Authorizer.AuthorizeStatic(r.Context(), app, token, id)
+		if err == nil {
+			observed := &responseObserver{ResponseWriter: w}
+			var event analytics.Event
+			var record bool
+			var callback func()
+			if IsDocumentNavigation(r) {
+				callback = func() { event, record = g.prepareInsight(staticAuth, observed, r) }
+			}
+			outcome := staticruntime.Serve(staticAuth, observed, r, callback)
+			if outcome.DocumentCandidate && IsDocumentNavigation(r) && observed.status() == http.StatusOK && record {
+				_ = g.Insights.Offer(event)
+			}
+			return
+		}
+		if IsDocumentNavigation(r) {
+			if ret, valid := ValidReturnPath(r.URL.RequestURI()); valid {
+				http.Redirect(w, r, "/_tinker/auth/login?return="+url.QueryEscape(ret), http.StatusSeeOther)
+				return
+			}
+		}
+		denyJSON(w, http.StatusUnauthorized, "not_authorized", id)
+		return
+	}
 	auth, err := g.Authorizer.Authorize(r.Context(), app, token, id)
 	if err != nil {
 		if ClassifyRoute(r.Method, r.URL.Path) == ProtectedStatic && IsDocumentNavigation(r) {
@@ -192,23 +228,30 @@ func (g Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		denyJSON(w, http.StatusUnauthorized, "not_authorized", id)
 		return
 	}
-	if endpoint := ClassifyRoute(r.Method, r.URL.Path); endpoint == ProtectedStatic {
-		observed := &responseObserver{ResponseWriter: w}
-		var event analytics.Event
-		var record bool
-		outcome := staticruntime.Serve(auth, observed, r, func() { event, record = g.prepareInsight(auth, observed, r) })
-		if outcome.DocumentCandidate && IsDocumentNavigation(r) && observed.status() == http.StatusOK {
-			if record {
-				_ = g.Insights.Offer(event)
-			}
-		}
-		return
-	}
 	if g.Protected == nil {
 		denyJSON(w, http.StatusNotFound, "not_found", id)
 		return
 	}
 	g.Protected.Dispatch(auth, ClassifyRoute(r.Method, r.URL.Path), w, r)
+}
+
+func (g Gateway) isEffectivePublic(ctx context.Context, app apps.App) bool {
+	if g.Authorizer.Policies == nil {
+		return false
+	}
+	if app.DeploymentID == "" || app.KVEnabled || app.BlobsEnabled || app.RealtimeEnabled || app.LLMChatRequested {
+		return false
+	}
+	p, err := g.Authorizer.Policies.Current(ctx, app.ID)
+	if err != nil || !p.Valid || p.Mode != "public" {
+		return false
+	}
+	gs, ok := g.Authorizer.Policies.(policies.PublicGateStore)
+	if !ok {
+		return false
+	}
+	gate, err := gs.CurrentPublicGate(ctx)
+	return err == nil && gate.Valid && gate.Enabled && gate.Revision > 0
 }
 
 type responseObserver struct {
@@ -242,7 +285,7 @@ func (w *responseObserver) status() int {
 // recordInsight runs only after staticruntime has served an authorized 200 HTML
 // document. The recorder's offer is non-blocking, and a cookie is an analytics
 // header only; a failed random source or recorder can never change the body.
-func (g Gateway) prepareInsight(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) (analytics.Event, bool) {
+func (g Gateway) prepareInsight(auth appauth.StaticAccessContext, w http.ResponseWriter, r *http.Request) (analytics.Event, bool) {
 	if g.Insights == nil || len(g.InsightsKey) == 0 || !g.Insights.Available() {
 		return analytics.Event{}, false
 	}

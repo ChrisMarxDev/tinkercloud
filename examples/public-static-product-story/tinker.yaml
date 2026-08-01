@@ -1,0 +1,15 @@
+version: 2
+name: public-static-product-story
+description: A capability-free public product story with deliberate search indexing.
+
+build:
+  output: .
+
+access:
+  mode: public
+  indexing: true
+
+tags:
+  - demo
+  - product-story
+  - public

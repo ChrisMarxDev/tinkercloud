@@ -19,7 +19,10 @@ authorized to create and manage their own apps, and `viewer` for a person who
 accesses an app. A deployment agent is automation acting through deployer
 authority. Never transfer credentials or authority between these roles.
 
-Tinkercloud V1 hosts private static apps. The gateway owns TLS, app routing,
+Tinkercloud V1 hosts private static apps. The accepted post-V1 public-static
+extension remains gateway-only: it permits only reviewed, capability-free,
+immutable static files after both a current app policy and a default-off,
+revisioned operator gate succeed. The gateway owns TLS, app routing,
 viewer authentication, access policy, static files, SDK capabilities, and
 deployment activation. It derives the app from the hostname and the viewer from
 an opaque app-host session. App code must never select either identity.
@@ -29,8 +32,13 @@ security state is a denial, not a value to guess. Never expose or request a
 deployer token, OTP, provider secret, database credential, app ID, or viewer ID
 in chat, argv, source code, `tinker.yaml`, browser storage, logs, or output.
 
-V1 is private-only. The app owner is always an implicit viewer. There is no
-public mode. Each app has its own private SQLite data file for KV and bounded
+V1's historical release boundary is private-only, and the app owner is always
+an implicit viewer. In the accepted post-V1 extension, public is never a
+default or a capability grant: a public release needs `access.mode: public`,
+no browser capabilities, explicit deployer acknowledgement, and the current
+operator gate. Reserved `/_tinker/*` routes remain private-viewer-only; a
+public release cannot expose identity, SDK, KV, collections, blobs, realtime,
+or LLM access. Each app has its own private SQLite data file for KV and bounded
 JSON document collections; blobs and that data are utility-grade state on one
 VPS, so losing the VPS can lose them. Realtime is app-scoped, in-memory,
 best-effort notification with no history, replay, ordering, or delivery
@@ -52,9 +60,10 @@ for a required value or decision that is still unknown, cannot be discovered,
 and cannot be defaulted safely. Group unresolved optional choices into one
 review. Never infer broader authority.
 
-Do not report success from a happy path alone. A deployment is complete only
-after a fresh anonymous request through the real HTTPS gateway proves that no
-app content is exposed.
+Do not report success from a happy path alone. A private deployment is complete
+only after a fresh anonymous HTTPS request proves no app content is exposed. A
+public-static deployment additionally needs the exact anonymous document/asset
+and indexing proof plus denial of every reserved route through that gateway.
 <!-- shared:role-common:end -->
 
 <!-- shared:deployer:start -->
@@ -427,12 +436,16 @@ Rules:
 - `name` is a valid stable app slug; do not silently rewrite it.
 - `build.output` and optional fallback stay beneath the project with no
   symlinks or traversal.
-- `access.mode` is private by default; v2 `public` requests are parsed but
-  cannot activate until the separately gated public-static slice exists.
-  Empty allowlists mean owner-only.
+- `access.mode` is private by default. The accepted post-V1 `public` mode can
+  activate only when the operator's current public gate is enabled, the release
+  is capability-free, and the deployer gives the explicit CLI acknowledgement;
+  otherwise it fails closed and preserves the earlier active release. Empty
+  private allowlists mean owner-only.
 - Tags are optional, lowercase ASCII, 1–24 characters, internally hyphenated
-  at most, unique, and limited to eight. `access.indexing` stays false unless
-  a future effective public release explicitly permits it.
+  at most, unique, and limited to eight. `access.indexing` is valid only for a
+  public release and defaults false; successful documents are `noindex,
+  nofollow` unless both the effective public policy and immutable indexing opt-in
+  are current.
 - Enable only capabilities the app uses and the deployer deliberately accepts.
 - `spa.fallback` names a normal file inside the built output.
 - Unknown keys are errors.
@@ -472,6 +485,15 @@ already explicit. Then run from the project root:
 ```sh
 tinker deploy .
 ```
+
+For an accepted post-V1 capability-free public-static release, show the
+internet-access consequence plainly and require an explicit deployer decision.
+Set `access.mode: public` and any deliberate `access.indexing` choice in the v2
+manifest, then use `tinker deploy --confirm-public .`. Never add that flag,
+change a private app to public, or enable indexing by inference. If the operator
+gate is disabled or unavailable, stop: a retry or a client flag cannot broaden
+access. Verify anonymous root HTML, one immutable asset, the expected
+`X-Robots-Tag`, and denials for all `/_tinker/*` routes without cookies.
 
 For an existing app policy, first read the current policy with `tinker access get
 APP`. `tinker access set APP --file policy.json` accepts only writable policy

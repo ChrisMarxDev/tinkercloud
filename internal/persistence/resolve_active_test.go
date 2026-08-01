@@ -15,7 +15,7 @@ func TestResolveActiveDerivedRootAndEligibility(t *testing.T) {
 	seedActiveRelease(t, s)
 	defer s.Close()
 	a, e := s.ResolveActive(context.Background(), "alpha")
-	if e != nil || filepath.Base(a.ReleaseRoot) == "hash" || filepath.Dir(filepath.Dir(a.ReleaseRoot)) != filepath.Join(s.DataRoot, "releases") {
+	if e != nil || a.DeploymentID != "d" || filepath.Base(a.ReleaseRoot) == "hash" || filepath.Dir(filepath.Dir(a.ReleaseRoot)) != filepath.Join(s.DataRoot, "releases") {
 		t.Fatal(a, e)
 	}
 	if !s.EligibleAppHost(context.Background(), "alpha") {

@@ -25,7 +25,7 @@ func (s *SQLiteStore) ResolveActive(ctx context.Context, slug string) (apps.App,
 		return apps.App{}, apps.ErrNotFound
 	}
 	var m releases.Manifest
-	if json.Unmarshal(manifest, &m) != nil {
+	if json.Unmarshal(manifest, &m) != nil || m.Name != a.Slug || !releases.ValidStoredManifest(m) {
 		return apps.App{}, apps.ErrNotFound
 	}
 	rows, e := s.DB.QueryContext(ctx, "SELECT relative_path,size,content_hash FROM deployment_files WHERE deployment_id=? ORDER BY relative_path", deploymentID)
@@ -54,11 +54,13 @@ func (s *SQLiteStore) ResolveActive(ctx context.Context, slug string) (apps.App,
 	// sealed AuthorizationContext has been issued.
 	a.ReleaseRoot = filepath.Join(s.DataRoot, "releases", a.ID, hash)
 	a.ReleaseEvidence = releases.FileManifest{Files: expected, Hash: hash}
+	a.DeploymentID = deploymentID
 	a.SPAFallback = m.SPAFallback != ""
 	a.KVEnabled = m.KV
 	a.BlobsEnabled = m.Blobs
 	a.RealtimeEnabled = m.Realtime
 	a.LLMChatRequested = m.LLMChat
+	a.PublicIndexing = m.Indexing
 	return a, nil
 }
 

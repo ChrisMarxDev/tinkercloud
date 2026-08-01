@@ -130,8 +130,9 @@ a dashboard mutation.
   description, and rendered tags case-insensitively; the tag select matches a
   rendered canonical tag exactly.
 - Owner/operator app summaries label the metric **Approximate visitors** and
-  show page views, last activity, and a textual 30-day daily series. Unavailable
-  analytics renders as unavailable, never as zero. Viewers and unrelated
+  show 7-day and 30-day page-view/visitor totals, last activity, and a textual
+  zero-filled 30-day daily series. Unavailable analytics renders as unavailable,
+  never as zero. Viewers and unrelated
   deployers receive no analytics markup or serialized values.
 - Public-policy and operator-gate states use visible exact text. Enabling public
   authority states “Anyone on the internet can open this app” and requires the
