@@ -66,3 +66,15 @@ cannot alter authorization, bytes, or availability.
 - Hard app deletion must cascade analytics state.
 - This is an explicit post-V1 extension and does not rewrite the V1 historical
   exit claim.
+
+## Implementation evidence
+
+The production-composition real-listener matrix and one guarded clean-host VPS
+acceptance run passed on 2026-08-01. They proved the default-off operator gate,
+candidate failure preservation, explicit public acknowledgement, exact public
+HTML/assets and indexing behavior, denial of representative reserved and
+capability routes, authorized catalog filtering, two views/one approximate
+visitor, owner/operator isolation, restart persistence, immediate gate and
+policy transitions, allowed-owner access after gate disable, and global logout.
+The tracked redacted acceptance record is
+[`public-reach-local-insights-acceptance.md`](../delivery/public-reach-local-insights-acceptance.md).

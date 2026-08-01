@@ -14,6 +14,7 @@ invalid values prevent the live run from starting.
 | Variable | Requirement |
 | --- | --- |
 | `TINKERCLOUD_VPS_E2E` | Exact value `1`. |
+| `TINKERCLOUD_PUBLIC_EXAMPLE_E2E` | Exact value `1` only for the separate, verification-only `TestPublicExampleAcceptance`. It remains off for ordinary tests and does not replace `TINKERCLOUD_VPS_E2E`. |
 | `TINKERCLOUD_VPS_SSH_TARGET` | Root SSH destination in exact `root@host` form, with no whitespace or option-like prefix. |
 | `TINKERCLOUD_VPS_ACKNOWLEDGE` | Exact value of `TINKERCLOUD_VPS_SSH_TARGET`. It is the dedicated-host acknowledgement. |
 | `TINKERCLOUD_VPS_KNOWN_HOSTS_FILE` | Absolute path to an existing regular file containing the target's trusted host key. |
@@ -35,6 +36,34 @@ invalid values prevent the live run from starting.
 The VPS must already have one public wildcard DNS record for `*.<domain>` plus
 a verified Resend sending domain. The suite does not create DNS records or
 retrieve credentials from the VPS.
+
+## Two-stage public example evidence
+
+The first-party `examples/public-static-product-story` is verified in two
+deliberate, one-attempt stages. They are not the destructive clean-host suite.
+
+1. From the deployer's workstation, use the checked-in deployment-agent wrapper
+   exactly once with `--confirm-public`. The wrapper performs the normal
+   Resend-backed deployer login if needed, sends the explicit acknowledgement
+   exactly once, and relies on the gateway's deployment proof. The manifest,
+   current operator gate, and capability-free validation remain independent.
+2. After that successful deployment, set exact
+   `TINKERCLOUD_PUBLIC_EXAMPLE_E2E=1` alongside the existing strict
+   `TINKERCLOUD_VPS_E2E` configuration and run exactly once:
+
+   ```sh
+   go test ./test/vps -run TestPublicExampleAcceptance -count=1 -v
+   ```
+
+   This second test uses HTTPS only. It does not install, clean, deploy,
+   mutate SSH/VPS state, inspect VPS SQLite/filesystem/logs, or retry a
+   deployment. With one fresh anonymous cookie jar, it verifies the tracked
+   exact `index.html` twice as document requests, exact `styles.css`, opt-in
+   indexing, safe cache/type/nosniff headers, and reserved-route denials. It
+   then completes the normal dashboard OTP flow as the configured deployer and
+   requires the public catalog card plus the owner dashboard's exact two views,
+   one approximate visitor, nonempty last activity, and 30 UTC daily rows. It
+   leaves the public app live.
 
 ## Unattended wrapper
 
@@ -127,6 +156,26 @@ not receive another mutation attempt. The suite does not re-install artifacts,
 rewrite secrets, or run broad setup work between retries; resumable init state
 makes each retry a final-proof attempt. Context cancellation stops immediately.
 
+## Evidence boundary and authority
+
+The clean VPS suite is black-box evidence: it proves behavior through the
+installed binary, supported root-local commands, supported control API, real
+OTP login, and HTTPS gateway requests. It does not inspect or mutate
+Tinkercloud SQLite rows, release/application directories, service logs, or a
+test-only production hook.
+
+Local production-composition and persistence tests supply the complementary
+durable-state evidence an external client cannot observe directly.
+`cmd/tinkercloud/public_reach_e2e_test.go` covers composed-listener activation,
+policy/gate, catalog, and injected failure paths;
+`internal/persistence/dashboard_test.go` covers owner/operator aggregate read
+models and their bounded 30-day series; and
+`internal/persistence/analytics_test.go` covers SQLite retention, cleanup, and
+hard-delete cascades. The VPS run proves their external outcomes—current cards,
+next-request revocation, public bytes, restart behavior, and rendered
+aggregates—but cannot prove physical retention or purge without violating this
+black-box boundary. Release evidence requires both forms of proof.
+
 ## Performed lifecycle and assertions
 
 ### Local deployer authorization command
@@ -203,6 +252,19 @@ result never claims to reverse the durable mutation.
    derived app sessions. A later explicit switch to the configured deployer
    identity must also revoke the original child sessions before the
    deployer-only app opens.
+
+   Before the account-switch case, the suite creates a fixed owner-only denied
+   fixture. The verified viewer catalog must contain `vps-e2e-primary` as its
+   allowed private card and both effective-public cards, while omitting the
+   denied fixture and all release markers. Through the supported revisioned
+   access-policy API, it removes the primary viewer email. The same verified
+   identity must lose that private catalog card on its next catalog read and
+   lose its existing primary app session on its next request. It restores the
+   email rule only because later capability checks need it, then proves that
+   the still-valid, host-only app session receives the exact active document
+   again. No fresh handoff is required after restoration; the prior next-
+   request denial remains the revocation evidence.
+
    The deployed fixture has
    `features.blobs: true` and contains a same-origin SDK-equivalent blob client
    example.
@@ -245,8 +307,12 @@ result never claims to reverse the durable mutation.
    fixture deployer lists them. Before the root-local operator gate is enabled,
    a capability-free public candidate and its anonymous root/asset requests
    must deny and leave the earlier private active release usable. A malformed,
-   unacknowledged, or capability-bearing public candidate must fail activation
-   and preserve that earlier release. Enable the root gate, deploy a v2 public
+   unacknowledged, capability-bearing, or manifest-valid archive missing its
+   required `index.html` must fail before activation and preserve that earlier
+   release. The missing-index case is a validation failure: candidate probing
+   follows validation, so probe-failure injection remains
+   production-composition evidence rather than a fabricated VPS condition.
+   Enable the root gate, deploy a v2 public
    fixture with explicit CLI acknowledgement, and prove anonymous exact HTML
    and immutable asset bytes plus its expected indexing header. In the same
    anonymous client, deny representative `/_tinker` auth, identity, SDK/KV,
@@ -254,7 +320,9 @@ result never claims to reverse the durable mutation.
    Authenticate a verified viewer and prove the effective catalog contains the
    permitted public/private cards but no other owner's app. Two top-level HTML
    views with one host-only analytics cookie must show two page views and one
-   approximate visitor on the first fixture card. When the configured deployer
+   approximate visitor on the first fixture card. Its owner-visible dashboard
+   card must contain nonempty last activity and exactly 30 UTC daily rows. When
+   the configured deployer
    is also the initial operator, that dashboard intentionally shows both
    owners; otherwise it must not show the second owner's card. In every case,
    the second deployer dashboard contains only its own fixture and the scoped

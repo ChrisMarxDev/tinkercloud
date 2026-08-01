@@ -38,19 +38,77 @@ class DeploymentAgentTests(unittest.TestCase):
     def tearDown(self):
         os.environ.clear(); os.environ.update(self.old_env); self.temp.cleanup()
 
-    def run_with(self, responses, login=None):
+    def run_with(self, responses, login=None, *, confirm_public=False):
         calls = []
         def fake(command, timeout=module.TIMEOUT_SECONDS):
             calls.append(command)
             return responses.pop(0)
         with patch.object(module, "run_json", fake):
-            result = module.deploy_once(str(self.tinker), "https://admin.example.test", "dev@christopher-marx.de", str(self.app), login or (lambda *_: None))
+            result = module.deploy_once(
+                str(self.tinker), "https://admin.example.test", "dev@christopher-marx.de", str(self.app),
+                login or (lambda *_: None), confirm_public=confirm_public,
+            )
         return result, calls
 
     def test_exact_saved_identity_reuses_without_reader_or_otp(self):
         result, calls = self.run_with([(0, {"valid": True, "name": "dev@christopher-marx.de"}), (0, {"valid": True, "name": "https://demo.example.test/"})], lambda *_: self.fail("login invoked"))
         self.assertTrue(result["reused_saved_identity"])
         self.assertEqual([call[-1] for call in calls], ["whoami", str(self.app)])
+        self.assertNotIn("--confirm-public", calls[-1])
+
+    def test_public_confirmation_is_explicit_and_forwarded_once(self):
+        (self.app / "tinker.yaml").write_text(
+            "version: 2\nname: demo\naccess:\n  mode: public\n"
+        )
+        _result, calls = self.run_with([
+            (0, {"valid": True, "name": "dev@christopher-marx.de"}),
+            (0, {"valid": True, "name": "https://demo.example.test/"}),
+        ], confirm_public=True)
+        self.assertEqual(calls[-1], [
+            str(self.tinker), "--json", "--server", "https://admin.example.test",
+            "deploy", "--confirm-public", str(self.app),
+        ])
+        self.assertEqual(calls[-1].count("--confirm-public"), 1)
+
+    def test_public_manifest_never_infers_confirmation(self):
+        (self.app / "tinker.yaml").write_text(
+            "version: 2\nname: demo\naccess:\n  mode: public\n"
+        )
+        _result, calls = self.run_with([
+            (0, {"valid": True, "name": "dev@christopher-marx.de"}),
+            (0, {"valid": True, "name": "https://demo.example.test/"}),
+        ])
+        self.assertEqual(calls[-1], [
+            str(self.tinker), "--json", "--server", "https://admin.example.test",
+            "deploy", str(self.app),
+        ])
+        self.assertNotIn("--confirm-public", calls[-1])
+
+    def test_malformed_public_confirmation_denies_before_cli(self):
+        for value in (None, 1, "true"):
+            with self.subTest(value=value):
+                run_json = Mock()
+                with patch.object(module, "run_json", run_json):
+                    with self.assertRaisesRegex(module.DeploymentError, module.INPUT_VALIDATION):
+                        module.deploy_once(
+                            str(self.tinker), "https://admin.example.test", "dev@christopher-marx.de",
+                            str(self.app), confirm_public=value,
+                        )
+                run_json.assert_not_called()
+
+    def test_malformed_or_duplicate_public_flag_denies_without_cli(self):
+        for extra in ("--confirm-public=true", "--confirm-public", "--confirm-public"):
+            with self.subTest(extra=extra):
+                argv = [
+                    "--tinker", str(self.tinker), "--server", "https://admin.example.test",
+                    "--deployer-email", "dev@christopher-marx.de", "--app-dir", str(self.app),
+                    "--confirm-public", extra,
+                ]
+                stderr = io.StringIO()
+                with patch.object(module, "deploy_once", side_effect=AssertionError("must not deploy")), \
+                     contextlib.redirect_stderr(stderr):
+                    self.assertEqual(module.main(argv), 1)
+                self.assertEqual(stderr.getvalue(), module.INPUT_VALIDATION + "\n")
 
     def test_allowed_deployer_domain_is_case_insensitive(self):
         responses = [(0, {"valid": True, "name": "dev@christopher-marx.de"}),

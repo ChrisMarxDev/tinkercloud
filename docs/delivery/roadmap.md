@@ -4,7 +4,7 @@ The roadmap uses vertical slices. Each milestone includes a user-visible result,
 a security claim, and an exit gate. Calendar estimates should be added only by
 the implementing team after spikes.
 
-## Active post-V1 extension — public reach and local insights
+## Implemented post-V1 extension — public reach and local insights
 
 Outcome: a verified viewer can discover current apps they may open, an owner
 can see bounded local usage, and an operator may permit deliberate
@@ -41,6 +41,9 @@ Exit evidence is the acceptance list in
 [`concept/features/public-reach-and-local-insights.html`](../../concept/features/public-reach-and-local-insights.html)
 and the executable obligations in
 [`public-reach-local-insights-denial-charter.md`](../../test/security/public-reach-local-insights-denial-charter.md).
+The complete local suite and one guarded clean-host black-box pass succeeded on
+2026-08-01. The requirement-by-requirement, redacted release record is
+[`public-reach-local-insights-acceptance.md`](public-reach-local-insights-acceptance.md).
 
 ## Next implementation slice — M5/M3 minimum-necessary guided flows
 

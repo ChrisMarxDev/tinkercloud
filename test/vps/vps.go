@@ -37,10 +37,14 @@ import (
 )
 
 const (
-	EnvEnabled     = "TINKERCLOUD_VPS_E2E"
-	EnvTarget      = "TINKERCLOUD_VPS_SSH_TARGET"
-	EnvAcknowledge = "TINKERCLOUD_VPS_ACKNOWLEDGE"
-	EnvKnownHosts  = "TINKERCLOUD_VPS_KNOWN_HOSTS_FILE"
+	EnvEnabled = "TINKERCLOUD_VPS_E2E"
+	// EnvPublicExample enables the separate, verification-only public example
+	// check. It deliberately requires the normal VPS E2E configuration too,
+	// but it never opens SSH or invokes any mutating suite method.
+	EnvPublicExample = "TINKERCLOUD_PUBLIC_EXAMPLE_E2E"
+	EnvTarget        = "TINKERCLOUD_VPS_SSH_TARGET"
+	EnvAcknowledge   = "TINKERCLOUD_VPS_ACKNOWLEDGE"
+	EnvKnownHosts    = "TINKERCLOUD_VPS_KNOWN_HOSTS_FILE"
 
 	initReadinessAttempts = 8
 	initReadinessDelay    = 15 * time.Second
@@ -64,6 +68,7 @@ const (
 	vpsDeniedAppSlug    = "vps-e2e-denied"
 	vpsPublicAppSlug    = "vps-e2e-public"
 	vpsPublicOtherSlug  = "vps-e2e-public-other"
+	publicExampleSlug   = "public-static-product-story"
 )
 
 var vpsFixtureSlugs = [...]string{
@@ -81,6 +86,8 @@ var dnsName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z
 var emailName = regexp.MustCompile(`^[a-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$`)
 var legacyUpdateManifestFlag = regexp.MustCompile(`(?m)^(?:flag provided but not defined: -release-manifest|unknown flag: --release-manifest)\s*$`)
 var dashboardLast7Insights = regexp.MustCompile(`<p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">([0-9]+)</p><p class="tinker-card__meta">Last 7 days · ([0-9]+) page views</p>`)
+var dashboardLastActivity = regexp.MustCompile(`<dt>Last activity</dt><dd>([^<]+)</dd>`)
+var dashboard30DaySeries = regexp.MustCompile(`(?s)<caption>Last 30 UTC days</caption>.*?<tbody>(.*?)</tbody>`)
 
 // Config intentionally separates SSH arguments. In particular, SSH_TARGET is
 // not a shell fragment and no mode disables host-key verification.
@@ -171,6 +178,16 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		}
 	}
 	return c, nil
+}
+
+// LoadPublicExampleConfig makes the public product-story verification opt-in
+// in addition to the normal strict VPS/OTP configuration. Keeping both gates
+// prevents an ordinary package test from contacting a host by accident.
+func LoadPublicExampleConfig(getenv func(string) string) (Config, error) {
+	if getenv(EnvPublicExample) != "1" {
+		return Config{}, fmt.Errorf("public example E2E is disabled; set %s=1", EnvPublicExample)
+	}
+	return LoadConfig(getenv)
 }
 
 func (c Config) PlatformHost() string { return "admin." + c.Domain }
@@ -708,7 +725,14 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.verifyPublicCatalog(ctx, viewer, publicState); err != nil {
+	deniedHost, deniedMarker, err := s.deploySmokeAppForViewer(ctx, c, vpsDeniedAppSlug, s.Config.DeployerEmail, false)
+	if err != nil {
+		return fmt.Errorf("deploy catalog-denied fixture: %w", err)
+	}
+	if err := s.verifyPublicCatalog(ctx, viewer, publicState, marker, deniedMarker); err != nil {
+		return err
+	}
+	if err := s.revokePrimaryViewerAndRestore(ctx, c, viewer, appHost, marker); err != nil {
 		return err
 	}
 	// Collections deliberately share the same app-private database as KV. This
@@ -757,8 +781,7 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err := s.appLocalLogoutAndBrokerReopen(ctx, viewer, appHost, secondHost, marker); err != nil {
 		return err
 	}
-	deniedHost, err := s.globalIdentityDeniedApp(ctx, c, viewer, appHost, secondHost)
-	if err != nil {
+	if err := s.globalIdentityDeniedApp(ctx, viewer, deniedHost, deniedMarker, appHost, secondHost); err != nil {
 		return err
 	}
 	if err := s.finishPublicMatrix(ctx, c, secondOwner, viewer, publicState); err != nil {
@@ -860,6 +883,21 @@ func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client
 	}
 	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
 		return state, fmt.Errorf("capability-bearing candidate replaced private baseline: %w", err)
+	}
+	// The manifest is structurally valid, but the archive deliberately omits
+	// index.html. It must fail before activation and leave the private baseline
+	// active. Validation necessarily catches this before the candidate probe;
+	// the production-composition suite separately injects its probe failure.
+	missingIndexArchive, missingIndexSize, err := publicArchiveWithoutIndex(vpsPublicAppSlug)
+	if err != nil {
+		return state, fmt.Errorf("build missing-index public candidate: %w", err)
+	}
+	key, _ = client.IdempotencyKey()
+	if _, err = confirmed.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(missingIndexArchive), missingIndexSize, key); err == nil {
+		return state, errors.New("missing-index public candidate activated")
+	}
+	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
+		return state, fmt.Errorf("missing-index candidate replaced private baseline: %w", err)
 	}
 	if err := malformedPublicAcknowledgementDenied(ctx, owner, vpsPublicAppSlug, publicArchiveBytes); err != nil {
 		return state, err
@@ -1015,6 +1053,31 @@ func publicArchive(slug, mode string, indexing, capability bool, viewerEmail str
 	return archive.Bytes(), int64(archive.Len()), marker, asset, nil
 }
 
+// publicArchiveWithoutIndex builds a manifest-valid public archive that fails
+// release validation. It is deliberately distinct from a candidate-probe
+// failure: the production service validates index.html before a candidate can
+// reach verification, so a clean black-box run cannot honestly manufacture a
+// probe failure without a test-only production seam.
+func publicArchiveWithoutIndex(slug string) ([]byte, int64, error) {
+	d, err := os.MkdirTemp("", "tinkercloud-vps-public-no-index-")
+	if err != nil {
+		return nil, 0, err
+	}
+	defer os.RemoveAll(d)
+	manifest := []byte("version: 2\nname: " + slug + "\nbuild:\n  output: .\naccess:\n  mode: public\n  indexing: false\n")
+	if err := os.WriteFile(filepath.Join(d, "asset.txt"), []byte("missing-index asset"), 0644); err != nil {
+		return nil, 0, err
+	}
+	if err := os.WriteFile(filepath.Join(d, "tinker.yaml"), manifest, 0644); err != nil {
+		return nil, 0, err
+	}
+	var archive bytes.Buffer
+	if err := client.ArchiveProject(d, manifest, &archive); err != nil {
+		return nil, 0, err
+	}
+	return archive.Bytes(), int64(archive.Len()), nil
+}
+
 // archivePublicFixture writes a deliberately unvalidated archive for one
 // negative server-side deployment case. Its layout matches ArchiveProject:
 // manifest first, then deterministic asset paths, with no duplicate manifest.
@@ -1114,6 +1177,99 @@ func verifyExactPublic(ctx context.Context, h *http.Client, host, marker, asset 
 	return nil
 }
 
+// RunPublicExampleAcceptance verifies the separately deployed first-party
+// public example through HTTPS only. It intentionally does not call Run,
+// create a Suite runner, deploy, clean, install, SSH, or mutate host state.
+// The normal dashboard OTP flow is used solely to read the owner-visible
+// catalog and aggregate view after two anonymous document requests.
+func (s *Suite) RunPublicExampleAcceptance(ctx context.Context) error {
+	index, stylesheet, err := publicExampleAssets()
+	if err != nil {
+		return err
+	}
+	host := publicExampleSlug + "." + s.Config.AppSuffix()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return err
+	}
+	base := s.httpClient()
+	anonymous := *base
+	anonymous.Jar = jar
+	anonymous.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	for i := 0; i < 2; i++ {
+		if err := requestExactPublicExampleDocument(ctx, &anonymous, host, index); err != nil {
+			return fmt.Errorf("public example document view %d: %w", i+1, err)
+		}
+	}
+	if err := requestExactPublicExampleAsset(ctx, &anonymous, host, stylesheet); err != nil {
+		return err
+	}
+	if err := verifyPublicReservedDenials(ctx, &anonymous, host, string(index), string(stylesheet)); err != nil {
+		return err
+	}
+
+	owner, err := s.dashboardBrowserForEmail(ctx, s.Config.DeployerEmail)
+	if err != nil {
+		return fmt.Errorf("public example owner dashboard login: %w", err)
+	}
+	catalog, status, err := fetchPlatformPage(ctx, owner, "https://"+s.Config.PlatformHost()+"/apps")
+	if err != nil || status != http.StatusOK || !strings.Contains(catalog, `data-tinker-catalog-slug="`+publicExampleSlug+`"`) {
+		return fmt.Errorf("public example owner catalog missing card: status=%d err=%w", status, err)
+	}
+	if err := s.waitDashboardInsights(ctx, owner, publicExampleSlug, 2, 1); err != nil {
+		return fmt.Errorf("public example owner insights: %w", err)
+	}
+	return nil
+}
+
+func publicExampleAssets() ([]byte, []byte, error) {
+	index, err := os.ReadFile(repoPath("examples", "public-static-product-story", "index.html"))
+	if err != nil || len(index) == 0 {
+		return nil, nil, errors.New("public example index is unavailable")
+	}
+	stylesheet, err := os.ReadFile(repoPath("examples", "public-static-product-story", "styles.css"))
+	if err != nil || len(stylesheet) == 0 {
+		return nil, nil, errors.New("public example stylesheet is unavailable")
+	}
+	return index, stylesheet, nil
+}
+
+func requestExactPublicExampleDocument(ctx context.Context, h *http.Client, host string, expected []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/"), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	resp, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(len(expected))+1))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK || !bytes.Equal(body, expected) || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/html") || resp.Header.Get("X-Robots-Tag") != "" {
+		return fmt.Errorf("public example document mismatch: status=%d", resp.StatusCode)
+	}
+	return nil
+}
+
+func requestExactPublicExampleAsset(ctx context.Context, h *http.Client, host string, expected []byte) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/styles.css"), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(len(expected))+1))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK || !bytes.Equal(body, expected) || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" || !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/css") || resp.Header.Get("X-Robots-Tag") != "" {
+		return fmt.Errorf("public example stylesheet mismatch: status=%d", resp.StatusCode)
+	}
+	return nil
+}
+
 func verifyPublicReservedDenials(ctx context.Context, h *http.Client, host string, forbidden ...string) error {
 	routes := []struct{ method, path string }{
 		{http.MethodGet, "/_tinker/auth/login"},
@@ -1158,18 +1314,84 @@ func verifyPublicReservedDenials(ctx context.Context, h *http.Client, host strin
 	return nil
 }
 
-func (s *Suite) verifyPublicCatalog(ctx context.Context, viewer *http.Client, state publicMatrixState) error {
+// verifyPublicCatalog proves the viewer's server-derived catalog has every
+// currently accessible fixture card while disclosing neither a policy-denied
+// card nor application bytes. It does not infer access from a card: app entry
+// points later re-check the current policy through the normal handoff.
+func (s *Suite) verifyPublicCatalog(ctx context.Context, viewer *http.Client, state publicMatrixState, primaryMarker, deniedMarker string) error {
 	body, status, err := fetchPlatformPage(ctx, viewer, "https://"+s.Config.PlatformHost()+"/apps")
 	if err != nil || status != http.StatusOK {
 		return fmt.Errorf("verified viewer catalog unavailable: status=%d err=%w", status, err)
 	}
-	for _, slug := range []string{vpsPublicAppSlug, vpsPublicOtherSlug} {
+	for _, slug := range []string{vpsPrimaryAppSlug, vpsPublicAppSlug, vpsPublicOtherSlug} {
 		if !strings.Contains(body, `data-tinker-catalog-slug="`+slug+`"`) {
-			return fmt.Errorf("verified catalog omitted effective public app %q", slug)
+			return fmt.Errorf("verified catalog omitted allowed app %q", slug)
 		}
 	}
-	if strings.Contains(body, `data-tinker-catalog-slug="`+vpsDeniedAppSlug+`"`) || strings.Contains(body, state.marker) || strings.Contains(body, state.asset) {
+	if strings.Contains(body, `data-tinker-catalog-slug="`+vpsDeniedAppSlug+`"`) || strings.Contains(body, primaryMarker) || strings.Contains(body, deniedMarker) || strings.Contains(body, state.marker) || strings.Contains(body, state.asset) {
 		return errors.New("verified catalog disclosed denied metadata or app bytes")
+	}
+	return nil
+}
+
+// revokePrimaryViewerAndRestore uses the supported revisioned access-policy
+// API to prove that a verified global identity immediately loses both catalog
+// discovery and its app session. Restoration is necessary for the following
+// SDK and session checks. The existing host-only session may resume only after
+// the policy is restored; the revocation proof above must deny it first.
+func (s *Suite) revokePrimaryViewerAndRestore(ctx context.Context, owner client.Client, viewer *http.Client, host, marker string) error {
+	if err := replacePrivateEmailPolicy(ctx, owner, vpsPrimaryAppSlug, nil, false); err != nil {
+		return fmt.Errorf("revoke primary viewer policy: %w", err)
+	}
+	body, status, err := fetchPlatformPage(ctx, viewer, "https://"+s.Config.PlatformHost()+"/apps")
+	if err != nil || status != http.StatusOK {
+		return fmt.Errorf("revoked viewer catalog unavailable: status=%d err=%w", status, err)
+	}
+	if strings.Contains(body, `data-tinker-catalog-slug="`+vpsPrimaryAppSlug+`"`) {
+		return errors.New("revoked viewer retained private app catalog card")
+	}
+	if err := s.assertAppDenied(ctx, viewer, host, marker); err != nil {
+		return fmt.Errorf("revoked viewer retained primary app access: %w", err)
+	}
+	if err := replacePrivateEmailPolicy(ctx, owner, vpsPrimaryAppSlug, []string{s.Config.ViewerEmail}, true); err != nil {
+		return fmt.Errorf("restore primary viewer policy: %w", err)
+	}
+	if err := s.assertExactAppDocument(ctx, viewer, host, []byte("<!doctype html><title>tinker</title>"+marker)); err != nil {
+		return fmt.Errorf("restored primary viewer did not regain its scoped app access: %w", err)
+	}
+	body, status, err = fetchPlatformPage(ctx, viewer, "https://"+s.Config.PlatformHost()+"/apps")
+	if err != nil || status != http.StatusOK || !strings.Contains(body, `data-tinker-catalog-slug="`+vpsPrimaryAppSlug+`"`) {
+		return fmt.Errorf("restored viewer catalog did not contain primary app: status=%d err=%w", status, err)
+	}
+	return nil
+}
+
+// replacePrivateEmailPolicy only drives the supported owner-scoped control API.
+// It reads the current server revision immediately before the mutation and
+// never accepts a caller-supplied app or identity selector.
+func replacePrivateEmailPolicy(ctx context.Context, owner client.Client, slug string, emails []string, confirmBroadening bool) error {
+	current, err := owner.Access(ctx, slug)
+	if err != nil || current.Mode != "private" || current.Revision == 0 {
+		return errors.New("current private access policy unavailable")
+	}
+	if emails == nil {
+		emails = []string{}
+	}
+	key, err := client.IdempotencyKey()
+	if err != nil {
+		return err
+	}
+	policy := map[string]any{
+		"mode":               "private",
+		"expected_revision":  current.Revision,
+		"confirm_broadening": confirmBroadening,
+		"allow": map[string]any{
+			"emails":  emails,
+			"domains": []string{},
+		},
+	}
+	if err := owner.Do(ctx, http.MethodPut, "/api/v1/apps/"+url.PathEscape(slug)+"/access", key, policy, nil); err != nil {
+		return err
 	}
 	return nil
 }
@@ -1236,7 +1458,7 @@ func (s *Suite) finishPublicMatrix(ctx context.Context, owner, secondOwner clien
 	if err := assertAnonymousStaticDenied(ctx, s.httpClient(), state.host, state.marker, state.asset); err != nil {
 		return fmt.Errorf("gate-disable next-request denial: %w", err)
 	}
-	if err := s.viewerFlowWithExistingIdentity(ctx, ownerBrowser, state.host, state.marker); err != nil {
+	if err := s.viewerFlowWithExistingIdentityForEmail(ctx, ownerBrowser, state.host, state.marker, s.Config.DeployerEmail); err != nil {
 		return fmt.Errorf("private owner access after gate disable: %w", err)
 	}
 	if err := s.setPublicGate(ctx, true); err != nil {
@@ -1338,9 +1560,11 @@ func dashboardAppCard(page, slug string) string {
 }
 
 type dashboardInsights struct {
-	available bool
-	pageViews int
-	visitors  int
+	available     bool
+	pageViews     int
+	visitors      int
+	lastActivity  string
+	dailyRowCount int
 }
 
 // dashboardCardInsights reads only the stable, owner-scoped Last 7 days
@@ -1360,7 +1584,14 @@ func dashboardCardInsights(card string) (dashboardInsights, bool) {
 	if visitorErr != nil || viewsErr != nil {
 		return dashboardInsights{}, false
 	}
-	return dashboardInsights{available: true, pageViews: pageViews, visitors: visitors}, true
+	insights := dashboardInsights{available: true, pageViews: pageViews, visitors: visitors}
+	if activity := dashboardLastActivity.FindStringSubmatch(card); len(activity) == 2 {
+		insights.lastActivity = strings.TrimSpace(activity[1])
+	}
+	if series := dashboard30DaySeries.FindStringSubmatch(card); len(series) == 2 {
+		insights.dailyRowCount = strings.Count(series[1], "<tr>")
+	}
+	return insights, true
 }
 
 func (s *Suite) waitDashboardInsights(ctx context.Context, h *http.Client, slug string, pageViews, visitors int) error {
@@ -1408,6 +1639,12 @@ func dashboardInsightsEvidence(page string, status int, err error, slug string, 
 		return false, "owned dashboard insights card malformed"
 	case !insights.available:
 		return false, "owned dashboard insights unavailable"
+	case insights.lastActivity == "":
+		return false, "owned dashboard last activity missing"
+	case insights.lastActivity == "No counted document views yet.":
+		return false, "owned dashboard last activity did not record a document view"
+	case insights.dailyRowCount != 30:
+		return false, fmt.Sprintf("owned dashboard daily series rows=%d want=30", insights.dailyRowCount)
 	case insights.pageViews == pageViews && insights.visitors == visitors:
 		return true, ""
 	default:
@@ -1577,105 +1814,99 @@ func (s *Suite) crossAppBlobDenied(ctx context.Context, c client.Client, firstSl
 }
 
 // globalIdentityDeniedApp proves that a valid global identity remains subject
-// to each app's current policy. It intentionally never invokes readOTP: a
-// rejection must be a friendly broker document, not a second OTP or app-byte
-// leak.
-func (s *Suite) globalIdentityDeniedApp(ctx context.Context, c client.Client, viewer *http.Client, oldFirstHost, oldSecondHost string) (string, error) {
-	slug := vpsDeniedAppSlug
-	// The current viewer is denied, but the configured deployer is allowed; the
-	// denial page therefore gives the real account-switch path a safe target.
-	host, marker, err := s.deploySmokeAppForViewer(ctx, c, slug, s.Config.DeployerEmail, false)
-	if err != nil {
-		return "", fmt.Errorf("deploy globally denied app: %w", err)
-	}
+// to each app's current policy. The denied fixture already exists for catalog
+// filtering evidence; this step intentionally never invokes readOTP before
+// the account switch, so a rejection remains a friendly broker document rather
+// than a second OTP or an app-byte leak.
+func (s *Suite) globalIdentityDeniedApp(ctx context.Context, viewer *http.Client, host, marker, oldFirstHost, oldSecondHost string) error {
 	handoff, err := s.beginAppHandoff(ctx, viewer, host)
 	if err != nil {
-		return "", err
+		return err
 	}
 	platform := "https://" + s.Config.PlatformHost()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 	response, err := viewer.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil {
-		return "", readErr
+		return readErr
 	}
 	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("This account cannot open this app.")) || bytes.Contains(body, []byte(marker)) || bytes.Contains(body, []byte("transaction")) {
-		return "", fmt.Errorf("globally authenticated denied app leaked or did not render generic denial: status=%d", response.StatusCode)
+		return fmt.Errorf("globally authenticated denied app leaked or did not render generic denial: status=%d", response.StatusCode)
 	}
 	// A switch is a same-origin POST. Its successful OTP verification revokes
 	// every child session before the broker issues the replacement identity.
 	form := url.Values{"handoff": {handoff}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/use-another", strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, readErr = io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	if readErr != nil || response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("Sign in to continue.")) {
-		return "", errors.New("account switch form unavailable")
+		return errors.New("account switch form unavailable")
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/otp", strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	body, readErr = io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
 	tx := hiddenValue(string(body), "transaction")
 	if readErr != nil || response.StatusCode != http.StatusOK || tx == "" {
-		return "", errors.New("switch OTP transaction missing")
+		return errors.New("switch OTP transaction missing")
 	}
 	code, err := readOTP(ctx, s.Config, "viewer", s.Config.DeployerEmail, s.Config.PlatformHost())
 	if err != nil {
-		return "", err
+		return err
 	}
 	form = url.Values{"email": {s.Config.DeployerEmail}, "handoff": {handoff}, "transaction": {tx}, "code": {code}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/_tinker/identity/verify", strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return err
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("Origin", platform)
 	response, err = viewer.Do(request)
 	if err != nil {
-		return "", err
+		return err
 	}
 	callback := response.Header.Get("Location")
 	response.Body.Close()
 	if response.StatusCode != http.StatusSeeOther || !isExactHandoffCallback(callback, host, handoff) {
-		return "", errors.New("account switch did not return exact callback")
+		return errors.New("account switch did not return exact callback")
 	}
 	for _, oldHost := range []string{oldFirstHost, oldSecondHost} {
 		if err := s.assertAppDenied(ctx, viewer, oldHost, ""); err != nil {
-			return "", fmt.Errorf("old child session remained usable after switch: %w", err)
+			return fmt.Errorf("old child session remained usable after switch: %w", err)
 		}
 	}
 	if err := s.finishAppHandoffForEmail(ctx, viewer, host, marker, callback, s.Config.DeployerEmail); err != nil {
-		return "", err
+		return err
 	}
 	if err := s.assertCookieScopes(viewer, host, ""); err != nil {
-		return "", err
+		return err
 	}
-	return host, nil
+	return nil
 }
 
 // dashboardGlobalLogout proves the one visible Tinkercloud sign-out action is
@@ -1818,6 +2049,30 @@ func (s *Suite) assertAppDenied(ctx context.Context, h *http.Client, host, marke
 	response.Body.Close()
 	if response.StatusCode != http.StatusUnauthorized || (marker != "" && bytes.Contains(body, []byte(marker))) {
 		return fmt.Errorf("expected app denial, got status=%d", response.StatusCode)
+	}
+	return nil
+}
+
+// assertExactAppDocument proves an already-issued, host-only app session can
+// access only the active release after the current policy permits it again.
+// Callers must separately prove that the same session was denied while the
+// policy was revoked; this helper never creates or consumes a handoff.
+func (s *Suite) assertExactAppDocument(ctx context.Context, h *http.Client, host string, expected []byte) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/"), nil)
+	if err != nil {
+		return err
+	}
+	response, err := h.Do(request)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	response.Body.Close()
+	if readErr != nil {
+		return readErr
+	}
+	if response.StatusCode != http.StatusOK || !bytes.Equal(body, expected) {
+		return fmt.Errorf("expected exact restored app document, got status=%d", response.StatusCode)
 	}
 	return nil
 }
@@ -2064,13 +2319,29 @@ func (s *Suite) firstViewerFlow(ctx context.Context, host, marker string) (*http
 // valid platform identity is authorized only for this newly resolved app and
 // exchanged for that host's own app cookie.
 func (s *Suite) viewerFlowWithExistingIdentity(ctx context.Context, h *http.Client, host, marker string) error {
-	return s.viewerFlowWithExistingIdentityAt(ctx, h, host, marker, "/")
+	return s.viewerFlowWithExistingIdentityForEmail(ctx, h, host, marker, s.Config.ViewerEmail)
+}
+
+// viewerFlowWithExistingIdentityForEmail is the explicit variant for a
+// browser whose already-verified global identity is not the fixture viewer.
+// The email is only the expected server-derived /me result; it is never sent
+// to the gateway as part of the app handoff.
+func (s *Suite) viewerFlowWithExistingIdentityForEmail(ctx context.Context, h *http.Client, host, marker, email string) error {
+	return s.viewerFlowWithExistingIdentityForEmailAt(ctx, h, host, marker, email, "/")
 }
 
 // viewerFlowWithExistingIdentityAt proves an app path and its ordered raw
 // query survive the app-to-admin handoff. The viewer identity remains entirely
 // server-derived; this is only the safe relative return destination.
 func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Client, host, marker, returnPath string) error {
+	return s.viewerFlowWithExistingIdentityForEmailAt(ctx, h, host, marker, s.Config.ViewerEmail, returnPath)
+}
+
+// viewerFlowWithExistingIdentityForEmailAt proves the same handoff for an
+// explicitly expected, already-verified identity. It keeps identity
+// attribution server-derived while preventing the acceptance helper from
+// assuming every browser belongs to Config.ViewerEmail.
+func (s *Suite) viewerFlowWithExistingIdentityForEmailAt(ctx context.Context, h *http.Client, host, marker, email, returnPath string) error {
 	handoff, err := s.beginAppHandoffAt(ctx, h, host, returnPath)
 	if err != nil {
 		return err
@@ -2094,7 +2365,7 @@ func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Cl
 	if !isExactHandoffCallback(response.Header.Get("Location"), host, handoff) {
 		return errors.New("existing identity redirected to an unsafe callback")
 	}
-	if err := s.finishAppHandoffAt(ctx, h, host, marker, response.Header.Get("Location"), returnPath); err != nil {
+	if err := s.finishAppHandoffForEmailAt(ctx, h, host, marker, response.Header.Get("Location"), email, returnPath); err != nil {
 		return err
 	}
 	return s.assertCookieScopes(h, host, "")

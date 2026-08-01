@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -56,6 +57,26 @@ func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 	}
 	if c.Target != "root@203.0.113.10" {
 		t.Fatal(c.Target)
+	}
+}
+
+func TestLoadPublicExampleConfigRequiresItsOwnExactOptInAndStrictVPSConfig(t *testing.T) {
+	v := configEnv(t)
+	if _, err := LoadPublicExampleConfig(env(v)); err == nil {
+		t.Fatal("public example check accepted without its exact opt-in")
+	}
+	v[EnvPublicExample] = "true"
+	if _, err := LoadPublicExampleConfig(env(v)); err == nil {
+		t.Fatal("public example check accepted non-exact opt-in")
+	}
+	v[EnvPublicExample] = "1"
+	v[EnvEnabled] = ""
+	if _, err := LoadPublicExampleConfig(env(v)); err == nil {
+		t.Fatal("public example check bypassed strict VPS configuration")
+	}
+	v[EnvEnabled] = "1"
+	if _, err := LoadPublicExampleConfig(env(v)); err != nil {
+		t.Fatalf("public example check rejected strict configuration: %v", err)
 	}
 }
 
@@ -676,15 +697,79 @@ func TestIdentityBrokerOutcomeDistinguishesPolicyDenialFromOTP(t *testing.T) {
 	}
 }
 
+func TestExistingIdentityHandoffChecksTheExplicitOwnerIdentity(t *testing.T) {
+	const (
+		platform = "admin.example.test"
+		host     = "owned.example.test"
+		marker   = "owner-app-marker"
+		owner    = "owner@example.test"
+		viewer   = "viewer@example.test"
+	)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	platformURL, err := url.Parse("https://" + platform + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar.SetCookies(platformURL, []*http.Cookie{
+		{Name: "__Host-tinker_identity", Value: "identity", Path: "/", Secure: true, HttpOnly: true},
+		{Name: "__Host-tinker_browser", Value: "binding", Path: "/", Secure: true, HttpOnly: true},
+	})
+
+	h := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	h.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		headers := make(http.Header)
+		switch {
+		case r.Host == host && r.Method == http.MethodGet && r.URL.Path == "/":
+			if hasCookie(r.Cookies(), "__Host-tinker_app") {
+				return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(strings.NewReader(marker)), Request: r}, nil
+			}
+			headers.Set("Location", "/_tinker/auth/login?return=%2F")
+			return &http.Response{StatusCode: http.StatusSeeOther, Header: headers, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		case r.Host == host && r.Method == http.MethodGet && r.URL.Path == "/_tinker/auth/login":
+			headers.Set("Location", "https://"+platform+"/_tinker/identity?handoff=handoff_owner")
+			return &http.Response{StatusCode: http.StatusSeeOther, Header: headers, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		case r.Host == platform && r.Method == http.MethodGet && r.URL.Path == "/_tinker/identity":
+			headers.Set("Location", "https://"+host+"/_tinker/auth/callback?handoff=handoff_owner")
+			return &http.Response{StatusCode: http.StatusSeeOther, Header: headers, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		case r.Host == host && r.Method == http.MethodGet && r.URL.Path == "/_tinker/auth/callback":
+			headers.Set("Location", "/")
+			headers.Add("Set-Cookie", (&http.Cookie{Name: "__Host-tinker_app", Value: "owner-app", Path: "/", Secure: true, HttpOnly: true}).String())
+			return &http.Response{StatusCode: http.StatusSeeOther, Header: headers, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		case r.Host == host && r.Method == http.MethodGet && r.URL.Path == "/_tinker/api/v1/me":
+			return jsonResponse(r, http.StatusOK, `{"identity":{"email":"`+owner+`"}}`), nil
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL)
+			return nil, nil
+		}
+	})
+
+	s := Suite{Config: Config{Domain: "example.test", ViewerEmail: viewer, DeployerEmail: owner}}
+	if err := s.viewerFlowWithExistingIdentityForEmail(context.Background(), h, host, marker, owner); err != nil {
+		t.Fatalf("owner global identity handoff rejected: %v", err)
+	}
+	appURL, err := url.Parse("https://" + host + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar.SetCookies(appURL, []*http.Cookie{{Name: "__Host-tinker_app", Value: "owner-app", Path: "/", Secure: true, HttpOnly: true, MaxAge: -1}})
+	if err := s.viewerFlowWithExistingIdentity(context.Background(), h, host, marker); err == nil || !strings.Contains(err.Error(), "current viewer identity was not server-derived") {
+		t.Fatalf("viewer convenience wrapper did not reject owner /me identity: %v", err)
+	}
+}
+
 func TestDashboardCardInsightsAreExactAndScopedToOwnedCard(t *testing.T) {
+	dailyRows := strings.Repeat(`<tr><td>Aug 01</td><td>0</td><td>0</td></tr>`, 30)
 	page := `
 <article data-tinker-app-slug="vps-e2e-public"><section>
 <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">1</p><p class="tinker-card__meta">Last 7 days · 2 page views</p></article>
 <article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">9</p><p class="tinker-card__meta">Last 30 days · 99 page views</p></article>
-</section></article>
+<dl class="tinker-definition"><dt>Last activity</dt><dd>2026-08-01 12:04 UTC</dd></dl><table><caption>Last 30 UTC days</caption><tbody>` + dailyRows + `</tbody></table></section></article>
 <article data-tinker-app-slug="vps-e2e-public-other"><section><article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">7</p><p class="tinker-card__meta">Last 7 days · 42 page views</p></article></section></article>`
 	insights, ok := dashboardCardInsights(dashboardAppCard(page, "vps-e2e-public"))
-	if !ok || !insights.available || insights.pageViews != 2 || insights.visitors != 1 {
+	if !ok || !insights.available || insights.pageViews != 2 || insights.visitors != 1 || insights.lastActivity != "2026-08-01 12:04 UTC" || insights.dailyRowCount != 30 {
 		t.Fatalf("owned card insights = %#v, parsed=%t; want exact 2 views / 1 visitor", insights, ok)
 	}
 	if _, ok := dashboardCardInsights(dashboardAppCard(page, "missing")); ok {
@@ -708,6 +793,77 @@ func TestDashboardInsightsEvidenceDistinguishesOverviewUnavailableFromMissingCar
 	}
 	if matched, diagnostic := dashboardInsightsEvidence("<main>ready</main>", http.StatusOK, nil, "owned", 2, 1); matched || diagnostic != "owned dashboard app card missing" {
 		t.Fatalf("missing card = matched=%t diagnostic=%q", matched, diagnostic)
+	}
+}
+
+func TestDashboardInsightsEvidenceRequiresOwnerVisibleActivityAndBoundedDailySeries(t *testing.T) {
+	base := `<article data-tinker-app-slug="owned"><article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">1</p><p class="tinker-card__meta">Last 7 days · 2 page views</p></article><dl><dt>Last activity</dt><dd>2026-08-01 12:04 UTC</dd></dl><table><caption>Last 30 UTC days</caption><tbody>` + strings.Repeat(`<tr><td>Aug 01</td></tr>`, 30) + `</tbody></table></article>`
+	if matched, diagnostic := dashboardInsightsEvidence(base, http.StatusOK, nil, "owned", 2, 1); !matched || diagnostic != "" {
+		t.Fatalf("complete owner insights evidence = matched=%t diagnostic=%q", matched, diagnostic)
+	}
+	withoutActivity := strings.Replace(base, `<dt>Last activity</dt><dd>2026-08-01 12:04 UTC</dd>`, "", 1)
+	if matched, diagnostic := dashboardInsightsEvidence(withoutActivity, http.StatusOK, nil, "owned", 2, 1); matched || diagnostic != "owned dashboard last activity missing" {
+		t.Fatalf("missing activity = matched=%t diagnostic=%q", matched, diagnostic)
+	}
+	shortSeries := strings.Replace(base, strings.Repeat(`<tr><td>Aug 01</td></tr>`, 30), strings.Repeat(`<tr><td>Aug 01</td></tr>`, 29), 1)
+	if matched, diagnostic := dashboardInsightsEvidence(shortSeries, http.StatusOK, nil, "owned", 2, 1); matched || diagnostic != "owned dashboard daily series rows=29 want=30" {
+		t.Fatalf("short series = matched=%t diagnostic=%q", matched, diagnostic)
+	}
+}
+
+func TestReplacePrivateEmailPolicyUsesCurrentRevisionAndExactSupportedShape(t *testing.T) {
+	var put map[string]any
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/primary/access":
+			return jsonResponse(r, http.StatusOK, `{"mode":"private","revision":7,"allow":{"emails":["viewer@example.test"],"domains":[]}}`), nil
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/apps/primary/access":
+			if r.Header.Get("Idempotency-Key") == "" {
+				t.Fatal("policy replacement omitted idempotency key")
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil || json.Unmarshal(body, &put) != nil {
+				t.Fatalf("policy replacement body=%q err=%v", body, err)
+			}
+			return jsonResponse(r, http.StatusNoContent, ``), nil
+		default:
+			t.Fatalf("unexpected policy request %s %s", r.Method, r.URL.Path)
+			return nil, nil
+		}
+	})}
+	owner := client.Client{Base: "https://admin.example.test", Token: "owner-token", HTTP: h}
+	if err := replacePrivateEmailPolicy(context.Background(), owner, "primary", nil, false); err != nil {
+		t.Fatal(err)
+	}
+	if put["mode"] != "private" || put["expected_revision"] != float64(7) || put["confirm_broadening"] != false {
+		t.Fatalf("policy envelope=%#v", put)
+	}
+	allow, ok := put["allow"].(map[string]any)
+	if !ok || len(allow["emails"].([]any)) != 0 || len(allow["domains"].([]any)) != 0 {
+		t.Fatalf("policy allowlist=%#v", allow)
+	}
+}
+
+func TestVerifyPublicCatalogRequiresAllowedPrivateAndPublicCardsAndRejectsDeniedMetadata(t *testing.T) {
+	const (
+		primaryMarker = "primary-private-marker"
+		deniedMarker  = "denied-private-marker"
+		publicMarker  = "public-marker"
+		publicAsset   = "public-asset"
+	)
+	valid := `<article data-tinker-catalog-slug="vps-e2e-primary"></article><article data-tinker-catalog-slug="vps-e2e-public"></article><article data-tinker-catalog-slug="vps-e2e-public-other"></article>`
+	page := valid
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(page)), Request: r}, nil
+	})}
+	s := Suite{Config: Config{Domain: "example.test"}}
+	state := publicMatrixState{marker: publicMarker, asset: publicAsset}
+	if err := s.verifyPublicCatalog(context.Background(), h, state, primaryMarker, deniedMarker); err != nil {
+		t.Fatalf("complete authorized catalog rejected: %v", err)
+	}
+	page = valid + `<article data-tinker-catalog-slug="vps-e2e-denied">` + deniedMarker + `</article>`
+	if err := s.verifyPublicCatalog(context.Background(), h, state, primaryMarker, deniedMarker); err == nil || !strings.Contains(err.Error(), "disclosed denied metadata") {
+		t.Fatalf("denied catalog metadata accepted: %v", err)
 	}
 }
 
@@ -737,6 +893,59 @@ func TestExactPublicDocumentUsesDocumentHeadersAndRetainsOneJarMarker(t *testing
 		if err := requestExactPublicDocument(context.Background(), h, "public.example.test", "marker", true); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestPublicExampleAssetsAreTrackedAndCapabilityFree(t *testing.T) {
+	index, stylesheet, err := publicExampleAssets()
+	if err != nil || len(index) == 0 || len(stylesheet) == 0 {
+		t.Fatalf("tracked public example assets index=%d stylesheet=%d err=%v", len(index), len(stylesheet), err)
+	}
+	manifest, err := os.ReadFile(repoPath("examples", "public-static-product-story", "tinker.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := releases.ParseManifest(manifest)
+	if err != nil || parsed.Name != publicExampleSlug || parsed.AccessMode != "public" || !parsed.Indexing || parsed.KV || parsed.Realtime || parsed.Blobs || parsed.LLMChat {
+		t.Fatalf("public example manifest=%#v err=%v", parsed, err)
+	}
+}
+
+func TestPublicExampleHTTPSHelpersRequireExactIndexedStaticResponses(t *testing.T) {
+	const host = "public-static-product-story.example.test"
+	index := []byte("<!doctype html><title>Northstar</title>")
+	stylesheet := []byte("body{color:#202820}")
+	seenDocuments := 0
+	h := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		headers := make(http.Header)
+		headers.Set("Cache-Control", "no-store")
+		headers.Set("X-Content-Type-Options", "nosniff")
+		switch r.URL.Path {
+		case "/":
+			seenDocuments++
+			if r.Header.Get("Accept") != "text/html" || r.Header.Get("Sec-Fetch-Dest") != "document" {
+				t.Fatalf("document headers accept=%q destination=%q", r.Header.Get("Accept"), r.Header.Get("Sec-Fetch-Dest"))
+			}
+			headers.Set("Content-Type", "text/html; charset=utf-8")
+			return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(bytes.NewReader(index)), Request: r}, nil
+		case "/styles.css":
+			headers.Set("Content-Type", "text/css; charset=utf-8")
+			return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(bytes.NewReader(stylesheet)), Request: r}, nil
+		default:
+			t.Fatalf("unexpected public example path %q", r.URL.Path)
+			return nil, nil
+		}
+	})}
+	for range 2 {
+		if err := requestExactPublicExampleDocument(context.Background(), h, host, index); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if seenDocuments != 2 {
+		t.Fatalf("document requests=%d want=2", seenDocuments)
+	}
+	if err := requestExactPublicExampleAsset(context.Background(), h, host, stylesheet); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -964,6 +1173,21 @@ func TestPublicArchiveFixturesMatchManifestAndArchiveContract(t *testing.T) {
 	}
 }
 
+func TestPublicArchiveWithoutIndexKeepsManifestValidButOmitsDocument(t *testing.T) {
+	archive, size, err := publicArchiveWithoutIndex("vps-public-no-index")
+	if err != nil || len(archive) == 0 || size != int64(len(archive)) {
+		t.Fatalf("missing-index archive bytes=%d size=%d err=%v", len(archive), size, err)
+	}
+	manifest, names := archiveManifestAndNames(t, archive)
+	parsed, err := releases.ParseManifest(manifest)
+	if err != nil || parsed.Name != "vps-public-no-index" || parsed.AccessMode != "public" || parsed.Indexing {
+		t.Fatalf("missing-index manifest=%#v err=%v", parsed, err)
+	}
+	if want := []string{"tinker.yaml", "asset.txt"}; !slices.Equal(names, want) {
+		t.Fatalf("missing-index archive entries=%v want=%v", names, want)
+	}
+}
+
 func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 	viewer := "viewer@example.test"
 	a, sizeA, markerA, err := smokeArchive("vps-smoke-a", viewer)
@@ -1030,6 +1254,23 @@ func TestVPSAcceptance(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 	defer cancel()
 	if e = (&Suite{Config: c}).Run(ctx); e != nil {
+		t.Fatal(e)
+	}
+}
+
+// TestPublicExampleAcceptance is intentionally separate from the destructive
+// clean-host suite. It only verifies the already deployed first-party public
+// example over HTTPS, then uses the normal dashboard OTP flow for its owner
+// read-model evidence. It never installs, deploys, cleans, SSHes, or mutates
+// VPS state.
+func TestPublicExampleAcceptance(t *testing.T) {
+	c, e := LoadPublicExampleConfig(os.Getenv)
+	if e != nil {
+		t.Skip(e)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	if e = (&Suite{Config: c}).RunPublicExampleAcceptance(ctx); e != nil {
 		t.Fatal(e)
 	}
 }

@@ -36,6 +36,28 @@ Ask only for these non-secret values when they cannot be discovered safely:
 - exact deployer email; and
 - exact absolute app directory containing `tinker.yaml`.
 
+Private is the default: the wrapper sends a bare `tinker deploy` and never
+derives public reach from `tinker.yaml`. If, and only if, the caller has
+deliberately chosen anonymous public static access for a capability-free public
+manifest, add the one explicit acknowledgement:
+
+```sh
+python3 skills/tinkercloud-deployment-agent/scripts/deploy_once.py \
+  --tinker /absolute/path/to/tinker \
+  --server https://admin.example.com \
+  --deployer-email deployer@example.com \
+  --app-dir /absolute/path/to/public-app \
+  --confirm-public
+```
+
+`--confirm-public` is forwarded exactly once as `tinker deploy
+--confirm-public …`; it is never inferred from the manifest, a saved
+credential, or a prior deployment. It does not make an invalid or private
+manifest public, bypass the current operator public-static gate, or authorize
+capabilities. The CLI and gateway perform those independent checks. Omit it
+for every private deployment. A duplicated or value-bearing form such as
+`--confirm-public=true` is invalid and the wrapper does not invoke the CLI.
+
 Use the checked-in deterministic wrapper once:
 
 ```sh

@@ -202,10 +202,16 @@ def forced_login(tinker: Path, server: str, email: str, reader: Path, env: dict[
 
 
 def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
-                login_driver: Callable[[Path, str, str, Path, dict[str, str]], None] = forced_login) -> dict:
+                login_driver: Callable[[Path, str, str, Path, dict[str, str]], None] = forced_login,
+                *, confirm_public: bool = False) -> dict:
     def validate_inputs() -> tuple[Path, Path, str, str, str]:
         if any(os.environ.get(name) for name in FORBIDDEN_CREDENTIAL_ENV):
             fail("credential environment input is forbidden")
+        # Public reach is an authorization broadening.  A caller must provide
+        # this exact boolean; it is never derived from the manifest or a prior
+        # deployment response.
+        if type(confirm_public) is not bool:
+            fail("public confirmation input is invalid")
         email = email_raw.lower()
         if (not EMAIL.fullmatch(email) or
                 email.rsplit("@", 1)[1] != LOCAL_AUTOMATION_DEPLOYER_DOMAIN):
@@ -242,7 +248,11 @@ def deploy_once(tinker_raw: str, server_raw: str, email_raw: str, app_raw: str,
             fail(POST_LOGIN_IDENTITY_CHECK)
 
     def deploy_and_validate() -> str:
-        status, deployment = run_json([str(tinker), "--json", "--server", server, "deploy", str(app)])
+        command = [str(tinker), "--json", "--server", server, "deploy"]
+        if confirm_public:
+            command.append("--confirm-public")
+        command.append(str(app))
+        status, deployment = run_json(command)
         if status != 0 or deployment.get("valid") is not True or not isinstance(deployment.get("name"), str):
             fail("deployment failed")
         url, _host = parse_server(deployment["name"])
@@ -263,9 +273,18 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--server", required=True)
     parser.add_argument("--deployer-email", required=True)
     parser.add_argument("--app-dir", required=True)
+    parser.add_argument("--confirm-public", action="store_true")
     try:
+        # A repeated acknowledgement is malformed rather than a second way to
+        # opt in.  The forwarded CLI command therefore contains the flag zero
+        # or one time, never an inferred or duplicated broadening signal.
+        if argv.count("--confirm-public") > 1:
+            fail(INPUT_VALIDATION)
         args = parser.parse_args(argv)
-        print(json.dumps(deploy_once(args.tinker, args.server, args.deployer_email, args.app_dir), separators=(",", ":")))
+        print(json.dumps(deploy_once(
+            args.tinker, args.server, args.deployer_email, args.app_dir,
+            confirm_public=args.confirm_public,
+        ), separators=(",", ":")))
         return 0
     except DeploymentError as error:
         stage = error.args[0] if error.args and error.args[0] in PUBLIC_FAILURE_STAGES else INTERNAL_FAILURE

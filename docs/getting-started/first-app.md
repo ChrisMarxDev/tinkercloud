@@ -84,7 +84,9 @@ To publish an update, edit the files and run the same deploy command again.
 
 ## Notes
 
-- Tinkercloud does not provide a public access mode.
+- This is a private-first guide. For the separately reviewed, capability-free
+  public-static flow, use the [public product-story example](../../examples/public-static-product-story/README.md)
+  and follow the [public-static access contract](../../specs/api/public-static-access.md).
 - Tinker Ritual stores its checklist in that browser only.
 - Do not put passwords, API keys, or other secrets in app files.
 - A local preview does not test Tinkercloud authentication or access rules.

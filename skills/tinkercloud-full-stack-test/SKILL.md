@@ -184,6 +184,32 @@ and indexing proof plus denial of every reserved route through that gateway.
     listener, use a randomized ACME host, inspect VPS state, bypass OTP, or
     make another live pass.
 
+12. Verify the first-party `examples/public-static-product-story` in a separate
+    two-stage L4 flow. First invoke the deployment-agent wrapper exactly once
+    with its explicit `--confirm-public` acknowledgement; it must be a
+    capability-free public manifest and the operator gate must already be on.
+    Only after that successful deployment, keep the existing strict
+    `TINKERCLOUD_VPS_E2E=1` configuration, add exact
+    `TINKERCLOUD_PUBLIC_EXAMPLE_E2E=1`, and make exactly one verification-only
+    invocation:
+
+    ```bash
+    go test ./test/vps -run TestPublicExampleAcceptance -count=1 -v
+    ```
+
+    This is not a deployment or VPS-management command. It uses HTTPS with a
+    fresh anonymous cookie jar to fetch the tracked `index.html` twice as a
+    document and tracked `styles.css`, requiring opt-in indexing plus
+    `no-store`, content-type, and `nosniff` headers, then denies all
+    representative reserved routes. It signs into the dashboard through the
+    normal local OTP reader as the configured deployer and requires that
+    owner's catalog card and exact two-view/one-visitor, nonempty-last-activity,
+    30-day dashboard evidence. It must never SSH, install, clean, deploy,
+    retry a deployment, inspect VPS SQLite/filesystem/logs, or delete the
+    public example. If the app already has prior analytics, do not reinterpret
+    a non-exact aggregate as success: use a fresh accepted deployment/test
+    environment instead.
+
 Do not create an infinite deploy loop. On ambiguity, malformed provider data,
 timeouts, unsafe local state, or any failed denial assertion, stop and retain
 only redacted diagnostics. The acceptance result proves Resend API acceptance

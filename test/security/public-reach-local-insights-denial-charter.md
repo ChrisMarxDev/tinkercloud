@@ -32,6 +32,12 @@ applicable.
   identity, SDK/capability, KV, collection, blob, live/WebSocket, and LLM
   paths, and each denial contains neither the public document nor an asset
   marker. A public cookie must not turn any reserved route into an allow.
+- The separately opt-in first-party public-example verification uses a fresh
+  anonymous HTTPS cookie jar only after the deployment-agent wrapper's one
+  explicit `--confirm-public` deployment. It proves the tracked document and
+  stylesheet exactly, opt-in indexing and safe static headers, and every
+  representative reserved-route denial. It must not install, redeploy, clean,
+  inspect VPS state, or turn an anonymous cookie into reserved-route authority.
 
 ## Catalog
 
@@ -72,4 +78,6 @@ transition matrices on a real listener and clean VPS before general release.
 For insights, the matrix also proves two successful top-level HTML requests in
 one app-host cookie jar produce two page views but one approximate visitor in
 the owner/operator read model; a second app or owner cannot observe those
-aggregates.
+aggregates. The separate public-example verification then requires its owner
+dashboard card to render that exact aggregate, a nonempty last-activity value,
+and exactly 30 UTC daily rows after normal dashboard OTP authentication.
