@@ -13,7 +13,10 @@ review it for credentials, personal data, private infrastructure, local paths,
 internal scratch content, proprietary information, and assets without clear
 redistribution rights. Use `.private/` for unchecked local material and never
 force-add it. Use `.tinker/` only for ignored Tinkercloud runtime state, not as
-a general-purpose private-content folder.
+a general-purpose private-content folder. Local generated Codex plans belong in
+the ignored `.codex/plans/` directory. Contributor-facing Codex skills or
+configuration under `.codex/` may be tracked after the same public-content
+review as any other repository file.
 
 All repository changes must be made on a focused branch and delivered through
 a pull request. Never push changes directly to `main`, bypass branch

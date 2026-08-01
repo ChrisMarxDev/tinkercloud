@@ -43,7 +43,7 @@ npm-debug.log*
 
 # Tool caches and editor/OS noise
 .private/
-.codex/
+.codex/plans/
 .worktrees/
 .task/
 .cache/
