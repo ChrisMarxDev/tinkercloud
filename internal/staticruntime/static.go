@@ -111,12 +111,7 @@ func safePath(u *url.URL) (string, error) {
 		clean = "/index.html"
 	}
 	rel := strings.TrimPrefix(clean, "/")
-	for _, part := range strings.Split(rel, "/") {
-		if part == "" || part == "." || strings.HasPrefix(part, ".") {
-			return "", errors.New("unsafe path")
-		}
-	}
-	if strings.HasSuffix(strings.ToLower(rel), ".map") {
+	if !releases.ServableStaticAssetPath(rel) {
 		return "", errors.New("source maps unavailable")
 	}
 	return rel, nil

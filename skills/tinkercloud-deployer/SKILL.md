@@ -489,11 +489,16 @@ tinker deploy .
 For an accepted post-V1 capability-free public-static release, show the
 internet-access consequence plainly and require an explicit deployer decision.
 Set `access.mode: public` and any deliberate `access.indexing` choice in the v2
-manifest, then use `tinker deploy --confirm-public .`. Never add that flag,
-change a private app to public, or enable indexing by inference. If the operator
-gate is disabled or unavailable, stop: a retry or a client flag cannot broaden
-access. Verify anonymous root HTML, one immutable asset, the expected
-`X-Robots-Tag`, and denials for all `/_tinker/*` routes without cookies.
+manifest. For a new or currently private app, use `tinker deploy --confirm-public .`;
+the CLI reads the authenticated deployer's current policy before asking or
+sending that acknowledgement. A public-to-public redeploy needs neither a
+prompt nor a fresh acknowledgement. Never add the flag, change a private app to
+public, or enable indexing by inference. If the operator gate is disabled or
+unavailable, stop: a retry or a client flag cannot broaden access. Verify
+anonymous root HTML and one immutable asset against the receipt's
+lowercase SHA-256 and exact byte size (sizes can exceed the denial-body cap),
+the expected `X-Robots-Tag`, and exact safe denials for all representative
+`/_tinker/*` routes without cookies.
 
 For an existing app policy, first read the current policy with `tinker access get
 APP`. `tinker access set APP --file policy.json` accepts only writable policy

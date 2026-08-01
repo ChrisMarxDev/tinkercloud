@@ -422,15 +422,11 @@ func runPublicMutationInProcess(ctx context.Context, databasePath string, enable
 	if err != nil {
 		return err
 	}
-	var operatorID string
-	err = store.DB.QueryRowContext(ctx, "SELECT id FROM users WHERE role='operator' AND status='active' ORDER BY id LIMIT 1").Scan(&operatorID)
-	if err == nil {
-		gate, gateErr := store.CurrentPublicGate(ctx)
-		if gateErr != nil {
-			err = gateErr
-		} else {
-			err = store.SetPublicGate(ctx, operatorID, enabled, gate.Revision, "root_public_gate_"+strconv.FormatInt(time.Now().UnixNano(), 10))
-		}
+	gate, gateErr := store.CurrentPublicGate(ctx)
+	if gateErr != nil {
+		err = gateErr
+	} else {
+		err = store.SetPublicGate(ctx, "root", enabled, gate.Revision, "root_public_gate_"+strconv.FormatInt(time.Now().UnixNano(), 10))
 	}
 	closeErr := store.Close()
 	if err != nil {
@@ -576,9 +572,6 @@ func run(args []string, out, errout *os.File) error {
 		}
 		if err = publicMutationRunner(context.Background(), databasePath, args[1] == "enable"); err != nil {
 			return errors.New("tinkercloud: public_failed")
-		}
-		if err = refreshRunningDeployerService(); err != nil {
-			return errors.New("tinkercloud: public_applied_service_refresh_failed")
 		}
 		fmt.Fprintf(out, "public static access %s\n", args[1]+"d")
 		return nil

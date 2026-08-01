@@ -1190,7 +1190,7 @@ func (s ControlService) Access(ctx context.Context, a controlapi.Actor, slug str
 	var id, mode string
 	var rev uint64
 	e := s.Store.DB.QueryRowContext(ctx, "SELECT a.id,a.policy_revision,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.slug=? AND a.owner_user_id=? AND a.status='active'", slug, a.ID).Scan(&id, &rev, &mode)
-	if e != nil || mode != "private" {
+	if e != nil || (mode != "private" && mode != "public") {
 		return nil, ErrUnavailable
 	}
 	rows, e := s.Store.DB.QueryContext(ctx, "SELECT kind,normalized_value FROM access_rules WHERE app_id=? AND policy_revision=? ORDER BY kind,normalized_value", id, rev)
@@ -1198,7 +1198,7 @@ func (s ControlService) Access(ctx context.Context, a controlapi.Actor, slug str
 		return nil, ErrUnavailable
 	}
 	defer rows.Close()
-	v := AccessView{Mode: "private", Revision: rev}
+	v := AccessView{Mode: mode, Revision: rev}
 	for rows.Next() {
 		var k, x string
 		if e = rows.Scan(&k, &x); e != nil {
@@ -1639,24 +1639,30 @@ func activationReceipt(r deployments.Record, domain string) (controlapi.Activati
 		result.AuthenticatedHealthy = true
 		return result, nil
 	}
-	if mode != "public" || !r.PublicAcknowledged {
+	// A committed public record is sufficient here. Fresh acknowledgement is a
+	// transition gate checked against the current policy before and inside the
+	// activation transaction; public-to-public continuity deliberately does not
+	// rewrite immutable upload evidence.
+	if mode != "public" {
 		return controlapi.ActivationResult{}, ErrUnavailable
 	}
 	var root string
+	var rootBytes int64
 	var assetPath, assetHash string
+	var assetBytes int64
 	for _, file := range r.Files {
 		if file.Path == "index.html" {
-			root = file.Hash
+			root, rootBytes = file.Hash, file.Size
 			continue
 		}
-		if assetPath == "" {
-			assetPath, assetHash = file.Path, file.Hash
+		if assetPath == "" && releases.ServableStaticAssetPath(file.Path) {
+			assetPath, assetHash, assetBytes = file.Path, file.Hash, file.Size
 		}
 	}
-	if len(root) != 64 || (assetPath == "") != (assetHash == "") || (assetHash != "" && len(assetHash) != 64) {
+	if len(root) != 64 || rootBytes < 0 || (assetPath == "") != (assetHash == "") || (assetHash != "" && (len(assetHash) != 64 || assetBytes < 0)) {
 		return controlapi.ActivationResult{}, ErrUnavailable
 	}
 	result.Posture = controlapi.ActivationPublicStatic
-	result.PublicStatic = &controlapi.PublicStaticEvidence{RootSHA256: root, AssetPath: assetPath, AssetSHA256: assetHash, Indexing: r.Manifest.Indexing}
+	result.PublicStatic = &controlapi.PublicStaticEvidence{RootSHA256: root, RootBytes: rootBytes, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes, Indexing: r.Manifest.Indexing}
 	return result, nil
 }

@@ -494,6 +494,9 @@ func (s *Suite) Run(ctx context.Context) error {
 	if err = s.remote(ctx, "/usr/local/bin/tinkercloud", "deployers", "authorize", s.Config.DeployerEmail); err != nil {
 		return err
 	}
+	if err = s.remote(ctx, "/usr/local/bin/tinkercloud", "deployers", "authorize", s.Config.ViewerEmail); err != nil {
+		return err
+	}
 	return s.exercise(ctx, remoteDir)
 }
 
@@ -590,14 +593,19 @@ func sdkReleaseVersion() (string, error) {
 type otpPrompt struct {
 	config        Config
 	purpose, host string
+	email         string
 	ctx           context.Context
 }
 
 func (p otpPrompt) Ask(q string) (string, error) {
-	if strings.HasPrefix(q, "Email:") {
-		return p.config.DeployerEmail, nil
+	email := p.email
+	if email == "" {
+		email = p.config.DeployerEmail
 	}
-	return readOTP(p.ctx, p.config, p.purpose, p.config.DeployerEmail, p.host)
+	if strings.HasPrefix(q, "Email:") {
+		return email, nil
+	}
+	return readOTP(p.ctx, p.config, p.purpose, email, p.host)
 }
 func readOTP(ctx context.Context, c Config, purpose, email, host string) (string, error) {
 	if c.OTPCommand != "" {
@@ -654,6 +662,14 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err := resetFixtureApps(ctx, c); err != nil {
 		return err
 	}
+	secondLogin, err := client.Login(ctx, base, otpPrompt{ctx: ctx, config: s.Config, purpose: "deployer", host: s.Config.PlatformHost(), email: s.Config.ViewerEmail})
+	if err != nil {
+		return fmt.Errorf("second-owner deployer OTP login: %w", err)
+	}
+	secondOwner := client.New(base, secondLogin.Token)
+	if err := resetFixtureApps(ctx, secondOwner); err != nil {
+		return err
+	}
 	// A reused VPS may deliberately be on a pre-blob release. Deploy a legacy
 	// manifest solely to create the updater's active anonymous-denial probe,
 	// then upgrade through the signed health-gated path before any blob feature
@@ -665,6 +681,10 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 		if err := s.applyReuseUpdate(ctx, remoteDir, vpsUpdateProbeSlug); err != nil {
 			return err
 		}
+	}
+	publicState, err := s.beginPublicMatrix(ctx, c, secondOwner)
+	if err != nil {
+		return err
 	}
 	slug := vpsPrimaryAppSlug
 	appHost, marker, err := s.deploySmokeAppWithRedeploy(ctx, c, slug, true)
@@ -683,6 +703,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	// security case intentionally verifies a separate viewer-purpose OTP.
 	viewer, blobID, firstCallback, firstState, err := s.firstViewerFlow(ctx, appHost, marker)
 	if err != nil {
+		return err
+	}
+	if err := s.verifyPublicCatalog(ctx, viewer, publicState); err != nil {
 		return err
 	}
 	// Collections deliberately share the same app-private database as KV. This
@@ -705,6 +728,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 		return err
 	}
 	if err := s.verifyCollectionPersistsAfterRestart(ctx, viewer, appHost, collectionID); err != nil {
+		return err
+	}
+	if err := s.verifyPublicAfterRestart(ctx, publicState); err != nil {
 		return err
 	}
 	secondHost, err := s.crossAppBlobDenied(ctx, c, slug, appHost, blobID, viewer)
@@ -732,7 +758,563 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err != nil {
 		return err
 	}
+	if err := s.finishPublicMatrix(ctx, c, secondOwner, viewer, publicState); err != nil {
+		return err
+	}
 	return s.dashboardGlobalLogout(ctx, viewer, appHost, secondHost, deniedHost)
+}
+
+type publicMatrixState struct {
+	host, otherHost        string
+	marker, asset          string
+	otherMarker            string
+	activeDeployment       string
+	secondActiveDeployment string
+	analyticsClient        *http.Client
+}
+
+func (s *Suite) setPublicGate(ctx context.Context, enabled bool) error {
+	action := "disable"
+	if enabled {
+		action = "enable"
+	}
+	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "public", action, "--config", "/etc/tinkercloud/config.yaml"); err != nil {
+		return fmt.Errorf("set public gate %s: %w", action, err)
+	}
+	return nil
+}
+
+func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client.Client) (publicMatrixState, error) {
+	state := publicMatrixState{host: vpsPublicAppSlug + "." + s.Config.AppSuffix(), otherHost: vpsPublicOtherSlug + "." + s.Config.AppSuffix()}
+	if s.Config.Reuse {
+		if err := s.setPublicGate(ctx, false); err != nil {
+			return state, err
+		}
+	}
+	for _, fixture := range []struct {
+		api  client.Client
+		slug string
+	}{{owner, vpsPublicAppSlug}, {secondOwner, vpsPublicOtherSlug}} {
+		if err := fixture.api.EnsureApp(ctx, fixture.slug); err != nil {
+			return state, fmt.Errorf("create public fixture %q: %w", fixture.slug, err)
+		}
+		if err := s.warmCertificate(ctx, fixture.slug+"."+s.Config.AppSuffix()); err != nil {
+			return state, err
+		}
+	}
+
+	privateArchive, privateSize, privateMarker, _, err := publicArchive(vpsPublicAppSlug, "private", false, false, s.Config.DeployerEmail)
+	if err != nil {
+		return state, err
+	}
+	privateKey, err := client.IdempotencyKey()
+	if err != nil {
+		return state, err
+	}
+	baseline, err := owner.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(privateArchive), privateSize, privateKey)
+	if err != nil || baseline.Posture != client.PosturePrivate {
+		return state, fmt.Errorf("deploy public-matrix private baseline: %w", err)
+	}
+
+	publicArchiveBytes, publicSize, marker, asset, err := publicArchive(vpsPublicAppSlug, "public", true, false, s.Config.DeployerEmail)
+	if err != nil {
+		return state, err
+	}
+	confirmed := owner
+	confirmed.PublicAcknowledged = true
+	key, err := client.IdempotencyKey()
+	if err != nil {
+		return state, err
+	}
+	if _, err = confirmed.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(publicArchiveBytes), publicSize, key); err == nil {
+		return state, errors.New("gate-off public candidate activated")
+	}
+	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
+		return state, fmt.Errorf("gate-off candidate replaced private baseline: %w", err)
+	}
+	if err := s.anonymousDenied(ctx, state.host, privateMarker); err != nil {
+		return state, fmt.Errorf("gate-off public fixture exposed bytes: %w", err)
+	}
+	if err := s.setPublicGate(ctx, true); err != nil {
+		return state, err
+	}
+
+	unacknowledged := owner
+	key, _ = client.IdempotencyKey()
+	if _, err = unacknowledged.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(publicArchiveBytes), publicSize, key); err == nil {
+		return state, errors.New("unacknowledged public candidate activated")
+	}
+	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
+		return state, fmt.Errorf("unacknowledged candidate replaced private baseline: %w", err)
+	}
+	capabilityArchive, capabilitySize, _, _, err := publicArchive(vpsPublicAppSlug, "public", false, true, s.Config.DeployerEmail)
+	if err != nil {
+		return state, err
+	}
+	key, _ = client.IdempotencyKey()
+	if _, err = confirmed.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(capabilityArchive), capabilitySize, key); err == nil {
+		return state, errors.New("capability-bearing public candidate activated")
+	}
+	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
+		return state, fmt.Errorf("capability-bearing candidate replaced private baseline: %w", err)
+	}
+	if err := malformedPublicAcknowledgementDenied(ctx, owner, vpsPublicAppSlug, publicArchiveBytes); err != nil {
+		return state, err
+	}
+	if err := assertActiveDeployment(ctx, owner, vpsPublicAppSlug, baseline.DeploymentID); err != nil {
+		return state, fmt.Errorf("malformed acknowledgement replaced private baseline: %w", err)
+	}
+
+	key, _ = client.IdempotencyKey()
+	active, err := confirmed.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(publicArchiveBytes), publicSize, key)
+	if err != nil || active.Posture != client.PosturePublicStatic || active.PublicStatic == nil || !active.PublicStatic.Indexing {
+		return state, fmt.Errorf("deploy confirmed public fixture: %w", err)
+	}
+	state.marker, state.asset, state.activeDeployment = marker, asset, active.DeploymentID
+
+	otherArchive, otherSize, otherMarker, _, err := publicArchive(vpsPublicOtherSlug, "public", false, false, s.Config.ViewerEmail)
+	if err != nil {
+		return state, err
+	}
+	secondConfirmed := secondOwner
+	secondConfirmed.PublicAcknowledged = true
+	key, _ = client.IdempotencyKey()
+	otherActive, err := secondConfirmed.Deploy(ctx, vpsPublicOtherSlug, bytes.NewReader(otherArchive), otherSize, key)
+	if err != nil || otherActive.Posture != client.PosturePublicStatic || otherActive.PublicStatic == nil || otherActive.PublicStatic.Indexing {
+		return state, fmt.Errorf("deploy second-owner public fixture: %w", err)
+	}
+	state.otherMarker, state.secondActiveDeployment = otherMarker, otherActive.DeploymentID
+	if err := assertOwnerIsolation(ctx, owner, secondOwner); err != nil {
+		return state, err
+	}
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return state, err
+	}
+	h := s.httpClient()
+	hc := *h
+	hc.Jar = jar
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state.analyticsClient = &hc
+	if err := verifyExactPublic(ctx, &hc, state.host, state.marker, state.asset, true); err != nil {
+		return state, err
+	}
+	if err := verifyPublicReservedDenials(ctx, &hc, state.host, state.marker, state.asset); err != nil {
+		return state, err
+	}
+	// Exactly one more document view in the same app-host jar: together with the
+	// root document above this is the 2 page-view / 1 approximate-visitor proof.
+	if err := requestExactPublicDocument(ctx, &hc, state.host, state.marker, true); err != nil {
+		return state, err
+	}
+	return state, nil
+}
+
+func assertActiveDeployment(ctx context.Context, c client.Client, slug, want string) error {
+	releases, err := c.ListReleases(ctx, slug)
+	if err != nil {
+		return err
+	}
+	for _, release := range releases {
+		if release.State == "active" {
+			if release.ID == want {
+				return nil
+			}
+			return fmt.Errorf("active deployment=%q want=%q", release.ID, want)
+		}
+	}
+	return errors.New("active deployment missing")
+}
+
+func assertOwnerIsolation(ctx context.Context, first, second client.Client) error {
+	firstApps, err := first.ListApps(ctx)
+	if err != nil {
+		return err
+	}
+	secondApps, err := second.ListApps(ctx)
+	if err != nil {
+		return err
+	}
+	if !containsOwnedApp(firstApps, vpsPublicAppSlug) || containsOwnedApp(firstApps, vpsPublicOtherSlug) || !containsOwnedApp(secondApps, vpsPublicOtherSlug) || containsOwnedApp(secondApps, vpsPublicAppSlug) {
+		return errors.New("two-owner fixture lists crossed ownership")
+	}
+	if _, err := first.Access(ctx, vpsPublicOtherSlug); err == nil {
+		return errors.New("first owner read second owner's public policy")
+	}
+	if _, err := second.Access(ctx, vpsPublicAppSlug); err == nil {
+		return errors.New("second owner read first owner's public policy")
+	}
+	return nil
+}
+
+func containsOwnedApp(apps []client.AppSummary, slug string) bool {
+	for _, app := range apps {
+		if app.Slug == slug && app.Status == "active" {
+			return true
+		}
+	}
+	return false
+}
+
+func publicArchive(slug, mode string, indexing, capability bool, viewerEmail string) ([]byte, int64, string, string, error) {
+	if mode != "private" && mode != "public" {
+		return nil, 0, "", "", errors.New("invalid public fixture mode")
+	}
+	d, err := os.MkdirTemp("", "tinkercloud-vps-public-")
+	if err != nil {
+		return nil, 0, "", "", err
+	}
+	defer os.RemoveAll(d)
+	id, err := randomID()
+	if err != nil {
+		return nil, 0, "", "", err
+	}
+	marker := "TINKERCLOUD_VPS_PUBLIC_DOCUMENT_" + id
+	asset := "TINKERCLOUD_VPS_PUBLIC_ASSET_" + id
+	if err := os.WriteFile(filepath.Join(d, "index.html"), []byte("<!doctype html><title>public matrix</title>"+marker), 0644); err != nil {
+		return nil, 0, "", "", err
+	}
+	if err := os.WriteFile(filepath.Join(d, "asset.txt"), []byte(asset), 0644); err != nil {
+		return nil, 0, "", "", err
+	}
+	if err := os.WriteFile(filepath.Join(d, "private.js"), []byte("window.fixture='"+marker+"'"), 0644); err != nil {
+		return nil, 0, "", "", err
+	}
+	manifest := "version: 2\nname: " + slug + "\ndescription: VPS public reach fixture\ntags:\n  - acceptance\n  - public\nbuild:\n  output: .\naccess:\n  mode: " + mode + "\n"
+	if mode == "public" {
+		manifest += "  indexing: " + strconv.FormatBool(indexing) + "\n"
+	} else {
+		manifest += "  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n"
+	}
+	if capability {
+		manifest += "features:\n  kv: true\n"
+	}
+	manifestBytes := []byte(manifest)
+	if err := os.WriteFile(filepath.Join(d, "tinker.yaml"), manifestBytes, 0644); err != nil {
+		return nil, 0, "", "", err
+	}
+	var archive bytes.Buffer
+	if err := client.ArchiveProject(d, manifestBytes, &archive); err != nil {
+		return nil, 0, "", "", err
+	}
+	return archive.Bytes(), int64(archive.Len()), marker, asset, nil
+}
+
+func malformedPublicAcknowledgementDenied(ctx context.Context, c client.Client, slug string, archive []byte) error {
+	key, err := client.IdempotencyKey()
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.Base, "/")+"/api/v1/apps/"+url.PathEscape(slug)+"/deployments", bytes.NewReader(archive))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/gzip")
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Idempotency-Key", key)
+	req.Header["X-Tinker-Public-Acknowledged"] = []string{"true", "true"}
+	h := c.HTTP
+	if h == nil {
+		h = http.DefaultClient
+	}
+	resp, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusBadRequest || bytes.Contains(body, archive) {
+		return fmt.Errorf("malformed public acknowledgement was not a bounded denial: status=%d", resp.StatusCode)
+	}
+	return nil
+}
+
+func requestExactPublicDocument(ctx context.Context, h *http.Client, host, marker string, indexing bool) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/"), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "text/html")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	resp, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	want := "noindex, nofollow"
+	if indexing {
+		want = ""
+	}
+	exact := "<!doctype html><title>public matrix</title>" + marker
+	if readErr != nil || resp.StatusCode != http.StatusOK || string(body) != exact || resp.Header.Get("X-Robots-Tag") != want || resp.Header.Get("Cache-Control") != "no-store" {
+		return fmt.Errorf("public document mismatch: status=%d robots=%q", resp.StatusCode, resp.Header.Get("X-Robots-Tag"))
+	}
+	return nil
+}
+
+func verifyExactPublic(ctx context.Context, h *http.Client, host, marker, asset string, indexing bool) error {
+	if err := requestExactPublicDocument(ctx, h, host, marker, indexing); err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, "/asset.txt"), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK || string(body) != asset || resp.Header.Get("Cache-Control") != "no-store" {
+		return fmt.Errorf("public asset mismatch: status=%d", resp.StatusCode)
+	}
+	return nil
+}
+
+func verifyPublicReservedDenials(ctx context.Context, h *http.Client, host string, forbidden ...string) error {
+	routes := []struct{ method, path string }{
+		{http.MethodGet, "/_tinker/auth/login"},
+		{http.MethodGet, "/_tinker/auth/callback"},
+		{http.MethodPost, "/_tinker/auth/logout"},
+		{http.MethodPost, "/_tinker/auth/otp"},
+		{http.MethodGet, "/_tinker/api/v1/me"},
+		{http.MethodGet, "/_tinker/api/v1/app"},
+		{http.MethodGet, "/_tinker/api/v1/capabilities"},
+		{http.MethodGet, "/_tinker/api/v1/kv/key"},
+		{http.MethodPost, "/_tinker/api/v1/db/items"},
+		{http.MethodGet, "/_tinker/api/v1/blobs"},
+		{http.MethodGet, "/_tinker/ws/v1"},
+		{http.MethodPost, "/_tinker/api/v1/llm/chat"},
+	}
+	for _, route := range routes {
+		req, err := http.NewRequestWithContext(ctx, route.method, appURL(host, route.path), nil)
+		if err != nil {
+			return err
+		}
+		if route.path == "/_tinker/ws/v1" {
+			req.Header.Set("Connection", "Upgrade")
+			req.Header.Set("Upgrade", "websocket")
+			req.Header.Set("Sec-WebSocket-Version", "13")
+			req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+		}
+		resp, err := h.Do(req)
+		if err != nil {
+			return err
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<10))
+		resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusNotFound || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Location") != "" || resp.Header.Get("Set-Cookie") != "" || !bytes.Contains(body, []byte(`"not_found"`)) {
+			return fmt.Errorf("public reserved route %s %s was not exact denial: status=%d", route.method, route.path, resp.StatusCode)
+		}
+		for _, secret := range forbidden {
+			if secret != "" && bytes.Contains(body, []byte(secret)) {
+				return fmt.Errorf("public reserved route %s %s leaked app bytes", route.method, route.path)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Suite) verifyPublicCatalog(ctx context.Context, viewer *http.Client, state publicMatrixState) error {
+	body, status, err := fetchPlatformPage(ctx, viewer, "https://"+s.Config.PlatformHost()+"/apps")
+	if err != nil || status != http.StatusOK {
+		return fmt.Errorf("verified viewer catalog unavailable: status=%d err=%w", status, err)
+	}
+	for _, slug := range []string{vpsPublicAppSlug, vpsPublicOtherSlug} {
+		if !strings.Contains(body, `data-tinker-catalog-slug="`+slug+`"`) {
+			return fmt.Errorf("verified catalog omitted effective public app %q", slug)
+		}
+	}
+	if strings.Contains(body, `data-tinker-catalog-slug="`+vpsDeniedAppSlug+`"`) || strings.Contains(body, state.marker) || strings.Contains(body, state.asset) {
+		return errors.New("verified catalog disclosed denied metadata or app bytes")
+	}
+	return nil
+}
+
+func (s *Suite) verifyPublicAfterRestart(ctx context.Context, state publicMatrixState) error {
+	if state.analyticsClient == nil {
+		return errors.New("public analytics client missing")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(state.host, "/asset.txt"), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := state.analyticsClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("public restart persistence request: %w", err)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK || string(body) != state.asset {
+		return fmt.Errorf("public bytes did not persist across restart: status=%d", resp.StatusCode)
+	}
+	return verifyPublicReservedDenials(ctx, state.analyticsClient, state.host, state.marker, state.asset)
+}
+
+func (s *Suite) finishPublicMatrix(ctx context.Context, owner, secondOwner client.Client, ownerBrowser *http.Client, state publicMatrixState) error {
+	if err := s.waitDashboardInsights(ctx, ownerBrowser, vpsPublicAppSlug, 2, 1); err != nil {
+		return err
+	}
+	body, status, err := fetchPlatformPage(ctx, ownerBrowser, "https://"+s.Config.PlatformHost()+"/dashboard")
+	if err != nil || status != http.StatusOK {
+		return fmt.Errorf("owner dashboard unavailable: status=%d err=%w", status, err)
+	}
+	if strings.Contains(body, `data-tinker-app-slug="`+vpsPublicOtherSlug+`"`) {
+		return errors.New("first owner dashboard disclosed second owner's app")
+	}
+
+	secondBrowser, err := s.dashboardBrowserForEmail(ctx, s.Config.ViewerEmail)
+	if err != nil {
+		return fmt.Errorf("second-owner dashboard login: %w", err)
+	}
+	secondBody, secondStatus, err := fetchPlatformPage(ctx, secondBrowser, "https://"+s.Config.PlatformHost()+"/dashboard")
+	if err != nil || secondStatus != http.StatusOK {
+		return fmt.Errorf("second-owner dashboard unavailable: status=%d err=%w", secondStatus, err)
+	}
+	if !strings.Contains(secondBody, `data-tinker-app-slug="`+vpsPublicOtherSlug+`"`) || strings.Contains(secondBody, `data-tinker-app-slug="`+vpsPublicAppSlug+`"`) {
+		return errors.New("second-owner dashboard crossed app ownership")
+	}
+	if err := assertOwnerIsolation(ctx, owner, secondOwner); err != nil {
+		return err
+	}
+
+	if err := s.setPublicGate(ctx, false); err != nil {
+		return err
+	}
+	if err := assertAnonymousStaticDenied(ctx, s.httpClient(), state.host, state.marker, state.asset); err != nil {
+		return fmt.Errorf("gate-disable next-request denial: %w", err)
+	}
+	if err := s.viewerFlowWithExistingIdentity(ctx, ownerBrowser, state.host, state.marker); err != nil {
+		return fmt.Errorf("private owner access after gate disable: %w", err)
+	}
+	if err := s.setPublicGate(ctx, true); err != nil {
+		return err
+	}
+	if err := verifyExactPublic(ctx, state.analyticsClient, state.host, state.marker, state.asset, true); err != nil {
+		return fmt.Errorf("public re-enable: %w", err)
+	}
+
+	privateArchive, privateSize, privateMarker, _, err := publicArchive(vpsPublicAppSlug, "private", false, false, s.Config.DeployerEmail)
+	if err != nil {
+		return err
+	}
+	key, err := client.IdempotencyKey()
+	if err != nil {
+		return err
+	}
+	privateResult, err := owner.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(privateArchive), privateSize, key)
+	if err != nil || privateResult.Posture != client.PosturePrivate {
+		return fmt.Errorf("public-to-private deployment: %w", err)
+	}
+	if err := assertAnonymousStaticDenied(ctx, s.httpClient(), state.host, privateMarker, state.asset); err != nil {
+		return fmt.Errorf("public-to-private next-request denial: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(state.host, "/"), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := ownerBrowser.Do(req)
+	if err != nil {
+		return err
+	}
+	privateBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK || !bytes.Contains(privateBody, []byte(privateMarker)) {
+		return fmt.Errorf("owner session failed after public-to-private transition: status=%d", resp.StatusCode)
+	}
+	if err := s.setPublicGate(ctx, false); err != nil {
+		return err
+	}
+	return assertAnonymousStaticDenied(ctx, s.httpClient(), state.otherHost, state.otherMarker)
+}
+
+func assertAnonymousStaticDenied(ctx context.Context, h *http.Client, host string, forbidden ...string) error {
+	for _, path := range []string{"/", "/asset.txt"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, appURL(host, path), nil)
+		if err != nil {
+			return err
+		}
+		resp, err := h.Do(req)
+		if err != nil {
+			return err
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusUnauthorized {
+			return fmt.Errorf("anonymous static denial %s status=%d", path, resp.StatusCode)
+		}
+		for _, value := range forbidden {
+			if value != "" && bytes.Contains(body, []byte(value)) {
+				return fmt.Errorf("anonymous static denial %s leaked app bytes", path)
+			}
+		}
+	}
+	return nil
+}
+
+func fetchPlatformPage(ctx context.Context, h *http.Client, raw string) (string, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
+	if err != nil {
+		return "", 0, err
+	}
+	resp, err := h.Do(req)
+	if err != nil {
+		return "", 0, err
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	resp.Body.Close()
+	return string(body), resp.StatusCode, readErr
+}
+
+func dashboardAppCard(page, slug string) string {
+	start := strings.Index(page, `data-tinker-app-slug="`+slug+`"`)
+	if start < 0 {
+		return ""
+	}
+	next := strings.Index(page[start+1:], `data-tinker-app-slug="`)
+	if next < 0 {
+		return page[start:]
+	}
+	return page[start : start+1+next]
+}
+
+func (s *Suite) waitDashboardInsights(ctx context.Context, h *http.Client, slug string, pageViews, visitors int) error {
+	deadline := time.Now().Add(12 * time.Second)
+	for {
+		page, status, err := fetchPlatformPage(ctx, h, "https://"+s.Config.PlatformHost()+"/dashboard")
+		card := dashboardAppCard(page, slug)
+		views := strconv.Itoa(pageViews) + " page views"
+		visitor := `<p class="tinker-stat__value">` + strconv.Itoa(visitors) + `</p>`
+		if err == nil && status == http.StatusOK && card != "" && strings.Contains(card, views) && strings.Contains(card, visitor) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("owner insights did not reach %d page views / %d approximate visitor", pageViews, visitors)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
+func (s *Suite) dashboardBrowserForEmail(ctx context.Context, email string) (*http.Client, error) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		return nil, err
+	}
+	h := s.httpClient()
+	hc := *h
+	hc.Jar = jar
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	if err := s.completeDashboardIdentityOTPForEmail(ctx, &hc, email); err != nil {
+		return nil, err
+	}
+	return &hc, nil
 }
 
 // resetFixtureApps removes stale state only for fixture slugs that the
@@ -1451,6 +2033,10 @@ func (s *Suite) beginAppHandoffAt(ctx context.Context, h *http.Client, host, ret
 }
 
 func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client) error {
+	return s.completeDashboardIdentityOTPForEmail(ctx, h, s.Config.ViewerEmail)
+}
+
+func (s *Suite) completeDashboardIdentityOTPForEmail(ctx context.Context, h *http.Client, email string) error {
 	platform := "https://" + s.Config.PlatformHost()
 	page, err := http.NewRequestWithContext(ctx, http.MethodGet, platform+"/login", nil)
 	if err != nil {
@@ -1473,7 +2059,7 @@ func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client
 		!bytes.Contains(body, []byte(`name="email"`)) {
 		return fmt.Errorf("dashboard login page missing generic sign-in form: status=%d", response.StatusCode)
 	}
-	form := url.Values{"email": {s.Config.ViewerEmail}}
+	form := url.Values{"email": {email}}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, platform+"/login", strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
@@ -1496,11 +2082,11 @@ func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client
 	if response.StatusCode != http.StatusOK || tx == "" {
 		return errors.New("dashboard identity OTP transaction missing")
 	}
-	code, err := readOTP(ctx, s.Config, "viewer", s.Config.ViewerEmail, s.Config.PlatformHost())
+	code, err := readOTP(ctx, s.Config, "viewer", email, s.Config.PlatformHost())
 	if err != nil {
 		return err
 	}
-	form = url.Values{"email": {s.Config.ViewerEmail}, "transaction": {tx}, "code": {code}}
+	form = url.Values{"email": {email}, "transaction": {tx}, "code": {code}}
 	request, err = http.NewRequestWithContext(ctx, http.MethodPost, platform+"/login/verify", strings.NewReader(form.Encode()))
 	if err != nil {
 		return err

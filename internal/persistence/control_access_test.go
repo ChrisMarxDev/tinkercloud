@@ -24,3 +24,19 @@ func TestControlAccessOwnedSorted(t *testing.T) {
 		t.Fatal("cross owner")
 	}
 }
+
+func TestControlAccessReturnsCurrentPublicMode(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now')); INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_at) VALUES('public-email','a',1,'email','viewer@example.test',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	v, err := (ControlService{Store: s}).Access(context.Background(), controlapi.Actor{ID: "u", Active: true}, "alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := v.(AccessView)
+	if got.Mode != "public" || got.Revision != 1 || len(got.Allow.Emails) != 1 || got.Allow.Emails[0] != "viewer@example.test" {
+		t.Fatalf("public access=%#v", got)
+	}
+}

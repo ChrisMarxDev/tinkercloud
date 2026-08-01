@@ -133,6 +133,8 @@ func successfulDeployTransport(t *testing.T, bearer string, archiveNames *[]stri
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/apps":
 			created = true
 			return jsonResponse(r, http.StatusCreated, `{"slug":"demo"}`), nil
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/apps/demo/access":
+			return jsonResponse(r, http.StatusOK, `{"mode":"private","revision":1,"allow":{"emails":[],"domains":[]}}`), nil
 		case r.URL.Path == "/api/v1/apps/demo/deployments":
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -379,6 +381,115 @@ func TestLoginForceIsRejectedForNonLoginCommandsBeforeStoreOrNetwork(t *testing.
 	var out, stderr bytes.Buffer
 	if code := runWith([]string{"--force", "--server", "https://tinker.example", "apps", "list"}, &out, &stderr, deps); code != 2 || stderr.String() != "--force is only valid with login.\n" || called {
 		t.Fatalf("code=%d out=%q err=%q called=%v", code, out.String(), stderr.String(), called)
+	}
+}
+
+func TestConfirmPublicIsRejectedForNonDeployCommandsBeforeStoreOrNetwork(t *testing.T) {
+	called := false
+	deps := runnerDeps{store: client.MemoryStore{"https://tinker.example": "saved-token"}, newClient: tokenClient(tokenRoundTrip(func(*http.Request) (*http.Response, error) {
+		called = true
+		return nil, context.Canceled
+	}))}
+	var out, stderr bytes.Buffer
+	if code := runWith([]string{"--confirm-public", "--server", "https://tinker.example", "apps", "list"}, &out, &stderr, deps); code != 2 || stderr.String() != "--confirm-public is only valid with deploy.\n" || called {
+		t.Fatalf("code=%d out=%q err=%q called=%v", code, out.String(), stderr.String(), called)
+	}
+}
+
+func TestPublicDeployConfirmationDependsOnCurrentOwnerPolicy(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 2\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: public\n  indexing: false\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, current         string
+		json, confirm, accept bool
+		wantCode, wantPrompts int
+		wantAck               bool
+	}{
+		{name: "interactive private accepts exact confirmation", current: "private", accept: true, wantCode: 1, wantPrompts: 1, wantAck: true},
+		{name: "interactive private rejects wrong confirmation", current: "private", wantCode: 1, wantPrompts: 1},
+		{name: "json private requires flag", current: "private", json: true, wantCode: 1},
+		{name: "json private sends acknowledgement with flag", current: "private", json: true, confirm: true, wantCode: 1, wantAck: true},
+		{name: "json current public continues without flag", current: "public", json: true, wantCode: 1},
+		{name: "current public does not prompt or acknowledge", current: "public", wantCode: 1},
+		{name: "current public preserves explicit flag for concurrent transition", current: "public", confirm: true, wantCode: 1, wantAck: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deploymentCalled, acknowledged := false, false
+			transport := tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+				switch r.URL.Path {
+				case "/api/v1/version":
+					return jsonResponse(r, http.StatusOK, `{"api_version":1}`), nil
+				case "/api/v1/whoami":
+					return jsonResponse(r, http.StatusOK, `{"email":"dev@example.test"}`), nil
+				case "/api/v1/apps":
+					return jsonResponse(r, http.StatusOK, `[{"slug":"demo","status":"active"}]`), nil
+				case "/api/v1/apps/demo/access":
+					return jsonResponse(r, http.StatusOK, `{"mode":"`+tc.current+`","revision":1,"allow":{"emails":[],"domains":[]}}`), nil
+				case "/api/v1/apps/demo/deployments":
+					deploymentCalled = true
+					acknowledged = r.Header.Get("X-Tinker-Public-Acknowledged") == "true"
+					return jsonResponse(r, http.StatusInternalServerError, `{}`), nil
+				default:
+					t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+					return nil, nil
+				}
+			})
+			prompt := &loginPrompt{}
+			if tc.accept {
+				prompt.values = []string{"public:demo"}
+			} else {
+				prompt.values = []string{"public:wrong"}
+			}
+			args := []string{"--server", "https://tinker.example"}
+			if tc.json {
+				args = append(args, "--json")
+			}
+			if tc.confirm {
+				args = append(args, "--confirm-public")
+			}
+			args = append(args, "deploy", project)
+			var out, stderr bytes.Buffer
+			code := runWith(args, &out, &stderr, runnerDeps{store: client.MemoryStore{"https://tinker.example": "token"}, prompt: prompt, newClient: tokenClient(transport)})
+			if code != tc.wantCode || prompt.asked != tc.wantPrompts || acknowledged != tc.wantAck {
+				t.Fatalf("code=%d prompts=%d acknowledged=%v output=%q err=%q", code, prompt.asked, acknowledged, out.String(), stderr.String())
+			}
+			if tc.current == "private" && !tc.accept && !tc.confirm && deploymentCalled {
+				t.Fatal("rejected broadening reached deployment")
+			}
+			if tc.json && tc.current == "private" && !tc.confirm && deploymentCalled {
+				t.Fatal("JSON broadening reached deployment without confirmation")
+			}
+			if tc.current == "public" && !deploymentCalled {
+				t.Fatal("public continuity did not reach deployment")
+			}
+		})
+	}
+}
+
+func TestPrivateDeployRejectsConfirmPublicBeforeNetwork(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--confirm-public", "--server", "https://tinker.example", "deploy", project}, &out, &stderr, runnerDeps{store: client.MemoryStore{"https://tinker.example": "token"}, newClient: tokenClient(tokenRoundTrip(func(*http.Request) (*http.Response, error) { called = true; return nil, context.Canceled }))})
+	if code != 2 || called || stderr.String() != "--confirm-public requires a public manifest.\n" {
+		t.Fatalf("code=%d called=%v out=%q err=%q", code, called, out.String(), stderr.String())
 	}
 }
 

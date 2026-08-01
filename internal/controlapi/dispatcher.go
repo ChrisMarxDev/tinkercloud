@@ -118,8 +118,10 @@ const (
 // storage locations or URLs.
 type PublicStaticEvidence struct {
 	RootSHA256  string `json:"root_sha256"`
+	RootBytes   int64  `json:"root_bytes"`
 	AssetPath   string `json:"asset_path,omitempty"`
 	AssetSHA256 string `json:"asset_sha256,omitempty"`
+	AssetBytes  int64  `json:"asset_bytes,omitempty"`
 	Indexing    bool   `json:"indexing"`
 }
 type ActivationResult struct {

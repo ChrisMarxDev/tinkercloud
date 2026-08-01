@@ -461,6 +461,155 @@ func TestDeploymentV2PublicRequestCannotActivateBeforePublicAuthorizationExists(
 	}
 }
 
+func TestPublicActivationAcknowledgementContinuityAndInterveningPrivateTransition(t *testing.T) {
+	publicManifest := releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public"}
+	t.Run("public to public needs no fresh acknowledgement", func(t *testing.T) {
+		s := seeded(t)
+		defer s.Close()
+		repo := DeploymentRepository{Store: s}
+		if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now')); UPDATE public_static_settings SET enabled=1 WHERE singleton=1"); err != nil {
+			t.Fatal(err)
+		}
+		old := deployments.Record{Deployment: releases.Deployment{ID: "old-public", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "old-public", Manifest: publicManifest, PublicAcknowledged: true}
+		next := deployments.Record{Deployment: releases.Deployment{ID: "next-public", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "next-public", Manifest: publicManifest}
+		for _, record := range []deployments.Record{old, next} {
+			if err := repo.Create(context.Background(), record); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='old-public' WHERE id='a'"); err != nil {
+			t.Fatal(err)
+		}
+		if !s.CandidatePolicyReady(context.Background(), next) {
+			t.Fatal("current public posture did not satisfy acknowledgement continuity")
+		}
+		if err := repo.CommitActivation(context.Background(), next, &old, "public-continuity"); err != nil {
+			t.Fatal(err)
+		}
+		var current, mode string
+		var revision int
+		if err := s.DB.QueryRow("SELECT a.current_deployment_id,a.policy_revision,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id='a'").Scan(&current, &revision, &mode); err != nil || current != next.ID || revision != 2 || mode != "public" {
+			t.Fatalf("current=%q revision=%d mode=%q err=%v", current, revision, mode, err)
+		}
+	})
+
+	t.Run("intervening private transition requires fresh acknowledgement", func(t *testing.T) {
+		s := seeded(t)
+		defer s.Close()
+		repo := DeploymentRepository{Store: s}
+		if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now')); UPDATE public_static_settings SET enabled=1 WHERE singleton=1"); err != nil {
+			t.Fatal(err)
+		}
+		old := deployments.Record{Deployment: releases.Deployment{ID: "old-public-race", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "old-public-race", Manifest: publicManifest, PublicAcknowledged: true}
+		next := deployments.Record{Deployment: releases.Deployment{ID: "next-public-race", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "next-public-race", Manifest: publicManifest}
+		for _, record := range []deployments.Record{old, next} {
+			if err := repo.Create(context.Background(), record); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='old-public-race' WHERE id='a'"); err != nil {
+			t.Fatal(err)
+		}
+		if !s.CandidatePolicyReady(context.Background(), next) {
+			t.Fatal("initial public continuity missing")
+		}
+		if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',2,'private',datetime('now')); UPDATE applications SET policy_revision=2 WHERE id='a'"); err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.CommitActivation(context.Background(), next, &old, "intervening-private"); err == nil {
+			t.Fatal("unacknowledged public candidate activated after private transition")
+		}
+		var current string
+		var revision int
+		if err := s.DB.QueryRow("SELECT current_deployment_id,policy_revision FROM applications WHERE id='a'").Scan(&current, &revision); err != nil || current != old.ID || revision != 2 {
+			t.Fatalf("current=%q revision=%d err=%v", current, revision, err)
+		}
+	})
+}
+
+func TestPublicToPrivateActivationTransitionsPolicyAtomically(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	repo := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'public',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	old := deployments.Record{Deployment: releases.Deployment{ID: "public-old", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "public-old", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public"}, PublicAcknowledged: true}
+	next := deployments.Record{Deployment: releases.Deployment{ID: "private-next", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "private-next", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "private"}}
+	for _, record := range []deployments.Record{old, next} {
+		if err := repo.Create(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='public-old' WHERE id='a'"); err != nil {
+		t.Fatal(err)
+	}
+	if !s.CandidatePolicyReady(context.Background(), next) {
+		t.Fatal("private candidate unexpectedly denied")
+	}
+	if err := repo.CommitActivation(context.Background(), next, &old, "return-private"); err != nil {
+		t.Fatal(err)
+	}
+	var current, mode string
+	if err := s.DB.QueryRow("SELECT a.current_deployment_id,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id='a'").Scan(&current, &mode); err != nil || current != next.ID || mode != "private" {
+		t.Fatalf("current=%q mode=%q err=%v", current, mode, err)
+	}
+}
+
+func TestPublicActivationDenialMatrixPreservesPreviousReleaseAndPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		acknowledged bool
+		capability   bool
+		gate         string
+	}{
+		{name: "gate off", acknowledged: true, gate: "off"},
+		{name: "gate missing", acknowledged: true, gate: "missing"},
+		{name: "unacknowledged broadening", gate: "on"},
+		{name: "capability bearing", acknowledged: true, capability: true, gate: "on"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := seeded(t)
+			defer s.Close()
+			repo := DeploymentRepository{Store: s}
+			if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))"); err != nil {
+				t.Fatal(err)
+			}
+			switch tc.gate {
+			case "on":
+				if _, err := s.DB.Exec("UPDATE public_static_settings SET enabled=1 WHERE singleton=1"); err != nil {
+					t.Fatal(err)
+				}
+			case "missing":
+				if _, err := s.DB.Exec("DELETE FROM public_static_settings"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			old := deployments.Record{Deployment: releases.Deployment{ID: "matrix-old", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "matrix-old", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "private"}}
+			next := deployments.Record{Deployment: releases.Deployment{ID: "matrix-next", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "matrix-next", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public", KV: tc.capability}, PublicAcknowledged: tc.acknowledged}
+			for _, record := range []deployments.Record{old, next} {
+				if err := repo.Create(context.Background(), record); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='matrix-old' WHERE id='a'"); err != nil {
+				t.Fatal(err)
+			}
+			if s.CandidatePolicyReady(context.Background(), next) {
+				t.Fatal("candidate policy unexpectedly ready")
+			}
+			if err := repo.CommitActivation(context.Background(), next, &old, "matrix-denied"); err == nil {
+				t.Fatal("public denial activated")
+			}
+			var current string
+			var revision int
+			if err := s.DB.QueryRow("SELECT current_deployment_id,policy_revision FROM applications WHERE id='a'").Scan(&current, &revision); err != nil || current != old.ID || revision != 1 {
+				t.Fatalf("current=%q revision=%d err=%v", current, revision, err)
+			}
+		})
+	}
+}
+
 func TestDeploymentActivationAuditFailurePreservesReleaseAndPolicy(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()
@@ -468,8 +617,11 @@ func TestDeploymentActivationAuditFailurePreservesReleaseAndPolicy(t *testing.T)
 	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := s.DB.Exec("UPDATE public_static_settings SET enabled=1 WHERE singleton=1"); err != nil {
+		t.Fatal(err)
+	}
 	old := deployments.Record{Deployment: releases.Deployment{ID: "old-audit", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "old-audit", Manifest: releases.Manifest{Version: 1, Name: "alpha"}}
-	next := deployments.Record{Deployment: releases.Deployment{ID: "next-audit", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "next-audit", Manifest: releases.Manifest{Version: 1, Name: "alpha", Emails: []string{"alice@example.com"}}}
+	next := deployments.Record{Deployment: releases.Deployment{ID: "next-audit", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "next-audit", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public", Emails: []string{"alice@example.com"}}, PublicAcknowledged: true}
 	for _, d := range []deployments.Record{old, next} {
 		if err := r.Create(context.Background(), d); err != nil {
 			t.Fatal(err)
@@ -492,5 +644,35 @@ func TestDeploymentActivationAuditFailurePreservesReleaseAndPolicy(t *testing.T)
 	var policies int
 	if err := s.DB.QueryRow("SELECT COUNT(*) FROM access_policies WHERE app_id='a'").Scan(&policies); err != nil || policies != 1 {
 		t.Fatalf("audit failure left policy revision: %d %v", policies, err)
+	}
+}
+
+func TestPublicActivationCommitFailurePreservesReleaseAndPolicy(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	repo := DeploymentRepository{Store: s}
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')); UPDATE public_static_settings SET enabled=1 WHERE singleton=1"); err != nil {
+		t.Fatal(err)
+	}
+	old := deployments.Record{Deployment: releases.Deployment{ID: "public-commit-old", AppID: "a", State: releases.Active}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "public-commit-old", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "private"}}
+	next := deployments.Record{Deployment: releases.Deployment{ID: "public-commit-next", AppID: "a", State: releases.Verified}, OwnerID: "u", AppSlug: "alpha", IdempotencyKey: "public-commit-next", Manifest: releases.Manifest{Version: 2, Name: "alpha", AccessMode: "public"}, PublicAcknowledged: true}
+	for _, record := range []deployments.Record{old, next} {
+		if err := repo.Create(context.Background(), record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := s.DB.Exec("UPDATE applications SET current_deployment_id='public-commit-old' WHERE id='a'; CREATE TRIGGER deny_public_activation BEFORE UPDATE OF state ON deployments WHEN NEW.id='public-commit-next' BEGIN SELECT RAISE(ABORT,'commit denied'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CommitActivation(context.Background(), next, &old, "public-commit-fails"); err == nil {
+		t.Fatal("commit failure accepted")
+	}
+	var current, mode string
+	var revision, audits int
+	if err := s.DB.QueryRow("SELECT a.current_deployment_id,a.policy_revision,p.mode FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id='a'").Scan(&current, &revision, &mode); err != nil || current != old.ID || revision != 1 || mode != "private" {
+		t.Fatalf("current=%q revision=%d mode=%q err=%v", current, revision, mode, err)
+	}
+	if err := s.DB.QueryRow("SELECT COUNT(*) FROM audit_events WHERE request_id='public-commit-fails'").Scan(&audits); err != nil || audits != 0 {
+		t.Fatalf("audits=%d err=%v", audits, err)
 	}
 }

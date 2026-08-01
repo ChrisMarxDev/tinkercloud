@@ -90,6 +90,10 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 		return 2
 	}
 	args := flag.Args()
+	if *confirmPublic && !((len(args) == 1 || len(args) == 2) && args[0] == "deploy") {
+		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "--confirm-public is only valid with deploy."}})
+		return 2
+	}
 	if *forceLogin && !(len(args) == 1 && args[0] == "login") {
 		writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "--force is only valid with login."}})
 		return 2
@@ -402,18 +406,9 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_manifest", "Manifest does not meet the V1 contract."}})
 			return 1
 		}
-		if m.AccessMode == "public" {
-			if *jsonOutput && !*confirmPublic {
-				writeTo(stdout, stderr, true, result{Error: &cliError{"confirmation_required", "Public access requires --confirm-public."}})
-				return 1
-			}
-			if !*jsonOutput && !*confirmPublic {
-				answer, err := deps.prompt.Ask("Type public:" + m.Name + " to confirm anonymous access: ")
-				if err != nil || answer != "public:"+m.Name {
-					writeTo(stdout, stderr, false, result{Error: &cliError{"confirmation_required", "Public access was not confirmed."}})
-					return 1
-				}
-			}
+		if m.AccessMode != "public" && *confirmPublic {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"usage", "--confirm-public requires a public manifest."}})
+			return 2
 		}
 		token, e := ensureDeployCredential(context.Background(), base, *jsonOutput, deps)
 		if e != nil {
@@ -427,6 +422,36 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 			return 1
 		}
+		deployer := client.New(base, token)
+		if deps.newClient != nil {
+			deployer = deps.newClient(base, token)
+		}
+		// The manifest owns the stable slug and the candidate policy. Ensure the
+		// caller owns that slug before streaming; a foreign-slug conflict is not
+		// a successful deployment and is intentionally kept indistinguishable.
+		if e = deployer.EnsureApp(context.Background(), m.Name); e != nil {
+			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be prepared."}})
+			return 1
+		}
+		publicBroadening := false
+		if m.AccessMode == "public" {
+			current, accessErr := deployer.Access(context.Background(), m.Name)
+			// An unavailable or malformed receipt is intentionally indistinguishable
+			// from a private/new policy: it can only require confirmation, never
+			// suppress it or reveal another deployer's app.
+			publicBroadening = accessErr != nil || current.Mode != "public"
+			if publicBroadening && !*confirmPublic {
+				if *jsonOutput || deps.prompt == nil {
+					writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"confirmation_required", "Public access requires --confirm-public."}})
+					return 1
+				}
+				answer, promptErr := deps.prompt.Ask("Type public:" + m.Name + " to confirm anonymous access: ")
+				if promptErr != nil || answer != "public:"+m.Name {
+					writeTo(stdout, stderr, false, result{Error: &cliError{"confirmation_required", "Public access was not confirmed."}})
+					return 1
+				}
+			}
+		}
 		archive, cleanup, err := stagedArchive(project, manifest)
 		if err != nil {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"invalid_directory", "Deployment directory is unsafe."}})
@@ -438,18 +463,11 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be prepared."}})
 			return 1
 		}
-		deployer := client.New(base, token)
-		if deps.newClient != nil {
-			deployer = deps.newClient(base, token)
-		}
-		deployer.PublicAcknowledged = m.AccessMode == "public"
-		// The manifest owns the stable slug and the candidate policy. Ensure the
-		// caller owns that slug before streaming; a foreign-slug conflict is not
-		// a successful deployment and is intentionally kept indistinguishable.
-		if e = deployer.EnsureApp(context.Background(), m.Name); e != nil {
-			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be prepared."}})
-			return 1
-		}
+		// Preserve an explicit acknowledgement even if the optimistic policy read
+		// saw public: the server's activation transaction may observe a concurrent
+		// public-to-private transition. Without a flag, continuity sends no fresh
+		// acknowledgement.
+		deployer.PublicAcknowledged = *confirmPublic || publicBroadening
 		out, e := deployer.Deploy(context.Background(), m.Name, archive, archiveSize(archive), key)
 		if e != nil {
 			var active *client.ActiveButUnverifiedError

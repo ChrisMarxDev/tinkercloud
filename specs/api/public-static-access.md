@@ -36,6 +36,10 @@ No boolean or request-provided app identifier can construct authority.
 
 - The operator gate defaults disabled and is changed only by operator authority
   through a revision-checked, audited mutation.
+- The root-local command delegates the SQLite mutation to the service-user
+  child, records `root` as the audit actor kind, and returns only after that
+  child closes successfully. It does not query, start, or restart systemd;
+  request-time gate reads make the durable change effective immediately.
 - Enabling the gate changes no app policy. Disabling it removes anonymous
   access on the next request.
 - A deployer may set public mode only for an owned app. Owner/email/domain rules
@@ -62,7 +66,9 @@ release proof. Public candidates must instead prove, through the exact HTTPS
 app origin with redirects disabled:
 
 1. the expected candidate root document bytes/hash are returned anonymously;
-2. a representative immutable asset is returned when present;
+2. a representative immutable asset is returned when present; the deployer
+   receipt includes its canonical release-relative path, lowercase SHA-256, and
+   exact bounded byte size (and the same hash/size evidence for the root);
 3. every reserved identity, SDK, data, blob, realtime, and LLM route is denied
    without invoking its dispatcher; and
 4. the response's indexing directive matches the immutable manifest.

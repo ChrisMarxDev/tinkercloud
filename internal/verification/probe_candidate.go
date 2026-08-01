@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ChrisMarxDev/tinkercloud/internal/appauth"
@@ -19,8 +20,58 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 )
+
+var probeRequestID = regexp.MustCompile(`^req_[0-9a-f]{24}$`)
+
+type protectedProbeSpy struct{ calls int }
+
+func (s *protectedProbeSpy) Dispatch(appauth.AuthorizationContext, gateway.Endpoint, http.ResponseWriter, *http.Request) {
+	s.calls++
+}
+
+type preAuthProbeSpy struct{ calls int }
+
+func (s *preAuthProbeSpy) DispatchPreAuth(apps.App, gateway.Endpoint, http.ResponseWriter, *http.Request) {
+	s.calls++
+}
+
+type reservedProbeRoute struct{ method, path string }
+
+// representativeReservedProbeRoutes is deliberately one route for every
+// gateway registry classification. Keep it synchronized with ClassifyRoute.
+var representativeReservedProbeRoutes = []reservedProbeRoute{
+	{http.MethodGet, "/_tinker/auth/login"},
+	{http.MethodGet, "/_tinker/auth/callback"},
+	{http.MethodPost, "/_tinker/auth/logout"},
+	{http.MethodGet, "/_tinker/api/v1/me"},
+	{http.MethodGet, "/_tinker/api/v1/app"},
+	{http.MethodGet, "/_tinker/api/v1/capabilities"},
+	{http.MethodGet, "/_tinker/api/v1/kv"},
+	{http.MethodGet, "/_tinker/api/v1/db"},
+	{http.MethodGet, "/_tinker/api/v1/blobs"},
+	{http.MethodGet, "/_tinker/ws/v1"},
+	{http.MethodPost, "/_tinker/api/v1/llm/chat"},
+}
+
+func safeReservedDenial(w *httptest.ResponseRecorder) bool {
+	if w.Code != http.StatusNotFound || w.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
+		w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Set-Cookie") != "" || w.Header().Get("Location") != "" ||
+		w.Header().Get("X-Content-Type-Options") != "nosniff" || w.Header().Get("Referrer-Policy") != "same-origin" || !probeRequestID.MatchString(w.Header().Get("X-Request-ID")) || w.Body.Len() > 32<<10 {
+		return false
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(w.Body.Bytes(), &envelope) != nil || len(envelope) != 1 || envelope["error"] == nil {
+		return false
+	}
+	var denial map[string]string
+	if json.Unmarshal(envelope["error"], &denial) != nil || len(denial) != 3 {
+		return false
+	}
+	return denial["code"] == "not_found" && denial["message"] == "This request is not authorized." && probeRequestID.MatchString(denial["request_id"]) && denial["request_id"] == w.Header().Get("X-Request-ID")
+}
 
 func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r deployments.Record) (Probe, error) {
 	root, e := CandidateFilesystem(dataRoot, r)
@@ -28,7 +79,7 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 		return Probe{}, e
 	}
 	index, e := os.ReadFile(filepath.Join(root, "index.html"))
-	if e != nil || len(index) > 1<<20 {
+	if e != nil {
 		return Probe{}, errors.New("candidate index unavailable")
 	}
 	v := identity.Identity{ID: "probe@invalid", Email: "probe@invalid"}
@@ -41,9 +92,12 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	if mode == "" {
 		mode = "private"
 	}
-	ps := &policies.MemoryStore{Policies: map[string]policies.Policy{r.AppID: {AppID: r.AppID, OwnerIdentityID: v.ID, Revision: 1, Mode: mode, Valid: true, Emails: map[string]struct{}{}, Domains: map[string]struct{}{}}}, Gate: policies.PublicGate{Enabled: mode == "public" && r.PublicAcknowledged, Revision: 1, Valid: true}}
+	// Candidate verification proves the release posture and bytes. The durable
+	// policy transition already owns acknowledgement and gate authorization.
+	ps := &policies.MemoryStore{Policies: map[string]policies.Policy{r.AppID: {AppID: r.AppID, OwnerIdentityID: v.ID, Revision: 1, Mode: mode, Valid: true, Emails: map[string]struct{}{}, Domains: map[string]struct{}{}}}, Gate: policies.PublicGate{Enabled: mode == "public", Revision: 1, Valid: true}}
 	app := apps.App{ID: r.AppID, Slug: r.AppSlug, DeploymentID: r.ID, Status: apps.Active, ReleaseRoot: root, ReleaseEvidence: releases.FileManifest{Files: r.Files, Hash: r.ReleaseHash}, SPAFallback: r.Manifest.SPAFallback != "", KVEnabled: r.Manifest.KV, BlobsEnabled: r.Manifest.Blobs, RealtimeEnabled: r.Manifest.Realtime, LLMChatRequested: r.Manifest.LLMChat, PublicIndexing: r.Manifest.Indexing}
-	g := gateway.Gateway{Config: cfg, Apps: apps.NewMemoryRepository(app), Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}}
+	protected, preauth := &protectedProbeSpy{}, &preAuthProbeSpy{}
+	g := gateway.Gateway{Config: cfg, Apps: apps.NewMemoryRepository(app), Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: protected, PreAuth: preauth}
 	host := r.AppSlug + "." + cfg.AppSuffix()
 	anon := httptest.NewRequest("GET", "https://"+host+"/", nil)
 	anon.Host = host
@@ -60,16 +114,44 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 		if aw.Header().Get("X-Robots-Tag") != wantRobots {
 			return Probe{}, errors.New("public indexing probe failed")
 		}
-		for _, p := range []string{"/_tinker/auth/login", "/_tinker/api/v1/app", "/_tinker/api/v1/kv", "/_tinker/ws/v1"} {
-			q := httptest.NewRequest("GET", "https://"+host+p, nil)
+		var assetPath, assetHash string
+		var rootBytes, assetBytes int64
+		for _, file := range r.Files {
+			if file.Path == "index.html" {
+				rootBytes = file.Size
+			} else if assetPath == "" && releases.ServableStaticAssetPath(file.Path) {
+				assetPath, assetHash, assetBytes = file.Path, file.Hash, file.Size
+			}
+		}
+		if int64(len(index)) != rootBytes {
+			return Probe{}, errors.New("public root evidence mismatch")
+		}
+		if assetPath != "" {
+			asset, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(assetPath)))
+			if err != nil || int64(len(asset)) != assetBytes || fmt.Sprintf("%x", sha256.Sum256(asset)) != assetHash {
+				return Probe{}, errors.New("public asset evidence mismatch")
+			}
+			q := httptest.NewRequest(http.MethodGet, "https://"+host+"/"+assetPath, nil)
 			q.Host = host
 			w := httptest.NewRecorder()
 			g.ServeHTTP(w, q)
-			if w.Code < 400 || w.Code >= 500 || w.Body.Len() > 32<<10 {
+			if w.Code != http.StatusOK || !bytes.Equal(w.Body.Bytes(), asset) || w.Header().Get("Set-Cookie") != "" || w.Header().Get("Location") != "" {
+				return Probe{}, errors.New("public asset probe failed")
+			}
+		}
+		for _, route := range representativeReservedProbeRoutes {
+			q := httptest.NewRequest(route.method, "https://"+host+route.path, nil)
+			q.Host = host
+			w := httptest.NewRecorder()
+			g.ServeHTTP(w, q)
+			if !safeReservedDenial(w) {
 				return Probe{}, errors.New("public reserved probe failed")
 			}
 		}
-		return Probe{URL: "https://" + host, AnonymousDenied: true, AuthenticatedHealthy: true, Posture: "public_static", RootSHA256: fmt.Sprintf("%x", sha256.Sum256(index)), Indexing: r.Manifest.Indexing}, nil
+		if protected.calls != 0 || preauth.calls != 0 {
+			return Probe{}, errors.New("public reserved dispatcher invoked")
+		}
+		return Probe{URL: "https://" + host, PublicReachable: true, ReservedDenied: true, Posture: "public_static", RootSHA256: fmt.Sprintf("%x", sha256.Sum256(index)), RootBytes: rootBytes, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes, Indexing: r.Manifest.Indexing}, nil
 	}
 	if aw.Code != http.StatusUnauthorized || bytes.Contains(aw.Body.Bytes(), index) {
 		return Probe{}, errors.New("anonymous probe failed")

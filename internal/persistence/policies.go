@@ -55,17 +55,16 @@ func (s *SQLiteStore) CurrentPublicGate(ctx context.Context) (policies.PublicGat
 	return policies.PublicGate{Enabled: enabled == 1, Revision: revision, Valid: true}, nil
 }
 
-// SetPublicGate is the narrow operator-only mutation seam.  Compare-and-swap
-// prevents an operator UI from accidentally overwriting a newer decision.
+// SetPublicGate is the narrow root-local mutation seam. The literal actor is a
+// typed boundary marker rather than a database user ID: the root command owns
+// privilege separation and the audit row truthfully records root authority.
+// Compare-and-swap prevents a stale local operation from overwriting a newer
+// decision.
 func (s *SQLiteStore) SetPublicGate(ctx context.Context, actor string, enabled bool, expectedRevision uint64, requestID string) error {
-	if actor == "" || requestID == "" {
+	if actor != "root" || requestID == "" || expectedRevision == 0 {
 		return policies.ErrUnavailable
 	}
 	return s.Write(ctx, func(tx *sql.Tx) error {
-		var role, status string
-		if err := tx.QueryRowContext(ctx, "SELECT role,status FROM users WHERE id=?", actor).Scan(&role, &status); err != nil || role != "operator" || status != "active" {
-			return policies.ErrUnavailable
-		}
 		var revision uint64
 		var old int
 		if err := tx.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&old, &revision); err != nil || (old != 0 && old != 1) || revision == 0 || revision != expectedRevision {
@@ -82,7 +81,7 @@ func (s *SQLiteStore) SetPublicGate(ctx context.Context, actor string, enabled b
 		if n, err := res.RowsAffected(); err != nil || n != 1 {
 			return policies.ErrUnavailable
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'operator',?,'public_static_gate.set','success',?)", actor, requestID)
+		_, err = tx.ExecContext(ctx, "INSERT INTO audit_events(id,occurred_at,actor_kind,actor_id,action,outcome,target_kind,target_id,request_id) VALUES(lower(hex(randomblob(16))),datetime('now'),'root',NULL,'public_static_gate.set','success','public_static_gate','singleton',?)", requestID)
 		return err
 	})
 }

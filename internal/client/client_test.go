@@ -37,6 +37,20 @@ func TestEnsureAppCreatesMissingOwnedSlug(t *testing.T) {
 	}
 }
 
+func TestAccessReadsOnlyValidCurrentPolicy(t *testing.T) {
+	c := New("https://tinker.test", "secret")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/v1/apps/demo/access" {
+			t.Fatalf("request %s %s", r.Method, r.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"mode":"public","revision":2,"allow":{"emails":["viewer@example.test"],"domains":[]}}`)), Header: make(http.Header), Request: r}, nil
+	})}
+	policy, err := c.Access(context.Background(), "demo")
+	if err != nil || policy.Mode != "public" || policy.Revision != 2 || len(policy.Allow.Emails) != 1 {
+		t.Fatalf("policy=%+v err=%v", policy, err)
+	}
+}
+
 func TestReleasedClientSendsCompatibilityHeaders(t *testing.T) {
 	old := BuildVersion
 	BuildVersion = "0.1.0"

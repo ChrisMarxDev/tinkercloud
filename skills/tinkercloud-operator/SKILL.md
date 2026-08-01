@@ -180,6 +180,9 @@ enabling it, verify the intended scope and explain that only independently
 acknowledged, capability-free public releases can become anonymous. Use
 `tinkercloud public disable` to revoke anonymous static access; the next
 anonymous request must deny while normal private owner/viewer access remains.
+The child closes its durable SQLite mutation before success and does not query,
+restart, or start systemd: the gateway reads the gate on every request, so a
+service refresh would add downtime without improving revocation.
 Never add a public listener, proxy, file server, public capability endpoint, or
 remote gate mutation.
 

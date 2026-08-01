@@ -302,13 +302,15 @@ func (s *SQLiteStore) CandidatePolicyReady(ctx context.Context, r deployments.Re
 		return false
 	}
 	var owner, status string
-	err := s.DB.QueryRowContext(ctx, "SELECT owner_user_id,status FROM applications WHERE id=?", r.AppID).Scan(&owner, &status)
-	if err != nil || owner != r.OwnerID || status != "active" {
+	var currentMode sql.NullString
+	err := s.DB.QueryRowContext(ctx, `SELECT a.owner_user_id,a.status,p.mode FROM applications a
+		LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id=?`, r.AppID).Scan(&owner, &status, &currentMode)
+	if err != nil || owner != r.OwnerID || status != "active" || (currentMode.Valid && currentMode.String != "private" && currentMode.String != "public") {
 		return false
 	}
 	if r.Manifest.AccessMode == "public" {
 		g, err := s.CurrentPublicGate(ctx)
-		return err == nil && g.Valid && g.Enabled
+		return err == nil && g.Valid && g.Enabled && !r.Manifest.HasBrowserCapability() && (r.PublicAcknowledged || currentMode.Valid && currentMode.String == "public")
 	}
 	return true
 }
@@ -328,7 +330,7 @@ func canonicalManifestPolicy(r deployments.Record) ([]string, []string, error) {
 	if m.Version == 1 && (m.AccessMode != "private" || m.Indexing || len(m.Tags) != 0) {
 		return nil, nil, errors.New("invalid v1 candidate policy")
 	}
-	if m.Version == 2 && (m.AccessMode != "private" && m.AccessMode != "public" || m.AccessMode != "public" && m.Indexing || m.AccessMode == "public" && (!r.PublicAcknowledged || m.HasBrowserCapability())) {
+	if m.Version == 2 && (m.AccessMode != "private" && m.AccessMode != "public" || m.AccessMode != "public" && m.Indexing || m.AccessMode == "public" && m.HasBrowserCapability()) {
 		return nil, nil, errors.New("invalid v2 candidate policy")
 	}
 	emails := append([]string(nil), m.Emails...)
@@ -415,10 +417,12 @@ func (s DeploymentRepository) CommitActivation(ctx context.Context, next deploym
 		var current sql.NullString
 		var policyRevision uint64
 		var owner, status string
-		if err := tx.QueryRowContext(ctx, "SELECT current_deployment_id,policy_revision,owner_user_id,status FROM applications WHERE id=?", next.AppID).Scan(&current, &policyRevision, &owner, &status); err != nil {
+		var currentMode sql.NullString
+		if err := tx.QueryRowContext(ctx, `SELECT a.current_deployment_id,a.policy_revision,a.owner_user_id,a.status,p.mode
+			FROM applications a LEFT JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision WHERE a.id=?`, next.AppID).Scan(&current, &policyRevision, &owner, &status, &currentMode); err != nil {
 			return err
 		}
-		if owner != next.OwnerID || status != "active" {
+		if owner != next.OwnerID || status != "active" || (currentMode.Valid && currentMode.String != "private" && currentMode.String != "public") {
 			return deployments.ErrDenied
 		}
 		if old == nil && current.Valid && current.String != "" {
@@ -433,7 +437,7 @@ func (s DeploymentRepository) CommitActivation(ctx context.Context, next deploym
 		if next.Manifest.AccessMode == "public" {
 			var enabled int
 			var gateRevision uint64
-			if err := tx.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&enabled, &gateRevision); err != nil || enabled != 1 || gateRevision == 0 || next.Manifest.HasBrowserCapability() || !next.PublicAcknowledged {
+			if err := tx.QueryRowContext(ctx, "SELECT enabled,revision FROM public_static_settings WHERE singleton=1").Scan(&enabled, &gateRevision); err != nil || enabled != 1 || gateRevision == 0 || next.Manifest.HasBrowserCapability() || (!next.PublicAcknowledged && (!currentMode.Valid || currentMode.String != "public")) {
 				return deployments.ErrDenied
 			}
 		}
