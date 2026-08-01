@@ -78,12 +78,12 @@ var legacyUpdateManifestFlag = regexp.MustCompile(`(?m)^(?:flag provided but not
 // Config intentionally separates SSH arguments. In particular, SSH_TARGET is
 // not a shell fragment and no mode disables host-key verification.
 type Config struct {
-	Target, Port, IdentityFile, KnownHosts          string
-	Domain                                          string
-	OperatorEmail, DeployerEmail, ViewerEmail       string
-	EmailFrom, ACMEEmail, ResendKeyFile, OTPCommand string
-	ReleaseDir                                      string
-	Reuse                                           bool
+	Target, Port, IdentityFile, KnownHosts    string
+	Domain                                    string
+	OperatorEmail, DeployerEmail, ViewerEmail string
+	EmailFrom, ResendKeyFile, OTPCommand      string
+	ReleaseDir                                string
+	Reuse                                     bool
 }
 
 // LoadConfig reads a deliberately small, strict environment contract. The
@@ -97,9 +97,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		Target: strings.TrimSpace(getenv(EnvTarget)), Port: strings.TrimSpace(getenv("TINKERCLOUD_VPS_SSH_PORT")), IdentityFile: strings.TrimSpace(getenv("TINKERCLOUD_VPS_SSH_IDENTITY_FILE")), KnownHosts: strings.TrimSpace(getenv(EnvKnownHosts)),
 		Domain:        strings.TrimSpace(getenv("TINKERCLOUD_VPS_DOMAIN")),
 		OperatorEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_OPERATOR_EMAIL")), DeployerEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_DEPLOYER_EMAIL")), ViewerEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_VIEWER_EMAIL")),
-		EmailFrom: strings.TrimSpace(getenv("TINKERCLOUD_VPS_EMAIL_FROM")), ACMEEmail: strings.TrimSpace(getenv("TINKERCLOUD_VPS_ACME_EMAIL")), ResendKeyFile: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RESEND_API_KEY_FILE")), OTPCommand: strings.TrimSpace(getenv("TINKERCLOUD_VPS_OTP_COMMAND")), ReleaseDir: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RELEASE_DIR")), Reuse: getenv("TINKERCLOUD_VPS_REUSE") == "1",
+		EmailFrom: strings.TrimSpace(getenv("TINKERCLOUD_VPS_EMAIL_FROM")), ResendKeyFile: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RESEND_API_KEY_FILE")), OTPCommand: strings.TrimSpace(getenv("TINKERCLOUD_VPS_OTP_COMMAND")), ReleaseDir: strings.TrimSpace(getenv("TINKERCLOUD_VPS_RELEASE_DIR")), Reuse: getenv("TINKERCLOUD_VPS_REUSE") == "1",
 	}
-	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINKERCLOUD_VPS_DOMAIN": c.Domain, "TINKERCLOUD_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINKERCLOUD_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINKERCLOUD_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINKERCLOUD_VPS_EMAIL_FROM": c.EmailFrom, "TINKERCLOUD_VPS_ACME_EMAIL": c.ACMEEmail, "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
+	for name, value := range map[string]string{EnvTarget: c.Target, EnvKnownHosts: c.KnownHosts, "TINKERCLOUD_VPS_DOMAIN": c.Domain, "TINKERCLOUD_VPS_OPERATOR_EMAIL": c.OperatorEmail, "TINKERCLOUD_VPS_DEPLOYER_EMAIL": c.DeployerEmail, "TINKERCLOUD_VPS_VIEWER_EMAIL": c.ViewerEmail, "TINKERCLOUD_VPS_EMAIL_FROM": c.EmailFrom, "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": c.ResendKeyFile} {
 		if value == "" || strings.ContainsAny(value, "\r\n\x00") {
 			return Config{}, fmt.Errorf("%s is required and must be a single line", name)
 		}
@@ -146,7 +146,7 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 	if c.Domain != strings.ToLower(c.Domain) || !dnsName.MatchString(c.Domain) {
 		return Config{}, errors.New("domain must be a canonical DNS name")
 	}
-	for _, e := range []string{c.OperatorEmail, c.DeployerEmail, c.ViewerEmail, c.EmailFrom, c.ACMEEmail} {
+	for _, e := range []string{c.OperatorEmail, c.DeployerEmail, c.ViewerEmail, c.EmailFrom} {
 		if !emailName.MatchString(strings.ToLower(e)) {
 			return Config{}, errors.New("invalid email address")
 		}
@@ -471,7 +471,7 @@ func (s *Suite) Run(ctx context.Context) error {
 		if err = s.remote(ctx, "/bin/sh", remoteDir+"/packaging/install.sh", remoteDir+"/tinkercloud-linux-amd64", remoteDir+"/tinkercloud-linux-amd64.metadata.json", remoteDir+"/tinkercloud-linux-amd64.signature"); err != nil {
 			return err
 		}
-		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinkercloud", "init", "--non-interactive", "--domain", s.Config.Domain, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--acme-email", s.Config.ACMEEmail, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
+		if err = s.initWithReadinessRetry(ctx, "/usr/local/bin/tinkercloud", "init", "--non-interactive", "--domain", s.Config.Domain, "--operator-email", s.Config.OperatorEmail, "--email-from", s.Config.EmailFrom, "--resend-api-key-file", remoteDir+"/resend.key", "--hmac-key-file", remoteDir+"/hmac.key"); err != nil {
 			return err
 		}
 		if err = s.remote(ctx, "mkdir", "-m", "0700", "/var/lib/tinkercloud-vps-e2e"); err != nil {
@@ -1263,7 +1263,10 @@ export async function blobSmoke(file) {
 	if blobs {
 		features += "  blobs: true\n"
 	}
-	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\n" + features + "access:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
+	// The acceptance flow deliberately returns to a nested document route after
+	// the second app handoff. Declare the opt-in SPA fallback so this route
+	// proves return-path preservation instead of testing a missing static file.
+	manifest := []byte("version: 1\nname: " + slug + "\nbuild:\n  output: dist\nspa:\n  fallback: index.html\n" + features + "access:\n  mode: private\n  allow:\n    emails:\n      - " + viewerEmail + "\n    domains: []\n")
 	if e = os.WriteFile(filepath.Join(d, "tinker.yaml"), manifest, 0644); e != nil {
 		return nil, 0, "", e
 	}
@@ -1505,8 +1508,8 @@ func (s *Suite) completeDashboardIdentityOTP(ctx context.Context, h *http.Client
 		return err
 	}
 	response.Body.Close()
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/" {
-		return fmt.Errorf("dashboard identity OTP did not complete: status=%d", response.StatusCode)
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/dashboard" {
+		return fmt.Errorf("dashboard identity OTP did not complete: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
 	}
 	if h.Jar == nil {
 		return errors.New("dashboard browser did not retain cookies")
@@ -2209,15 +2212,16 @@ func loopbackSocket(local string) bool {
 	return strings.HasPrefix(local, "127.") || strings.HasPrefix(local, "[::1]") || strings.HasPrefix(local, "::1:")
 }
 
-var hiddenInput = regexp.MustCompile(`name="transaction" value="([^"]+)"`)
+var hiddenInput = regexp.MustCompile(`name="(transaction|csrf)" value="([^"]+)"`)
 
 func hiddenValue(html, name string) string {
-	if name != "transaction" {
+	if name != "transaction" && name != "csrf" {
 		return ""
 	}
-	m := hiddenInput.FindStringSubmatch(html)
-	if len(m) == 2 {
-		return m[1]
+	for _, m := range hiddenInput.FindAllStringSubmatch(html, -1) {
+		if len(m) == 3 && m[1] == name {
+			return m[2]
+		}
 	}
 	return ""
 }

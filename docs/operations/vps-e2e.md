@@ -23,8 +23,8 @@ Prepare:
 - one wildcard `A` record for `*.<domain>` pointing at the VPS. Tinkercloud
   derives `admin.<domain>` for the dashboard and `<slug>.<domain>` for apps;
 - a verified Resend sending domain and API key;
-- distinct operator, deployer, and viewer email addresses, plus an ACME contact
-  email; and
+- distinct operator, deployer, and viewer email addresses; the suite derives its
+  internal ACME contact from the operator email; and
 - a known-hosts entry whose fingerprint was checked through the Hetzner console
   or another out-of-band trusted channel.
 
@@ -86,7 +86,6 @@ export TINKERCLOUD_VPS_OPERATOR_EMAIL='operator@example.com'
 export TINKERCLOUD_VPS_DEPLOYER_EMAIL='deployer@example.com'
 export TINKERCLOUD_VPS_VIEWER_EMAIL='viewer@example.com'
 export TINKERCLOUD_VPS_EMAIL_FROM='tinker@example.com'
-export TINKERCLOUD_VPS_ACME_EMAIL='operator@example.com'
 export TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$PWD/.tinker/vps/resend-api-key"
 export TINKERCLOUD_RESEND_READER_API_KEY_FILE="$PWD/.tinker/vps/resend-reader-api-key"
 export TINKERCLOUD_RESEND_OTP_LEDGER_FILE="$PWD/.tinker/vps/resend-otp-consumed.json"

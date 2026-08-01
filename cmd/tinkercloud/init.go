@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
 )
@@ -41,6 +42,7 @@ type initRuntime struct {
 	ClockOK      func(context.Context) error
 	Run          func(context.Context, string, ...string) error
 	Install      func(configPath, credentialPath string) error
+	DNSLookup    func(context.Context, string) ([]string, error)
 	LocalHealth  func(context.Context, string) error
 	PublicHealth func(context.Context, string) error
 }
@@ -62,6 +64,9 @@ var productionInitRuntime = initRuntime{
 	},
 	Install: func(configPath, credentialPath string) error {
 		return runInstallService([]string{"--config", configPath, "--credentials", credentialPath})
+	},
+	DNSLookup: func(ctx context.Context, host string) ([]string, error) {
+		return net.DefaultResolver.LookupHost(ctx, host)
 	},
 	LocalHealth: func(ctx context.Context, _ string) error {
 		return exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "tinkercloud.service").Run()
@@ -221,6 +226,27 @@ func runPreflight(ctx context.Context, rt initRuntime) error {
 	return nil
 }
 
+// runDNSPreflight proves both names needed by the one-domain public topology
+// resolve before the service can make an ACME request. It deliberately accepts
+// any usable DNS result: the operator may use A, AAAA, or CNAME records and
+// the server cannot safely infer a single expected public address.
+func runDNSPreflight(ctx context.Context, cfg config.Config, lookup func(context.Context, string) ([]string, error)) error {
+	platform := cfg.PlatformHost()
+	if lookup == nil {
+		return fmt.Errorf("tinkercloud: dns_platform_unavailable: configure DNS for %s, then retry init", platform)
+	}
+	if resolved(lookup(ctx, platform)) != nil {
+		return fmt.Errorf("tinkercloud: dns_platform_unavailable: configure DNS for %s, then retry init", platform)
+	}
+	// This otherwise unused valid label proves the wildcard record without
+	// requiring an application to exist or exposing app state to DNS.
+	wildcardProbe := "tinkercloud-init." + cfg.AppSuffix()
+	if resolved(lookup(ctx, wildcardProbe)) != nil {
+		return fmt.Errorf("tinkercloud: dns_wildcard_unavailable: configure wildcard DNS for *.%s, then retry init", cfg.AppSuffix())
+	}
+	return nil
+}
+
 // runInit is intentionally non-interactive. Supplying secret values on argv is
 // rejected by design: only root-readable files are accepted and copied to the
 // systemd EnvironmentFile atomically.
@@ -234,7 +260,6 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	domain := fs.String("domain", "", "root domain; derives admin.<domain> and <slug>.<domain>")
 	email := fs.String("operator-email", "", "initial operator email")
 	emailFrom := fs.String("email-from", "", "verified Resend sender")
-	acmeEmail := fs.String("acme-email", "", "ACME contact email")
 	dataDir := fs.String("data-directory", "/var/lib/tinkercloud", "private data directory")
 	acmeDir := fs.String("acme-cache-directory", "/var/lib/tinkercloud-acme", "private ACME cache directory")
 	updateReleaseBase := fs.String("update-release-base", "", "HTTPS release directory used by manual updates")
@@ -260,10 +285,14 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 			return errors.New("tinkercloud: config_invalid")
 		}
 	} else if os.IsNotExist(err) {
-		if *domain == "" || *emailFrom == "" || *acmeEmail == "" {
+		if *domain == "" || *emailFrom == "" {
 			return errors.New("tinkercloud: config_values_required")
 		}
-		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: *acmeEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
+		normalizedOperatorEmail, normalizeErr := identity.Normalize(*email)
+		if normalizeErr != nil {
+			return errors.New("tinkercloud: config_invalid")
+		}
+		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: normalizedOperatorEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
 		if err := cfg.Validate(); err != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
@@ -338,6 +367,17 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 			return err
 		}
 		if err := state.Complete(operations.InitOperator); err != nil {
+			return err
+		}
+		if err := persist(); err != nil {
+			return err
+		}
+	}
+	if state.Next() == operations.InitDNS {
+		if err := runDNSPreflight(ctx, cfg, rt.DNSLookup); err != nil {
+			return err
+		}
+		if err := state.Complete(operations.InitDNS); err != nil {
 			return err
 		}
 		if err := persist(); err != nil {

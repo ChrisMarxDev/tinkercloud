@@ -128,11 +128,12 @@ const (
 	InitPaths     InitStep = "paths"
 	InitDatabase  InitStep = "database"
 	InitOperator  InitStep = "operator"
+	InitDNS       InitStep = "dns"
 	InitService   InitStep = "service"
 	InitVerified  InitStep = "verified"
 )
 
-var ordered = []InitStep{InitPreflight, InitPaths, InitDatabase, InitOperator, InitService, InitVerified}
+var ordered = []InitStep{InitPreflight, InitPaths, InitDatabase, InitOperator, InitDNS, InitService, InitVerified}
 
 type InitState struct {
 	Completed map[InitStep]bool `json:"completed"`

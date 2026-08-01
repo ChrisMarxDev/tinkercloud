@@ -211,6 +211,8 @@ tasks:
     cmds:
       - ./scripts/check-beta-release-workflow.sh
       - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-stable-release-workflows.sh
+      - ./scripts/check-stable-release-workflows-self-test.sh
       - ./scripts/check-release-key-drift.sh
       - ./scripts/release-test.sh
       - ./packaging/install_test.sh
@@ -221,6 +223,15 @@ tasks:
     cmds:
       - ./scripts/check-beta-release-workflow.sh
       - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-release-key-drift.sh
+      - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+  release:stable-check:
+    desc: Validate stable GitHub and npm CLI release workflows without publishing
+    summary: Checks workflow syntax, production-authority gates, OIDC publication boundaries, and denial self-tests. It never reads a private key or changes GitHub/npm state.
+    cmds:
+      - ./scripts/check-stable-release-workflows.sh
+      - ./scripts/check-stable-release-workflows-self-test.sh
       - ./scripts/check-release-key-drift.sh
       - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 

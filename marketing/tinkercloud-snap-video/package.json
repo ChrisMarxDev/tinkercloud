@@ -1,7 +1,7 @@
 {
   "name": "tinkercloud-snap-video",
   "version": "1.0.0",
-  "description": "Dynamic 13-second product film for Tinkercloud",
+  "description": "Dynamic 25-second product film for Tinkercloud",
   "repository": {},
   "license": "UNLICENSED",
   "private": true,
@@ -25,7 +25,7 @@
     "build": "remotion bundle",
     "render": "remotion render TinkercloudSnap out/tinkercloud-dynamic.mp4",
     "render:no-bgm": "remotion render TinkercloudSnap out/tinkercloud-dynamic-no-bgm.mp4 --props=props-no-bgm.json",
-    "stills": "remotion still TinkercloudSnap out/create.png --frame=68 && remotion still TinkercloudSnap out/deploy.png --frame=160 && remotion still TinkercloudSnap out/upload.png --frame=213 && remotion still TinkercloudSnap out/protected.png --frame=304 && remotion still TinkercloudSnap out/end-card.png --frame=365",
+    "stills": "remotion still TinkercloudSnap out/create.png --frame=110 && remotion still TinkercloudSnap out/deploy.png --frame=250 && remotion still TinkercloudSnap out/upload.png --frame=420 && remotion still TinkercloudSnap out/protected.png --frame=580 && remotion still TinkercloudSnap out/end-card.png --frame=710",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },

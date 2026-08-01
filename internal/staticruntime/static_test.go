@@ -82,6 +82,48 @@ func TestServeVerifiesImmutableEvidenceAfterAuthorization(t *testing.T) {
 		t.Fatalf("corrupt release served: code=%d body=%q reads=%d", w.Code, w.Body.String(), reads)
 	}
 }
+
+func TestServeSPAFallbackRequiresExplicitAppOptIn(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("SPA-PRIVATE"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := releases.Inspect(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	viewer := identity.Identity{ID: "viewer", Email: "viewer@example.com"}
+	sessionsStore := sessions.NewMemoryStore()
+	token, _, err := sessionsStore.Create("app", viewer, time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	authorizer := appauth.Authorizer{Sessions: sessionsStore, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{"app": {AppID: "app", OwnerIdentityID: "owner", Revision: 1, Emails: map[string]struct{}{viewer.Email: {}}, Valid: true}}}}
+	authorize := func(spaFallback bool) appauth.AuthorizationContext {
+		t.Helper()
+		auth, err := authorizer.Authorize(context.Background(), apps.App{ID: "app", Slug: "alpha", ReleaseRoot: root, ReleaseEvidence: evidence, SPAFallback: spaFallback}, token, "req")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return auth
+	}
+	request := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "https://alpha.test/workspace/42?tab=open&tag=first&tag=second&encoded=a%2Bb", nil)
+	}
+
+	denied := httptest.NewRecorder()
+	Serve(authorize(false), denied, request())
+	if denied.Code != http.StatusNotFound || denied.Body.String() == "SPA-PRIVATE" {
+		t.Fatalf("undeclared SPA fallback served route: status=%d body=%q", denied.Code, denied.Body.String())
+	}
+
+	allowed := httptest.NewRecorder()
+	Serve(authorize(true), allowed, request())
+	if allowed.Code != http.StatusOK || allowed.Body.String() != "SPA-PRIVATE" {
+		t.Fatalf("declared SPA fallback did not serve route: status=%d body=%q", allowed.Code, allowed.Body.String())
+	}
+}
+
 func TestOpenBeneathSymlinkSwapNeverLeaks(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside")

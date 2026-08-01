@@ -70,10 +70,18 @@ interim, end-of-life, other-distribution, or future unverified releases deny.
 For a new server, start with the signed installer and resumable
 `tinkercloud setup`. Inspect first, then ask only for the controlled root domain,
 initial operator email, and Resend credential source that cannot be derived.
-Derive `admin.<domain>` and `<slug>.<domain>`, reserve `admin`, `api`, `auth`,
-`status`, `www`, `docs`, and `install`, and ask for one wildcard DNS record.
+Derive `admin.<domain>` and `<slug>.<domain>`, and persist the normalized
+operator email as the internal ACME contact; never ask for, accept, or override
+it through a separate ACME-contact flag, question, or environment input.
+Reserve `admin`, `api`, `auth`, `status`, `www`, `docs`, and `install`, and ask
+for one wildcard DNS record.
 Do not reserve `tinker` or `tinkercloud`. Pause with one exact DNS or Resend action
 when external state is incomplete; resume without re-asking verified answers.
+Before the ACME-capable service starts, require both `admin.<domain>` and a
+synthetic one-label app hostname to resolve. This proves the exact platform and
+wildcard DNS setup without guessing or comparing a public VPS IP; a failure
+must stop before ACME and report the affected non-secret hostname or wildcard
+action.
 
 The workstation `tinker host install|status|doctor|update` commands may perform
 the same root-local flow over an explicit `root@HOST` using normal OpenSSH

@@ -102,6 +102,22 @@ grep -F 'task release:beta-check' skills/distribute-tinker-cli/SKILL.md >/dev/nu
   echo "CLI GitHub beta verification drift" >&2
   exit 1
 }
+grep -F 'task release:stable-check' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable release verification drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run stable-release.yml' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable GitHub workflow drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run npm-cli-publish.yml' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI npm trusted-publish workflow drift" >&2
+  exit 1
+}
+grep -F 'specs/operations/stable-release-contract.md' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+  echo "CLI stable release contract drift" >&2
+  exit 1
+}
 grep -F "npm test --prefix sdk/typescript" skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
   echo "SDK distribution test drift" >&2
   exit 1

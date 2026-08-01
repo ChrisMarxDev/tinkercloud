@@ -1,5 +1,0 @@
-/*
- * Obsolete by design. Tinkercloud-owned operations pages embed the canonical
- * tinkercloud.css asset through webui.FuncMap; do not add a divergent stylesheet
- * or link this file from a native page.
- */

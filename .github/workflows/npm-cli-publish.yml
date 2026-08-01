@@ -1,0 +1,178 @@
+name: npm-cli-publish
+run-name: Publish @tinkercloud/cli v${{ inputs.version }} to ${{ inputs.dist_tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing stable GitHub release version
+        required: true
+        type: string
+      dist_tag:
+        description: Explicit npm dist-tag
+        required: true
+        type: choice
+        options:
+          - latest
+          - next
+      confirmation:
+        description: Type publish-npm-cli-vVERSION using the exact version above
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-cli-publish
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source_commit: ${{ steps.source.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install the pinned trusted-publishing npm CLI
+        run: npm install --global npm@11.5.1
+      - name: Validate stable release and npm destination
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          DIST_TAG: ${{ inputs.dist_tag }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "npm CLI version must be strict MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          tag="v$VERSION"
+          if [[ "$CONFIRMATION" != "publish-npm-cli-$tag" ]]; then
+            echo "npm CLI publication confirmation mismatch" >&2
+            exit 1
+          fi
+          [[ "$DIST_TAG" == "latest" || "$DIST_TAG" == "next" ]] || {
+            echo "unsupported npm dist-tag" >&2
+            exit 1
+          }
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production ./scripts/check-release-key-policy.sh
+          ./scripts/check-release-key-drift.sh
+          git show-ref --verify --quiet "refs/tags/$tag" || { echo "source tag is unavailable" >&2; exit 1; }
+          source_commit=$(git rev-list -n 1 "$tag")
+          git merge-base --is-ancestor "$source_commit" origin/main || {
+            echo "npm CLI source tag is not reachable from origin/main" >&2
+            exit 1
+          }
+          git checkout --detach "$source_commit"
+          test -z "$(git status --porcelain=v1)" || { echo "npm CLI source checkout is dirty" >&2; exit 1; }
+          state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
+          if [[ "$state" != $'false\tfalse\t'"$tag" ]]; then
+            echo "npm CLI requires an existing published stable GitHub release" >&2
+            exit 1
+          fi
+          visibility=$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)
+          [[ "$visibility" == "PUBLIC" ]] || { echo "npm provenance requires a public repository" >&2; exit 1; }
+          package_version=$(node -p "require('./sdk/typescript/package.json').version")
+          [[ "$package_version" == "$VERSION" ]] || { echo "source package version drift" >&2; exit 1; }
+          package_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error --output /dev/null --write-out '%{http_code}' https://registry.npmjs.org/%40tinkercloud%2Fcli)
+          [[ "$package_status" == "200" ]] || {
+            echo "@tinkercloud/cli must be bootstrapped interactively before trusted publishing" >&2
+            exit 1
+          }
+          version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error --output /dev/null --write-out '%{http_code}' "https://registry.npmjs.org/%40tinkercloud%2Fcli/$VERSION")
+          case "$version_status" in
+            404) ;;
+            200) echo "@tinkercloud/cli@$VERSION already exists" >&2; exit 1 ;;
+            *) echo "npm registry version check failed with HTTP $version_status" >&2; exit 1 ;;
+          esac
+          npm_version=$(npm --version)
+          NPM_VERSION="$npm_version" node -e '
+            const [major, minor, patch] = process.env.NPM_VERSION.split(".").map(Number);
+            if (major < 11 || (major === 11 && minor < 5) || (major === 11 && minor === 5 && patch < 1)) {
+              console.error("trusted publishing requires npm 11.5.1 or newer");
+              process.exit(1);
+            }
+          '
+          echo "source_commit=$source_commit" >>"$GITHUB_OUTPUT"
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm-cli
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.source_commit }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install the pinned trusted-publishing npm CLI
+        run: npm install --global npm@11.5.1
+      - name: Download and verify the canonical stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production ./scripts/check-release-key-policy.sh
+          tag="v$VERSION"
+          state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
+          [[ "$state" == $'false\tfalse\t'"$tag" ]] || { echo "stable release state changed" >&2; exit 1; }
+          release_dir="$RUNNER_TEMP/tinkercloud-release-v$VERSION"
+          mkdir -p "$release_dir"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir"
+          ./scripts/release-verify.sh "$release_dir"
+          distribution_dir="$RUNNER_TEMP/tinkercloud-distribution-v$VERSION"
+          ./scripts/distribution-prepare.sh "$VERSION" "$release_dir" "$distribution_dir" \
+            "@tinkercloud/cli" Tinker tinker \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/"
+          echo "CLI_TARBALL=$distribution_dir/tinkercloud-cli-$VERSION.tgz" >>"$GITHUB_ENV"
+      - name: Recheck npm version absence
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error --output /dev/null --write-out '%{http_code}' "https://registry.npmjs.org/%40tinkercloud%2Fcli/$VERSION")
+          [[ "$version_status" == "404" ]] || { echo "npm CLI version is no longer publishable" >&2; exit 1; }
+      - name: Publish exact CLI tarball with trusted publishing
+        env:
+          DIST_TAG: ${{ inputs.dist_tag }}
+        run: npm publish "$CLI_TARBALL" --access public --tag "$DIST_TAG"
+      - name: Verify the public npm package
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/tinkercloud-npm-prefix"
+          for attempt in 1 2 3 4 5; do
+            if npm install --global --ignore-scripts --prefix "$prefix" "@tinkercloud/cli@$VERSION"; then
+              break
+            fi
+            [[ "$attempt" != 5 ]] || exit 1
+            sleep 5
+          done
+          installed_version=$("$prefix/bin/tinker" version)
+          [[ "$installed_version" == "tinker $VERSION" ]] || {
+            echo "published npm CLI version mismatch" >&2
+            exit 1
+          }

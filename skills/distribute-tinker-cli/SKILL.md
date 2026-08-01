@@ -17,8 +17,9 @@ Classify the request before doing work:
   namespace, create a release, update a tap, or advance a tag.
 - **Publish**: proceed only when the user explicitly asks to publish. Stable or
   package-manager publication requires the locked identity, exact version,
-  verified destination ownership, and channel. Before stable distribution,
-  only the separately contracted GitHub beta channel may publish.
+  verified destination ownership, channel, production authority, and protected
+  workflow Environment. Before production-key rotation, only the separately
+  contracted GitHub beta channel may publish.
 
 An instruction to prepare, test, distribute later, or get release-ready is not
 publication authority. Stop before stable or package-manager publication while
@@ -35,9 +36,13 @@ From the repository root, read in order:
 4. `specs/operations/release-artifact-contract.md`
 5. `specs/operations/update-compatibility-contract.md`
 6. `specs/operations/beta-release-contract.md`
-7. `docs/operations/release-pipeline.md`
-8. `docs/decisions/0044-signed-distribution-compatibility-manifest.md`
-9. `docs/decisions/0046-github-beta-release-channel.md`
+7. `specs/operations/stable-release-contract.md`
+8. `specs/operations/stable-distribution-denial-charter.md`
+9. `docs/operations/release-pipeline.md`
+10. `docs/operations/cli-distribution.md`
+11. `docs/decisions/0044-signed-distribution-compatibility-manifest.md`
+12. `docs/decisions/0046-github-beta-release-channel.md`
+13. `docs/decisions/0053-stable-github-and-npm-cli-distribution.md`
 
 Preserve unrelated work in a dirty checkout. Never rewrite an existing release
 directory or use a production signing key implicitly.
@@ -87,7 +92,8 @@ Prove all of the following before calling preparation complete:
 - Every CLI artifact has exact metadata, checksum, Ed25519 signature, and the
   same release version.
 - The npm candidate contains the four native `tinker` binaries, one reviewed
-  launcher, package metadata, and the Apache-2.0 license.
+  launcher, README, canonical repository/provenance metadata, and the
+  Apache-2.0 license.
 - The npm `bin` key, launcher target, native artifact names, Homebrew command,
   installer command, and documented invocation all use the approved final
   identity.
@@ -95,7 +101,8 @@ Prove all of the following before calling preparation complete:
   hook, server binary, signing key, credential, release URL selected at install
   time, or unsupported platform claim.
 - npm, pnpm, Yarn, and Bun consume the same npm artifact; do not create four
-  divergent packages.
+  divergent packages. Keep Yarn's `preferUnplugged` hint so the selected native
+  executable is present on the real filesystem under Plug'n'Play.
 - The Homebrew formula selects only the verified macOS artifact for the local
   architecture and records the release checksum. Formula preparation never
   mutates a tap.
@@ -110,6 +117,7 @@ Run at minimum:
 go test ./...
 npm test --prefix sdk/typescript
 task release:check
+task release:stable-check
 ./scripts/check-skill-drift
 git diff --check
 ```
@@ -158,20 +166,57 @@ Before any external mutation, require:
 - a clean, intentional source commit and immutable signed release directory;
 - the exact version and prerelease/stable channel;
 - an approved release authority and public verification key;
-- explicit approval for the external destinations being mutated.
+- explicit approval for the external destinations being mutated;
+- `packaging/release-key-policy.json` classifies the synchronized committed
+  trust anchor as `production`, never `beta`;
+- the public repository has immutable releases and reviewer-protected
+  `stable-release` and `npm-cli` Environments; and
+- `@tinkercloud/cli` already exists and trusts only
+  `npm-cli-publish.yml`/`npm-cli` for `npm publish` OIDC.
 
-Publish in dependency order:
+Run `task release:stable-check` before any dispatch. Publish GitHub first:
 
-1. Create the immutable canonical hosted release with the exact verified files.
-2. Verify remote checksums and signatures by downloading them as an anonymous
+```sh
+gh workflow run stable-release.yml \
+  --ref main \
+  -f version="$VERSION" \
+  -f confirmation="publish-stable-v$VERSION"
+```
+
+This must stop for the `stable-release` Environment approval. After it
+finishes, verify the exact and `latest` one-line installers anonymously.
+
+npm trusted publishing cannot create a package that does not yet exist. For
+the first version only, generate the tarball from the downloaded stable release
+and publish that exact tarball interactively with 2FA. Then configure the npm
+trusted publisher named in the contract. Never introduce a bootstrap token in
+GitHub Actions.
+
+For every later version, dispatch only:
+
+```sh
+gh workflow run npm-cli-publish.yml \
+  --ref main \
+  -f version="$VERSION" \
+  -f dist_tag="$DIST_TAG" \
+  -f confirmation="publish-npm-cli-v$VERSION"
+```
+
+The workflow stops for `npm-cli` approval, downloads the stable release,
+verifies it, generates and allowlist-checks the tarball, rejects an existing
+version, and publishes through short-lived OIDC with provenance.
+
+Continue in dependency order:
+
+1. Verify remote checksums and signatures by downloading them as an anonymous
    consumer.
-3. Publish the generated npm tarball with an explicit dist-tag. Never publish
+2. Verify the generated npm tarball with the explicit dist-tag. Never publish
    from a rebuilt or modified package directory.
-4. Commit the generated `Tinker` formula to
+3. Commit the generated `Tinker` formula to
    `ChrisMarxDev/homebrew-tinkercloud` without changing its version, URLs, or
    hashes.
-5. Expose the reviewed one-line installer only from the approved HTTPS origin.
-6. Install independently through npm, pnpm, Yarn, Bun, Homebrew, and the
+4. Expose the reviewed one-line installer only from the approved HTTPS origin.
+5. Install independently through npm, pnpm, Yarn, Bun, Homebrew, and the
    one-line path; compare `tinker version` and artifact identity with the signed
    release.
 

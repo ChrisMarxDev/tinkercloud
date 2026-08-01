@@ -1,6 +1,6 @@
 # Tinkercloud dynamic product film
 
-A 12.93-second, beat-synchronised Remotion film for Tinkercloud.
+A 25.17-second, beat-synchronised Remotion film for Tinkercloud.
 
 The film turns the product path into one continuous motion arc:
 
@@ -21,6 +21,10 @@ npm run render:no-bgm
 
 The main render includes the soundtrack. The no-BGM variant retains the sound
 effects for editors who want to lay in different music.
+
+The second pass uses Mixkit’s “Deep Urban” as the music bed and replaces the
+original digital feedback sounds with physical keyboard, air movement,
+mechanical lock, deep-impact, riser, and shimmer textures.
 
 See `DYNAMIC_CUT_SPEC.md` for the creative and timing decisions and
 `AUDIO_ATTRIBUTION.md` for the audio sources.

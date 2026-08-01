@@ -16,21 +16,26 @@ import {
 import {TINKER} from "../theme";
 
 const flights = [
-  {name: "index.html", tone: "yellow" as const, y: 210, delay: 3},
-  {name: "app.js", tone: "pink" as const, y: 382, delay: 8},
-  {name: "styles.css", tone: "blue" as const, y: 550, delay: 13},
-  {name: "tinker.yaml", tone: "mint" as const, y: 714, delay: 18},
+  {name: "index.html", tone: "yellow" as const, y: 210, delay: 22},
+  {name: "app.js", tone: "pink" as const, y: 382, delay: 35},
+  {name: "styles.css", tone: "blue" as const, y: 550, delay: 47},
+  {name: "tinker.yaml", tone: "mint" as const, y: 714, delay: 57},
 ];
 
 export const UploadFlightScene: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const cloudEnter = spring({
-    frame: frame - 3,
+    frame: frame - 6,
     fps,
     config: {damping: 13, stiffness: 120, mass: 0.9},
   });
-  const sweep = interpolate(frame, [67, 82], [0, 1], {
+  const verified = spring({
+    frame: frame - 108,
+    fps,
+    config: {damping: 14, stiffness: 175, mass: 0.72},
+  });
+  const sweep = interpolate(frame, [153, 173], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.inOut(Easing.quad),
@@ -62,7 +67,7 @@ export const UploadFlightScene: React.FC = () => {
         title="Watch it fly."
         detail="Tinkercloud verifies the release before it goes live."
         frame={frame}
-        enterAt={2}
+        enterAt={8}
       />
 
       <div
@@ -83,11 +88,38 @@ export const UploadFlightScene: React.FC = () => {
             width: 560,
             height: 560,
             borderRadius: 999,
-            border: "3px solid rgba(47,103,245,0.2)",
-            transform: `rotate(${frame * 0.5}deg) scale(${0.92 + Math.sin(frame * 0.08) * 0.025})`,
+            border: `3px solid rgba(47,103,245,${0.2 + verified * 0.2})`,
+            transform: `rotate(${frame * (0.5 - verified * 0.42)}deg) scale(${
+              0.92 + Math.sin(frame * 0.08) * 0.025 + verified * 0.04
+            })`,
           }}
         />
         <CloudMark size={510} color={TINKER.ink} shadowColor={TINKER.primary} />
+        <div
+          style={{
+            position: "absolute",
+            top: 238,
+            display: "grid",
+            placeItems: "center",
+            width: 108,
+            height: 108,
+            borderRadius: 999,
+            color: "#fffef8",
+            background: TINKER.positive,
+            border: "8px solid #fffef8",
+            boxShadow: "0 16px 0 rgba(32,6,117,0.12)",
+            fontSize: 62,
+            fontWeight: 900,
+            opacity: verified,
+            transform: `scale(${interpolate(verified, [0, 1], [0.4, 1])}) rotate(${interpolate(
+              verified,
+              [0, 1],
+              [-18, 0],
+            )}deg)`,
+          }}
+        >
+          ✓
+        </div>
         <div
           style={{
             position: "absolute",
@@ -102,7 +134,7 @@ export const UploadFlightScene: React.FC = () => {
             fontWeight: 900,
           }}
         >
-          VERIFYING RELEASE
+          {verified > 0.55 ? "RELEASE VERIFIED" : "VERIFYING RELEASE"}
         </div>
       </div>
 
@@ -111,7 +143,7 @@ export const UploadFlightScene: React.FC = () => {
           frame: frame - tile.delay,
           fps,
           config: {damping: 13, stiffness: 115, mass: 0.75},
-          durationInFrames: 25,
+          durationInFrames: 42,
         });
         const arc = Math.sin(flight * Math.PI);
         const x = interpolate(flight, [0, 1], [-250, 1275 + index * 28]);

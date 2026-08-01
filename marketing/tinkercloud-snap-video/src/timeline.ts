@@ -1,17 +1,17 @@
 export const FPS = 30;
-export const BEAT_SECONDS = 0.461558;
+export const BEAT_SECONDS = 0.483845;
 export const BEAT_FRAMES = BEAT_SECONDS * FPS;
-export const MUSIC_TRIM_BEFORE = Math.round(74.094875 * FPS);
+export const MUSIC_TRIM_BEFORE = Math.round(10.424087 * FPS);
 
 export const beat = (index: number) => Math.round(index * BEAT_FRAMES);
 
 export const CUTS = {
   create: 0,
-  deploy: beat(8),
-  upload: beat(14),
-  protected: beat(20),
-  brand: beat(24),
-  end: beat(28),
+  deploy: beat(12),
+  upload: beat(22),
+  protected: beat(34),
+  brand: beat(44),
+  end: beat(52),
 } as const;
 
 export const DURATION_IN_FRAMES = CUTS.end;

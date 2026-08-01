@@ -29,6 +29,13 @@ one complete signed prerelease through the protected repository workflow. It
 uses the locked Tinkercloud identities and never mutates npm, JSR, Homebrew,
 stable/latest, or DNS state.
 
+After identity lock, the stable GitHub and npm CLI workflows remain disabled
+until the beta trust anchor is rotated to a production authority, the GitHub
+repository is public, protected Environments exist, and the npm package has
+been bootstrapped interactively with 2FA. Later npm CLI versions use the exact
+`npm-cli-publish.yml` trusted publisher with OIDC and provenance; no registry
+token is stored in GitHub.
+
 ## Shared gates
 
 - Read `PRINCIPLES.md`, then `PRD.md`, then the relevant distribution,
@@ -56,6 +63,9 @@ stable/latest, or DNS state.
   downloader, or install-time release-origin selection.
 - Homebrew and the one-line installer refer to the same verified release
   artifacts. Preparation does not mutate a tap or hosted origin.
+- Stable release work must read the stable release contract and denial charter,
+  validate `release-key-policy.json`, and distinguish the one-time npm package
+  bootstrap from later OIDC publications.
 
 ## SDK-specific gates
 

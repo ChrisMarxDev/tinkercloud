@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/config"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
@@ -35,6 +36,7 @@ func fakeInitRuntime(t *testing.T) (initRuntime, *int) {
 			return nil
 		},
 		Install:      func(string, string) error { *installs++; return nil },
+		DNSLookup:    func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil },
 		LocalHealth:  func(context.Context, string) error { return nil },
 		PublicHealth: func(context.Context, string) error { return nil },
 	}
@@ -50,7 +52,7 @@ func (p pipeListener) Close() error              { return p.Conn.Close() }
 func (p pipeListener) Addr() net.Addr            { return p.Conn.LocalAddr() }
 
 func initArgs(root string) []string {
-	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-from", "operator@example.test", "--acme-email", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--resend-api-key-file", filepath.Join(root, "resend"), "--hmac-key-file", filepath.Join(root, "hmac")}
+	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--resend-api-key-file", filepath.Join(root, "resend"), "--hmac-key-file", filepath.Join(root, "hmac")}
 }
 
 func TestSupportedUbuntuHostDenyCharter(t *testing.T) {
@@ -161,6 +163,56 @@ func TestInitCompletesOnlyAfterAllDurableSteps(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(root, "etc", "config.yaml")); string(b) == "" || string(b) == "resend-secret" {
 		t.Fatal("config wrote secret")
 	}
+	if b, _ := os.ReadFile(filepath.Join(root, "etc", "config.yaml")); !strings.Contains(string(b), "acme:\n  email: operator@example.test\n") {
+		t.Fatalf("ACME contact was not derived from operator email: %s", b)
+	}
+}
+
+func TestInitRejectsLegacyACMEEmailFlagBeforeHostMutation(t *testing.T) {
+	root := t.TempDir()
+	writeInitSecrets(t, root)
+	rt, _ := fakeInitRuntime(t)
+	preflightRan := false
+	rt.ReadFile = func(string) ([]byte, error) {
+		preflightRan = true
+		return nil, errors.New("must not be called")
+	}
+	oldUID := effectiveUID
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() { effectiveUID = oldUID })
+	args := append(initArgs(root), "--acme-email", "different@example.test")
+	if err := runInit(args, os.Stdout, rt); err == nil || err.Error() != "tinkercloud: invalid_arguments" {
+		t.Fatalf("legacy ACME flag result = %v", err)
+	}
+	if preflightRan {
+		t.Fatal("legacy ACME flag reached host preflight")
+	}
+}
+
+func TestInitStoresNormalizedOperatorEmailAsACMEContact(t *testing.T) {
+	root := t.TempDir()
+	writeInitSecrets(t, root)
+	rt, _ := fakeInitRuntime(t)
+	oldUID := effectiveUID
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() { effectiveUID = oldUID })
+	args := initArgs(root)
+	for i := range args {
+		if args[i] == "operator@example.test" {
+			args[i] = " operator@EXAMPLE.TEST "
+			break
+		}
+	}
+	if err := runInit(args, os.Stdout, rt); err != nil {
+		t.Fatal(err)
+	}
+	config, err := os.ReadFile(filepath.Join(root, "etc", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(config), "acme:\n  email: operator@example.test\n") {
+		t.Fatalf("ACME contact = %s, want normalized operator email", config)
+	}
 }
 
 func TestInitInterruptedServiceIsRetryable(t *testing.T) {
@@ -192,6 +244,63 @@ func TestInitInterruptedServiceIsRetryable(t *testing.T) {
 	}
 	if *installs != 2 {
 		t.Fatal(*installs)
+	}
+}
+
+func TestInitDNSPreflightDenyCharter(t *testing.T) {
+	for name, lookup := range map[string]func(context.Context, string) ([]string, error){
+		"platform missing": func(_ context.Context, host string) ([]string, error) {
+			if host == "admin.apps.tinker.example.test" {
+				return nil, errors.New("not found")
+			}
+			return []string{"192.0.2.1"}, nil
+		},
+		"wildcard empty": func(_ context.Context, host string) ([]string, error) {
+			if host == "tinkercloud-init.apps.tinker.example.test" {
+				return nil, nil
+			}
+			return []string{"2001:db8::1"}, nil
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeInitSecrets(t, root)
+			rt, installs := fakeInitRuntime(t)
+			rt.DNSLookup = lookup
+			oldUID := effectiveUID
+			effectiveUID = func() int { return 0 }
+			t.Cleanup(func() { effectiveUID = oldUID })
+
+			err := runInit(initArgs(root), os.Stdout, rt)
+			if err == nil || !strings.Contains(err.Error(), "dns_") || !strings.Contains(err.Error(), "configure") || strings.Contains(err.Error(), "192.0.2.1") || strings.Contains(err.Error(), "2001:db8") {
+				t.Fatalf("DNS failure result = %v", err)
+			}
+			if *installs != 0 {
+				t.Fatalf("service installed before DNS preflight: %d", *installs)
+			}
+			stateBytes, readErr := os.ReadFile(filepath.Join(root, "etc", "init-state.json"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			state, parseErr := operations.ParseInitState(stateBytes)
+			if parseErr != nil || state.Next() != operations.InitDNS {
+				t.Fatalf("init state = %q, %v, %v", stateBytes, state, parseErr)
+			}
+		})
+	}
+}
+
+func TestRunDNSPreflightAcceptsResolvedNamesWithoutAddressComparison(t *testing.T) {
+	var hosts []string
+	cfg := config.Config{Domain: "example.test"}
+	if err := runDNSPreflight(context.Background(), cfg, func(_ context.Context, host string) ([]string, error) {
+		hosts = append(hosts, host)
+		return []string{"2001:db8::1"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(hosts, ","), "admin.example.test,tinkercloud-init.example.test"; got != want {
+		t.Fatalf("DNS hosts = %q, want %q", got, want)
 	}
 }
 

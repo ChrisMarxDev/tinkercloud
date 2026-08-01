@@ -368,7 +368,8 @@ curl thin installer | sudo sh
 → discover host, ports, time, disk, and supported OS
 → ask only for the base domain, operator email, and Resend credential source
   that cannot be derived
-→ derive `admin.<domain>` and `<slug>.<domain>`; reserve platform labels
+→ derive `admin.<domain>`, `<slug>.<domain>`, and the internal ACME contact
+  from the normalized operator email; reserve platform labels
 → show the one wildcard DNS record and pause until its public value is correct
 → create service user, generated config, credentials, and data directory
 → initialize SQLite and operator

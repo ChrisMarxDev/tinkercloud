@@ -162,6 +162,34 @@ tinker host update root@HOST --release-base "$RELEASE_BASE"
 The beta workflow is governed by
 [`specs/operations/beta-release-contract.md`](../../specs/operations/beta-release-contract.md).
 
+## Publish stable CLI channels
+
+Stable distribution is implemented as two separate manual workflows:
+
+1. `stable-release.yml` builds, signs, remotely verifies, and publishes the
+   canonical GitHub release; and
+2. `npm-cli-publish.yml` downloads that release, verifies it, derives the exact
+   `@tinkercloud/cli` tarball, and publishes it with npm trusted-publisher OIDC.
+
+Both workflows fail while `packaging/release-key-policy.json` identifies the
+committed authority as `beta`. Rotate to a separately controlled production
+key and synchronize every embedded trust anchor before changing that policy.
+The GitHub repository must be public, releases immutable, and the
+`stable-release` and `npm-cli` Environments reviewer-protected.
+
+The first npm version is a one-time exception: npm requires a package to exist
+before it can be assigned a trusted publisher. Publish the exact generated
+tarball interactively with 2FA, then bind `@tinkercloud/cli` to
+`npm-cli-publish.yml`, repository `ChrisMarxDev/tinkercloud`, Environment
+`npm-cli`, with only `npm publish` allowed. Later versions use Node 24, npm
+11.5.1 or newer, `id-token: write`, no registry token, and automatic
+provenance.
+
+The complete one-time setup and dispatch commands are in
+[CLI distribution](cli-distribution.md). The normative behavior and denials
+are in the [stable release contract](../../specs/operations/stable-release-contract.md)
+and [denial charter](../../specs/operations/stable-distribution-denial-charter.md).
+
 ## Install the deployer client
 
 Deployer machines install only `tinker`, never the privileged server binary. The
@@ -183,13 +211,16 @@ trust root. Obtain this script from the signed source release or a reviewed
 checkout; the public key embedded in it is the verification authority.
 
 The stable one-line form remains a template until a stable GitHub release is
-approved:
+published and anonymously verified:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsS \
-  https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh |
-  TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/ sh
+  https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh |
+  TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/ sh
 ```
+
+Replace both `latest` path segments with `download/vVERSION` for an exact,
+reproducible version.
 
 The HTTPS bootstrap authenticates the reviewed installer; the installer then
 uses the pinned Ed25519 key for the selected native binary. Do not advertise
@@ -216,7 +247,7 @@ Homebrew formula is generated from the verified macOS checksums but no tap is
 created or modified.
 
 Public commands such as `npm install -g @tinkercloud/cli`,
-`pnpm add -g @tinkercloud/cli`, `yarn global add @tinkercloud/cli`,
+`pnpm add -g @tinkercloud/cli`, `yarn add --dev @tinkercloud/cli`,
 `bun add -g @tinkercloud/cli`, and
 `brew install ChrisMarxDev/tinkercloud/tinker` remain documentation templates
 until namespace ownership and the corresponding release channels are approved.

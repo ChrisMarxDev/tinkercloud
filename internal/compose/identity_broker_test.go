@@ -271,6 +271,39 @@ func TestIdentityBrokerDashboardLogoutRequiresOriginAndCSRFThenRevokesGlobalIden
 	}
 }
 
+func TestIdentityBrokerViewerWithoutDashboardRoleCanUseNoRoleGlobalLogout(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	base := newBrokerStore(now)
+	store := &dashboardDeniedBrokerStore{brokerStore: base}
+	b := IdentityBroker{Store: store, PlatformHost: "admin.apps.tinker.test", AppSuffix: "apps.tinker.test", Now: func() time.Time { return now }}
+	h := b.PlatformHandler(http.NotFoundHandler())
+
+	page := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
+	r.Host = "admin.apps.tinker.test"
+	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
+	h.ServeHTTP(page, r)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "This account cannot use the dashboard.") {
+		t.Fatalf("viewer no-role page status=%d body=%q", page.Code, page.Body.String())
+	}
+	csrf := cookieByName(page.Result().Cookies(), browseridentity.CSRFCookieName)
+	if csrf == nil || !strings.Contains(page.Body.String(), `name="csrf" value="`+csrf.Value+`"`) {
+		t.Fatalf("viewer no-role logout form omitted identity-bound CSRF: cookies=%+v body=%q", page.Result().Cookies(), page.Body.String())
+	}
+
+	logout := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/logout", strings.NewReader("csrf="+url.QueryEscape(csrf.Value)))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(&http.Cookie{Name: GlobalIdentityCookieName, Value: "global"})
+	r.AddCookie(csrf)
+	h.ServeHTTP(logout, r)
+	if logout.Code != http.StatusSeeOther || logout.Header().Get("Location") != "/login" || !hasExpiredCookie(logout.Result().Cookies(), GlobalIdentityCookieName) || !hasExpiredCookie(logout.Result().Cookies(), browseridentity.CSRFCookieName) {
+		t.Fatalf("viewer global logout status=%d location=%q cookies=%+v", logout.Code, logout.Header().Get("Location"), logout.Result().Cookies())
+	}
+}
+
 func TestIdentityBrokerBrowserBindingIsHostOnlyOpaqueAndNonAuthorizing(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)
@@ -421,7 +454,7 @@ func TestConfiguredIdentityBrokerFailsClosedInsteadOfLegacyAppLogin(t *testing.T
 
 func TestPlatformLoginWithViewerIdentityAndNoDashboardRoleDoesNotLoop(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
-	store := dashboardDeniedBrokerStore{brokerStore: *newBrokerStore(now)}
+	store := dashboardDeniedBrokerStore{brokerStore: newBrokerStore(now)}
 	b := IdentityBroker{Store: &store, Now: func() time.Time { return now }}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
@@ -788,7 +821,7 @@ type brokerStore struct {
 	platformChallenges map[string]brokerPlatformChallenge
 }
 
-type dashboardDeniedBrokerStore struct{ brokerStore }
+type dashboardDeniedBrokerStore struct{ *brokerStore }
 
 func (*dashboardDeniedBrokerStore) AuthenticateDashboardIdentity(context.Context, string, time.Time) (persistence.DashboardIdentityResult, error) {
 	return persistence.DashboardIdentityResult{}, persistence.ErrIdentity

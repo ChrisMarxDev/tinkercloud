@@ -1,4 +1,4 @@
 interface:
   display_name: "Distribute Tinker CLI"
   short_description: "Prepare and release the signed Tinker CLI"
-  default_prompt: "Use $distribute-tinker-cli to prepare and verify CLI distribution candidates without publishing them."
+  default_prompt: "Use $distribute-tinker-cli to prepare or safely publish the signed Tinker CLI through GitHub and npm."

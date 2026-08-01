@@ -36,7 +36,7 @@ func configEnv(t *testing.T) map[string]string {
 	if err := os.WriteFile(key, []byte("re_test\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINKERCLOUD_VPS_DOMAIN": "example.test", "TINKERCLOUD_VPS_OPERATOR_EMAIL": "operator@example.test", "TINKERCLOUD_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINKERCLOUD_VPS_VIEWER_EMAIL": "viewer@example.test", "TINKERCLOUD_VPS_EMAIL_FROM": "tinker@example.test", "TINKERCLOUD_VPS_ACME_EMAIL": "admin@example.test", "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": key}
+	return map[string]string{EnvEnabled: "1", EnvTarget: "root@203.0.113.10", EnvAcknowledge: "root@203.0.113.10", EnvKnownHosts: kh, "TINKERCLOUD_VPS_DOMAIN": "example.test", "TINKERCLOUD_VPS_OPERATOR_EMAIL": "operator@example.test", "TINKERCLOUD_VPS_DEPLOYER_EMAIL": "deployer@example.test", "TINKERCLOUD_VPS_VIEWER_EMAIL": "viewer@example.test", "TINKERCLOUD_VPS_EMAIL_FROM": "tinker@example.test", "TINKERCLOUD_VPS_RESEND_API_KEY_FILE": key}
 }
 func TestLoadConfigRequiresExplicitGateAndAcknowledgement(t *testing.T) {
 	v := configEnv(t)
@@ -268,7 +268,7 @@ func (r *initRetryRunner) Run(_ context.Context, name string, args ...string) ([
 
 func verificationPendingState(t *testing.T) []byte {
 	t.Helper()
-	return []byte(`{"completed":{"preflight":true,"paths":true,"database":true,"operator":true,"service":true}}`)
+	return []byte(`{"completed":{"preflight":true,"paths":true,"database":true,"operator":true,"dns":true,"service":true}}`)
 }
 
 func TestInitReadinessRetriesOnlyPersistedPublicHealth(t *testing.T) {
@@ -568,12 +568,66 @@ func TestReuseUpdateStagesOnlySignedManifestEvidence(t *testing.T) {
 		}
 	}
 }
-func TestHiddenTransactionAndMarkerDenial(t *testing.T) {
+func TestHiddenTransactionAndCSRFExtractionIsFixedToKnownServerFields(t *testing.T) {
 	if got := hiddenValue(`<input name="transaction" value="otp_x">`, "transaction"); got != "otp_x" {
+		t.Fatal(got)
+	}
+	if got := hiddenValue(`<input name="csrf" value="gis_1.csrf-value">`, "csrf"); got != "gis_1.csrf-value" {
+		t.Fatal(got)
+	}
+	if got := hiddenValue(`<input name="csrf" value="first"><input name="transaction" value="second">`, "transaction"); got != "second" {
 		t.Fatal(got)
 	}
 	if got := hiddenValue(`<input name="transaction" value="otp_x">`, "email"); got != "" {
 		t.Fatal(got)
+	}
+}
+
+func TestDashboardIdentityOTPRequiresDashboardCompletionRedirect(t *testing.T) {
+	command := filepath.Join(t.TempDir(), "otp-reader")
+	if err := os.WriteFile(command, []byte("#!/bin/sh\nprintf '123456\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	newClient := func(location string) *http.Client {
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+			Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				headers := make(http.Header)
+				body := ""
+				switch {
+				case r.Method == http.MethodGet && r.URL.Path == "/login":
+					body = `<form action="/login"><input name="email"></form>`
+					headers.Add("Set-Cookie", (&http.Cookie{Name: "__Host-tinker_browser", Value: "binding", Path: "/", Secure: true, HttpOnly: true}).String())
+					return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+				case r.Method == http.MethodPost && r.URL.Path == "/login":
+					body = `<input name="transaction" value="pid_1">`
+					return &http.Response{StatusCode: http.StatusOK, Header: headers, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+				case r.Method == http.MethodPost && r.URL.Path == "/login/verify":
+					headers.Set("Location", location)
+					headers.Add("Set-Cookie", (&http.Cookie{Name: "__Host-tinker_identity", Value: "identity", Path: "/", Secure: true, HttpOnly: true}).String())
+					return &http.Response{StatusCode: http.StatusSeeOther, Header: headers, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+				default:
+					t.Fatalf("unexpected request %s %s", r.Method, r.URL)
+					return nil, nil
+				}
+			}),
+		}
+	}
+
+	s := Suite{Config: Config{Domain: "example.test", ViewerEmail: "viewer@example.test", OTPCommand: command}}
+	if err := s.completeDashboardIdentityOTP(context.Background(), newClient("/dashboard")); err != nil {
+		t.Fatalf("dashboard completion redirect rejected: %v", err)
+	}
+	if err := s.completeDashboardIdentityOTP(context.Background(), newClient("/")); err == nil {
+		t.Fatal("unexpected dashboard completion redirect accepted")
 	}
 }
 
@@ -754,7 +808,7 @@ func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 		t.Fatalf("archive A: bytes=%d size=%d marker=%q err=%v", len(a), sizeA, markerA, err)
 	}
 	m := smokeManifest(t, a)
-	if m.Name != "vps-smoke-a" || !m.KV || !m.Realtime || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
+	if m.Name != "vps-smoke-a" || m.SPAFallback != "index.html" || !m.KV || !m.Realtime || !m.Blobs || len(m.Emails) != 1 || m.Emails[0] != viewer || len(m.Domains) != 0 {
 		t.Fatalf("smoke policy = %#v", m)
 	}
 	_, _, markerB, err := smokeArchive("vps-smoke-b", viewer)

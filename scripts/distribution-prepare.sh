@@ -42,4 +42,7 @@ node "$root/scripts/generate-homebrew-formula.mjs" "$release_dir" "$output_dir/h
   cd "$output_dir/npm"
   npm pack --ignore-scripts --silent --pack-destination "$output_dir"
 )
+tarball="$output_dir/tinkercloud-cli-$version.tgz"
+test -f "$tarball" || { echo "npm CLI tarball unavailable" >&2; exit 1; }
+node "$root/scripts/verify-npm-cli-candidate.mjs" "$output_dir/npm" "$version" "$tarball"
 echo "distribution candidates written to $output_dir (not published)"

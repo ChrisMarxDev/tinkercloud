@@ -29,6 +29,15 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 
 - Init advances idempotent named steps only after each adapter reports durable
   success; an interrupted step remains retryable.
+- Before installing or starting the ACME-capable service, init performs a
+  bounded DNS preflight for the derived exact platform hostname
+  `admin.{domain}` and a fixed synthetic one-label app hostname beneath
+  `{domain}`. The latter proves that the configured wildcard resolves without
+  requiring an active app. Either lookup failure or an empty answer leaves the
+  DNS step incomplete, starts no service, and reports the exact non-secret host
+  or wildcard action to correct. This is a resolution gate, not an IP-address
+  comparison: DNS may legitimately use an A, AAAA, or CNAME answer. It does
+  not contact ACME or any certificate authority.
 - An existing host enables the LLM encryption root only through local-root
   `tinkercloud llm enable`. It creates or verifies the root-owned credential entry
   without revealing it, writes only the environment reference to config, then
@@ -91,9 +100,9 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   `deployer_applied_service_refresh_failed` because the durable mutation is not
   rolled back.
 - Init state is an ordered, fail-closed JSON record beside the root-owned
-  config. It records `preflight`, `paths`, `database`, `operator`, `service`,
-  and `verified` only after each step succeeds; gaps or unknown steps deny
-  continuation.
+  config. It records `preflight`, `paths`, `database`, `operator`, `dns`,
+  `service`, and `verified` only after each step succeeds; gaps or unknown
+  steps deny continuation.
 - The final init public-health proof is derived only from the configured root
   `domain`: `https://admin.{domain}/api/v1/version`. It uses verified
   TLS (with no insecure override), follows no redirect, and accepts only the
@@ -230,6 +239,16 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
 - VPS evidence containing a `tinkercloud`-owned non-loopback listener outside TCP
   80/443 fails, while an operator-owned listener does not become Tinkercloud's
   responsibility.
+
+## Init DNS preflight deny charter
+
+- A missing, failing, empty, or context-cancelled lookup for `admin.{domain}`
+  leaves init at `dns`; it must not install or start the service or contact
+  ACME.
+- A missing, failing, empty, or context-cancelled lookup for the synthetic
+  one-label app hostname leaves init at `dns` with the same no-service,
+  no-ACME result.
+- A DNS answer is never required to equal a guessed public VPS address.
 
 ## VPN-only topology deny charter
 

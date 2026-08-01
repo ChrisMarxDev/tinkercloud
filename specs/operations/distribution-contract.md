@@ -2,9 +2,10 @@
 
 This contract covers internal package-manager preparation only. Its commands do
 not publish a package, create a hosted release, change a package-manager tap, or
-claim that a locked public identity is registered or available. The separately
-authorized GitHub prerelease channel is governed by
-[`beta-release-contract.md`](beta-release-contract.md).
+claim that a locked public identity is registered or available. External beta
+and stable mutations are separately governed by
+[`beta-release-contract.md`](beta-release-contract.md) and
+[`stable-release-contract.md`](stable-release-contract.md).
 
 ## One source release
 

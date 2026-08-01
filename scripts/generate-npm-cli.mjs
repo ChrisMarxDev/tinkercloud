@@ -51,6 +51,7 @@ for (const artifact of artifacts) {
 }
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 await copyFile(join(root, "packaging", "npm", "bin", "tinker.js"), join(outputDir, "bin", "tinker.js"));
+await copyFile(join(root, "packaging", "npm", "README.md"), join(outputDir, "README.md"));
 await copyFile(join(root, "LICENSE"), join(outputDir, "LICENSE"));
 await chmod(join(outputDir, "bin", "tinker.js"), 0o755);
 const manifest = {
@@ -60,10 +61,22 @@ const manifest = {
   license: "Apache-2.0",
   type: "module",
   bin: { tinker: "./bin/tinker.js" },
-  files: ["bin/tinker.js", "vendor/tinker-*", "LICENSE"],
+  files: ["bin/tinker.js", "vendor/tinker-*", "README.md", "LICENSE"],
   os: ["darwin", "linux"],
   cpu: ["x64", "arm64"],
   engines: { node: ">=18" },
   sideEffects: false,
+  preferUnplugged: true,
+  repository: {
+    type: "git",
+    url: "git+https://github.com/ChrisMarxDev/tinkercloud.git",
+  },
+  bugs: { url: "https://github.com/ChrisMarxDev/tinkercloud/issues" },
+  homepage: "https://github.com/ChrisMarxDev/tinkercloud#readme",
+  keywords: ["tinkercloud", "cli", "deployment", "self-hosted"],
+  publishConfig: {
+    access: "public",
+    registry: "https://registry.npmjs.org/",
+  },
 };
 await writeFile(join(outputDir, "package.json"), JSON.stringify(manifest, null, 2) + "\n", { mode: 0o644 });

@@ -44,30 +44,23 @@ export const CloudMark: React.FC<{
 
 export const Grain: React.FC<{opacity?: number}> = ({opacity = 0.08}) => {
   return (
-    <svg
+    <div
       style={{
         position: "absolute",
         inset: 0,
-        width: "100%",
-        height: "100%",
         opacity,
         pointerEvents: "none",
         mixBlendMode: "soft-light",
+        backgroundImage: [
+          "radial-gradient(circle at 2px 3px, rgba(32,6,117,0.72) 0 0.7px, transparent 0.9px)",
+          "radial-gradient(circle at 7px 11px, rgba(255,255,255,0.78) 0 0.55px, transparent 0.8px)",
+          "radial-gradient(circle at 13px 5px, rgba(32,6,117,0.48) 0 0.5px, transparent 0.75px)",
+        ].join(","),
+        backgroundSize: "17px 19px, 23px 29px, 31px 37px",
+        backgroundPosition: "0 0, 5px 7px, 11px 3px",
       }}
-      viewBox="0 0 1920 1080"
-      preserveAspectRatio="none"
       aria-hidden="true"
-    >
-      <filter id="tinker-noise">
-        <feTurbulence
-          type="fractalNoise"
-          baseFrequency="0.72"
-          numOctaves="4"
-          stitchTiles="stitch"
-        />
-      </filter>
-      <rect width="1920" height="1080" filter="url(#tinker-noise)" opacity="0.52" />
-    </svg>
+    />
   );
 };
 

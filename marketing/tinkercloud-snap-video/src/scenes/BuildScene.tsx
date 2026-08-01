@@ -31,7 +31,12 @@ export const BuildScene: React.FC = () => {
     fps,
     config: {damping: 15, stiffness: 125, mass: 0.85},
   });
-  const exit = interpolate(frame, [97, 110], [0, 1], {
+  const windowEnter = spring({
+    frame: frame - 12,
+    fps,
+    config: {damping: 17, stiffness: 115, mass: 0.9},
+  });
+  const exit = interpolate(frame, [158, 173], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.78, 0, 1, 0.62),
@@ -104,11 +109,13 @@ export const BuildScene: React.FC = () => {
           left: 785,
           top: 170,
           transformOrigin: "67% 50%",
-          transform: `translateX(${cameraX}px) scale(${cameraScale})`,
+          transform: `translateY(${interpolate(windowEnter, [0, 1], [90, 0])}px) translateX(${cameraX}px) scale(${
+            interpolate(windowEnter, [0, 1], [0.88, 1]) * cameraScale
+          })`,
           opacity: interpolate(exit, [0.84, 1], [1, 0], {
             extrapolateLeft: "clamp",
             extrapolateRight: "clamp",
-          }),
+          }) * windowEnter,
         }}
       >
         <Window width={980} height={650}>
@@ -197,9 +204,9 @@ export const BuildScene: React.FC = () => {
 
         {fileTiles.map((tile, index) => {
           const tileEnter = spring({
-            frame: frame - (10 + index * 5),
+            frame: frame - (42 + index * 11),
             fps,
-            config: {damping: 12, stiffness: 150, mass: 0.75},
+            config: {damping: 13, stiffness: 145, mass: 0.78},
           });
           const settleX = [-65, 710, 760, -90][index];
           const settleY = [-60, -40, 470, 490][index];
@@ -229,7 +236,7 @@ export const BuildScene: React.FC = () => {
         title="Create your project."
         detail="Keep the app small. Keep control of where it runs."
         frame={frame}
-        enterAt={8}
+        enterAt={18}
         dark
       />
       <Grain opacity={0.1} />

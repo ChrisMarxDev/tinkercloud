@@ -41,9 +41,6 @@ live_examples/
 *.tgz
 npm-debug.log*
 
-# Independently versioned and hosted website checkout
-/landing/
-
 # Tool caches and editor/OS noise
 .task/
 .cache/

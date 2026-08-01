@@ -81,7 +81,6 @@ preflight() {
   single_line_value "${TINKERCLOUD_VPS_DEPLOYER_EMAIL:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_VIEWER_EMAIL:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_EMAIL_FROM:-}" || return 1
-  single_line_value "${TINKERCLOUD_VPS_ACME_EMAIL:-}" || return 1
   single_line_value "${TINKERCLOUD_VPS_RESEND_API_KEY_FILE:-}" || return 1
   single_line_value "${TINKERCLOUD_RESEND_READER_API_KEY_FILE:-}" || return 1
   single_line_value "${TINKERCLOUD_RESEND_OTP_LEDGER_FILE:-}" || return 1

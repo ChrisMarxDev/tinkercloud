@@ -56,6 +56,7 @@ jobs:
             echo "beta publication confirmation mismatch" >&2
             exit 1
           fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
           git show-ref --verify --quiet "refs/tags/$tag" || {
             echo "beta source tag is unavailable" >&2
             exit 1
@@ -113,7 +114,9 @@ jobs:
       - name: Test beta workflow denial checker
         run: ./scripts/check-beta-release-workflow-self-test.sh
       - name: Check embedded release authorities
-        run: ./scripts/check-release-key-drift.sh
+        run: |
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
+          ./scripts/check-release-key-drift.sh
       - name: Lint GitHub Actions
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: Test release tamper and reproducibility gates

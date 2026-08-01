@@ -1,6 +1,6 @@
 # ADR 0051: One root domain and a single browser identity broker
 
-**Status:** Accepted replacement architecture; implementation in progress
+**Status:** Accepted, implemented, and live verified
 
 ## Context
 
@@ -88,5 +88,16 @@ The replacement contract is
 [`browser-identity-handoff-contract.md`](../../specs/api/browser-identity-handoff-contract.md),
 with a deny-path charter for cross-origin requests, cookie scope/overwrite,
 handoff replay, reserved hosts, role/app-policy separation, logout scope,
-path-plus-query preservation, and DNS/TLS readiness. Implementation remains
-in progress until the full local and live E2E evidence is recorded.
+path-plus-query preservation, and DNS/TLS readiness.
+
+## Implementation evidence
+
+The signed `0.1.0` build completed the guarded clean-host VPS acceptance run on
+2026-07-31 at `testing.tinkercloud.fun`. The black-box run proved one dashboard
+OTP identity across two allowed app hosts without a second OTP, independent
+host-only app sessions, preserved path and query state, replay and wrong-app
+handoff denial, app-local logout, global logout with child-session revocation,
+account switching, private static denial, cross-app data isolation, and
+restart persistence. The redacted owner-only result is retained under
+`.tinker/vps/unattended-reports/` as
+`vps-e2e-20260731T145714Z-74715.status`.

@@ -26,7 +26,8 @@ for values it cannot discover or safely default:
 4. for the future VPN-only mode, the certificate and private-key credential
    sources.
 
-The ACME contact defaults to the operator email in public mode. Tinkercloud handles
+The internal ACME contact is the normalized operator email in public mode; no
+separate flag, question, or environment input can override it. Tinkercloud handles
 host checks, service identity, directories, configuration, credentials,
 database initialization, systemd installation, startup, and final security
 verification. It reports one actionable prerequisite when DNS, email,
@@ -74,6 +75,8 @@ verify and install the signed tinkercloud binary
 → discover host state; ask base domain + operator email
 → show exact DNS/Resend actions and resume after completion
 → generate the service identity, config, credentials, SQLite, and operator
+→ confirm `admin.<domain>` and a synthetic one-label app hostname resolve
+  before starting the ACME-capable service
 → obtain the platform certificate through public HTTP-01
 → prove the public HTTPS gateway
 → reconcile the active-deployer allowlist

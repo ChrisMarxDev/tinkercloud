@@ -23,7 +23,7 @@ func diagnosticFixture(t *testing.T) (config.Config, string) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(root, "init-state.json")
-	if err := os.WriteFile(state, []byte(`{"completed":{"preflight":true,"paths":true,"database":true,"operator":true,"service":true,"verified":true}}`), 0600); err != nil {
+	if err := os.WriteFile(state, []byte(`{"completed":{"preflight":true,"paths":true,"database":true,"operator":true,"dns":true,"service":true,"verified":true}}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	db, err := persistence.OpenSQLite(context.Background(), filepath.Join(data, "tinkercloud.db"))

@@ -16,7 +16,6 @@ export TINKERCLOUD_VPS_OPERATOR_EMAIL=operator@example.com
 export TINKERCLOUD_VPS_DEPLOYER_EMAIL=deployer@example.com
 export TINKERCLOUD_VPS_VIEWER_EMAIL=viewer@example.com
 export TINKERCLOUD_VPS_EMAIL_FROM=operator@example.com
-export TINKERCLOUD_VPS_ACME_EMAIL=operator@example.com
 export TINKERCLOUD_VPS_RESEND_API_KEY_FILE=/absolute/path/to/resend-key
 export TINKERCLOUD_RESEND_READER_API_KEY_FILE=/absolute/path/to/local-resend-reader-key
 export TINKERCLOUD_RESEND_OTP_LEDGER_FILE=/absolute/path/to/local-consumed-otp-ledger.json

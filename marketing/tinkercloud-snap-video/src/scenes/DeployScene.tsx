@@ -19,10 +19,18 @@ export const DeployScene: React.FC = () => {
     fps,
     config: {damping: 15, stiffness: 170, mass: 0.75},
   });
-  const typedChars = Math.max(0, Math.min(command.length, Math.floor((frame - 11) / 2)));
+  const typedChars = Math.max(
+    0,
+    Math.min(command.length, Math.floor((frame - 26) / 2.2)),
+  );
   const typed = command.slice(0, typedChars);
-  const submitted = frame >= 43;
-  const exit = interpolate(frame, [69, 82], [0, 1], {
+  const submitted = frame >= 66;
+  const staged = spring({
+    frame: frame - 108,
+    fps,
+    config: {damping: 18, stiffness: 165, mass: 0.7},
+  });
+  const exit = interpolate(frame, [128, 144], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.84, 0, 1, 0.7),
@@ -115,19 +123,19 @@ export const DeployScene: React.FC = () => {
               style={{
                 marginTop: 38,
                 opacity: submitted
-                  ? interpolate(frame, [43, 49], [0, 1], {
+                  ? interpolate(frame, [66, 74], [0, 1], {
                       extrapolateRight: "clamp",
                     })
                   : 0,
                 transform: `translateY(${interpolate(
                   frame,
-                  [43, 49],
+                  [66, 74],
                   [24, 0],
                   {extrapolateLeft: "clamp", extrapolateRight: "clamp"},
                 )}px)`,
               }}
             >
-                <div style={{fontSize: 32, color: "rgba(255,255,255,0.58)"}}>
+              <div style={{fontSize: 32, color: "rgba(255,255,255,0.58)"}}>
                 Packaging 4 files
               </div>
               <div
@@ -142,7 +150,7 @@ export const DeployScene: React.FC = () => {
               >
                 <div
                   style={{
-                    width: `${interpolate(frame, [44, 65], [0, 100], {
+                    width: `${interpolate(frame, [69, 104], [0, 100], {
                       extrapolateLeft: "clamp",
                       extrapolateRight: "clamp",
                       easing: Easing.out(Easing.cubic),
@@ -152,6 +160,33 @@ export const DeployScene: React.FC = () => {
                     background: TINKER.mint,
                   }}
                 />
+              </div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 14,
+                  marginTop: 28,
+                  padding: "12px 20px",
+                  borderRadius: 999,
+                  color: TINKER.mint,
+                  background: "rgba(201,244,214,0.12)",
+                  border: "2px solid rgba(201,244,214,0.28)",
+                  fontSize: 32,
+                  fontWeight: 800,
+                  opacity: staged,
+                  transform: `translateY(${interpolate(staged, [0, 1], [18, 0])}px)`,
+                }}
+              >
+                <span
+                  style={{
+                    width: 13,
+                    height: 13,
+                    borderRadius: 999,
+                    background: TINKER.mint,
+                  }}
+                />
+                Release staged
               </div>
             </div>
           </div>
@@ -163,7 +198,7 @@ export const DeployScene: React.FC = () => {
         title="Upload it."
         detail="One command. One atomic release."
         frame={frame}
-        enterAt={4}
+        enterAt={8}
         dark
       />
 

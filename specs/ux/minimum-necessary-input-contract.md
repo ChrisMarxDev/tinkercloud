@@ -21,9 +21,11 @@ confirmations.
 
 `tinkercloud setup` discovers supported host facts and asks for one controlled base
 domain plus the initial operator email. It derives conventional platform/app
-hosts, sender, ACME contact, canonical paths, service identity, limits, and
-internal-secret locations. It persists only validated non-secret resumable
-progress.
+hosts, sender, and the internal ACME contact from that normalized operator email,
+along with canonical paths, service identity, limits, and internal-secret
+locations. It persists only validated non-secret resumable progress. Neither
+human setup nor deterministic initialization accepts a separate ACME-contact
+flag, question, or environment input.
 
 Missing DNS, Resend verification, firewall, or certificate state produces one
 exact external action and a continuation instruction. Provider secrets enter
@@ -60,6 +62,10 @@ They require explicit validated inputs and produce deterministic output.
   output, or unproven capability cannot be silently accepted.
 - No wizard may infer public access, viewer rules, deployer authority, provider
   permission, app identity, or owner identity.
+- A separate ACME-contact input, including a legacy flag or VPS-test environment
+  variable, must be rejected or ignored before host mutation; the persisted
+  ACME contact must equal the normalized initial operator email. Deployer flows
+  never accept certificate, key, or ACME-contact data.
 - Secrets in argv/ordinary config, echoing prompts, logs, audit, or generated
   manifest deny setup.
 - A resumable assistant cannot treat partial/unverified external state as

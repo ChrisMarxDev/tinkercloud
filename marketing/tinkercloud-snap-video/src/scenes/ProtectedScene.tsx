@@ -20,16 +20,21 @@ export const ProtectedScene: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const reveal = spring({
-    frame: frame - 4,
+    frame: frame - 10,
     fps,
     config: {damping: 15, stiffness: 155, mass: 0.8},
   });
   const lockLand = spring({
-    frame: frame - 24,
+    frame: frame - 52,
     fps,
     config: {damping: 11, stiffness: 180, mass: 0.65},
   });
-  const handoff = interpolate(frame, [41, 54], [0, 1], {
+  const policyEnter = spring({
+    frame: frame - 76,
+    fps,
+    config: {damping: 17, stiffness: 150, mass: 0.72},
+  });
+  const handoff = interpolate(frame, [114, 145], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.bezier(0.2, 0.85, 0.2, 1),
@@ -57,7 +62,7 @@ export const ProtectedScene: React.FC = () => {
         title="Get a protected live URL."
         detail="Private by default. Anonymous access is denied."
         frame={frame}
-        enterAt={5}
+        enterAt={14}
         dark
       />
 
@@ -147,6 +152,22 @@ export const ProtectedScene: React.FC = () => {
                 </div>
               </div>
             </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 18,
+                marginTop: 28,
+                opacity: policyEnter,
+                transform: `translateY(${interpolate(policyEnter, [0, 1], [18, 0])}px)`,
+              }}
+            >
+              <Pill style={{background: TINKER.positiveSoft}}>
+                PRIVATE BY DEFAULT
+              </Pill>
+              <Pill style={{background: TINKER.primarySoft}}>
+                GATEWAY AUTH
+              </Pill>
+            </div>
           </div>
         </Window>
       </div>
@@ -174,7 +195,7 @@ export const ProtectedScene: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          left: interpolate(frame, [0, 11], [-340, 2180], {
+          left: interpolate(frame, [0, 16], [-340, 2180], {
             extrapolateRight: "clamp",
             easing: Easing.out(Easing.quad),
           }),

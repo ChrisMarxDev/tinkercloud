@@ -240,12 +240,4 @@ func TestOperationsUsesOnlyCanonicalEmbeddedAssets(t *testing.T) {
 			t.Fatalf("operations template has divergent or remote asset %q", forbidden)
 		}
 	}
-
-	legacy, err := os.ReadFile("assets/operations.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(legacy), "{") && !strings.HasPrefix(strings.TrimSpace(string(legacy)), "/*") {
-		t.Fatal("obsolete operations stylesheet must not contain active rules")
-	}
 }

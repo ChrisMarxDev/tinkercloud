@@ -20,7 +20,9 @@ step rather than as mandatory questions.
 
 `tinkercloud setup` owns generation of non-secret server configuration. It may ask
 for a base domain, operator email, and a Resend credential source, then derive
-conventional platform/app hostnames and sending defaults. Missing external DNS
+ conventional platform/app hostnames, sending defaults, and the internal ACME
+ contact from the normalized operator email. It never asks for or accepts a
+ separate ACME-contact value. Missing external DNS
 or email state produces one exact external action and a resumable continuation.
 Resend records are collected before the DNS checkpoint so Tinkercloud and provider
 records can be added in one DNS-provider session.

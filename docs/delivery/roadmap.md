@@ -30,7 +30,8 @@ Remaining vertical path:
 - add the resumable human `tinkercloud setup` assistant over the strict
   non-interactive initialization contract;
 - derive conventional platform/app/sender values from one base domain and
-  pause with exact DNS/Resend actions;
+  pause with exact DNS/Resend actions, including a fail-fast exact-admin and
+  wildcard-resolution check before the ACME-capable service starts;
 - make project/output/capability discovery explicit and ask only when safe
   evidence is ambiguous;
 - replace field-by-field optional deploy questions with one review/edit
@@ -336,12 +337,18 @@ Evidence implemented:
   refusing non-loopback listeners. It explicitly excludes production auth,
   deployment, blobs, LLM/provider calls, and deployment protection evidence.
 
-Remaining release evidence:
+Live release evidence:
 
-- the exact updated build still needs the root-run disposable-VPS acceptance
-  pass for two-app KV/collection isolation, restart persistence, anonymous
-  denial, and app deletion. The checked-in VPS harness covers these steps, but
-  an unrun harness is not live VPS evidence.
+- the signed `0.1.0` build passed the guarded clean-host VPS acceptance run on
+  2026-07-31 at `testing.tinkercloud.fun`;
+- real gateway requests proved two-app KV/collection isolation, restart
+  persistence, anonymous denial with no app bytes, and fixture-scoped cleanup;
+  and
+- the same pass proved one dashboard OTP identity across allowed app hosts,
+  distinct host-only app sessions, replay/wrong-app denial, app-local logout,
+  global child-session revocation, account switching, blob isolation, and
+  omitted ungranted LLM capability state. The redacted owner-only result is
+  `.tinker/vps/unattended-reports/vps-e2e-20260731T145714Z-74715.status`.
 
 ### Implemented M4 slice — lightweight app-scoped blobs
 
@@ -506,7 +513,8 @@ The assistant:
 - checks supported OS/architecture, root authority, NTP, disk, and ports before
   asking for configuration;
 - asks for one controlled base domain and the operator email, derives
-  conventional platform/app/sender/ACME values, and puts non-standard choices
+  conventional platform/app/sender values and the internal ACME contact from
+  the normalized operator email, and puts non-standard choices
   behind one edit step;
 - pauses with exact external DNS and Resend actions, persists validated
   non-secret progress, and resumes without re-asking prior valid answers;
@@ -580,6 +588,18 @@ prerelease. Direct CLI, host, and SDK-tarball installation use that exact
 versioned release. npm, JSR, Homebrew, stable/latest promotion, and silent
 updates remain disabled. The committed authority is beta-only and must rotate
 across every embedded trust anchor before stable distribution.
+Stable distribution scaffolding is executable but intentionally inactive:
+`stable-release.yml` can publish and remotely verify an immutable GitHub
+release only when the committed key policy identifies a rotated production
+authority, while `npm-cli-publish.yml` derives `@tinkercloud/cli` from that
+exact release and uses npm trusted-publisher OIDC. A denial charter and static
+self-tests reject automatic triggers, beta-key promotion, private repositories,
+existing versions, long-lived npm tokens, unverified downloads, and mixed
+GitHub/npm mutation. The npm candidate has an exact content allowlist and
+canonical provenance metadata. Activation still requires the public GitHub
+repository, protected Environments, production key rotation, npm scope
+ownership, and one interactive 2FA bootstrap because npm cannot configure a
+trusted publisher for a package that does not yet exist.
 The packaged and generated gateway units are also locally validated without a
 systemd PID 1: they retain the `tinkercloud` user, strict sandbox, exactly the
 configured writable paths, and only `CAP_NET_BIND_SERVICE` in their ambient

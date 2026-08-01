@@ -38,6 +38,7 @@ test "$(grep -c -F -- 'contents: write' "$workflow")" = 1 || {
 reject '^[[:space:]]+(actions|checks|deployments|discussions|id-token|issues|packages|pages|pull-requests|security-events|statuses):[[:space:]]+write' \
   "beta release grants an unnecessary write permission"
 require "environment: beta-release" "beta signing environment gate is missing"
+require "TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta" "beta-key policy gate is missing"
 require "publish-beta-\$tag" "exact beta publication confirmation is missing"
 require 'git merge-base --is-ancestor "$source_commit" origin/main' \
   "reviewed main ancestry gate is missing"

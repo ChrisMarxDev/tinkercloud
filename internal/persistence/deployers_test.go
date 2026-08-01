@@ -2,9 +2,7 @@ package persistence
 
 import (
 	"context"
-	"github.com/ChrisMarxDev/tinkercloud/internal/tokens"
 	"testing"
-	"time"
 )
 
 func TestSetDeployerStatus(t *testing.T) {
@@ -52,6 +50,4 @@ func TestSetDeployerStatusPreservesOperatorAndRollsBackAudit(t *testing.T) {
 	if n != 0 {
 		t.Fatal(n)
 	}
-	_ = tokens.ErrInvalid
-	_ = time.Now()
 }

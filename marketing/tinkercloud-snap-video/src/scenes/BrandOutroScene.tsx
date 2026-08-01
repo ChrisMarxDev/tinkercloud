@@ -14,28 +14,24 @@ const wordmark = "tinkercloud";
 export const BrandOutroScene: React.FC = () => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const compress = interpolate(frame, [2, 9], [1, 0.04], {
+  const compress = interpolate(frame, [4, 16], [1, 0.04], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.in(Easing.cubic),
   });
   const bloom = spring({
-    frame: frame - 10,
+    frame: frame - 17,
     fps,
     config: {damping: 12, stiffness: 170, mass: 0.7},
   });
-  const markLeft = interpolate(frame, [9, 20], [490, 250], {
+  const markLeft = interpolate(frame, [16, 34], [490, 250], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: Easing.out(Easing.cubic),
   });
-  const showCloud = frame >= 10;
-  const revealChars = Math.min(
-    wordmark.length,
-    Math.max(0, Math.floor((frame - 12) / 1.1)),
-  );
+  const showCloud = frame >= 17;
   const tagline = spring({
-    frame: frame - 22,
+    frame: frame - 44,
     fps,
     config: {damping: 18, stiffness: 145, mass: 0.7},
   });
@@ -116,7 +112,7 @@ export const BrandOutroScene: React.FC = () => {
             position: "absolute",
             left: 498,
             top: 47,
-            width: 500,
+            width: 700,
             overflow: "hidden",
             whiteSpace: "nowrap",
             fontFamily: DISPLAY_FONT,
@@ -126,7 +122,31 @@ export const BrandOutroScene: React.FC = () => {
             letterSpacing: "-0.075em",
           }}
         >
-          {wordmark.slice(0, revealChars)}
+          {wordmark.split("").map((character, index) => {
+            const characterEnter = spring({
+              frame: frame - (24 + index * 1.7),
+              fps,
+              config: {damping: 15, stiffness: 190, mass: 0.58},
+            });
+
+            return (
+              <span
+                key={`${character}-${index}`}
+                style={{
+                  display: "inline-block",
+                  opacity: characterEnter,
+                  filter: `blur(${interpolate(characterEnter, [0, 1], [13, 0])}px)`,
+                  transform: `translateY(${interpolate(
+                    characterEnter,
+                    [0, 1],
+                    [34, 0],
+                  )}px) scale(${interpolate(characterEnter, [0, 1], [0.72, 1])})`,
+                }}
+              >
+                {character}
+              </span>
+            );
+          })}
         </div>
       </div>
 

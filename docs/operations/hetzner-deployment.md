@@ -43,13 +43,14 @@ Automation and recovery still use the explicit contract:
 sudo tinkercloud init --non-interactive \
   --domain example.com \
   --operator-email operator@example.com \
-  --email-from access@example.com --acme-email operator@example.com \
+  --email-from access@example.com \
   --resend-api-key-file /root/tinkercloud-resend.key \
   --hmac-key-file /root/tinkercloud-hmac.key
 ```
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
-secret files. It never prompts or derives missing values. The human `setup`
+secret files. It derives the internal ACME contact from the required normalized
+operator email; it never accepts a separate ACME-contact flag. The human `setup`
 assistant generates these inputs and may accept the Resend secret through a
 no-echo prompt only if that path passes the supported-shell secret-handling
 audit; otherwise it guides creation/selection of a protected file. Neither path

@@ -52,6 +52,7 @@
 | [0050](0050-local-deployer-workstation-otp-automation.md) | Local deployer-workstation OTP automation is not CI credentialing | Accepted for V1 test infrastructure |
 | [0051](0051-one-domain-single-browser-identity.md) | One root domain and a single browser identity broker | Accepted replacement architecture; implementation in progress |
 | [0052](0052-tinkercloud-product-identity.md) | Tinkercloud product and distribution identity | Accepted |
+| [0053](0053-stable-github-and-npm-cli-distribution.md) | Stable CLI distribution through GitHub Releases and one npm artifact | Accepted; activation gated |
 
 ## Decision rule
 

@@ -20,11 +20,10 @@ invalid values prevent the live run from starting.
 | `TINKERCLOUD_VPS_SSH_PORT` | Optional decimal SSH port. |
 | `TINKERCLOUD_VPS_SSH_IDENTITY_FILE` | Optional absolute existing private-key path. |
 | `TINKERCLOUD_VPS_DOMAIN` | Existing root domain whose wildcard DNS record resolves to the VPS. The suite derives the dashboard as `admin.<domain>` and every app as `<slug>.<domain>`. |
-| `TINKERCLOUD_VPS_OPERATOR_EMAIL` | Initial operator email used during host initialization. |
+| `TINKERCLOUD_VPS_OPERATOR_EMAIL` | Initial operator email used during host initialization and as the derived internal ACME contact. |
 | `TINKERCLOUD_VPS_DEPLOYER_EMAIL` | Email authorized as the deployer used in the control login. |
 | `TINKERCLOUD_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply a distinct identity from the deployer. |
 | `TINKERCLOUD_VPS_EMAIL_FROM` | Verified Resend sender. |
-| `TINKERCLOUD_VPS_ACME_EMAIL` | ACME contact email. |
 | `TINKERCLOUD_VPS_RESEND_API_KEY_FILE` | Absolute path to the existing local Resend-key file. |
 | `TINKERCLOUD_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
 | `TINKERCLOUD_RESEND_READER_API_KEY_FILE` | Required by the shipped unattended Resend reader: absolute local mode-`0600`, non-symlink Resend key with sent-email read access. It must never be copied to the VPS. |

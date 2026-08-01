@@ -42,7 +42,7 @@ run() {
   TINKERCLOUD_VPS_DOMAIN=example.test \
   TINKERCLOUD_VPS_OPERATOR_EMAIL=operator@example.test TINKERCLOUD_VPS_DEPLOYER_EMAIL=deployer@example.test \
   TINKERCLOUD_VPS_VIEWER_EMAIL=viewer@example.test TINKERCLOUD_VPS_EMAIL_FROM=tinker@example.test \
-  TINKERCLOUD_VPS_ACME_EMAIL=operator@example.test TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$tmp/send-key" \
+  TINKERCLOUD_VPS_RESEND_API_KEY_FILE="$tmp/send-key" \
   TINKERCLOUD_RESEND_READER_API_KEY_FILE="$tmp/reader-key" TINKERCLOUD_RESEND_OTP_LEDGER_FILE="$tmp/ledger.json" \
   TINKERCLOUD_VPS_OTP_COMMAND="$root/skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py" "$runner"
 }

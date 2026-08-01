@@ -56,6 +56,10 @@ acknowledgement and pinned host-key inputs are present. Read
 commands are development checks, not production deployment evidence.
 The supported server workflow and its prerequisites are documented in
 [Hetzner deployment](docs/operations/hetzner-deployment.md).
+Stable CLI publication and its currently gated one-time setup are documented
+in [CLI distribution](docs/operations/cli-distribution.md). Until those gates
+are completed and the public channels are anonymously verified, install
+commands remain maintainer templates rather than release claims.
 
 ## Start here
 

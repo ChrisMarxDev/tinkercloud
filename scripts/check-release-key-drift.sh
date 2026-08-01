@@ -10,6 +10,8 @@ test -f "$public_key" || {
   exit 1
 }
 
+"$root/scripts/check-release-key-policy.sh" >/dev/null
+
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-release-key-drift.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
