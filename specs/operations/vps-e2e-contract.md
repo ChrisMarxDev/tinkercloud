@@ -22,7 +22,7 @@ invalid values prevent the live run from starting.
 | `TINKERCLOUD_VPS_DOMAIN` | Existing root domain whose wildcard DNS record resolves to the VPS. The suite derives the dashboard as `admin.<domain>` and every app as `<slug>.<domain>`. |
 | `TINKERCLOUD_VPS_OPERATOR_EMAIL` | Initial operator email used during host initialization and as the derived internal ACME contact. |
 | `TINKERCLOUD_VPS_DEPLOYER_EMAIL` | Email authorized as the deployer used in the control login. |
-| `TINKERCLOUD_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply a distinct identity from the deployer. |
+| `TINKERCLOUD_VPS_VIEWER_EMAIL` | Email allowed by the smoke-app policy and used for app login. Supply an identity distinct from both the deployer and operator; the suite later promotes it to the second fixture deployer for ownership isolation. |
 | `TINKERCLOUD_VPS_EMAIL_FROM` | Verified Resend sender. |
 | `TINKERCLOUD_VPS_RESEND_API_KEY_FILE` | Absolute path to the existing local Resend-key file. |
 | `TINKERCLOUD_VPS_OTP_COMMAND` | Optional absolute executable that obtains sent OTPs. |
@@ -254,9 +254,13 @@ result never claims to reverse the durable mutation.
    Authenticate a verified viewer and prove the effective catalog contains the
    permitted public/private cards but no other owner's app. Two top-level HTML
    views with one host-only analytics cookie must show two page views and one
-   approximate visitor in the owner/operator dashboard. Disable the gate and
-   prove next-request anonymous denial while normal private owner access still
-   works; re-enable it, then transition the app public-to-private and prove
+   approximate visitor on the first fixture card. When the configured deployer
+   is also the initial operator, that dashboard intentionally shows both
+   owners; otherwise it must not show the second owner's card. In every case,
+   the second deployer dashboard contains only its own fixture and the scoped
+   control API proves two-owner isolation. Disable the gate and prove
+   next-request anonymous denial while normal private owner access still works;
+   re-enable it, then transition the app public-to-private and prove
    next-request anonymous denial. Prove two-owner/two-app catalog and insights
    isolation, restart persistence, and malformed/failure paths. Do not create
    randomized certificate hostnames, query VPS storage/SQLite/logs, bypass OTP,

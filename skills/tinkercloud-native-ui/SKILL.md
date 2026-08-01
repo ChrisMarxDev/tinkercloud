@@ -88,6 +88,12 @@ the control-plane mark, stylesheet, or chrome.
   label “Approximate visitors.” Show page views, last activity, and textual
   daily values; unavailable is never rendered as zero. No viewer, app SDK,
   deployment-agent, or unrelated-deployer markup may contain analytics values.
+- Dashboard release descriptions come only from a valid stored manifest on a
+  `verified`, `active`, or `superseded` immutable release. Known
+  `uploading`, `uploaded`, `validating`, `staged`, `rejected`, and `failed`
+  candidate records stay description-less without parsing their manifest
+  bytes. An unknown state or malformed immutable manifest makes the dashboard
+  unavailable; do not guess at metadata.
 - Public publishing copy must state that anyone on the internet can open the
   app, keep indexing as a separate default-off fact, and retain exact
   server-side broadening confirmation. In the first pilot, UI displays the

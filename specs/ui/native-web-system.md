@@ -114,6 +114,14 @@ deployer-selected rollback form, route, button, or simulated client-side
 control. Failed activation preservation is server-side deployment behavior, not
 a dashboard mutation.
 
+Only `verified`, `active`, and `superseded` releases are immutable metadata
+authorities: their stored manifests must be valid before the dashboard may use
+their descriptions. Known non-authoritative `uploading`, `uploaded`,
+`validating`, `staged`, `rejected`, and `failed` records render with a blank
+description without parsing candidate manifest bytes. An unknown release state,
+or an invalid manifest for an immutable state, makes the dashboard read model
+unavailable rather than guessing at metadata.
+
 ## Post-V1 reach and insights surfaces
 
 - The viewer catalog is a distinct global-identity surface, not a weakened
@@ -188,8 +196,11 @@ Before a styled happy path is accepted, tests must prove:
     only with a server-derived stable gateway URL, opens a new tab with
     `rel="noopener noreferrer"`, has an accessible name and title, and never
     exposes a release hash, release path, or raw immutable URL. A malformed
-    final deployment manifest makes the dashboard read model unavailable;
-   absent intermediate metadata is simply description-less.
+    stored manifest for `verified`, `active`, or `superseded` makes the
+    dashboard read model unavailable. Known `uploading`, `uploaded`,
+    `validating`, `staged`, `rejected`, and `failed` candidate records are
+    description-less without parsing their manifest bytes; unknown states fail
+    closed.
 15. Global viewer identity is presented only on Tinkercloud-owned platform/app
    authentication pages. It must never be rendered as a control role, sent to
    deployed app content, selected by a query parameter, or stored in browser

@@ -122,6 +122,29 @@ func TestConfigRejectsNonRootAndSameIdentity(t *testing.T) {
 	if _, err := LoadConfig(env(v)); err == nil {
 		t.Fatal("same deployer and viewer accepted")
 	}
+	v = configEnv(t)
+	v["TINKERCLOUD_VPS_VIEWER_EMAIL"] = v["TINKERCLOUD_VPS_OPERATOR_EMAIL"]
+	if _, err := LoadConfig(env(v)); err == nil {
+		t.Fatal("same operator and viewer accepted")
+	}
+}
+
+func TestDashboardOwnershipExpectationIsRoleAware(t *testing.T) {
+	for _, tc := range []struct {
+		name                 string
+		operator, deployer   string
+		operatorReadsAllApps bool
+	}{
+		{name: "distinct operator and deployer", operator: "operator@example.test", deployer: "deployer@example.test", operatorReadsAllApps: false},
+		{name: "same operator and deployer", operator: "owner@example.test", deployer: "owner@example.test", operatorReadsAllApps: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := Suite{Config: Config{OperatorEmail: tc.operator, DeployerEmail: tc.deployer}}
+			if got := s.deployerDashboardIsOperator(); got != tc.operatorReadsAllApps {
+				t.Fatalf("operator dashboard scope = %t, want %t", got, tc.operatorReadsAllApps)
+			}
+		})
+	}
 }
 
 func TestConfigRequiresOneCanonicalRootDomain(t *testing.T) {
@@ -633,6 +656,26 @@ func TestDashboardIdentityOTPRequiresDashboardCompletionRedirect(t *testing.T) {
 	}
 }
 
+func TestIdentityBrokerOutcomeDistinguishesPolicyDenialFromOTP(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		want   string
+	}{
+		{name: "authenticated policy denial", status: http.StatusOK, body: `<h1>This account cannot open this app.</h1>`, want: "was denied by the app policy"},
+		{name: "actual OTP form", status: http.StatusOK, body: `<form action="/_tinker/identity/otp"><input name="email"></form>`, want: "requires OTP"},
+		{name: "unrecognized broker page", status: http.StatusOK, body: `<h1>Try again</h1>`, want: "returned an unrecognized broker page"},
+		{name: "non OK status", status: http.StatusServiceUnavailable, body: "", want: "returned an unexpected broker response"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := identityBrokerOutcome(tc.status, []byte(tc.body)); got != tc.want {
+				t.Fatalf("identityBrokerOutcome(%d, %q)=%q want %q", tc.status, tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDashboardCardInsightsAreExactAndScopedToOwnedCard(t *testing.T) {
 	page := `
 <article data-tinker-app-slug="vps-e2e-public"><section>
@@ -656,6 +699,15 @@ func TestDashboardCardInsightsDistinguishUnavailableAndMalformed(t *testing.T) {
 	}
 	if _, ok := dashboardCardInsights(`<article data-tinker-app-slug="owned"><p class="tinker-stat__value">1</p></article>`); ok {
 		t.Fatal("malformed dashboard card was accepted as insights evidence")
+	}
+}
+
+func TestDashboardInsightsEvidenceDistinguishesOverviewUnavailableFromMissingCard(t *testing.T) {
+	if matched, diagnostic := dashboardInsightsEvidence("<h1>Your app overview is unavailable.</h1>", http.StatusOK, nil, "owned", 2, 1); matched || diagnostic != "dashboard overview unavailable" {
+		t.Fatalf("overview unavailable = matched=%t diagnostic=%q", matched, diagnostic)
+	}
+	if matched, diagnostic := dashboardInsightsEvidence("<main>ready</main>", http.StatusOK, nil, "owned", 2, 1); matched || diagnostic != "owned dashboard app card missing" {
+		t.Fatalf("missing card = matched=%t diagnostic=%q", matched, diagnostic)
 	}
 }
 

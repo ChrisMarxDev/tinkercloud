@@ -222,6 +222,89 @@ func TestDashboardDescriptionsAreImmutableCurrentMetadataAndFailClosed(t *testin
 	}
 }
 
+func TestDashboardKeepsActiveMetadataWhenRejectedCandidateHasInvalidManifest(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	if _, err := s.DB.Exec("INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := json.Marshal(releases.Manifest{Version: 1, Name: "alpha", Description: "Current immutable description"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec("INSERT INTO deployments(id,app_id,manifest_json,state,created_at) VALUES('active','a',?,'active',datetime('now','-1 minute')),('rejected','a',X'00','rejected',datetime('now')); UPDATE applications SET current_deployment_id='active' WHERE id='a'", active); err != nil {
+		t.Fatal(err)
+	}
+
+	v, err := (ControlService{Store: s, AppSuffix: "apps.example.test"}).Dashboard(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, app := range v.Apps {
+		if app.Slug != "alpha" {
+			continue
+		}
+		if app.Description != "Current immutable description" || app.StableURL != "https://alpha.apps.example.test/" {
+			t.Fatalf("active summary=%#v", app)
+		}
+		foundRejected := false
+		for _, release := range app.Releases {
+			if release.ID == "rejected" {
+				foundRejected = true
+				if release.Description != "" {
+					t.Fatalf("rejected release disclosed candidate description: %#v", release)
+				}
+			}
+		}
+		if !foundRejected {
+			t.Fatal("rejected candidate absent from dashboard history")
+		}
+		return
+	}
+	t.Fatal("active app missing from dashboard")
+}
+
+func TestDashboardManifestDescriptionUsesOnlyImmutableAuthoritativeStates(t *testing.T) {
+	valid, err := json.Marshal(releases.Manifest{Version: 1, Name: "alpha", Description: "Immutable"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		state    releases.State
+		manifest []byte
+		want     string
+		wantErr  bool
+	}{
+		{name: "uploading ignores invalid manifest", state: releases.Uploading, manifest: []byte("not-json")},
+		{name: "uploaded ignores invalid manifest", state: releases.Uploaded, manifest: []byte("not-json")},
+		{name: "validating ignores invalid manifest", state: releases.Validating, manifest: []byte("not-json")},
+		{name: "staged ignores invalid manifest", state: releases.Staged, manifest: []byte("not-json")},
+		{name: "rejected ignores invalid manifest", state: releases.Rejected, manifest: []byte("not-json")},
+		{name: "failed ignores invalid manifest", state: releases.Failed, manifest: []byte("not-json")},
+		{name: "verified requires valid manifest", state: releases.Verified, manifest: []byte("not-json"), wantErr: true},
+		{name: "active requires valid manifest", state: releases.Active, manifest: []byte("not-json"), wantErr: true},
+		{name: "superseded requires valid manifest", state: releases.Superseded, manifest: []byte("not-json"), wantErr: true},
+		{name: "verified description", state: releases.Verified, manifest: valid, want: "Immutable"},
+		{name: "active description", state: releases.Active, manifest: valid, want: "Immutable"},
+		{name: "superseded description", state: releases.Superseded, manifest: valid, want: "Immutable"},
+		{name: "unknown fails closed", state: releases.State("unknown"), manifest: valid, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := dashboardManifestDescription(tc.manifest, string(tc.state), "alpha")
+			if tc.wantErr {
+				if err != ErrUnavailable {
+					t.Fatalf("description error = %v, want %v", err, ErrUnavailable)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("description = %q, %v; want %q, nil", got, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestDashboardCurrentDescriptionSurvivesBoundedReleaseHistory(t *testing.T) {
 	s := seeded(t)
 	defer s.Close()

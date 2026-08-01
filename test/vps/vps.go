@@ -158,8 +158,8 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 			return Config{}, errors.New("invalid email address")
 		}
 	}
-	if strings.EqualFold(c.DeployerEmail, c.ViewerEmail) {
-		return Config{}, errors.New("deployer and viewer identities must differ")
+	if strings.EqualFold(c.DeployerEmail, c.ViewerEmail) || strings.EqualFold(c.OperatorEmail, c.ViewerEmail) {
+		return Config{}, errors.New("viewer identity must differ from operator and deployer")
 	}
 	if c.OTPCommand != "" {
 		if !filepath.IsAbs(c.OTPCommand) {
@@ -1202,7 +1202,16 @@ func (s *Suite) finishPublicMatrix(ctx context.Context, owner, secondOwner clien
 	if err != nil || status != http.StatusOK {
 		return fmt.Errorf("owner dashboard unavailable: status=%d err=%w", status, err)
 	}
-	if strings.Contains(body, `data-tinker-app-slug="`+vpsPublicOtherSlug+`"`) {
+	if s.deployerDashboardIsOperator() {
+		// The configured deployer can also be the initial operator. That role is
+		// deliberately allowed to read all app summaries, so this dashboard is
+		// not ownership-isolation evidence. It must still include both fixture
+		// owners while the scoped API proof and second deployer dashboard below
+		// enforce isolation.
+		if !strings.Contains(body, `data-tinker-app-slug="`+vpsPublicAppSlug+`"`) || !strings.Contains(body, `data-tinker-app-slug="`+vpsPublicOtherSlug+`"`) {
+			return errors.New("operator dashboard omitted a public fixture app")
+		}
+	} else if strings.Contains(body, `data-tinker-app-slug="`+vpsPublicOtherSlug+`"`) {
 		return errors.New("first owner dashboard disclosed second owner's app")
 	}
 
@@ -1269,6 +1278,13 @@ func (s *Suite) finishPublicMatrix(ctx context.Context, owner, secondOwner clien
 		return err
 	}
 	return assertAnonymousStaticDenied(ctx, s.httpClient(), state.otherHost, state.otherMarker)
+}
+
+// deployerDashboardIsOperator identifies the intentional role overlap in the
+// VPS acceptance identity setup. Dashboard authority comes from the durable
+// account role, not from the deployer token used for API fixture setup.
+func (s *Suite) deployerDashboardIsOperator() bool {
+	return strings.EqualFold(s.Config.OperatorEmail, s.Config.DeployerEmail)
 }
 
 func assertAnonymousStaticDenied(ctx context.Context, h *http.Client, host string, forbidden ...string) error {
@@ -1352,31 +1368,11 @@ func (s *Suite) waitDashboardInsights(ctx context.Context, h *http.Client, slug 
 	last := "dashboard request was not attempted"
 	for {
 		page, status, err := fetchPlatformPage(ctx, h, "https://"+s.Config.PlatformHost()+"/dashboard")
-		card := dashboardAppCard(page, slug)
-		switch {
-		case err != nil:
-			// The page body and transport error can contain unrelated dashboard or
-			// network metadata. Keep external acceptance failure output bounded.
-			last = "dashboard HTTP request failed"
-		case status == http.StatusUnauthorized || status == http.StatusForbidden:
-			last = fmt.Sprintf("dashboard authentication failed: status=%d", status)
-		case status != http.StatusOK:
-			last = fmt.Sprintf("dashboard HTTP status=%d", status)
-		case card == "":
-			last = "owned dashboard app card missing"
-		default:
-			insights, ok := dashboardCardInsights(card)
-			switch {
-			case !ok:
-				last = "owned dashboard insights card malformed"
-			case !insights.available:
-				last = "owned dashboard insights unavailable"
-			case insights.pageViews == pageViews && insights.visitors == visitors:
-				return nil
-			default:
-				last = fmt.Sprintf("owned dashboard observed page_views=%d approximate_visitors=%d", insights.pageViews, insights.visitors)
-			}
+		matched, diagnostic := dashboardInsightsEvidence(page, status, err, slug, pageViews, visitors)
+		if matched {
+			return nil
 		}
+		last = diagnostic
 		if time.Now().After(deadline) {
 			return fmt.Errorf("owner insights did not reach exact page_views=%d approximate_visitors=%d: %s", pageViews, visitors, last)
 		}
@@ -1385,6 +1381,37 @@ func (s *Suite) waitDashboardInsights(ctx context.Context, h *http.Client, slug 
 			return ctx.Err()
 		case <-time.After(250 * time.Millisecond):
 		}
+	}
+}
+
+// dashboardInsightsEvidence returns only bounded acceptance diagnostics. It
+// distinguishes the server-rendered unavailable page from a successful
+// dashboard that simply lacks the expected authorized app card.
+func dashboardInsightsEvidence(page string, status int, err error, slug string, pageViews, visitors int) (bool, string) {
+	switch {
+	case err != nil:
+		return false, "dashboard HTTP request failed"
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return false, fmt.Sprintf("dashboard authentication failed: status=%d", status)
+	case status != http.StatusOK:
+		return false, fmt.Sprintf("dashboard HTTP status=%d", status)
+	case strings.Contains(page, "Your app overview is unavailable."):
+		return false, "dashboard overview unavailable"
+	}
+	card := dashboardAppCard(page, slug)
+	if card == "" {
+		return false, "owned dashboard app card missing"
+	}
+	insights, ok := dashboardCardInsights(card)
+	switch {
+	case !ok:
+		return false, "owned dashboard insights card malformed"
+	case !insights.available:
+		return false, "owned dashboard insights unavailable"
+	case insights.pageViews == pageViews && insights.visitors == visitors:
+		return true, ""
+	default:
+		return false, fmt.Sprintf("owned dashboard observed page_views=%d approximate_visitors=%d", insights.pageViews, insights.visitors)
 	}
 }
 
@@ -2056,9 +2083,13 @@ func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Cl
 	if err != nil {
 		return err
 	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	response.Body.Close()
+	if readErr != nil {
+		return readErr
+	}
 	if response.StatusCode != http.StatusSeeOther {
-		return fmt.Errorf("existing identity unexpectedly needed OTP: status=%d", response.StatusCode)
+		return fmt.Errorf("existing identity handoff %s: status=%d", identityBrokerOutcome(response.StatusCode, body), response.StatusCode)
 	}
 	if !isExactHandoffCallback(response.Header.Get("Location"), host, handoff) {
 		return errors.New("existing identity redirected to an unsafe callback")
@@ -2067,6 +2098,24 @@ func (s *Suite) viewerFlowWithExistingIdentityAt(ctx context.Context, h *http.Cl
 		return err
 	}
 	return s.assertCookieScopes(h, host, "")
+}
+
+// identityBrokerOutcome intentionally classifies only stable, non-sensitive
+// broker contracts. A 200 page is not automatically an OTP request: an
+// authenticated but policy-denied identity gets a distinct generic page and
+// must never be misreported as an email-delivery failure.
+func identityBrokerOutcome(status int, body []byte) string {
+	if status != http.StatusOK {
+		return "returned an unexpected broker response"
+	}
+	switch {
+	case bytes.Contains(body, []byte("This account cannot open this app.")):
+		return "was denied by the app policy"
+	case bytes.Contains(body, []byte(`action="/_tinker/identity/otp"`)) && bytes.Contains(body, []byte(`name="email"`)):
+		return "requires OTP"
+	default:
+		return "returned an unrecognized broker page"
+	}
 }
 
 // beginAppHandoff exercises the document-only gateway path. It returns the

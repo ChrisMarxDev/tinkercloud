@@ -16,6 +16,13 @@ applicable.
   repository, WebSocket, blob store, or provider dispatcher is touched.
 - Public-to-private and global gate-disable transitions deny the next anonymous
   request and cannot be extended by cache state.
+- Disabling the global public gate removes only anonymous static authority. A
+  fresh handoff for an existing verified identity still evaluates the current
+  `public` policy's implicit owner, exact-email, and domain rules; an allowed
+  identity receives the exact app callback and host-only child session, while
+  an unmatched identity receives the generic broker denial with no callback,
+  app session, or release bytes. Missing, corrupt, or unknown policy state
+  denies every handoff.
 - Malformed/unknown policy modes and untyped public booleans cannot create a
   static authorization context.
 - Public candidate proof fails on redirects, wrong host/scheme, unexpected

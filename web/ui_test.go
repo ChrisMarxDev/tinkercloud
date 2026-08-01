@@ -227,6 +227,8 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`type="password"`,
 		`never displayed or recovered`,
 		`disable:0123456789abcdef0123456789abcdef`,
+		`only verified, active, and superseded immutable releases provide descriptions`,
+		`uploading, uploaded, validating, staged, rejected, and failed candidates remain description-less`,
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("showcase missing %q", required)

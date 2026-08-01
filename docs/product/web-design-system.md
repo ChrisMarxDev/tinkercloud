@@ -194,6 +194,13 @@ Release history is read-only in V1: show immutable metadata without a rollback
 button, form, or client-side approximation. Failed activation preservation is
 reported as server truth, not an operator/deployer action.
 
+Only `verified`, `active`, and `superseded` release records may contribute a
+description: those immutable states require a valid stored manifest. The
+operational history can also show `uploading`, `uploaded`, `validating`,
+`staged`, `rejected`, and `failed` candidates, but renders their descriptions
+blank without parsing candidate bytes. An unknown state or malformed immutable
+manifest makes the dashboard unavailable rather than inventing a summary.
+
 The operator-only deployer section uses one native multiline active allowlist
 form, prefilled from a server-rendered revisioned snapshot. It makes authority
 broadening explicit and says that removed addresses are signed out and cannot

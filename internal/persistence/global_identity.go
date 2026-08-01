@@ -243,7 +243,7 @@ func policyAllowsTx(ctx context.Context, tx *sql.Tx, appID string, viewer identi
 	var owner string
 	if err := tx.QueryRowContext(ctx, `SELECT a.policy_revision,p.mode,u.normalized_email
 		FROM applications a JOIN access_policies p ON p.app_id=a.id AND p.revision=a.policy_revision
-		JOIN users u ON u.id=a.owner_user_id WHERE a.id=? AND a.status='active'`, appID).Scan(&revision, &mode, &owner); err != nil || mode != "private" {
+		JOIN users u ON u.id=a.owner_user_id WHERE a.id=? AND a.status='active'`, appID).Scan(&revision, &mode, &owner); err != nil || (mode != "private" && mode != "public") {
 		return false
 	}
 	p := policies.Policy{AppID: appID, OwnerIdentityID: owner, Revision: revision, Valid: true, Emails: map[string]struct{}{}, Domains: map[string]struct{}{}}
@@ -257,11 +257,16 @@ func policyAllowsTx(ctx context.Context, tx *sql.Tx, appID string, viewer identi
 		if rows.Scan(&kind, &value) != nil {
 			return false
 		}
-		if kind == "email" {
+		switch kind {
+		case "email":
 			p.Emails[value] = struct{}{}
-		}
-		if kind == "domain" {
+		case "domain":
 			p.Domains[value] = struct{}{}
+		case "owner":
+			// Owner authority is derived from the application owner row, not an
+			// app-controlled rule. The migration may retain this canonical marker.
+		default:
+			return false
 		}
 	}
 	return rows.Err() == nil && policies.Evaluate(p, viewer) == policies.Allow

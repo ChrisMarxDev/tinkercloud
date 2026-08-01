@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/client"
+	"github.com/ChrisMarxDev/tinkercloud/internal/compose"
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
 	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
@@ -271,6 +273,13 @@ func TestPublicReachProductionCompositionLocalAcceptance(t *testing.T) {
 		t.Fatal("capability-bearing public candidate activated")
 	}
 	assertCurrentDeployment(t, store, publicAppID, public.result.DeploymentID, "public")
+	// A raw, capability-bearing public candidate is deliberately rejected before
+	// it becomes immutable metadata. Its persisted candidate bytes must not make
+	// the owner dashboard unavailable or replace the active release's summary.
+	ownerDashboard, err = service.Dashboard(ctx, controlapi.Actor{ID: ownerID, Role: "deployer", Active: true})
+	if err != nil || len(ownerDashboard.Apps) != 1 || ownerDashboard.Apps[0].Slug != "public-story" || !ownerDashboard.Apps[0].Insights.Available || ownerDashboard.Apps[0].Insights.Last7Days.PageViews != 2 || ownerDashboard.Apps[0].Insights.Last7Days.ApproximateVisitors != 1 {
+		t.Fatalf("owner dashboard after rejected public candidate=%#v err=%v", ownerDashboard.Apps, err)
+	}
 
 	if _, err := store.DB.Exec("CREATE TRIGGER fail_acceptance_insight BEFORE INSERT ON app_insight_days BEGIN SELECT RAISE(ABORT,'insights unavailable'); END"); err != nil {
 		t.Fatal(err)
@@ -303,6 +312,12 @@ func TestPublicReachProductionCompositionLocalAcceptance(t *testing.T) {
 	if privateOwner.status != http.StatusOK || privateOwner.body != "<h1>PUBLIC-DOCUMENT</h1>" {
 		t.Fatalf("owner fallback status=%d body=%q", privateOwner.status, privateOwner.body)
 	}
+	// Public-gate authority is anonymous-static only. Once the gate is off, a
+	// fresh app handoff still accepts the current owner's global identity, then
+	// creates a new host-only child session before static dispatch. A different
+	// global identity remains a generic broker denial and cannot receive bytes.
+	assertGateOffIdentityHandoff(t, ctx, cfg, store, transport, publicHost, "owner@example.com", "PUBLIC-DOCUMENT")
+	assertGateOffIdentityDenied(t, ctx, cfg, store, transport, publicHost, "unmatched@example.net", "PUBLIC-DOCUMENT", "PUBLIC-ASSET")
 	if err := store.SetPublicGate(ctx, "root", true, 3, "acceptance-reenable"); err != nil {
 		t.Fatal(err)
 	}
@@ -504,6 +519,165 @@ func localRequest(t *testing.T, client *http.Client, method, host, path string, 
 		t.Fatal(err)
 	}
 	return localResponse{status: response.StatusCode, header: response.Header.Clone(), body: string(body)}
+}
+
+// assertGateOffIdentityHandoff exercises the complete production composition
+// after anonymous public access is disabled. The global identity proves only an
+// email; the public policy's retained owner/email/domain rules still decide
+// whether it may receive this app's new host-only child session.
+func assertGateOffIdentityHandoff(t *testing.T, ctx context.Context, cfg config.Config, store *persistence.SQLiteStore, transport http.RoundTripper, host, email, marker string) {
+	t.Helper()
+	browser := existingGlobalIdentityBrowser(t, ctx, cfg, store, transport, email, "gate-off-owner")
+	handoff := beginLocalAppHandoff(t, ctx, browser, cfg, host)
+	callback := authorizeLocalHandoff(t, ctx, browser, cfg, host, handoff)
+	consumeLocalHandoff(t, ctx, browser, callback)
+	if !localBrowserHasCookie(browser, "https://"+host, cfg.SessionCookie) {
+		t.Fatal("gate-off owner handoff did not issue an app-host child session")
+	}
+	if localBrowserHasCookie(browser, "https://"+host, compose.GlobalIdentityCookieName) {
+		t.Fatal("gate-off owner global identity cookie reached the app host")
+	}
+	if localBrowserHasCookie(browser, "https://"+cfg.PlatformHost(), cfg.SessionCookie) {
+		t.Fatal("gate-off owner child session reached the platform host")
+	}
+	static := localRequest(t, browser, http.MethodGet, host, "/", nil, true)
+	if static.status != http.StatusOK || !strings.Contains(static.body, marker) {
+		t.Fatalf("gate-off owner handoff did not serve static content: status=%d body=%q", static.status, static.body)
+	}
+}
+
+func assertGateOffIdentityDenied(t *testing.T, ctx context.Context, cfg config.Config, store *persistence.SQLiteStore, transport http.RoundTripper, host, email, documentMarker, assetMarker string) {
+	t.Helper()
+	browser := existingGlobalIdentityBrowser(t, ctx, cfg, store, transport, email, "gate-off-unmatched")
+	handoff := beginLocalAppHandoff(t, ctx, browser, cfg, host)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+cfg.PlatformHost()+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := browser.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if response.StatusCode != http.StatusOK || response.Header.Get("Location") != "" || !bytes.Contains(body, []byte("This account cannot open this app.")) || bytes.Contains(body, []byte(documentMarker)) || bytes.Contains(body, []byte(assetMarker)) {
+		t.Fatalf("gate-off unmatched identity was not generic broker denial: status=%d location=%q body=%q", response.StatusCode, response.Header.Get("Location"), body)
+	}
+	if localBrowserHasCookie(browser, "https://"+host, cfg.SessionCookie) {
+		t.Fatal("gate-off unmatched identity received an app-host child session")
+	}
+	denied := localRequest(t, browser, http.MethodGet, host, "/asset.txt", nil, false)
+	if denied.status != http.StatusUnauthorized || strings.Contains(denied.body, documentMarker) || strings.Contains(denied.body, assetMarker) {
+		t.Fatalf("gate-off unmatched identity received app bytes: status=%d body=%q", denied.status, denied.body)
+	}
+}
+
+func existingGlobalIdentityBrowser(t *testing.T, ctx context.Context, cfg config.Config, store *persistence.SQLiteStore, transport http.RoundTripper, email, binding string) *http.Client {
+	t.Helper()
+	now := time.Now().UTC()
+	challenge, err := store.RequestPlatformIdentityOTP(ctx, binding, email, "acceptance", []byte("local-public-acceptance-hmac-key"), now, time.Minute)
+	if err != nil || challenge == nil || challenge.Code == "" {
+		t.Fatalf("create existing global identity: challenge=%#v err=%v", challenge, err)
+	}
+	issued, err := store.VerifyPlatformIdentityOTP(ctx, binding, email, challenge.ID, challenge.Code, "", false, []byte("local-public-acceptance-hmac-key"), now, 5)
+	if err != nil || issued.Token == "" {
+		t.Fatalf("issue existing global identity: %#v err=%v", issued, err)
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	platform, err := url.Parse("https://" + cfg.PlatformHost())
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar.SetCookies(platform, []*http.Cookie{{Name: compose.GlobalIdentityCookieName, Value: issued.Token, Path: "/", Secure: true, HttpOnly: true, Expires: issued.Session.ExpiresAt}})
+	return &http.Client{Transport: transport, Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+}
+
+func beginLocalAppHandoff(t *testing.T, ctx context.Context, browser *http.Client, cfg config.Config, host string) string {
+	t.Helper()
+	document, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document.Header.Set("Accept", "text/html,application/xhtml+xml")
+	document.Header.Set("Sec-Fetch-Dest", "document")
+	response, err := browser.Do(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther || !strings.HasPrefix(response.Header.Get("Location"), "/_tinker/auth/login?") {
+		t.Fatalf("gate-off document did not enter private app login: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
+	}
+	login, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+response.Header.Get("Location"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = browser.Do(login)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	broker, err := url.Parse(response.Header.Get("Location"))
+	if err != nil || response.StatusCode != http.StatusSeeOther || broker.Scheme != "https" || !strings.EqualFold(broker.Host, cfg.PlatformHost()) || broker.Path != "/_tinker/identity" || len(broker.Query()) != 1 || broker.Query().Get("handoff") == "" {
+		t.Fatalf("gate-off app login did not create exact identity handoff: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
+	}
+	return broker.Query().Get("handoff")
+}
+
+func authorizeLocalHandoff(t *testing.T, ctx context.Context, browser *http.Client, cfg config.Config, host, handoff string) string {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+cfg.PlatformHost()+"/_tinker/identity?handoff="+url.QueryEscape(handoff), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := browser.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	callback, err := url.Parse(response.Header.Get("Location"))
+	if err != nil || response.StatusCode != http.StatusSeeOther || callback.Scheme != "https" || !strings.EqualFold(callback.Host, host) || callback.Path != "/_tinker/auth/callback" || len(callback.Query()) != 1 || callback.Query().Get("handoff") != handoff {
+		t.Fatalf("gate-off existing identity did not receive exact app callback: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
+	}
+	return callback.String()
+}
+
+func consumeLocalHandoff(t *testing.T, ctx context.Context, browser *http.Client, callback string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, callback, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := browser.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/" {
+		t.Fatalf("gate-off app callback did not consume handoff: status=%d location=%q", response.StatusCode, response.Header.Get("Location"))
+	}
+}
+
+func localBrowserHasCookie(browser *http.Client, rawURL, name string) bool {
+	if browser == nil || browser.Jar == nil {
+		return false
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	for _, cookie := range browser.Jar.Cookies(u) {
+		if cookie.Name == name && cookie.Value != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func assertCurrentDeployment(t *testing.T, store *persistence.SQLiteStore, appID, wantDeployment, wantMode string) {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
@@ -22,6 +23,60 @@ func seedViewerPolicyFor(t *testing.T, s *SQLiteStore, appID string) {
 	if _, err := s.DB.Exec(`INSERT INTO access_policies(app_id,revision,mode,created_by,created_at) VALUES(?,1,'private','u',datetime('now'));
 		INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES(? || '-viewer',?,1,'email','viewer@example.com','u',datetime('now'))`, appID, appID, appID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPolicyAllowsIdentityHandoffForKnownPrivateAndPublicModes(t *testing.T) {
+	s := seeded(t)
+	defer s.Close()
+	ctx := context.Background()
+	if _, err := s.DB.Exec(`INSERT INTO access_policies(app_id,revision,mode,created_by,created_at)
+		VALUES('a',1,'public','u',datetime('now'));
+		INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES
+		('exact-email','a',1,'email','exact@example.com','u',datetime('now')),
+		('allowed-domain','a',1,'domain','team.example.com','u',datetime('now'))`); err != nil {
+		t.Fatal(err)
+	}
+
+	allows := func(viewer identity.Identity) bool {
+		t.Helper()
+		var allowed bool
+		if err := s.Write(ctx, func(tx *sql.Tx) error {
+			allowed = policyAllowsTx(ctx, tx, "a", viewer)
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return allowed
+	}
+	for _, tc := range []struct {
+		name   string
+		viewer identity.Identity
+		want   bool
+	}{
+		{name: "public policy retains implicit owner", viewer: identity.Identity{ID: "owner@example.com", Email: "owner@example.com"}, want: true},
+		{name: "public policy allows exact email", viewer: identity.Identity{ID: "exact", Email: "exact@example.com"}, want: true},
+		{name: "public policy allows exact domain", viewer: identity.Identity{ID: "team", Email: "viewer@team.example.com"}, want: true},
+		{name: "public policy denies unmatched identity", viewer: identity.Identity{ID: "other", Email: "other@example.net"}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := allows(tc.viewer); got != tc.want {
+				t.Fatalf("policyAllowsTx(%#v)=%t want %t", tc.viewer, got, tc.want)
+			}
+		})
+	}
+
+	if _, err := s.DB.Exec("PRAGMA ignore_check_constraints=ON; UPDATE access_policies SET mode='unknown' WHERE app_id='a' AND revision=1"); err != nil {
+		t.Fatal(err)
+	}
+	if allows(identity.Identity{ID: "owner@example.com", Email: "owner@example.com"}) {
+		t.Fatal("unknown policy mode allowed owner handoff")
+	}
+	if _, err := s.DB.Exec("UPDATE access_policies SET mode='private' WHERE app_id='a' AND revision=1; INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES('unknown-rule','a',1,'unknown','ignored@example.com','u',datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	if allows(identity.Identity{ID: "owner@example.com", Email: "owner@example.com"}) {
+		t.Fatal("unknown policy rule allowed owner handoff")
 	}
 }
 

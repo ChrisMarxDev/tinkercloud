@@ -1076,14 +1076,23 @@ func dashboardInsightPeriod(in InsightSummary) controlapi.DashboardInsightPeriod
 }
 
 func dashboardManifestDescription(manifest []byte, state, slug string) (string, error) {
-	if len(manifest) == 0 {
-		if state == string(releases.Verified) || state == string(releases.Active) || state == string(releases.Superseded) {
-			return "", ErrUnavailable
-		}
+	// Only releases which could be the current immutable app bytes are an
+	// authority for dashboard metadata. Candidates in every other known state
+	// are diagnostic history, not an active description source: their manifest
+	// may be incomplete, rejected before parsing, or deliberately hostile.
+	// Never parse it merely to make an historical card prettier.
+	switch releases.State(state) {
+	case releases.Uploading, releases.Uploaded, releases.Validating, releases.Staged, releases.Rejected, releases.Failed:
 		return "", nil
+	case releases.Verified, releases.Active, releases.Superseded:
+		// These immutable states have passed manifest validation. A missing or
+		// malformed stored value is control-plane corruption and must fail
+		// closed, including for the active pointer below.
+	default:
+		return "", ErrUnavailable
 	}
 	var parsed releases.Manifest
-	if json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) {
+	if len(manifest) == 0 || json.Unmarshal(manifest, &parsed) != nil || parsed.Name != slug || !releases.ValidStoredManifest(parsed) {
 		return "", ErrUnavailable
 	}
 	return parsed.Description, nil

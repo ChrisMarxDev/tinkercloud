@@ -86,6 +86,15 @@ child session is never sent to or accepted by the admin origin or a sibling
 app. Protected HTTP, SDK, blob, database, and WebSocket requests continue to
 recheck the current app and policy.
 
+An app may retain `mode: public` while the operator's anonymous-static gate is
+off. That gate is never an input to identity handoff authorization: the normal
+handoff path accepts only a current active app with an exact known policy mode
+(`private` or `public`) and then evaluates its retained implicit owner, exact
+email, and email-domain rules. Unknown, missing, or malformed policy state
+denies. Thus disabling anonymous static access immediately removes only the
+anonymous static variant; it does not force an otherwise allowed verified
+identity to complete another OTP or lose ordinary app access.
+
 ## Logout and account switching
 
 `POST /_tinker/auth/logout` on an app host revokes only that app's current child
@@ -143,6 +152,11 @@ Executable evidence must prove:
     mint, preserve, or authenticate a parallel browser credential.
 11. Missing DNS, wrong wildcard target, missing admin certificate, or missing
     app certificate fails setup/activation without exposing app content.
+12. With an effective-public app's anonymous-static gate disabled, a fresh
+    handoff from an already verified allowed owner/email/domain identity reaches
+    only the exact app callback and creates a new host-only app session. An
+    unmatched identity receives the generic broker denial, no callback, no app
+    session, and no release bytes.
 
 ## Required E2E evidence
 
