@@ -22,6 +22,12 @@ limited to one coherent outcome, link the relevant issue when one exists, use
 the pull request template, include validation evidence, and leave the merge
 decision to the maintainer.
 
+Use a dedicated Git worktree for each independent issue or pull request.
+Parallel or otherwise unrelated work must not share a checkout, branch, index,
+or untracked state. Create each worktree from the current intended base branch,
+keep its changes scoped to that one outcome, and remove the worktree after the
+work is merged, closed, or deliberately abandoned.
+
 Build a clean, reviewable commit series. Each commit must represent one
 coherent step, avoid unrelated or generated noise, and leave the repository in
 a valid state. Put prerequisite contracts and tests before the implementation
