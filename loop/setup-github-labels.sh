@@ -50,10 +50,24 @@ while IFS='|' read -r name color description; do
     --description "${description}" \
     --force
 done <<'LABELS'
-inbox|d4c5f9|Untrusted intake awaiting refinement
-open|0e8a16|Refined and ready, but not authorized for implementation
-pending|fbca04|Blocked on a decision, review, dependency, or external input
-plan|5319e7|Agent should post a technical plan, not code
-implement|b60205|Trusted maintainer command authorizing implementation
+status/needs-triage|d4c5f9|New or reopened issue awaiting classification
+status/needs-info|fbca04|Waiting for concrete reporter information
+status/accepted|0e8a16|Refined and valid without implementation authority
+status/blocked|b60205|Waiting for a maintainer decision or external dependency
+status/in-progress|1d76db|An open pull request is addressing this issue
+type/bug|d73a4a|A reproducible defect in supported behavior
+type/feature|a2eeef|A focused product capability request
+type/docs|0075ca|Documentation content or usability
+type/question|d876e3|Setup, usage, or support question
+type/maintenance|c5def5|Repository, dependency, test, or tooling maintenance
+priority/critical|b60205|Release blocker or urgent supported-behavior regression
+priority/next|fbca04|Deliberately selected for near-term work
+priority/backlog|ededed|Valid work without a near-term commitment
+resolution/duplicate|cfd3d7|Closed in favor of a canonical issue
+resolution/invalid|e4e669|Closed because the report is invalid or not reproducible
+resolution/not-planned|ffffff|Closed because the project will not pursue it
+agent/plan|5319e7|Trusted maintainer command requesting a technical plan
+agent/implement|000000|Trusted maintainer command authorizing implementation
+good first issue|7057ff|Suitable for a first contribution
+help wanted|008672|Maintainer welcomes an external contribution
 LABELS
-

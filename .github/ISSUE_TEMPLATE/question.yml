@@ -1,7 +1,7 @@
 name: Question or support
 description: Ask for help using or understanding Tinkercloud
 title: "question: "
-labels: ["question", "inbox"]
+labels: ["type/question", "status/needs-triage"]
 body:
   - type: markdown
     attributes:

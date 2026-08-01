@@ -44,6 +44,7 @@ npm-debug.log*
 # Tool caches and editor/OS noise
 .private/
 .codex/
+.worktrees/
 .task/
 .cache/
 **/__pycache__/
@@ -58,4 +59,6 @@ tmp/
 
 # Autonomous GitHub issue-loop runtime and local credential fallback
 .hermes-task-loop/
+.hermes-triage-loop/
 GITHUB_TOKEN
+TRIAGE_GITHUB_TOKEN

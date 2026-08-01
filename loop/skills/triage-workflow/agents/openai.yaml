@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tinkercloud Issue Triage"
+  short_description: "Classify and maintain public GitHub issues"
+  default_prompt: "Use $triage-workflow to triage the current Tinkercloud issue queue."

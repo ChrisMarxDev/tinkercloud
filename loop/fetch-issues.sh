@@ -51,16 +51,23 @@ export GH_TOKEN
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "${tmp_dir}"' EXIT
 
-labels=(inbox open pending plan implement)
-for label in "${labels[@]}"; do
-  "${GH_BIN}" issue list \
-    --repo "${REPO_SLUG}" \
-    --state open \
-    --label "${label}" \
-    --limit 100 \
-    --json number,title,body,author,labels,url,updatedAt,createdAt \
-    >"${tmp_dir}/${label}.json"
-done
+"${GH_BIN}" issue list \
+  --repo "${REPO_SLUG}" \
+  --state open \
+  --limit 100 \
+  --json number,title,body,author,labels,url,updatedAt,createdAt \
+  >"${tmp_dir}/open.json"
+
+python3 - "${tmp_dir}/open.json" <<'PY' >"${tmp_dir}/command-issues"
+import json
+import sys
+from pathlib import Path
+
+for issue in json.loads(Path(sys.argv[1]).read_text()):
+    labels = {label["name"] for label in issue.get("labels", [])}
+    if labels.intersection({"agent/plan", "agent/implement"}):
+        print(issue["number"])
+PY
 
 while IFS= read -r issue_number; do
   [[ -n "${issue_number}" ]] || continue
@@ -74,16 +81,7 @@ while IFS= read -r issue_number; do
     printf '[]\n' >"${tmp_dir}/${issue_number}-events.json"
     : >"${tmp_dir}/${issue_number}-events-failed"
   fi
-done < <(
-  python3 - "${tmp_dir}/implement.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-for issue in json.loads(Path(sys.argv[1]).read_text()):
-    print(issue["number"])
-PY
-)
+done <"${tmp_dir}/command-issues"
 
 python3 - "${OUT_FILE}" "${tmp_dir}" "${REPO_SLUG}" "${APPROVER_LOGINS}" <<'PY'
 import json
@@ -98,32 +96,34 @@ approvers = {
     for login in sys.argv[4].split(",")
     if login.strip()
 }
-state_labels = ("inbox", "open", "pending", "plan")
-all_workflow_labels = (*state_labels, "implement")
+state_labels = {
+    "status/needs-triage",
+    "status/needs-info",
+    "status/accepted",
+    "status/blocked",
+    "status/in-progress",
+}
+command_labels = {"agent/plan", "agent/implement"}
 
-by_number = {}
-for label in all_workflow_labels:
-    issues = json.loads((tmp_dir / f"{label}.json").read_text())
-    for issue in issues:
-        number = issue["number"]
-        entry = by_number.setdefault(number, issue)
-        entry_labels = {item["name"] for item in entry.get("labels", [])}
-        entry["stateLabels"] = sorted(entry_labels.intersection(state_labels))
-        entry["hasImplementLabel"] = "implement" in entry_labels
+issues = []
+for issue in json.loads((tmp_dir / "open.json").read_text()):
+    labels = {label["name"] for label in issue.get("labels", [])}
+    commands = sorted(labels.intersection(command_labels))
+    if not commands:
+        continue
 
-for issue in by_number.values():
     issue["bodyTruncated"] = len(issue.get("body") or "") > 16000
     issue["body"] = (issue.get("body") or "")[:16000]
-    issue["implementationApproved"] = False
-    issue["approvalActor"] = None
+    issue["stateLabels"] = sorted(labels.intersection(state_labels))
+    issue["commandLabels"] = commands
+    issue["commandApproval"] = {command: False for command in commands}
+    issue["approvalActors"] = {command: None for command in commands}
     issue["approvalLookupFailed"] = False
-
-    if not issue["hasImplementLabel"]:
-        continue
 
     number = issue["number"]
     if (tmp_dir / f"{number}-events-failed").exists():
         issue["approvalLookupFailed"] = True
+        issues.append(issue)
         continue
 
     pages = json.loads((tmp_dir / f"{number}-events.json").read_text())
@@ -134,55 +134,60 @@ for issue in by_number.values():
         elif isinstance(page, dict):
             events.append(page)
 
-    implement_events = [
-        (index, event)
-        for index, event in enumerate(events)
-        if event.get("event") in {"labeled", "unlabeled"}
-        and (event.get("label") or {}).get("name") == "implement"
-    ]
-    if not implement_events:
-        issue["approvalLookupFailed"] = True
-        continue
+    for command in commands:
+        command_events = [
+            (index, event)
+            for index, event in enumerate(events)
+            if event.get("event") in {"labeled", "unlabeled"}
+            and (event.get("label") or {}).get("name") == command
+        ]
+        if not command_events:
+            issue["approvalLookupFailed"] = True
+            continue
 
-    _, latest = max(
-        implement_events,
-        key=lambda item: (
-            item[1].get("created_at") or "",
-            item[1].get("id") if isinstance(item[1].get("id"), int) else -1,
-            item[0],
-        ),
-    )
-    actor = (latest.get("actor") or {}).get("login")
-    issue["approvalActor"] = actor
-    issue["implementationApproved"] = (
-        latest.get("event") == "labeled"
-        and isinstance(actor, str)
-        and actor.lower() in approvers
-    )
+        _, latest = max(
+            command_events,
+            key=lambda item: (
+                item[1].get("created_at") or "",
+                item[1].get("id") if isinstance(item[1].get("id"), int) else -1,
+                item[0],
+            ),
+        )
+        actor = (latest.get("actor") or {}).get("login")
+        issue["approvalActors"][command] = actor
+        issue["commandApproval"][command] = (
+            latest.get("event") == "labeled"
+            and isinstance(actor, str)
+            and actor.lower() in approvers
+        )
+
+    issues.append(issue)
+
 
 def is_actionable(issue):
-    states = set(issue.get("stateLabels", []))
-    if "pending" in states:
+    if issue.get("approvalLookupFailed"):
         return False
-    if issue.get("implementationApproved"):
-        return True
-    return bool(states.intersection({"inbox", "plan"}))
+    if issue.get("stateLabels") != ["status/accepted"]:
+        return False
+    commands = issue.get("commandLabels", [])
+    if len(commands) != 1:
+        return False
+    return issue.get("commandApproval", {}).get(commands[0], False)
 
-actionable = [issue for issue in by_number.values() if is_actionable(issue)]
+
+actionable = [issue for issue in issues if is_actionable(issue)]
 payload = {
     "repo": repo,
     "approverLogins": sorted(approvers),
     "counts": {
-        "inbox": sum("inbox" in issue.get("stateLabels", []) for issue in by_number.values()),
-        "open": sum("open" in issue.get("stateLabels", []) for issue in by_number.values()),
-        "pending": sum("pending" in issue.get("stateLabels", []) for issue in by_number.values()),
-        "plan": sum("plan" in issue.get("stateLabels", []) for issue in by_number.values()),
-        "implement": sum(issue.get("hasImplementLabel", False) for issue in by_number.values()),
-        "approvedImplement": sum(issue.get("implementationApproved", False) for issue in by_number.values()),
+        "agentPlan": sum("agent/plan" in issue["commandLabels"] for issue in issues),
+        "agentImplement": sum("agent/implement" in issue["commandLabels"] for issue in issues),
+        "approvedPlan": sum(issue["commandApproval"].get("agent/plan", False) for issue in issues),
+        "approvedImplement": sum(issue["commandApproval"].get("agent/implement", False) for issue in issues),
         "actionable": len(actionable),
     },
     "actionableIssueNumbers": sorted(issue["number"] for issue in actionable),
-    "issues": sorted(by_number.values(), key=lambda item: item["number"]),
+    "issues": sorted(issues, key=lambda item: item["number"]),
 }
 
 out_file.write_text(json.dumps(payload, indent=2) + "\n")
