@@ -75,8 +75,8 @@ const essentials = [
   },
   {
     icon: Sparkle,
-    title: "LLM capability",
-    body: "Operator-governed AI access without browser secrets.",
+    title: "LLM capability · post-V1",
+    body: "Operator-governed AI access without browser secrets when enabled.",
   },
 ];
 

@@ -516,6 +516,7 @@ h1 span {
 }
 
 .how {
+  grid-column: 1 / -1;
   padding: 88px 0 106px;
   scroll-margin-top: 20px;
 }

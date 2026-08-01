@@ -19,6 +19,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy tinkercloud.fun
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
@@ -47,7 +48,7 @@ jobs:
         run: npm test
 
       - name: Deploy Worker and static assets
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
