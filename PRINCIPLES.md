@@ -122,6 +122,19 @@ explicit and non-interactive. Security-sensitive secrets still use narrow
 credential boundaries, but that boundary must not force unrelated non-secret
 ceremony.
 
+## 18. User documentation and contributor internals stay separate
+
+The root `README.md` is a user guide: operators come first and deployers come
+second. `docs/` contains user, operator, deployer, product, architecture, and
+security guidance that helps someone understand or use Tinkercloud. It must not
+become a scratchpad for agent prompts, contributor mechanics, or CI procedure.
+
+Contributor and agent maintenance material belongs in `internals/` or the
+relevant `skills/` directory. Root `AGENTS.md`, `PRINCIPLES.md`, and `PRD.md`
+remain canonical governance and scope documents because repository tooling and
+review depend on them. User-facing pages should link to internal material only
+when a contributor needs to leave the user path.
+
 ## Non-negotiable invariant
 
 There must be one typed, testable authorization result between public request
