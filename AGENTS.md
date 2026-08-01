@@ -4,6 +4,49 @@ Read `PRINCIPLES.md` and then `PRD.md` before planning, coding, or reviewing
 changes. Principles override the PRD; the PRD overrides topic documents and
 examples.
 
+## Public repository and contribution hygiene
+
+This is a public repository. Assume that every tracked file, commit message,
+branch, pull request, issue, review comment, test fixture, generated artifact,
+and CI log can be read and retained by anyone. Before publishing any material,
+review it for credentials, personal data, private infrastructure, local paths,
+internal scratch content, proprietary information, and assets without clear
+redistribution rights. Use `.private/` for unchecked local material and never
+force-add it. Use `.tinker/` only for ignored Tinkercloud runtime state, not as
+a general-purpose private-content folder.
+
+All repository changes must be made on a focused branch and delivered through
+a pull request. Never push changes directly to `main`, bypass branch
+protection, or merge an agent-authored pull request. Keep each pull request
+limited to one coherent outcome, link the relevant issue when one exists, use
+the pull request template, include validation evidence, and leave the merge
+decision to the maintainer.
+
+Build a clean, reviewable commit series. Each commit must represent one
+coherent step, avoid unrelated or generated noise, and leave the repository in
+a valid state. Put prerequisite contracts and tests before the implementation
+that depends on them, and put follow-up documentation or mechanical cleanup in
+separate commits when that improves review. Remove fixup, WIP, merge, and
+checkpoint commits before requesting final review. Do not rewrite commits that
+another contributor may already be reviewing without coordinating with them.
+
+Every commit must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```text
+<type>[optional scope][!]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Use `feat` for new behavior, `fix` for bug fixes, and the established `build`,
+`chore`, `ci`, `docs`, `perf`, `refactor`, `revert`, `style`, and `test` types
+for those concerns. Use a short noun for an optional scope. Mark breaking
+changes with `!` and explain them in a `BREAKING CHANGE:` footer. Reference
+issues with trailers such as `Refs: #123`; use `Closes #123` in the pull
+request body when merge should close the issue.
+
 ## Terminology
 
 Use `operator` for a person who hosts and operates Tinkercloud, `deployer` for a
