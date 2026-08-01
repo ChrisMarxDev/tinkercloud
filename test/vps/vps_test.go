@@ -633,6 +633,61 @@ func TestDashboardIdentityOTPRequiresDashboardCompletionRedirect(t *testing.T) {
 	}
 }
 
+func TestDashboardCardInsightsAreExactAndScopedToOwnedCard(t *testing.T) {
+	page := `
+<article data-tinker-app-slug="vps-e2e-public"><section>
+<article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">1</p><p class="tinker-card__meta">Last 7 days · 2 page views</p></article>
+<article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">9</p><p class="tinker-card__meta">Last 30 days · 99 page views</p></article>
+</section></article>
+<article data-tinker-app-slug="vps-e2e-public-other"><section><article class="tinker-stat"><p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">7</p><p class="tinker-card__meta">Last 7 days · 42 page views</p></article></section></article>`
+	insights, ok := dashboardCardInsights(dashboardAppCard(page, "vps-e2e-public"))
+	if !ok || !insights.available || insights.pageViews != 2 || insights.visitors != 1 {
+		t.Fatalf("owned card insights = %#v, parsed=%t; want exact 2 views / 1 visitor", insights, ok)
+	}
+	if _, ok := dashboardCardInsights(dashboardAppCard(page, "missing")); ok {
+		t.Fatal("missing dashboard card was accepted as insights evidence")
+	}
+}
+
+func TestDashboardCardInsightsDistinguishUnavailableAndMalformed(t *testing.T) {
+	unavailable, ok := dashboardCardInsights(`<article data-tinker-app-slug="owned"><h4>Local insights unavailable</h4></article>`)
+	if !ok || unavailable.available {
+		t.Fatalf("unavailable card = %#v, parsed=%t", unavailable, ok)
+	}
+	if _, ok := dashboardCardInsights(`<article data-tinker-app-slug="owned"><p class="tinker-stat__value">1</p></article>`); ok {
+		t.Fatal("malformed dashboard card was accepted as insights evidence")
+	}
+}
+
+func TestExactPublicDocumentUsesDocumentHeadersAndRetainsOneJarMarker(t *testing.T) {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requests := 0
+	h := &http.Client{Jar: jar, Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		requests++
+		if r.Header.Get("Accept") != "text/html" || r.Header.Get("Sec-Fetch-Dest") != "document" {
+			t.Fatalf("document tracking headers = Accept=%q Sec-Fetch-Dest=%q", r.Header.Get("Accept"), r.Header.Get("Sec-Fetch-Dest"))
+		}
+		if requests == 1 && r.Header.Get("Cookie") != "" {
+			t.Fatalf("first public document unexpectedly carried a marker: %q", r.Header.Get("Cookie"))
+		}
+		if requests == 2 && !strings.Contains(r.Header.Get("Cookie"), "__Host-tinker-insights=opaque") {
+			t.Fatalf("second public document did not retain the app-host marker: %q", r.Header.Get("Cookie"))
+		}
+		header := make(http.Header)
+		header.Set("Cache-Control", "no-store")
+		header.Add("Set-Cookie", "__Host-tinker-insights=opaque; Path=/; Secure; HttpOnly")
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader("<!doctype html><title>public matrix</title>marker")), Request: r}, nil
+	})}
+	for range 2 {
+		if err := requestExactPublicDocument(context.Background(), h, "public.example.test", "marker", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
@@ -803,6 +858,60 @@ func TestSocketInventoryMatchesExactPublicPorts(t *testing.T) {
 	}
 }
 
+func TestPublicArchiveFixturesMatchManifestAndArchiveContract(t *testing.T) {
+	viewer := "viewer@example.test"
+	cases := []struct {
+		name, mode    string
+		indexing      bool
+		capability    bool
+		validManifest bool
+	}{
+		{name: "private", mode: "private", validManifest: true},
+		{name: "public indexed", mode: "public", indexing: true, validManifest: true},
+		{name: "public no index", mode: "public", validManifest: true},
+		{name: "public capability denial", mode: "public", capability: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			archive, size, marker, asset, err := publicArchive("vps-public-"+strings.ReplaceAll(tc.name, " ", "-"), tc.mode, tc.indexing, tc.capability, viewer)
+			if err != nil || len(archive) == 0 || size != int64(len(archive)) || marker == "" || asset == "" {
+				t.Fatalf("public archive: bytes=%d size=%d marker=%q asset=%q err=%v", len(archive), size, marker, asset, err)
+			}
+			manifest, names := archiveManifestAndNames(t, archive)
+			if want := []string{"tinker.yaml", "asset.txt", "index.html", "private.js"}; !slices.Equal(names, want) {
+				t.Fatalf("archive entries = %v, want %v", names, want)
+			}
+			parsed, parseErr := releases.ParseManifest(manifest)
+			if !tc.validManifest {
+				if !errors.Is(parseErr, releases.ErrManifest) {
+					t.Fatalf("capability-bearing public fixture parser error = %v, want invalid manifest", parseErr)
+				}
+				if !strings.Contains(string(manifest), "features:\n  kv: true\n") {
+					t.Fatalf("capability fixture manifest omitted requested capability: %q", manifest)
+				}
+				var locallyValidated bytes.Buffer
+				if err := client.ArchiveProject(t.TempDir(), manifest, &locallyValidated); !errors.Is(err, releases.ErrManifest) {
+					t.Fatalf("ArchiveProject error = %v, want invalid manifest", err)
+				}
+				return
+			}
+			if parseErr != nil {
+				t.Fatal(parseErr)
+			}
+			wantEmails := 0
+			if tc.mode == "private" {
+				wantEmails = 1
+			}
+			if parsed.Name != "vps-public-"+strings.ReplaceAll(tc.name, " ", "-") || parsed.AccessMode != tc.mode || parsed.Indexing != tc.indexing || parsed.KV || len(parsed.Emails) != wantEmails {
+				t.Fatalf("public fixture manifest = %#v", parsed)
+			}
+			if tc.mode == "private" && parsed.Emails[0] != viewer {
+				t.Fatalf("private fixture emails = %v, want %q", parsed.Emails, viewer)
+			}
+		})
+	}
+}
+
 func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 	viewer := "viewer@example.test"
 	a, sizeA, markerA, err := smokeArchive("vps-smoke-a", viewer)
@@ -821,25 +930,44 @@ func TestSmokeArchiveIsDeployableAndUsesUniqueMarker(t *testing.T) {
 
 func smokeManifest(t *testing.T, archive []byte) releases.Manifest {
 	t.Helper()
+	b, _ := archiveManifestAndNames(t, archive)
+	m, err := releases.ParseManifest(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
+}
+
+func archiveManifestAndNames(t *testing.T, archive []byte) ([]byte, []string) {
+	t.Helper()
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
-	h, err := tr.Next()
-	if err != nil || h.Name != "tinker.yaml" {
-		t.Fatalf("first archive entry = %#v, %v", h, err)
+	var manifest []byte
+	var names []string
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		names = append(names, h.Name)
+		if h.Name == "tinker.yaml" {
+			manifest, err = io.ReadAll(tr)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	b, err := io.ReadAll(tr)
-	if err != nil {
-		t.Fatal(err)
+	if len(names) == 0 || names[0] != "tinker.yaml" || manifest == nil {
+		t.Fatalf("archive missing first manifest: entries=%v", names)
 	}
-	m, err := releases.ParseManifest(b)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return m
+	return manifest, names
 }
 
 func TestVPSAcceptance(t *testing.T) {

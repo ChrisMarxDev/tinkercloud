@@ -14,6 +14,7 @@ import (
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
 )
 
 func fakeInitRuntime(t *testing.T) (initRuntime, *int) {
@@ -35,12 +36,63 @@ func fakeInitRuntime(t *testing.T) (initRuntime, *int) {
 			}
 			return nil
 		},
-		Install:      func(string, string) error { *installs++; return nil },
-		DNSLookup:    func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil },
+		Install:                func(string, string) error { *installs++; return nil },
+		DNSLookup:              func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil },
+		PrepareSQLiteOwnership: func(string) error { return nil },
+		InitializeSQLite: func(ctx context.Context, databasePath, operatorEmail string) error {
+			db, err := persistence.OpenSQLite(ctx, databasePath)
+			if err != nil {
+				return err
+			}
+			if operatorEmail != "" {
+				err = db.EnsureInitialOperator(ctx, operatorEmail, "init")
+			}
+			closeErr := db.Close()
+			if err != nil {
+				return err
+			}
+			return closeErr
+		},
 		LocalHealth:  func(context.Context, string) error { return nil },
 		PublicHealth: func(context.Context, string) error { return nil },
 	}
 	return rt, installs
+}
+
+func TestInitSQLiteDropsToServiceIdentityBeforeOpeningDatabase(t *testing.T) {
+	oldDrop, oldOpen := dropToTinkercloudIdentity, openInitSQLite
+	t.Cleanup(func() {
+		dropToTinkercloudIdentity = oldDrop
+		openInitSQLite = oldOpen
+	})
+	dropped := false
+	dropToTinkercloudIdentity = func() error {
+		dropped = true
+		return nil
+	}
+	openInitSQLite = func(ctx context.Context, databasePath string) (*persistence.SQLiteStore, error) {
+		if !dropped {
+			t.Fatal("SQLite opened before dropping to the service identity")
+		}
+		return persistence.OpenSQLite(ctx, databasePath)
+	}
+
+	databasePath := filepath.Join(t.TempDir(), "tinkercloud.db")
+	if err := runInitSQLiteInProcess(context.Background(), databasePath, "operator@example.test"); err != nil {
+		t.Fatal(err)
+	}
+	if !dropped {
+		t.Fatal("SQLite opened without dropping to the service identity")
+	}
+	store, err := persistence.OpenSQLite(context.Background(), databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var count int
+	if err = store.DB.QueryRow("SELECT COUNT(*) FROM users WHERE normalized_email='operator@example.test' AND role='operator'").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("initial operator = %d, %v", count, err)
+	}
 }
 
 // pipeListener only exists to exercise the injected port check without taking
@@ -139,6 +191,16 @@ func TestInitCompletesOnlyAfterAllDurableSteps(t *testing.T) {
 	root := t.TempDir()
 	writeInitSecrets(t, root)
 	rt, installs := fakeInitRuntime(t)
+	var sqliteCalls []string
+	initializeSQLite := rt.InitializeSQLite
+	rt.PrepareSQLiteOwnership = func(databasePath string) error {
+		sqliteCalls = append(sqliteCalls, "repair:"+databasePath)
+		return nil
+	}
+	rt.InitializeSQLite = func(ctx context.Context, databasePath, operatorEmail string) error {
+		sqliteCalls = append(sqliteCalls, "service:"+operatorEmail)
+		return initializeSQLite(ctx, databasePath, operatorEmail)
+	}
 	oldUID := effectiveUID
 	effectiveUID = func() int { return 0 }
 	t.Cleanup(func() { effectiveUID = oldUID })
@@ -147,6 +209,9 @@ func TestInitCompletesOnlyAfterAllDurableSteps(t *testing.T) {
 	}
 	if *installs != 1 {
 		t.Fatal(*installs)
+	}
+	if got, want := strings.Join(sqliteCalls, ","), "repair:"+filepath.Join(root, "data", "tinkercloud.db")+",service:,service:operator@example.test"; got != want {
+		t.Fatalf("SQLite ownership/write order = %q, want %q", got, want)
 	}
 	stateBytes, err := os.ReadFile(filepath.Join(root, "etc", "init-state.json"))
 	if err != nil {

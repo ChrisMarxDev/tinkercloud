@@ -324,6 +324,7 @@ var dropToTinkercloudIdentity = func() error {
 }
 
 var openDeployerSQLite = persistence.OpenSQLite
+var openInitSQLite = persistence.OpenSQLite
 
 // deployerMutationRunner keeps the root process privileged for the one
 // post-mutation systemd refresh while the SQLite writer itself runs in a child
@@ -351,12 +352,46 @@ var deployerServiceTryRestart = func() error {
 const internalDeployerMutationCommand = "deployer-mutate-internal"
 const internalInsightsMutationCommand = "insights-mutate-internal"
 const internalPublicMutationCommand = "public-mutate-internal"
+const internalInitSQLiteCommand = "init-sqlite-internal"
 
 // insightsMutationRunner follows the same service-user writer pattern as the
 // other root-local recovery mutations: root retains only systemd authority,
 // while the child drops privilege before SQLite opens any durable artifact.
 var insightsMutationRunner = runInsightsMutationChild
 var publicMutationRunner = runPublicMutationChild
+
+// runInitSQLiteChild keeps init's root parent available to persist its
+// root-owned state and install systemd, while the child permanently drops to
+// the service identity before it creates or changes SQLite artifacts.
+func runInitSQLiteChild(ctx context.Context, databasePath, operatorEmail string) error {
+	executable, err := os.Executable()
+	if err != nil || executable == "" {
+		return errors.New("init SQLite unavailable")
+	}
+	args := []string{internalInitSQLiteCommand, "--database", databasePath}
+	if operatorEmail != "" {
+		args = append(args, "--operator-email", operatorEmail)
+	}
+	return exec.CommandContext(ctx, executable, args...).Run()
+}
+
+func runInitSQLiteInProcess(ctx context.Context, databasePath, operatorEmail string) error {
+	if err := dropToTinkercloudIdentity(); err != nil {
+		return err
+	}
+	store, err := openInitSQLite(ctx, databasePath)
+	if err != nil {
+		return err
+	}
+	if operatorEmail != "" {
+		err = store.EnsureInitialOperator(ctx, operatorEmail, "init")
+	}
+	closeErr := store.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
+}
 
 func runDeployerMutationChild(ctx context.Context, databasePath, email, status, action string) error {
 	executable, err := os.Executable()
@@ -466,6 +501,21 @@ func run(args []string, out, errout *os.File) error {
 		return errors.New("tinkercloud: usage")
 	}
 	switch args[0] {
+	case internalInitSQLiteCommand:
+		if effectiveUID() != 0 {
+			return errors.New("tinkercloud: root_required")
+		}
+		fs := flag.NewFlagSet(internalInitSQLiteCommand, flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		databasePath := fs.String("database", "", "")
+		operatorEmail := fs.String("operator-email", "", "")
+		if fs.Parse(args[1:]) != nil || len(fs.Args()) != 0 || !filepath.IsAbs(*databasePath) {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		if err := runInitSQLiteInProcess(context.Background(), *databasePath, *operatorEmail); err != nil {
+			return errors.New("tinkercloud: init_database_failed")
+		}
+		return nil
 	case internalInsightsMutationCommand:
 		if effectiveUID() != 0 {
 			return errors.New("tinkercloud: root_required")

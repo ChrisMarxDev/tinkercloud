@@ -594,6 +594,11 @@ Keep provider and Tinkercloud secrets in root-owned mode-0600 credential files o
 systemd credentials. Never accept them in argv, ordinary YAML, chat, browser
 state, shell history, logs, or audit. Run the gateway as the unprivileged
 `tinkercloud` service identity with only the narrow bind capability for 80/443.
+During initialization, create and seed the control SQLite database only in a
+fixed child that permanently drops to that identity before opening SQLite; do
+not let the root init parent create database, WAL, or SHM artifacts. A resumable
+legacy install may hand off only those exact validated root-owned artifacts,
+never recursively change the data directory or widen modes.
 
 If offering `llm.chat`, configure it as an operator-owned capability adapter:
 use the dashboard **API keys** section to choose Anthropic or Gemini and enter

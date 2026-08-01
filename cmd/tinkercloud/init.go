@@ -24,7 +24,6 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
 	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
-	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
 )
 
 const (
@@ -36,15 +35,17 @@ const (
 // initRuntime isolates host mutation and network checks. Production uses the
 // defaults below; tests must opt into fakes rather than an undocumented bypass.
 type initRuntime struct {
-	GOOS, GOARCH func() string
-	ReadFile     func(string) ([]byte, error)
-	Listen       func(network, address string) (net.Listener, error)
-	ClockOK      func(context.Context) error
-	Run          func(context.Context, string, ...string) error
-	Install      func(configPath, credentialPath string) error
-	DNSLookup    func(context.Context, string) ([]string, error)
-	LocalHealth  func(context.Context, string) error
-	PublicHealth func(context.Context, string) error
+	GOOS, GOARCH           func() string
+	ReadFile               func(string) ([]byte, error)
+	Listen                 func(network, address string) (net.Listener, error)
+	ClockOK                func(context.Context) error
+	Run                    func(context.Context, string, ...string) error
+	Install                func(configPath, credentialPath string) error
+	DNSLookup              func(context.Context, string) ([]string, error)
+	PrepareSQLiteOwnership func(databasePath string) error
+	InitializeSQLite       func(ctx context.Context, databasePath, operatorEmail string) error
+	LocalHealth            func(context.Context, string) error
+	PublicHealth           func(context.Context, string) error
 }
 
 var productionInitRuntime = initRuntime{
@@ -68,6 +69,8 @@ var productionInitRuntime = initRuntime{
 	DNSLookup: func(ctx context.Context, host string) ([]string, error) {
 		return net.DefaultResolver.LookupHost(ctx, host)
 	},
+	PrepareSQLiteOwnership: prepareDeployerDatabaseOwnership,
+	InitializeSQLite:       runInitSQLiteChild,
 	LocalHealth: func(ctx context.Context, _ string) error {
 		return exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", "tinkercloud.service").Run()
 	},
@@ -343,12 +346,17 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 			return err
 		}
 	}
+	// A prior interrupted version may have created only the three SQLite
+	// artifacts as root. Repairing those exact, validated files before the
+	// service-identity child runs keeps init resumable without widening modes or
+	// recursively changing service-owned state.
+	if err := rt.PrepareSQLiteOwnership(filepath.Join(cfg.DataDirectory, "tinkercloud.db")); err != nil {
+		return errors.New("tinkercloud: service_identity_failed")
+	}
 	if state.Next() == operations.InitDatabase {
-		db, openErr := persistence.OpenSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinkercloud.db"))
-		if openErr != nil {
-			return openErr
+		if err := rt.InitializeSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinkercloud.db"), ""); err != nil {
+			return err
 		}
-		_ = db.Close()
 		if err := state.Complete(operations.InitDatabase); err != nil {
 			return err
 		}
@@ -357,13 +365,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		}
 	}
 	if state.Next() == operations.InitOperator {
-		db, openErr := persistence.OpenSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinkercloud.db"))
-		if openErr != nil {
-			return openErr
-		}
-		err = db.EnsureInitialOperator(ctx, *email, "init")
-		_ = db.Close()
-		if err != nil {
+		if err := rt.InitializeSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinkercloud.db"), *email); err != nil {
 			return err
 		}
 		if err := state.Complete(operations.InitOperator); err != nil {

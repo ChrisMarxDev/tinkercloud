@@ -51,6 +51,13 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   readable by the service group; secret values are copied from root-readable
   files into a root-only systemd EnvironmentFile and never appear in config,
   diagnostics, or command output.
+- Init's database creation and initial-operator mutation each run in a fixed
+  child that permanently drops to the installed `tinkercloud` service identity
+  before opening SQLite. The control database and its WAL/SHM artifacts are
+  therefore service-owned from a clean install. On a resumable legacy init,
+  root may hand off only an existing regular root-owned database/WAL/SHM
+  artifact after no-symlink, owner, and non-permissive-mode validation; it
+  never recursively changes the data directory or widens modes.
 
 - The generated systemd sandbox derives its writable allowlist from the
   validated config and contains exactly the data and ACME cache directories.

@@ -7,7 +7,9 @@
 package vps
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -78,6 +80,7 @@ var rootTarget = regexp.MustCompile(`^root@(?:[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-
 var dnsName = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
 var emailName = regexp.MustCompile(`^[a-z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$`)
 var legacyUpdateManifestFlag = regexp.MustCompile(`(?m)^(?:flag provided but not defined: -release-manifest|unknown flag: --release-manifest)\s*$`)
+var dashboardLast7Insights = regexp.MustCompile(`<p class="tinker-stat__label">Approximate visitors</p><p class="tinker-stat__value">([0-9]+)</p><p class="tinker-card__meta">Last 7 days · ([0-9]+) page views</p>`)
 
 // Config intentionally separates SSH arguments. In particular, SSH_TARGET is
 // not a shell fragment and no mode disables host-key verification.
@@ -805,7 +808,7 @@ func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client
 
 	privateArchive, privateSize, privateMarker, _, err := publicArchive(vpsPublicAppSlug, "private", false, false, s.Config.DeployerEmail)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("build public-matrix private baseline fixture: %w", err)
 	}
 	privateKey, err := client.IdempotencyKey()
 	if err != nil {
@@ -818,7 +821,7 @@ func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client
 
 	publicArchiveBytes, publicSize, marker, asset, err := publicArchive(vpsPublicAppSlug, "public", true, false, s.Config.DeployerEmail)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("build public-matrix indexed public fixture: %w", err)
 	}
 	confirmed := owner
 	confirmed.PublicAcknowledged = true
@@ -849,7 +852,7 @@ func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client
 	}
 	capabilityArchive, capabilitySize, _, _, err := publicArchive(vpsPublicAppSlug, "public", false, true, s.Config.DeployerEmail)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("build public-matrix capability-bearing public fixture: %w", err)
 	}
 	key, _ = client.IdempotencyKey()
 	if _, err = confirmed.Deploy(ctx, vpsPublicAppSlug, bytes.NewReader(capabilityArchive), capabilitySize, key); err == nil {
@@ -874,7 +877,7 @@ func (s *Suite) beginPublicMatrix(ctx context.Context, owner, secondOwner client
 
 	otherArchive, otherSize, otherMarker, _, err := publicArchive(vpsPublicOtherSlug, "public", false, false, s.Config.ViewerEmail)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("build second-owner public fixture: %w", err)
 	}
 	secondConfirmed := secondOwner
 	secondConfirmed.PublicAcknowledged = true
@@ -995,10 +998,47 @@ func publicArchive(slug, mode string, indexing, capability bool, viewerEmail str
 		return nil, 0, "", "", err
 	}
 	var archive bytes.Buffer
-	if err := client.ArchiveProject(d, manifestBytes, &archive); err != nil {
-		return nil, 0, "", "", err
+	if capability {
+		// A public release with a browser capability is intentionally malformed.
+		// ArchiveProject correctly rejects it locally, but the VPS suite must send
+		// this hostile archive to prove that the server rejects it too.
+		if err := archivePublicFixture(&archive, manifestBytes, map[string][]byte{
+			"asset.txt":  []byte(asset),
+			"index.html": []byte("<!doctype html><title>public matrix</title>" + marker),
+			"private.js": []byte("window.fixture='" + marker + "'"),
+		}); err != nil {
+			return nil, 0, "", "", fmt.Errorf("archive public fixture mode=%s indexing=%t capability=%t: %w", mode, indexing, capability, err)
+		}
+	} else if err := client.ArchiveProject(d, manifestBytes, &archive); err != nil {
+		return nil, 0, "", "", fmt.Errorf("archive public fixture mode=%s indexing=%t capability=%t: %w", mode, indexing, capability, err)
 	}
 	return archive.Bytes(), int64(archive.Len()), marker, asset, nil
+}
+
+// archivePublicFixture writes a deliberately unvalidated archive for one
+// negative server-side deployment case. Its layout matches ArchiveProject:
+// manifest first, then deterministic asset paths, with no duplicate manifest.
+func archivePublicFixture(w io.Writer, manifest []byte, files map[string][]byte) error {
+	gz := gzip.NewWriter(w)
+	gz.Header.ModTime = time.Unix(0, 0)
+	tw := tar.NewWriter(gz)
+	entries := []struct {
+		name string
+		body []byte
+	}{{"tinker.yaml", manifest}, {"asset.txt", files["asset.txt"]}, {"index.html", files["index.html"]}, {"private.js", files["private.js"]}}
+	for _, entry := range entries {
+		h := &tar.Header{Name: entry.name, Mode: 0644, Size: int64(len(entry.body)), ModTime: time.Unix(0, 0), Format: tar.FormatPAX}
+		if err := tw.WriteHeader(h); err != nil {
+			return err
+		}
+		if _, err := tw.Write(entry.body); err != nil {
+			return err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	return gz.Close()
 }
 
 func malformedPublicAcknowledgementDenied(ctx context.Context, c client.Client, slug string, archive []byte) error {
@@ -1199,7 +1239,7 @@ func (s *Suite) finishPublicMatrix(ctx context.Context, owner, secondOwner clien
 
 	privateArchive, privateSize, privateMarker, _, err := publicArchive(vpsPublicAppSlug, "private", false, false, s.Config.DeployerEmail)
 	if err != nil {
-		return err
+		return fmt.Errorf("build public-to-private fixture: %w", err)
 	}
 	key, err := client.IdempotencyKey()
 	if err != nil {
@@ -1281,18 +1321,64 @@ func dashboardAppCard(page, slug string) string {
 	return page[start : start+1+next]
 }
 
+type dashboardInsights struct {
+	available bool
+	pageViews int
+	visitors  int
+}
+
+// dashboardCardInsights reads only the stable, owner-scoped Last 7 days
+// summary from one dashboard app card. It deliberately does not inspect the
+// page outside that card: another app's aggregate must never satisfy this
+// fixture's proof.
+func dashboardCardInsights(card string) (dashboardInsights, bool) {
+	if strings.Contains(card, "Local insights unavailable") {
+		return dashboardInsights{}, true
+	}
+	match := dashboardLast7Insights.FindStringSubmatch(card)
+	if len(match) != 3 {
+		return dashboardInsights{}, false
+	}
+	visitors, visitorErr := strconv.Atoi(match[1])
+	pageViews, viewsErr := strconv.Atoi(match[2])
+	if visitorErr != nil || viewsErr != nil {
+		return dashboardInsights{}, false
+	}
+	return dashboardInsights{available: true, pageViews: pageViews, visitors: visitors}, true
+}
+
 func (s *Suite) waitDashboardInsights(ctx context.Context, h *http.Client, slug string, pageViews, visitors int) error {
 	deadline := time.Now().Add(12 * time.Second)
+	last := "dashboard request was not attempted"
 	for {
 		page, status, err := fetchPlatformPage(ctx, h, "https://"+s.Config.PlatformHost()+"/dashboard")
 		card := dashboardAppCard(page, slug)
-		views := strconv.Itoa(pageViews) + " page views"
-		visitor := `<p class="tinker-stat__value">` + strconv.Itoa(visitors) + `</p>`
-		if err == nil && status == http.StatusOK && card != "" && strings.Contains(card, views) && strings.Contains(card, visitor) {
-			return nil
+		switch {
+		case err != nil:
+			// The page body and transport error can contain unrelated dashboard or
+			// network metadata. Keep external acceptance failure output bounded.
+			last = "dashboard HTTP request failed"
+		case status == http.StatusUnauthorized || status == http.StatusForbidden:
+			last = fmt.Sprintf("dashboard authentication failed: status=%d", status)
+		case status != http.StatusOK:
+			last = fmt.Sprintf("dashboard HTTP status=%d", status)
+		case card == "":
+			last = "owned dashboard app card missing"
+		default:
+			insights, ok := dashboardCardInsights(card)
+			switch {
+			case !ok:
+				last = "owned dashboard insights card malformed"
+			case !insights.available:
+				last = "owned dashboard insights unavailable"
+			case insights.pageViews == pageViews && insights.visitors == visitors:
+				return nil
+			default:
+				last = fmt.Sprintf("owned dashboard observed page_views=%d approximate_visitors=%d", insights.pageViews, insights.visitors)
+			}
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("owner insights did not reach %d page views / %d approximate visitor", pageViews, visitors)
+			return fmt.Errorf("owner insights did not reach exact page_views=%d approximate_visitors=%d: %s", pageViews, visitors, last)
 		}
 		select {
 		case <-ctx.Done():

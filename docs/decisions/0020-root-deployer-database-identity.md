@@ -1,20 +1,22 @@
-# ADR 0020: Root deployer command writes SQLite as the service identity
+# ADR 0020: Root-local SQLite mutations write as the service identity
 
 **Status:** Accepted for V1
 
 ## Context
 
-`tinkercloud deployers` is a root-only recovery command, but opening SQLite as
-root can create or replace the database's WAL and SHM sidecars as root-owned.
-The unprivileged gateway then cannot persist OTP challenges or other state.
+Root-only initialization and recovery commands can create or replace SQLite's
+database, WAL, and SHM artifacts as root. The unprivileged gateway then cannot
+persist OTP challenges or other state.
 
 ## Decision
 
 The root parent validates its local caller and non-secret input, then starts
 one fixed internal child operation. That child permanently drops to the
-installed `tinkercloud` UID and primary GID before it opens SQLite. The service
-identity, not root, creates and mutates `tinkercloud.db`, `tinkercloud.db-wal`, and
-`tinkercloud.db-shm`. No broad mode change is used to compensate for ownership.
+installed `tinkercloud` UID and primary GID before it opens SQLite. Init uses
+that child separately for database creation and initial-operator seeding, so
+the service identity, not root, creates and mutates `tinkercloud.db`,
+`tinkercloud.db-wal`, and `tinkercloud.db-shm`. No broad mode change is used to
+compensate for ownership.
 
 For recovery from the pre-decision regression, root may hand off only the three
 known regular root-owned SQLite artifacts after no-symlink and non-permissive
@@ -34,7 +36,8 @@ returns a typed failure and prints no successful authorization result.
 
 ## Consequences
 
-- Root remains the authority that may begin a deployer authorization command.
+- Root remains the authority that may begin initialization and deployer
+  authorization commands.
 - The database-writing child cannot regain root after its database boundary.
   The root parent retains only the fixed post-close service refresh authority;
   it never opens SQLite itself.
