@@ -21,49 +21,49 @@ fi
 # A key that is not the repository's release authority must be rejected before
 # compilation, so an accidental developer key cannot create a trusted-looking
 # artifact.
-if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" "$root/scripts/release-build.sh" 0.1.0 "$tmp/wrong-key" >/dev/null 2>&1; then
+if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" "$root/scripts/release-build.sh" 0.1.1 "$tmp/wrong-key" >/dev/null 2>&1; then
   echo "mismatched release key accepted" >&2
   exit 1
 fi
 
 TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.0 "$tmp/release" >/dev/null
+SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.1 "$tmp/release" >/dev/null
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" "$root/scripts/release-verify.sh" "$tmp/release" >/dev/null
-if "$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/wrong-package" \
+if "$root/scripts/distribution-prepare.sh" 0.1.1 "$tmp/release" "$tmp/wrong-package" \
   "@wrong/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/" >/dev/null 2>&1; then
+  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.1/" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical npm package" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/wrong-formula" \
+if "$root/scripts/distribution-prepare.sh" 0.1.1 "$tmp/release" "$tmp/wrong-formula" \
   "@tinkercloud/cli" Wrong tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/" >/dev/null 2>&1; then
+  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.1/" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical Homebrew formula" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/wrong-command" \
+if "$root/scripts/distribution-prepare.sh" 0.1.1 "$tmp/release" "$tmp/wrong-command" \
   "@tinkercloud/cli" Tinker wrong \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/" >/dev/null 2>&1; then
+  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.1/" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical CLI command" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/wrong-origin" \
+if "$root/scripts/distribution-prepare.sh" 0.1.1 "$tmp/release" "$tmp/wrong-origin" \
   "@tinkercloud/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/elsewhere/releases/download/v0.1.0/" >/dev/null 2>&1; then
+  "https://github.com/ChrisMarxDev/elsewhere/releases/download/v0.1.1/" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical release origin" >&2
   exit 1
 fi
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-"$root/scripts/distribution-prepare.sh" 0.1.0 "$tmp/release" "$tmp/distribution" \
+"$root/scripts/distribution-prepare.sh" 0.1.1 "$tmp/release" "$tmp/distribution" \
   "@tinkercloud/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/" >/dev/null
+  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.1/" >/dev/null
 node - "$tmp/distribution" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 const root = process.argv[2];
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "npm", "package.json"), "utf8"));
-if (manifest.name !== "@tinkercloud/cli" || manifest.version !== "0.1.0" || manifest.dependencies || manifest.scripts) {
+if (manifest.name !== "@tinkercloud/cli" || manifest.version !== "0.1.1" || manifest.dependencies || manifest.scripts) {
   throw new Error("invalid npm CLI candidate");
 }
 const vendors = fs.readdirSync(path.join(root, "npm", "vendor")).sort();
@@ -71,7 +71,7 @@ if (vendors.join(" ") !== "tinker-darwin-amd64 tinker-darwin-arm64 tinker-linux-
   throw new Error("incomplete npm CLI platform matrix");
 }
 const formula = fs.readFileSync(path.join(root, "homebrew", "tinker.rb"), "utf8");
-if (!formula.includes('version "0.1.0"') || !formula.includes("tinker-darwin-amd64") || !formula.includes("tinker-darwin-arm64")) {
+if (!formula.includes('version "0.1.1"') || !formula.includes("tinker-darwin-amd64") || !formula.includes("tinker-darwin-arm64")) {
   throw new Error("invalid Homebrew formula candidate");
 }
 NODE
@@ -80,7 +80,7 @@ NODE
 # assert the release promises are not merely documentation.
 TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.0 "$tmp/release-again" >/dev/null
+SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.1 "$tmp/release-again" >/dev/null
 for artifact in tinkercloud-linux-amd64 tinker-linux-amd64 tinker-linux-arm64 tinker-darwin-amd64 tinker-darwin-arm64; do
   cmp "$tmp/release/$artifact" "$tmp/release-again/$artifact" || { echo "build was not reproducible: $artifact" >&2; exit 1; }
 done
