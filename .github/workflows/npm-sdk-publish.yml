@@ -1,0 +1,229 @@
+name: npm-sdk-publish
+run-name: Publish @tinkercloud/sdk v${{ inputs.version }} to beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing GitHub beta prerelease version
+        required: true
+        type: string
+      confirmation:
+        description: Type publish-npm-sdk-beta-vVERSION using the exact version above
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-sdk-publish
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      source_commit: ${{ steps.source.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install the pinned trusted-publishing npm CLI
+        run: npm install --global npm@11.5.1
+      - name: Validate beta release and npm destination
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "npm SDK beta version must be strict MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          tag="v$VERSION"
+          if [[ "$CONFIRMATION" != "publish-npm-sdk-beta-$tag" ]]; then
+            echo "npm SDK beta publication confirmation mismatch" >&2
+            exit 1
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
+          ./scripts/check-release-key-drift.sh
+          git show-ref --verify --quiet "refs/tags/$tag" || {
+            echo "source tag is unavailable" >&2
+            exit 1
+          }
+          source_commit=$(git rev-list -n 1 "$tag")
+          git merge-base --is-ancestor "$source_commit" origin/main || {
+            echo "npm SDK beta tag is not reachable from origin/main" >&2
+            exit 1
+          }
+          git checkout --detach "$source_commit"
+          test -z "$(git status --porcelain=v1)" || {
+            echo "npm SDK beta source checkout is dirty" >&2
+            exit 1
+          }
+          state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,tagName \
+            --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
+          if [[ "$state" != $'false\ttrue\t'"$tag" ]]; then
+            echo "npm SDK requires an existing published GitHub prerelease" >&2
+            exit 1
+          fi
+          visibility=$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)
+          [[ "$visibility" == "PUBLIC" ]] || {
+            echo "npm provenance requires a public GitHub repository" >&2
+            exit 1
+          }
+          package_version=$(node -p "require('./sdk/typescript/package.json').version")
+          jsr_version=$(node -p "require('./sdk/typescript/jsr.json').version")
+          sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)
+          if [[ "$package_version" != "$VERSION" || "$jsr_version" != "$VERSION" || "$sdk_version" != "$VERSION" ]]; then
+            echo "SDK version declarations do not match $VERSION" >&2
+            exit 1
+          fi
+          package_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --output /dev/null --write-out '%{http_code}' \
+            https://registry.npmjs.org/%40tinkercloud%2Fsdk)
+          [[ "$package_status" == "200" ]] || {
+            echo "@tinkercloud/sdk must be bootstrapped once with 2FA before trusted publishing" >&2
+            exit 1
+          }
+          version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --output /dev/null --write-out '%{http_code}' \
+            "https://registry.npmjs.org/%40tinkercloud%2Fsdk/$VERSION")
+          case "$version_status" in
+            404) ;;
+            200) echo "@tinkercloud/sdk@$VERSION already exists" >&2; exit 1 ;;
+            *) echo "npm registry version check failed with HTTP $version_status" >&2; exit 1 ;;
+          esac
+          npm_version=$(npm --version)
+          NPM_VERSION="$npm_version" node -e '
+            const [major, minor, patch] = process.env.NPM_VERSION.split(".").map(Number);
+            if (major < 11 || (major === 11 && minor < 5) || (major === 11 && minor === 5 && patch < 1)) {
+              console.error("trusted publishing requires npm 11.5.1 or newer");
+              process.exit(1);
+            }
+          '
+          echo "source_commit=$source_commit" >>"$GITHUB_OUTPUT"
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm-sdk
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.validate.outputs.source_commit }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install the pinned trusted-publishing npm CLI
+        run: npm install --global npm@11.5.1
+      - name: Download and verify the canonical beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
+          ./scripts/check-release-key-drift.sh
+          tag="v$VERSION"
+          state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,tagName \
+            --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
+          [[ "$state" == $'false\ttrue\t'"$tag" ]] || {
+            echo "GitHub beta release state changed" >&2
+            exit 1
+          }
+          release_dir="$RUNNER_TEMP/tinkercloud-beta-release-v$VERSION"
+          mkdir -p "$release_dir"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir"
+          ./scripts/release-verify.sh "$release_dir"
+          sdk_tarball="$release_dir/tinkercloud-sdk-$VERSION.tgz"
+          node ./scripts/verify-sdk-publish-candidate.mjs "$VERSION" "$sdk_tarball"
+          sdk_integrity=$(node - "$sdk_tarball" <<'NODE'
+          const crypto = require("node:crypto");
+          const fs = require("node:fs");
+          const digest = crypto.createHash("sha512").update(fs.readFileSync(process.argv[2])).digest("base64");
+          process.stdout.write(`sha512-${digest}`);
+          NODE
+          )
+          echo "SDK_TARBALL=$sdk_tarball" >>"$GITHUB_ENV"
+          echo "SDK_INTEGRITY=$sdk_integrity" >>"$GITHUB_ENV"
+      - name: Recheck npm version absence
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+            --output /dev/null --write-out '%{http_code}' \
+            "https://registry.npmjs.org/%40tinkercloud%2Fsdk/$VERSION")
+          [[ "$version_status" == "404" ]] || {
+            echo "npm SDK version is no longer publishable" >&2
+            exit 1
+          }
+      - name: Publish the exact SDK tarball with trusted publishing
+        run: npm publish "$SDK_TARBALL" --access public --tag beta --ignore-scripts --provenance
+      - name: Verify the public npm beta
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          metadata="$RUNNER_TEMP/npm-sdk-version.json"
+          package="$RUNNER_TEMP/npm-sdk-package.json"
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+              --output "$metadata" --write-out '%{http_code}' \
+              "https://registry.npmjs.org/%40tinkercloud%2Fsdk/$VERSION")
+            package_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+              --output "$package" --write-out '%{http_code}' \
+              https://registry.npmjs.org/%40tinkercloud%2Fsdk)
+            if [[ "$version_status" == "200" && "$package_status" == "200" ]]; then
+              if VERSION="$VERSION" SDK_INTEGRITY="$SDK_INTEGRITY" \
+                node - "$metadata" "$package" <<'NODE'
+          const fs = require("node:fs");
+          const version = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const root = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+          if (version.name !== "@tinkercloud/sdk" || version.version !== process.env.VERSION) process.exit(1);
+          if (version.dist?.integrity !== process.env.SDK_INTEGRITY) process.exit(1);
+          if (!version.dist?.attestations?.url) process.exit(1);
+          if (version.repository?.url !== "git+https://github.com/ChrisMarxDev/tinkercloud.git") process.exit(1);
+          if (root["dist-tags"]?.beta !== process.env.VERSION) process.exit(1);
+          NODE
+              then
+                break
+              fi
+            fi
+            [[ "$attempt" != 12 ]] || {
+              echo "published npm SDK beta did not reach the verified registry state" >&2
+              exit 1
+            }
+            sleep 5
+          done
+          consumer="$RUNNER_TEMP/npm-sdk-consumer"
+          mkdir -p "$consumer"
+          printf '{"private":true,"type":"module"}\n' >"$consumer/package.json"
+          npm install --ignore-scripts --no-audit --no-fund --package-lock=false \
+            --prefix "$consumer" "@tinkercloud/sdk@$VERSION"
+          cd "$consumer"
+          VERSION="$VERSION" node --input-type=module -e '
+            import { SDK_VERSION, createTinker, tinker } from "@tinkercloud/sdk";
+            if (SDK_VERSION !== process.env.VERSION || typeof createTinker !== "function" || typeof tinker.user.current !== "function") process.exit(1);
+          '

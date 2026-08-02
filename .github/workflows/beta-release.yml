@@ -113,6 +113,12 @@ jobs:
         run: ./scripts/check-beta-release-workflow.sh
       - name: Test beta workflow denial checker
         run: ./scripts/check-beta-release-workflow-self-test.sh
+      - name: Check SDK npm beta workflow contract
+        run: ./scripts/check-npm-sdk-workflow.sh
+      - name: Test SDK npm beta workflow denial checker
+        run: ./scripts/check-npm-sdk-workflow-self-test.sh
+      - name: Test exact SDK publish-candidate verifier
+        run: ./scripts/verify-sdk-publish-candidate-self-test.sh
       - name: Check embedded release authorities
         run: |
           TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
