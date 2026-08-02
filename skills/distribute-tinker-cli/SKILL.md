@@ -143,8 +143,9 @@ private key or changing GitHub state.
 Dispatch only the reviewed workflow:
 
 ```sh
-gh workflow run beta-release.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"
 ```
@@ -172,13 +173,14 @@ Before any external mutation, require:
 - the public repository has immutable releases and reviewer-protected
   `stable-release` and `npm-cli` Environments; and
 - `@tinkercloud/cli` already exists and trusts only
-  `npm-cli-publish.yml`/`npm-cli` for `npm publish` OIDC.
+  `release.yml`/`npm-cli` for `npm publish` OIDC.
 
 Run `task release:stable-check` before any dispatch. Publish GitHub first:
 
 ```sh
-gh workflow run stable-release.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=stable \
   -f version="$VERSION" \
   -f confirmation="publish-stable-v$VERSION"
 ```
@@ -195,11 +197,11 @@ GitHub Actions.
 For every later version, dispatch only:
 
 ```sh
-gh workflow run npm-cli-publish.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=stable \
   -f version="$VERSION" \
-  -f dist_tag="$DIST_TAG" \
-  -f confirmation="publish-npm-cli-v$VERSION"
+  -f confirmation="publish-stable-v$VERSION"
 ```
 
 The workflow stops for `npm-cli` approval, downloads the stable release,
