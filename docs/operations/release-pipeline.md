@@ -86,9 +86,10 @@ beta or production signing key.
 
 ## Publish a GitHub beta
 
-The beta channel is an exact GitHub prerelease. It uses the locked Tinkercloud
-identities without claiming npm, JSR, Homebrew, DNS, or stable/latest
-availability.
+The canonical beta release is an exact GitHub prerelease. It uses the locked
+Tinkercloud identities without claiming JSR, Homebrew, DNS, or stable/latest
+availability. After it is public and verified, its exact SDK tarball may be
+published separately to npm's opt-in `beta` dist-tag.
 
 Configure the repository once:
 
@@ -128,7 +129,8 @@ Approve the `beta-release` Environment only after checking the tag, commit, and
 workflow diff. The workflow tests without the private key, signs the complete
 release, verifies it locally, uploads it as a draft, downloads and verifies the
 draft bytes, publishes it as a prerelease, and smoke-tests the public CLI
-installer plus SDK tarball. It never publishes npm/JSR or changes Homebrew.
+installer plus SDK tarball. This workflow itself never publishes npm/JSR or
+changes Homebrew.
 
 Every public beta uses a new patch version. Do not rerun against an existing
 release, replace an asset, move its tag, or promote it to stable/latest. A
@@ -167,8 +169,42 @@ decision. Update an installed beta host with:
 tinker host update root@HOST --release-base "$RELEASE_BASE"
 ```
 
-The beta workflow is governed by
+The GitHub beta workflow is governed by
 [`specs/operations/beta-release-contract.md`](../../specs/operations/beta-release-contract.md).
+
+## Publish the SDK npm beta
+
+Only `@tinkercloud/sdk` is eligible for npm during beta. The native CLI remains
+on the signed GitHub installer, and the server is never placed in a JavaScript
+registry. The npm version stays strict numeric for compatibility; npm's fixed
+`beta` dist-tag and the GitHub prerelease flag identify the channel.
+
+Configure GitHub Environment `npm-sdk` once with a required reviewer, access
+from `main`, and no npm token secret. The package's trusted publisher must be
+exactly repository `ChrisMarxDev/tinkercloud`, workflow
+`npm-sdk-publish.yml`, Environment `npm-sdk`, with only `npm publish` allowed.
+
+The package must first be bootstrapped once with interactive 2FA from the exact
+verified prerelease tarball. The complete guarded procedure is in
+[SDK distribution](sdk-distribution.md). After that, each later beta is:
+
+```sh
+task release:npm-sdk-check
+gh workflow run npm-sdk-publish.yml \
+  --ref main \
+  -f version="$VERSION" \
+  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+```
+
+Approve `npm-sdk` only after reviewing the existing public GitHub prerelease and
+confirming the npm version is unused. The workflow downloads and verifies the
+complete release, publishes the exact SDK tarball without lifecycle scripts or
+repacking, then verifies its integrity, provenance, repository metadata,
+`beta` dist-tag, and clean import. It cannot select `latest` or publish the CLI,
+server, JSR, or Homebrew.
+
+This path is governed by
+[`specs/sdk/npm-beta-publishing-contract.md`](../../specs/sdk/npm-beta-publishing-contract.md).
 
 ## Publish stable CLI channels
 

@@ -18,10 +18,9 @@ Classify the request before doing work:
   package identity, version, registries, and tags/channels.
 
 Preparation is not publication authority. The package identity is locked as
-`@tinkercloud/sdk`, but registry publication stops with verified local
-artifacts until destination ownership and the exact release are approved. The
-complete signed GitHub beta below may expose the SDK tarball only when that
-separate beta publication is explicitly authorized.
+`@tinkercloud/sdk`. During beta, npm publication is authorized only for the
+exact SDK tarball in an already-public verified GitHub prerelease, through the
+fixed `beta` dist-tag. JSR and stable/latest publication remain unauthorized.
 
 ## Load the contract
 
@@ -32,13 +31,15 @@ From the repository root, read in order:
 3. `specs/sdk/distribution-contract.md`
 4. `specs/operations/distribution-contract.md`
 5. `specs/operations/beta-release-contract.md`
-6. `specs/operations/update-compatibility-contract.md`
-7. `specs/api/http-contract.md`
-8. `docs/architecture/client-sdk.md`
-9. `docs/operations/release-pipeline.md`
-10. `docs/decisions/0026-sdk-registry-distribution.md`
-11. `docs/decisions/0044-signed-distribution-compatibility-manifest.md`
-12. `docs/decisions/0046-github-beta-release-channel.md`
+6. `specs/sdk/npm-beta-publishing-contract.md`
+7. `specs/operations/update-compatibility-contract.md`
+8. `specs/api/http-contract.md`
+9. `docs/architecture/client-sdk.md`
+10. `docs/operations/release-pipeline.md`
+11. `docs/decisions/0026-sdk-registry-distribution.md`
+12. `docs/decisions/0044-signed-distribution-compatibility-manifest.md`
+13. `docs/decisions/0046-github-beta-release-channel.md`
+14. `docs/decisions/0054-sdk-npm-beta-trusted-publishing.md`
 
 Preserve unrelated local changes. Do not change compatibility ranges, public
 exports, package identity, or registry metadata as a packaging convenience.
@@ -107,46 +108,63 @@ If a JSR dry-run tool is not pinned or already approved by the repository, stop
 and report that missing supply-chain input instead of executing an unpinned
 `npx` package.
 
-## Use the GitHub beta
+## Use the GitHub beta as the source
 
 The explicitly approved GitHub beta workflow publishes the SDK tarball as part
-of the complete signed prerelease. It does not publish npm or JSR. Consumers
-may install that exact versioned tarball URL through npm-compatible tooling
-while npm and JSR publication remain unauthorized.
+of the complete signed prerelease. The GitHub workflow itself does not publish
+npm or JSR. Consumers may install that exact versioned tarball URL directly, or
+a separately approved SDK workflow may publish the same bytes to npm beta.
 
 Verify the GitHub asset against the complete signed release and test an import
 from a clean temporary consumer. Do not call a GitHub asset an npm-registry or
 JSR publication, and do not create a separate SDK-only hosted release.
 
-## Publish registries only with explicit authority
+## Publish the npm beta only with explicit authority
 
-Before any registry mutation, require:
+Before npm mutation, require:
 
-- the final package name and verified npm/JSR namespace ownership;
+- verified control of the npm `@tinkercloud` scope;
 - finalized canonical repository metadata matching the provenance source;
-- an immutable source commit and completely verified signed release;
+- an immutable source commit and completely verified public GitHub prerelease;
 - confirmation that the version does not already exist;
-- the exact stable/prerelease npm dist-tag and JSR channel behavior;
-- registry authentication supplied through approved secret storage, never argv,
-  chat, files in the checkout, logs, or generated artifacts;
-- an approved, pinned publishing CLI and provenance configuration.
+- exact authorization for `@tinkercloud/sdk`, the numeric version, and the
+  fixed `beta` dist-tag;
+- GitHub Environment `npm-sdk` approval and the exact trusted publisher;
+- no npm token, developer session, `.npmrc` credential, or inherited secret.
 
-Publish in this order:
+Run the non-publishing checks first:
 
-1. Publish the canonical signed release and verify it anonymously.
-2. Publish npm from the exact SDK tarball contained in that release, with the
-   explicit tag and provenance settings.
-3. Publish JSR from the same source commit only after its dry-run file list and
-   version match the verified npm artifact.
-4. Fetch both registry versions anonymously and compare version, exports,
-   declarations, license, README, and package contents.
-5. Compile small consumers through npm, pnpm, Yarn, Bun, and JSR/Deno as
-   applicable. Exercise at least one HTTP call type and the live constructor.
+```sh
+task release:npm-sdk-check
+```
 
-Never rebuild between registry publications. Never overwrite a published
-version, silently move `latest`, or hide partial publication. On failure, stop,
-preserve evidence, and reconcile forward with a new version or an explicitly
-approved tag correction.
+If the npm package does not exist, stop and route the operator through the
+documented one-time 2FA bootstrap from the exact verified SDK tarball. Then
+configure the trusted publisher for repository `ChrisMarxDev/tinkercloud`,
+workflow `npm-sdk-publish.yml`, Environment `npm-sdk`, and only `npm publish`.
+
+For later versions, publish only through:
+
+```sh
+gh workflow run npm-sdk-publish.yml \
+  --ref main \
+  -f version="$VERSION" \
+  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+```
+
+Approve the `npm-sdk` Environment only after verifying the version, tag,
+GitHub prerelease, workflow commit, and fixed beta channel. The workflow must:
+
+1. Download and verify the complete signed GitHub prerelease.
+2. Select and inspect its exact `tinkercloud-sdk-VERSION.tgz` without rebuilding.
+3. Reject an existing npm version.
+4. Publish with OIDC, provenance, scripts disabled, and `--tag beta`.
+5. Verify the registry integrity, attestation, dist-tag, repository, and clean
+   consumer import.
+
+Never publish the CLI or server, invoke JSR, rebuild, overwrite a version,
+advance `latest`, or hide partial publication. On failure, stop, preserve
+evidence, and reconcile forward with a new numeric patch version.
 
 ## Report the result
 
@@ -154,9 +172,10 @@ Report:
 
 - mode: inspect, prepare, or publish;
 - package identity, version, source commit, and signed release;
-- npm tarball digest and selected dist-tag;
-- JSR source/file-list parity;
+- npm tarball digest and fixed `beta` dist-tag;
+- trusted-publisher/provenance verification;
 - compatibility range and app API version;
-- tests and anonymous registry verification actually completed;
-- unresolved namespace ownership, tooling, credential, release-origin, or
-  partial-publication state.
+- tests and anonymous registry verification actually completed; and
+- unresolved bootstrap, namespace ownership, release-origin, or
+  partial-publication state. Report JSR as unauthorized, not pending within the
+  npm beta workflow.

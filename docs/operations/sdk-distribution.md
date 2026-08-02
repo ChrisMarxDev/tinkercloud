@@ -1,29 +1,26 @@
 # SDK Distribution
 
-**Status:** Prepared, not published
+**Status:** npm beta workflow prepared; first package bootstrap still manual
 
-`@tinkercloud/sdk` is ready to be reviewed as an npm-registry package and a JSR
-package. No command or workflow in this repository publishes it.
+`@tinkercloud/sdk` is the only package published to npm during beta. The native
+`tinker` CLI remains on the signed GitHub installer. JSR, Homebrew, stable npm,
+and npm's `latest` dist-tag remain disabled.
 
 ## Consumer formats
 
 One npm artifact supports npm, pnpm, Yarn, Bun, and Deno:
 
 ```sh
-npm install @tinkercloud/sdk
-pnpm add @tinkercloud/sdk
-yarn add @tinkercloud/sdk
-bun add @tinkercloud/sdk
-deno add npm:@tinkercloud/sdk
+npm install @tinkercloud/sdk@beta
+pnpm add @tinkercloud/sdk@beta
+yarn add @tinkercloud/sdk@beta
+bun add @tinkercloud/sdk@beta
+deno add npm:@tinkercloud/sdk@beta
 ```
 
-JSR provides the same API directly from the reviewed TypeScript source:
-
-```sh
-deno add jsr:@tinkercloud/sdk
-```
-
-These commands will work only after the corresponding first publication.
+These commands work after the one-time npm bootstrap below. An exact beta can
+also be pinned as `@tinkercloud/sdk@VERSION`. Do not document the untagged
+package until a stable release is separately authorized and verified.
 
 ## Prepare a candidate
 
@@ -33,12 +30,12 @@ From `sdk/typescript`:
 npm ci
 npm test
 npm publish --dry-run
-deno publish --dry-run
+task release:npm-sdk-check
 ```
 
 `npm test` verifies version consistency, exact tarball contents, examples,
-bundle size, and an offline install/import from the generated tarball. The two
-publish commands are dry runs and do not mutate either registry.
+bundle size, and an offline install/import from the generated tarball. The dry
+run and Task target do not mutate npm, GitHub, or another registry.
 
 The following values must be identical for a release:
 
@@ -47,24 +44,88 @@ The following values must be identical for a release:
 - `SDK_VERSION` in `src/index.ts`; and
 - the version passed to `scripts/release-build.sh`.
 
-## First-publication checklist
+## One-time npm bootstrap
 
-Do not publish until all of these are complete:
+The normal workflow uses npm trusted publishing, but npm cannot attach a trusted
+publisher before `@tinkercloud/sdk` exists. Bootstrap exactly one beta version
+interactively after its GitHub prerelease is public.
 
-1. Confirm the canonical public GitHub repository and update exact-case package
-   metadata.
-2. Confirm maintainers control the `@tinkercloud` scope and `sdk` package on npm
-   and JSR.
-3. Review the dry-run file lists and the generated npm tarball.
-4. Run the complete release and secret-scanning gates from a clean checkout.
-5. Create a reviewed release tag whose version matches the SDK.
-6. Configure npm and JSR trusted publishers for the exact repository and
-   release workflow.
-7. Publish from the protected release environment with provenance.
-8. Install the public version with each documented package manager and rerun
-   the browser SDK examples.
+Prerequisites:
 
-Prefer registry trusted publishing with short-lived OIDC credentials. Do not
-add an npm token, JSR token, `.npmrc` credential, or developer session to this
-repository. A successful publication is distribution evidence only; it does
-not prove Tinkercloud authorization or isolation.
+1. The exact `vVERSION` GitHub release is published as a prerelease, not a
+   stable release or draft.
+2. The npm account has 2FA and controls the `@tinkercloud` scope.
+3. GitHub Environment `npm-sdk` exists with a required reviewer and permits
+   `main`.
+4. `task release:npm-sdk-check` and the complete release checks pass from the
+   reviewed tag.
+
+Download and verify every canonical release asset before selecting the SDK:
+
+```sh
+VERSION=0.1.3
+RELEASE_DIR=$(mktemp -d)
+gh release download "v$VERSION" \
+  --repo ChrisMarxDev/tinkercloud \
+  --dir "$RELEASE_DIR"
+TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta \
+  ./scripts/check-release-key-policy.sh
+./scripts/release-verify.sh "$RELEASE_DIR"
+node ./scripts/verify-sdk-publish-candidate.mjs \
+  "$VERSION" "$RELEASE_DIR/tinkercloud-sdk-$VERSION.tgz"
+```
+
+After reviewing the exact version and tarball, publish it once with 2FA:
+
+```sh
+npm publish "$RELEASE_DIR/tinkercloud-sdk-$VERSION.tgz" \
+  --access public \
+  --tag beta \
+  --ignore-scripts
+```
+
+Do not use `latest`, rebuild the tarball, or bootstrap the CLI package. The
+first interactive publish may not carry CI provenance; every later OIDC
+publication must.
+
+Immediately configure the package's npm trusted publisher:
+
+```text
+Provider: GitHub Actions
+Organization/user: ChrisMarxDev
+Repository: tinkercloud
+Workflow: npm-sdk-publish.yml
+Environment: npm-sdk
+Allowed action: npm publish
+```
+
+There is no npm token or GitHub npm secret.
+
+## Publish subsequent betas
+
+First publish and anonymously verify a new numeric-patch GitHub prerelease.
+Then dispatch:
+
+```sh
+gh workflow run npm-sdk-publish.yml \
+  --ref main \
+  -f version="$VERSION" \
+  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+```
+
+Approve Environment `npm-sdk` only after reviewing the tag, GitHub prerelease,
+workflow commit, package absence, and fixed beta channel. The workflow downloads
+and verifies the complete signed release, publishes its exact SDK tarball with
+OIDC and provenance under `beta`, then verifies registry integrity,
+attestation, repository metadata, dist-tag, and a clean consumer import.
+
+Every public beta uses a new numeric patch version. If npm accepts a version and
+a later check fails, do not unpublish or reuse it; preserve the evidence and
+release the correction forward under another version.
+
+The normative rules and deny paths are in
+[`specs/sdk/npm-beta-publishing-contract.md`](../../specs/sdk/npm-beta-publishing-contract.md)
+and
+[`test/security/sdk-npm-beta-publishing-denial-charter.md`](../../test/security/sdk-npm-beta-publishing-denial-charter.md).
+A successful publication is distribution evidence only; it does not prove
+Tinkercloud authorization or isolation.

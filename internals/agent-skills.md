@@ -69,11 +69,12 @@ compatibility ranges, examples, and the signed SDK tarball aligned.
 
 Both distinguish read-only inspection, local preparation, and external
 publication. Locked names and placeholder release origins allow rehearsal but
-do not claim registry or tap availability. One explicit path permits a GitHub
-beta through the protected `beta-release` workflow; it publishes the complete
-signed prerelease but never npm, JSR, Homebrew, or stable/latest state. Neither
-skill embeds an alternate signer or publisher; repository release tooling and
-contracts remain authoritative.
+do not claim registry or tap availability. The protected `beta-release`
+workflow publishes the complete signed GitHub prerelease. A separate protected
+`npm-sdk` path may then publish only its exact SDK tarball under npm's `beta`
+dist-tag. JSR, Homebrew, CLI npm, and stable/latest state remain deferred.
+Neither skill embeds an alternate signer or publisher; repository release
+tooling and contracts remain authoritative.
 
 ## Generic-first, standalone rule
 
