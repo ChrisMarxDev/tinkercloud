@@ -142,7 +142,7 @@ At each stage, inject:
 - fsync/walk failure while sealing a candidate, and an existing
   content-addressed directory whose bytes or file manifest were corrupted;
 - process interruption before and after durable state change;
-- Resend timeout/error;
+- selected email-provider timeout/error;
 - ACME pending/failure;
 - audit append failure;
 - probe timeout.

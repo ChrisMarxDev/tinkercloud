@@ -7,13 +7,13 @@ and rollback failure reporting. VPS-only evidence additionally proves systemd
 permissions, socket inventory, clean installation, and a real failed update.
 
 `tinkercloud status` is strictly offline and must never read a provider credential
-file or invoke a Resend diagnostic. `tinkercloud doctor` is a root-only provider
+file or invoke an email-provider diagnostic. `tinkercloud doctor` is a root-only provider
 credential reader: non-root invocation denies before any credential-file read
 or provider request. Its default credential file and any explicit override must
 be absolute, clean, free of symlinked components, root-owned, a single regular
 file at mode `0600`, and contain exactly one assignment for each configured
-Resend and HMAC reference. Absent, symlinked, non-root-owned, permissive,
-malformed, duplicate, or unexpected-field files make only the Resend check
+email-provider and HMAC reference. Absent, symlinked, non-root-owned, permissive,
+malformed, duplicate, or unexpected-field files make only the email-provider check
 unavailable and must not invoke the provider. Diagnostics, command output,
 errors, and provider failures must not disclose keys, credential paths,
 references, or provider response bodies.

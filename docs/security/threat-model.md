@@ -37,7 +37,7 @@ Protected dispatchers
   ▼
 SQLite and private filesystem
 
-Tinkercloud ── outbound-only HTTPS ──▶ Resend
+Tinkercloud ── outbound-only HTTPS ──▶ selected Resend or Postmark provider
 Operator ── root/service boundary ─▶ host and recovery commands
 ```
 

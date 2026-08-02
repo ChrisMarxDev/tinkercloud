@@ -160,7 +160,8 @@ revocation, and cookies. It does not decide app access.
 
 ### `email`
 
-Defines a provider-neutral outbound message interface and a Resend adapter. API
+Defines a provider-neutral outbound message interface plus direct Resend and
+Postmark adapters. API
 keys remain in the configuration secret source. Delivery retries are bounded;
 OTP expiry is never extended because of retries.
 
@@ -332,4 +333,4 @@ domain policies and state machines
 repository / filesystem / provider interfaces
 ```
 
-Domain policy code must not import HTTP, SQLite, Resend, or CLI packages.
+Domain policy code must not import HTTP, SQLite, provider SDK, or CLI packages.
