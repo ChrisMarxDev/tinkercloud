@@ -110,7 +110,7 @@ grep -F -- '-f channel=stable' skills/distribute-tinker-cli/SKILL.md >/dev/null 
   echo "CLI stable GitHub workflow drift" >&2
   exit 1
 }
-grep -F '`release.yml`/`npm-cli`' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
+grep -F 'only `release.yml` with their' skills/distribute-tinker-cli/SKILL.md >/dev/null || {
   echo "CLI npm trusted-publish workflow drift" >&2
   exit 1
 }
