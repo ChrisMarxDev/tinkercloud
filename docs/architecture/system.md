@@ -17,7 +17,7 @@ Internet ────────▶│ Tinkercloud public gateway │
                                │
             ┌──────────────────┼───────────────────┐
             ▼                  ▼                   ▼
-      SQLite database    private data dir     Resend HTTPS API
+      SQLite database    private data dir     selected email HTTPS API
       metadata/state     immutable releases   outbound OTP only
 ```
 
@@ -146,7 +146,7 @@ metadata. V1 does not mount remote storage or run a second object-store service.
 | SQLite read unavailable | deny / generic unavailable | fail operation |
 | Policy missing or invalid | deny | refuse activation |
 | Release missing | authenticated unavailable page | mark unhealthy |
-| Resend unavailable | existing valid sessions continue | new OTP fails generically |
+| Email provider unavailable | existing valid sessions continue | new OTP fails generically |
 | Disk critical | existing reads continue if safe | reject upload/app-data writes |
 | Certificate not ready | app not reported ready | deployment remains non-ready |
 | Audit persistence fails | read may continue | sensitive mutation fails |

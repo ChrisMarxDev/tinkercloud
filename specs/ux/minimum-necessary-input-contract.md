@@ -27,8 +27,8 @@ locations. It persists only validated non-secret resumable progress. Neither
 human setup nor deterministic initialization accepts a separate ACME-contact
 flag, question, or environment input.
 
-Missing DNS, Resend verification, firewall, or certificate state produces one
-exact external action and a continuation instruction. Provider secrets enter
+Missing DNS, selected email-provider verification, firewall, or certificate
+state produces one exact external action and a continuation instruction. Provider secrets enter
 only the root-owned credential boundary through a protected file or an audited
 no-echo prompt; they never enter argv, ordinary config, logs, audit, browser
 state, or deployed bytes.

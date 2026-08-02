@@ -11,7 +11,7 @@
 
 **North star:** [Shopify Quick](docs/product/north-star-quick.md)
 
-**Last updated:** 2026-08-01
+**Last updated:** 2026-08-02
 
 ## 0. How to use this document
 
@@ -159,7 +159,8 @@ can be established through local test and release evidence.
 - One private data directory containing immutable releases and keys.
 - Embedded migrations, login/admin/deployer UI, and local assets.
 - Automatic per-host ACME certificates.
-- Resend email adapter behind a provider-neutral interface.
+- Operator-selected Resend or Postmark email adapter behind a provider-neutral
+  interface.
 - Root-only operator recovery without email.
 - Signed manual and explicitly enabled automatic self-update with
   health-gated automatic rollback and durable app/auth-state preservation.
@@ -351,10 +352,11 @@ Prerequisites:
 
 - clean supported Hetzner VPS with root SSH access;
 - one operator-controlled domain; and
-- access to a Resend account and the domain’s DNS control plane.
+- access to a supported email-provider account and the domain’s DNS control
+  plane.
 
-Platform/wildcard DNS, Resend domain verification, and the API key are required
-external state, but the human assistant derives and presents their exact values
+Platform/wildcard DNS, email-provider sender verification, and the API key are
+required external state, but the human assistant derives and presents their exact values
 at resumable checkpoints rather than requiring the operator to prepare them
 from config documentation.
 
@@ -367,14 +369,15 @@ fresh supported VPS root shell runs exact-version signed install-host.sh
 → verify checksum and signature
 → tinkercloud setup
 → discover host, ports, time, disk, and supported OS
-→ ask only for the base domain, operator email, and Resend credential source
+→ ask only for the base domain, operator email, email-provider choice, and
+  provider credential source
   that cannot be derived
 → derive `admin.<domain>`, `<slug>.<domain>`, and the internal ACME contact
   from the normalized operator email; reserve platform labels
 → show the one wildcard DNS record and pause until its public value is correct
 → create service user, generated config, credentials, and data directory
 → initialize SQLite and operator
-→ test Resend
+→ test the selected email provider
 → provision TLS
 → enable/start systemd service
 → run platform health, route-classification, socket-confinement, and safe
@@ -611,7 +614,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
   interim, end-of-life, and unverified Ubuntu releases MUST fail preflight.
 - **FR-OPS-003:** Only Tinkercloud MUST listen publicly on ports 80 and 443.
 - **FR-OPS-004:** `tinkercloud init` MUST be safely resumable after interruption.
-- **FR-OPS-005:** `tinkercloud doctor` MUST diagnose DNS, TLS, Resend, database,
+- **FR-OPS-005:** `tinkercloud doctor` MUST diagnose DNS, TLS, the selected
+  email provider, database,
   disk, permissions, clock, ports, version, and update health without exposing
   secrets.
 - **FR-OPS-006:** Root recovery MUST allow replacing the operator email and
@@ -637,7 +641,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.3 OTP authentication
 
-- **FR-AUTH-001:** V1 MUST support numeric email OTP login through Resend.
+- **FR-AUTH-001:** V1 MUST support numeric email OTP login through an
+  operator-selected Resend or Postmark adapter.
 - **FR-AUTH-002:** OTP request responses MUST not reveal policy membership.
 - **FR-AUTH-003:** Challenges MUST be random, short-lived, one-time, hashed at
   rest, attempt-limited, and invalidated by a newer challenge.
@@ -646,7 +651,8 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 - **FR-AUTH-005:** OTP verification MUST re-evaluate current authorization before
   creating a session.
 - **FR-AUTH-006:** Challenge consumption and session creation MUST be atomic.
-- **FR-AUTH-007:** Existing valid sessions MAY continue during a Resend outage;
+- **FR-AUTH-007:** Existing valid sessions MAY continue during an email-provider
+  outage;
   new authentication MUST fail closed.
 - **FR-AUTH-008:** A successful browser OTP MAY establish exactly one opaque,
   host-only global identity per browser profile on `admin.<domain>`. It grants
@@ -1002,7 +1008,7 @@ tinkercloud modular Go monolith
   ├── embedded web UI
   ├── SQLite
   ├── private release filesystem
-  └── outbound Resend + ACME only
+  └── outbound selected email provider + ACME only
 ```
 
 There are no internal HTTP microservices in V1.
@@ -1019,8 +1025,8 @@ domain policies and state machines
 repository/filesystem/provider interfaces
 ```
 
-Domain code must not import HTTP, SQL-driver, Resend, ACME, CLI, or web-template
-packages.
+Domain code must not import HTTP, SQL-driver, provider SDK, ACME, CLI, or
+web-template packages.
 
 ### 9.3 Future repository structure
 
@@ -1337,8 +1343,8 @@ data:
   directory: /var/lib/tinkercloud
 
 email:
-  provider: resend
-  api_key_secret: resend_api_key
+  provider: resend # or postmark
+  api_key: env:RESEND_API_KEY
   from: Tinkercloud <access@example.com>
 
 auth:
@@ -1349,7 +1355,7 @@ auth:
 
 Tinkercloud’s own secrets:
 
-- Resend API key;
+- selected email-provider API key;
 - session/challenge hashing keys;
 - future capability encryption root;
 - release/update trust configuration where applicable.
@@ -1505,7 +1511,8 @@ logs/audit.
   plus lazily opened WAL app-local databases. ADR 0048 and executable
   concurrency, migration, interruption, isolation, and deletion evidence own
   this choice.
-- Direct Resend HTTP adapter.
+- Direct standard-library Resend and Postmark HTTP adapters; exactly one is
+  selected by operator configuration.
 - ACME implementation selected through the M0 spike.
 - CLI uses the standard library unless a small framework materially improves
   stable command/help/JSON output.
@@ -1892,7 +1899,8 @@ revocation behavior.
 ## 23. Additional accepted defaults
 
 - Email OTP only in V1; no password and no required magic-link flow.
-- Resend only in V1 behind an adapter interface.
+- Resend and Postmark in V1 behind one provider-neutral adapter interface; no
+  automatic failover or runtime provider endpoints.
 - Per-host HTTP-challenge ACME first.
 - Server-rendered admin/deployer UI.
 - No automatic build command inside `tinker deploy`.
@@ -1918,7 +1926,8 @@ revocation behavior.
 - [ ] Human setup asks only for non-discoverable required values and can resume
       after an external DNS or email prerequisite is fixed.
 - [ ] Only Tinkercloud owns expected public sockets.
-- [ ] DNS, TLS, Resend, SQLite, permissions, disk, and version diagnostics work.
+- [ ] DNS, TLS, selected email provider, SQLite, permissions, disk, and version
+      diagnostics work.
 - [ ] Root operator recovery works with email unavailable.
 - [ ] Failed update returns to the prior healthy version.
 

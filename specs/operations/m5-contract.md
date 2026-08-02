@@ -10,13 +10,14 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   credentials, or send email.
 - `tinkercloud doctor` includes every `status` check and makes bounded (five
   second) outbound checks for platform DNS, the configured wildcard DNS record,
-  platform TLS hostname/chain/expiry, and a read-only authenticated Resend
-  domains request. It requires local root before reading provider credentials.
+  platform TLS hostname/chain/expiry, and a read-only authenticated request to
+  the configured Resend or Postmark provider. It requires local root before
+  reading provider credentials.
   By default it reads `/etc/tinkercloud/credentials/tinkercloud.env`; an explicit
   absolute credential-file path is allowed only when it has no symlinked path
   component, is a root-owned regular file with mode `0600`, and has exactly the
-  configured Resend and HMAC environment assignments once each. It passes the
-  parsed Resend key through typed local composition, never by changing the
+  configured email-provider and HMAC environment assignments once each. It
+  passes the parsed provider key through typed local composition, never by changing the
   caller environment. It never sends email and never prints addresses, keys,
   secret references, credential paths, or provider response bodies. A residual
   rollback snapshot is unhealthy until an operator resolves it; an absent
@@ -42,8 +43,8 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   `tinkercloud llm enable`. It creates or verifies the root-owned credential entry
   without revealing it, writes only the environment reference to config, then
   requires a service restart. A subsequent root-only `doctor` validates the
-  credential shape without provider use beyond its existing read-only Resend
-  dependency check.
+  credential shape without provider use beyond its existing read-only selected
+  email-provider dependency check.
 - Init is root-only and non-interactive. It validates an explicit host
   allowlist of Ubuntu 24.04 LTS/amd64 and Ubuntu 26.04 LTS/amd64, NTP, and
   exclusive 80/443 availability before creating the service identity or

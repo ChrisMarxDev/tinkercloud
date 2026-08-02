@@ -18,7 +18,7 @@
 | [0016](0016-bounded-live-transport-liveness.md) | Bounded authenticated WebSocket liveness and prompt revocation | Accepted for V1 |
 | [0017](0017-deployer-public-denial-proof.md) | Deployer-side public denial proof | Accepted for V1 |
 | [0022](0022-app-host-login-navigation.md) | App-host document login and account switching | Accepted for V1 |
-| [0018](0018-root-only-doctor-credential-read.md) | Root-only credential file for doctor | Accepted for V1 |
+| [0018](0018-root-only-doctor-credential-read.md) | Root-only credential file for doctor | Accepted for V1; Resend-specific details generalized by 0057 |
 | [0019](0019-root-deployer-command-grammar.md) | Root-only deployer command grammar | Accepted for V1 |
 | [0023](0023-policy-revision-concurrency.md) | Optimistic concurrency for access-policy replacement | Accepted for V1; rollback references superseded by 0039 |
 | [0020](0020-root-deployer-database-identity.md) | Root deployer command writes SQLite as the service identity | Accepted for V1 |
@@ -40,7 +40,7 @@
 | [0038](0038-bounded-certificate-readiness-retry.md) | Bounded pre-activation certificate readiness retry | Accepted for V1 |
 | [0039](0039-defer-deployer-release-rollback.md) | Defer deployer-selected release rollback | Accepted post-V1 |
 | [0040](0040-operator-deployer-allowlist-reconciliation.md) | Reconcile one active deployer allowlist | Accepted for V1 |
-| [0041](0041-minimum-necessary-guided-flows.md) | Minimum-necessary guided human flows | Accepted for V1 |
+| [0041](0041-minimum-necessary-guided-flows.md) | Minimum-necessary guided human flows | Accepted for V1; provider choice generalized by 0057 |
 | [0042](0042-two-role-facing-agent-skills.md) | Two role-facing agent skills | Accepted for V1 |
 | [0043](0043-workstation-cli-host-operations.md) | Workstation CLI coordinates a fixed SSH host grammar | Accepted for distribution preparation |
 | [0044](0044-signed-distribution-compatibility-manifest.md) | Signed distribution compatibility manifest | Accepted for distribution preparation |
@@ -56,6 +56,7 @@
 | [0054](0054-public-static-catalog-local-insights.md) | Operator-gated public static access, authorized catalog, and local insights | Accepted post-V1 extension |
 | [0055](0055-defer-dashboard-token-management.md) | Defer dashboard token management pending a dedicated overhaul | Accepted |
 | [0056](0056-configurable-local-automation-recipient-domain.md) | Configure the local automation recipient domain | Accepted |
+| [0057](0057-resend-and-postmark-email-providers.md) | Support Resend and Postmark email providers | Accepted for V1 |
 
 ## Decision rule
 
