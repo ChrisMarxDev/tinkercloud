@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -262,13 +263,17 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	credentialPath := fs.String("credentials", defaultCredentialPath, "root-owned systemd environment file")
 	domain := fs.String("domain", "", "root domain; derives admin.<domain> and <slug>.<domain>")
 	email := fs.String("operator-email", "", "initial operator email")
-	emailProvider := fs.String("email-provider", "", "email provider: resend or postmark (default resend)")
+	emailProvider := fs.String("email-provider", "", "email provider: resend, postmark, sendgrid, or smtp (default resend)")
 	emailFrom := fs.String("email-from", "", "verified email-provider sender")
 	dataDir := fs.String("data-directory", "/var/lib/tinkercloud", "private data directory")
 	acmeDir := fs.String("acme-cache-directory", "/var/lib/tinkercloud-acme", "private ACME cache directory")
 	updateReleaseBase := fs.String("update-release-base", "", "HTTPS release directory used by manual updates")
-	emailAPIKeyFile := fs.String("email-api-key-file", "", "root-readable file containing the selected provider key")
+	emailAPIKeyFile := fs.String("email-api-key-file", "", "root-readable file containing the selected provider key or SMTP password")
 	resendFile := fs.String("resend-api-key-file", "", "deprecated Resend-only alias for --email-api-key-file")
+	smtpHost := fs.String("smtp-host", "", "SMTP submission host")
+	smtpPort := fs.Int("smtp-port", 0, "SMTP submission port (default 587)")
+	smtpUsername := fs.String("smtp-username", "", "SMTP AUTH PLAIN username")
+	smtpTLS := fs.String("smtp-tls", "", "SMTP transport: starttls (default) or tls")
 	hmacFile := fs.String("hmac-key-file", "", "root-readable file containing >=32 byte session HMAC key")
 	nonInteractive := fs.Bool("non-interactive", false, "never prompt; require explicit values")
 	if fs.Parse(args) != nil || len(fs.Args()) != 0 || !*nonInteractive || *email == "" {
@@ -276,6 +281,28 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	}
 	if !filepath.IsAbs(*cfgPath) || !filepath.IsAbs(*credentialPath) {
 		return errors.New("tinkercloud: unsafe_path")
+	}
+
+	requestedProvider := *emailProvider
+	if requestedProvider == "" {
+		requestedProvider = string(config.EmailProviderResend)
+	}
+	selectedProvider, parseErr := config.ParseEmailProvider(requestedProvider)
+	if parseErr != nil {
+		return errors.New("tinkercloud: invalid_arguments")
+	}
+	if selectedProvider == config.EmailProviderSMTP {
+		if *smtpPort == 0 {
+			*smtpPort = 587
+		}
+		if *smtpTLS == "" {
+			*smtpTLS = "starttls"
+		}
+		if configCredentials := (config.SMTPCredentials{Host: *smtpHost, Port: *smtpPort, Username: *smtpUsername, Password: "credential-file", TLS: *smtpTLS}); configCredentials.Validate() != nil {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+	} else if *smtpHost != "" || *smtpPort != 0 || *smtpUsername != "" || *smtpTLS != "" {
+		return errors.New("tinkercloud: invalid_arguments")
 	}
 
 	var cfg config.Config
@@ -289,7 +316,9 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if loadErr != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
-		if *emailProvider != "" {
+		if *emailProvider == "" && cfg.EmailProvider != "" {
+			selectedProvider = cfg.EffectiveEmailProvider()
+		} else if *emailProvider != "" && cfg.EmailProvider != "" {
 			requested, parseErr := config.ParseEmailProvider(*emailProvider)
 			if parseErr != nil || requested != cfg.EffectiveEmailProvider() {
 				return errors.New("tinkercloud: invalid_arguments")
@@ -303,19 +332,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if normalizeErr != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
-		providerName := *emailProvider
-		if providerName == "" {
-			providerName = string(config.EmailProviderResend)
-		}
-		provider, parseErr := config.ParseEmailProvider(providerName)
-		if parseErr != nil {
-			return errors.New("tinkercloud: invalid_arguments")
-		}
-		apiKeyRef := "env:RESEND_API_KEY"
-		if provider == config.EmailProviderPostmark {
-			apiKeyRef = "env:POSTMARK_SERVER_TOKEN"
-		}
-		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailProvider: provider, EmailFrom: *emailFrom, ACMEEmail: normalizedOperatorEmail, EmailAPIKeyRef: apiKeyRef, HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
+		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: normalizedOperatorEmail, HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
 		if err := cfg.Validate(); err != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
@@ -328,7 +345,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		return errors.New("tinkercloud: invalid_arguments")
 	}
 	if *resendFile != "" {
-		if cfg.EffectiveEmailProvider() != config.EmailProviderResend {
+		if selectedProvider != config.EmailProviderResend {
 			return errors.New("tinkercloud: invalid_arguments")
 		}
 		providerKeyFile = *resendFile
@@ -366,7 +383,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		}
 	}
 	if state.Next() == operations.InitPaths {
-		if err := provisionPaths(ctx, rt, cfg, *credentialPath, providerKeyFile, *hmacFile, createdConfig, *cfgPath); err != nil {
+		if err := provisionPaths(ctx, rt, cfg, *credentialPath, providerKeyFile, *hmacFile, selectedProvider, *smtpHost, *smtpPort, *smtpUsername, *smtpTLS, createdConfig, *cfgPath); err != nil {
 			return err
 		}
 		if err := state.Complete(operations.InitPaths); err != nil {
@@ -445,7 +462,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	return nil
 }
 
-func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, credentialPath, emailAPIKeyFile, hmacFile string, writeConfig bool, configPath string) error {
+func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, credentialPath, emailAPIKeyFile, hmacFile string, provider config.EmailProvider, smtpHost string, smtpPort int, smtpUsername, smtpTLS string, writeConfig bool, configPath string) error {
 	if err := ensureServiceUser(ctx, rt); err != nil {
 		return err
 	}
@@ -499,11 +516,15 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 		if len(hmac) < 32 {
 			return errors.New("tinkercloud: hmac_invalid")
 		}
-		emailName, hmacName, llmName, err := credentialNames(cfg)
+		_, hmacName, llmName, err := credentialNames(cfg)
 		if err != nil {
 			return err
 		}
-		credential := emailName + "=" + emailAPIKey + "\n" + hmacName + "=" + hmac + "\n"
+		emailLines, err := providerEnvironment(provider, emailAPIKey, smtpHost, smtpPort, smtpUsername, smtpTLS)
+		if err != nil {
+			return err
+		}
+		credential := strings.Join(emailLines, "\n") + "\n" + hmacName + "=" + hmac + "\n"
 		if llmName != "" {
 			root := make([]byte, 32)
 			if _, err = rand.Read(root); err != nil {
@@ -528,6 +549,31 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 	return nil
 }
 
+func providerEnvironment(provider config.EmailProvider, credential, smtpHost string, smtpPort int, smtpUsername, smtpTLS string) ([]string, error) {
+	switch provider {
+	case config.EmailProviderResend:
+		return []string{"RESEND_API_KEY=" + credential}, nil
+	case config.EmailProviderPostmark:
+		return []string{"POSTMARK_SERVER_TOKEN=" + credential}, nil
+	case config.EmailProviderSendGrid:
+		return []string{"SENDGRID_API_KEY=" + credential}, nil
+	case config.EmailProviderSMTP:
+		smtpConfig := config.SMTPCredentials{Host: smtpHost, Port: smtpPort, Username: smtpUsername, Password: credential, TLS: smtpTLS}
+		if smtpConfig.Validate() != nil {
+			return nil, errors.New("tinkercloud: invalid_arguments")
+		}
+		return []string{
+			"TINKERCLOUD_SMTP_HOST=" + smtpHost,
+			"TINKERCLOUD_SMTP_PORT=" + strconv.Itoa(smtpPort),
+			"TINKERCLOUD_SMTP_USERNAME=" + smtpUsername,
+			"TINKERCLOUD_SMTP_PASSWORD=" + credential,
+			"TINKERCLOUD_SMTP_TLS=" + smtpTLS,
+		}, nil
+	default:
+		return nil, errors.New("tinkercloud: invalid_arguments")
+	}
+}
+
 func credentialNames(cfg config.Config) (string, string, string, error) {
 	name := func(ref string) (string, bool) {
 		v, ok := strings.CutPrefix(ref, "env:")
@@ -541,9 +587,13 @@ func credentialNames(cfg config.Config) (string, string, string, error) {
 		}
 		return v, true
 	}
-	emailName, ok := name(cfg.EmailAPIKeyRef)
-	if !ok {
-		return "", "", "", errors.New("tinkercloud: unsafe_secret_reference")
+	emailName := ""
+	if cfg.EmailAPIKeyRef != "" {
+		var ok bool
+		emailName, ok = name(cfg.EmailAPIKeyRef)
+		if !ok {
+			return "", "", "", errors.New("tinkercloud: unsafe_secret_reference")
+		}
 	}
 	hmac, ok := name(cfg.HMACKeyRef)
 	if !ok || emailName == hmac {

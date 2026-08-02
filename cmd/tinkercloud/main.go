@@ -170,11 +170,20 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 	insights.SetEnabled(insightsEnabled)
 	credential := providerCredential{secrets.EmailAPIKey}
 	var out otp.Outbox
-	switch c.EffectiveEmailProvider() {
+	provider := secrets.Email.Provider
+	if provider == "" {
+		provider = c.EffectiveEmailProvider()
+	}
+	switch provider {
 	case config.EmailProviderResend:
 		out = email.Resend{Credential: credential, From: c.EmailFrom}
 	case config.EmailProviderPostmark:
 		out = email.Postmark{Credential: credential, From: c.EmailFrom}
+	case config.EmailProviderSendGrid:
+		out = email.SendGrid{Credential: credential, From: c.EmailFrom}
+	case config.EmailProviderSMTP:
+		smtpConfig := secrets.Email.SMTP
+		out = email.SMTP{Host: smtpConfig.Host, Port: smtpConfig.Port, Username: smtpConfig.Username, Password: smtpConfig.Password, TLSMode: smtpConfig.TLS, From: c.EmailFrom}
 	default:
 		return nil, hub, insights, errors.New("email provider unavailable")
 	}

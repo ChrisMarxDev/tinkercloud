@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,12 +35,14 @@ type EmailProvider string
 const (
 	EmailProviderResend   EmailProvider = "resend"
 	EmailProviderPostmark EmailProvider = "postmark"
+	EmailProviderSendGrid EmailProvider = "sendgrid"
+	EmailProviderSMTP     EmailProvider = "smtp"
 )
 
 func ParseEmailProvider(raw string) (EmailProvider, error) {
 	provider := EmailProvider(raw)
 	switch provider {
-	case EmailProviderResend, EmailProviderPostmark:
+	case EmailProviderResend, EmailProviderPostmark, EmailProviderSendGrid, EmailProviderSMTP:
 		return provider, nil
 	default:
 		return "", fmt.Errorf("unsupported email provider")
@@ -66,6 +69,27 @@ func (c Config) AppSuffix() string { return normalizeDomain(c.Domain) }
 type Secrets struct {
 	EmailAPIKey, HMACKey string
 	LLMRootKey           []byte
+	Email                EmailCredentials
+}
+
+type EmailCredentials struct {
+	Provider EmailProvider
+	APIKey   string
+	SMTP     SMTPCredentials
+}
+
+type SMTPCredentials struct {
+	Host, Username, Password, TLS string
+	Port                          int
+}
+
+func (s SMTPCredentials) Validate() error {
+	if !validSMTPHost(s.Host) || s.Port < 1 || s.Port > 65535 ||
+		s.Username == "" || strings.ContainsAny(s.Username+s.Password, " \t\r\n\x00#'\\\"") || s.Password == "" ||
+		(s.TLS != "starttls" && s.TLS != "tls") {
+		return fmt.Errorf("invalid smtp configuration")
+	}
+	return nil
 }
 
 // ResourceLimits are the intentionally small V1 growth controls. Zero-valued
@@ -232,17 +256,31 @@ func (c Config) RenderYAML() ([]byte, error) {
 	if c.LLMRootKeyRef != "" {
 		secretRefs += "  llm_root_key: " + c.LLMRootKeyRef + "\n"
 	}
-	return []byte(fmt.Sprintf("domain: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\n%semail:\n  provider: %s\n  from: %s\n  api_key: %s\nacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.AppSuffix(), c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, secretRefs, c.EffectiveEmailProvider(), c.EmailFrom, c.EmailAPIKeyRef, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
+	emailConfig := "email:\n"
+	if c.EmailProvider != "" || c.EmailAPIKeyRef != "" {
+		emailConfig += "  provider: " + string(c.EffectiveEmailProvider()) + "\n"
+	}
+	emailConfig += "  from: " + c.EmailFrom + "\n"
+	if c.EmailAPIKeyRef != "" {
+		emailConfig += "  api_key: " + c.EmailAPIKeyRef + "\n"
+	}
+	return []byte(fmt.Sprintf("domain: %s\nsession_cookie: %s\nlisten_http: %s\nlisten_https: %s\ndata_directory: %s\n%s%sacme:\n  email: %s\n  cache_directory: %s\nupdates:\n  release_base: %s\notp:\n  expiry: %s\n  max_attempts: %d\nsession:\n  expiry: %s\nrealtime:\n  idle_timeout: %s\n  ping_interval: %s\n  pong_timeout: %s\n  write_timeout: %s\n  outbound_queue: %d\nlimits:\n  apps_per_deployer: %d\n  archive_upload_bytes: %d\n  expanded_release_bytes: %d\n  files_per_release: %d\n  single_file_bytes: %d\n  deployment_attempts_per_hour: %d\n  release_retention: %d\n  blob_bytes: %d\n  blobs_per_app: %d\n  total_blob_bytes_per_app: %d\n  blob_list_limit: %d\n  blob_uploads_per_minute: %d\n  blob_concurrent_uploads: %d\n  blob_upload_duration: %s\n  disk_warning_percent: %d\n  disk_stop_percent: %d\n", c.AppSuffix(), c.SessionCookie, c.ListenHTTP, c.ListenHTTPS, c.DataDirectory, secretRefs, emailConfig, c.ACMEEmail, c.ACMECachedir, c.UpdateReleaseBase, c.OTPExpiry, c.OTPMaxAttempts, c.SessionExpiry, r.IdleTimeout, r.PingInterval, r.PongTimeout, r.WriteTimeout, r.OutboundQueue, l.AppsPerDeployer, l.ArchiveUploadBytes, l.ExpandedReleaseBytes, l.FilesPerRelease, l.SingleFileBytes, l.DeploymentAttemptsPerHour, l.ReleaseRetention, l.BlobBytes, l.BlobsPerApp, l.TotalBlobBytesPerApp, l.BlobListLimit, l.BlobUploadsPerMinute, l.BlobConcurrentUploads, l.BlobUploadDuration, l.DiskWarningPercent, l.DiskStopPercent)), nil
 }
 
 func (c Config) Redacted() map[string]string {
 	return map[string]string{"domain": c.AppSuffix(), "admin_host": c.PlatformHost(), "email_api_key": "[redacted]", "hmac_key": "[redacted]", "llm_root_key": "[redacted]"}
 }
 func (c Config) ResolveSecrets(get func(string) string) (Secrets, error) {
-	if c.EmailAPIKeyRef == "" || c.HMACKeyRef == "" {
+	if c.HMACKeyRef == "" {
 		return Secrets{}, fmt.Errorf("missing secret reference")
 	}
 	s := Secrets{}
+	emailCredentials, err := c.ResolveEmailCredentials(get)
+	if err != nil {
+		return Secrets{}, err
+	}
+	s.Email = emailCredentials
+	s.EmailAPIKey = emailCredentials.APIKey
 	if c.LLMRootKeyRef != "" {
 		raw := get(strings.TrimPrefix(c.LLMRootKeyRef, "env:"))
 		decoded, err := hex.DecodeString(raw)
@@ -254,7 +292,7 @@ func (c Config) ResolveSecrets(get func(string) string) (Secrets, error) {
 	for _, x := range []struct {
 		ref string
 		dst *string
-	}{{c.EmailAPIKeyRef, &s.EmailAPIKey}, {c.HMACKeyRef, &s.HMACKey}} {
+	}{{c.HMACKeyRef, &s.HMACKey}} {
 		if x.ref != "" {
 			*x.dst = get(strings.TrimPrefix(x.ref, "env:"))
 			if *x.dst == "" {
@@ -266,6 +304,46 @@ func (c Config) ResolveSecrets(get func(string) string) (Secrets, error) {
 		return Secrets{}, fmt.Errorf("invalid hmac secret")
 	}
 	return s, nil
+}
+
+// ResolveEmailCredentials applies the public, deterministic first-present
+// provider cascade. An earlier provider intentionally wins even when later
+// credentials also exist; this makes upgrades predictable for existing Resend
+// installations and keeps selection independent of map or file ordering.
+func (c Config) ResolveEmailCredentials(get func(string) string) (EmailCredentials, error) {
+	if key := get("RESEND_API_KEY"); key != "" {
+		return EmailCredentials{Provider: EmailProviderResend, APIKey: key}, nil
+	}
+	if key := get("POSTMARK_SERVER_TOKEN"); key != "" {
+		return EmailCredentials{Provider: EmailProviderPostmark, APIKey: key}, nil
+	}
+	if key := get("SENDGRID_API_KEY"); key != "" {
+		return EmailCredentials{Provider: EmailProviderSendGrid, APIKey: key}, nil
+	}
+	smtpValues := []string{
+		get("TINKERCLOUD_SMTP_HOST"), get("TINKERCLOUD_SMTP_PORT"),
+		get("TINKERCLOUD_SMTP_USERNAME"), get("TINKERCLOUD_SMTP_PASSWORD"),
+		get("TINKERCLOUD_SMTP_TLS"),
+	}
+	if strings.Join(smtpValues, "") != "" {
+		port, err := strconv.Atoi(smtpValues[1])
+		credentials := SMTPCredentials{Host: smtpValues[0], Port: port, Username: smtpValues[2], Password: smtpValues[3], TLS: smtpValues[4]}
+		if err != nil || credentials.Validate() != nil {
+			return EmailCredentials{}, fmt.Errorf("invalid smtp configuration")
+		}
+		return EmailCredentials{Provider: EmailProviderSMTP, SMTP: credentials}, nil
+	}
+	// Compatibility for configs generated before environment-presence
+	// selection. New configs leave this reference empty.
+	if c.EmailAPIKeyRef != "" {
+		key := get(strings.TrimPrefix(c.EmailAPIKeyRef, "env:"))
+		provider := c.EffectiveEmailProvider()
+		if key == "" || provider == EmailProviderSMTP {
+			return EmailCredentials{}, fmt.Errorf("missing email provider environment")
+		}
+		return EmailCredentials{Provider: provider, APIKey: key}, nil
+	}
+	return EmailCredentials{}, fmt.Errorf("missing email provider environment")
 }
 
 // LoadYAML accepts a deliberately narrow server config. Secrets are references,
@@ -315,14 +393,12 @@ func LoadYAML(path string) (Config, error) {
 		return Config{}, fmt.Errorf("invalid config: multiple documents")
 	}
 	provider := raw.Email.Provider
-	if provider == "" {
-		provider = EmailProviderResend
-	}
 	apiKeyRef := raw.Email.APIKey
 	if raw.Email.ResendAPIKey != "" {
-		if apiKeyRef != "" || provider != EmailProviderResend {
+		if apiKeyRef != "" || provider != "" && provider != EmailProviderResend {
 			return Config{}, fmt.Errorf("invalid config: ambiguous email credential")
 		}
+		provider = EmailProviderResend
 		apiKeyRef = raw.Email.ResendAPIKey
 	}
 	c := Config{Domain: raw.Domain, SessionCookie: raw.SessionCookie, ListenHTTP: raw.ListenHTTP, ListenHTTPS: raw.ListenHTTPS, DataDirectory: raw.DataDirectory, EmailProvider: provider, EmailAPIKeyRef: apiKeyRef, HMACKeyRef: raw.SecretRefs["hmac_key"], LLMRootKeyRef: raw.SecretRefs["llm_root_key"], EmailFrom: raw.Email.From, ACMEEmail: raw.ACME.Email, ACMECachedir: raw.ACME.CacheDirectory, UpdateReleaseBase: raw.Updates.ReleaseBase, OTPExpiry: raw.OTP.Expiry, OTPMaxAttempts: raw.OTP.MaxAttempts, SessionExpiry: raw.Session.Expiry, Realtime: raw.Realtime, Limits: raw.Limits}
@@ -358,10 +434,12 @@ func (c Config) Validate() error {
 	if strings.ContainsAny(c.EmailFrom+c.ACMEEmail+c.ListenHTTP+c.ListenHTTPS, "\r\n") {
 		return fmt.Errorf("config values cannot contain control newlines")
 	}
-	if _, err := ParseEmailProvider(string(c.EffectiveEmailProvider())); err != nil {
-		return err
+	if c.EmailProvider != "" {
+		if _, err := ParseEmailProvider(string(c.EmailProvider)); err != nil {
+			return err
+		}
 	}
-	if c.EmailFrom == "" || c.ACMEEmail == "" || c.HMACKeyRef == "" || c.EmailAPIKeyRef == "" {
+	if c.EmailFrom == "" || c.ACMEEmail == "" || c.HMACKeyRef == "" {
 		return fmt.Errorf("email from and hmac reference are required")
 	}
 	if !safePrivateRoot(c.DataDirectory) {
@@ -405,6 +483,26 @@ func validDomain(domain string) bool {
 		}
 		for _, char := range label {
 			if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validSMTPHost(host string) bool {
+	if host == "" || len(host) > 253 || strings.TrimSpace(host) != host || strings.ContainsAny(host, "/@:*\t\r\n\x00") {
+		return false
+	}
+	if net.ParseIP(host) != nil {
+		return true
+	}
+	for _, label := range strings.Split(host, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, char := range label {
+			if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '-') {
 				return false
 			}
 		}

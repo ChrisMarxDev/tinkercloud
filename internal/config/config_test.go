@@ -106,6 +106,65 @@ func TestEmailProviderConfigDenials(t *testing.T) {
 	}
 }
 
+func TestEmailProviderEnvironmentCascade(t *testing.T) {
+	cfg := valid(t.TempDir())
+	values := map[string]string{
+		"RESEND_API_KEY":            "resend-key",
+		"POSTMARK_SERVER_TOKEN":     "postmark-key",
+		"SENDGRID_API_KEY":          "sendgrid-key",
+		"TINKERCLOUD_SMTP_HOST":     "smtp.example.test",
+		"TINKERCLOUD_SMTP_PORT":     "587",
+		"TINKERCLOUD_SMTP_USERNAME": "operator@example.test",
+		"TINKERCLOUD_SMTP_PASSWORD": "smtp-password",
+		"TINKERCLOUD_SMTP_TLS":      "starttls",
+	}
+	get := func(name string) string { return values[name] }
+	credentials, err := cfg.ResolveEmailCredentials(get)
+	if err != nil || credentials.Provider != EmailProviderResend || credentials.APIKey != "resend-key" {
+		t.Fatalf("Resend priority = %#v, %v", credentials, err)
+	}
+	delete(values, "RESEND_API_KEY")
+	credentials, err = cfg.ResolveEmailCredentials(get)
+	if err != nil || credentials.Provider != EmailProviderPostmark || credentials.APIKey != "postmark-key" {
+		t.Fatalf("Postmark priority = %#v, %v", credentials, err)
+	}
+	delete(values, "POSTMARK_SERVER_TOKEN")
+	credentials, err = cfg.ResolveEmailCredentials(get)
+	if err != nil || credentials.Provider != EmailProviderSendGrid || credentials.APIKey != "sendgrid-key" {
+		t.Fatalf("SendGrid priority = %#v, %v", credentials, err)
+	}
+	delete(values, "SENDGRID_API_KEY")
+	credentials, err = cfg.ResolveEmailCredentials(get)
+	if err != nil || credentials.Provider != EmailProviderSMTP || credentials.SMTP.Host != "smtp.example.test" || credentials.SMTP.Port != 587 {
+		t.Fatalf("SMTP fallback = %#v, %v", credentials, err)
+	}
+}
+
+func TestEmailProviderEnvironmentDenials(t *testing.T) {
+	cfg := valid(t.TempDir())
+	cfg.EmailAPIKeyRef = ""
+	for name, values := range map[string]map[string]string{
+		"absent":       {},
+		"partial smtp": {"TINKERCLOUD_SMTP_HOST": "smtp.example.test"},
+		"plaintext smtp": {
+			"TINKERCLOUD_SMTP_HOST": "smtp.example.test", "TINKERCLOUD_SMTP_PORT": "25",
+			"TINKERCLOUD_SMTP_USERNAME": "operator@example.test", "TINKERCLOUD_SMTP_PASSWORD": "secret",
+			"TINKERCLOUD_SMTP_TLS": "none",
+		},
+		"invalid smtp port": {
+			"TINKERCLOUD_SMTP_HOST": "smtp.example.test", "TINKERCLOUD_SMTP_PORT": "70000",
+			"TINKERCLOUD_SMTP_USERNAME": "operator@example.test", "TINKERCLOUD_SMTP_PASSWORD": "secret",
+			"TINKERCLOUD_SMTP_TLS": "tls",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := cfg.ResolveEmailCredentials(func(key string) string { return values[key] }); err == nil {
+				t.Fatal("invalid provider environment accepted")
+			}
+		})
+	}
+}
+
 func TestConfigRejectsSplitAndUnsafeDomains(t *testing.T) {
 	root := t.TempDir()
 	for _, domain := range []string{"", "localhost", "127.0.0.1", "*.tinker.test", "admin@tinker.test", "-tinker.test", "tinker..test", "tïny.test"} {
