@@ -1,6 +1,6 @@
 # SDK Distribution
 
-**Status:** npm beta workflow prepared; first package bootstrap still manual
+**Status:** unified release workflow prepared; first package bootstrap still manual
 
 `@tinkercloud/sdk` is the only package published to npm during beta. The native
 `tinker` CLI remains on the signed GitHub installer. JSR, Homebrew, stable npm,
@@ -94,7 +94,7 @@ Immediately configure the package's npm trusted publisher:
 Provider: GitHub Actions
 Organization/user: ChrisMarxDev
 Repository: tinkercloud
-Workflow: npm-sdk-publish.yml
+Workflow: release.yml
 Environment: npm-sdk
 Allowed action: npm publish
 ```
@@ -107,10 +107,11 @@ First publish and anonymously verify a new numeric-patch GitHub prerelease.
 Then dispatch:
 
 ```sh
-gh workflow run npm-sdk-publish.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=beta \
   -f version="$VERSION" \
-  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+  -f confirmation="publish-beta-v$VERSION"
 ```
 
 Approve Environment `npm-sdk` only after reviewing the tag, GitHub prerelease,

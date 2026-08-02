@@ -119,8 +119,9 @@ and push its exact tag:
 VERSION=0.1.0
 git tag -a "v$VERSION" -m "Beta v$VERSION"
 git push origin "v$VERSION"
-gh workflow run beta-release.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"
 ```
@@ -180,7 +181,7 @@ registry. The npm version stays strict numeric for compatibility; npm's fixed
 Configure GitHub Environment `npm-sdk` once with a required reviewer, access
 from `main`, and no npm token secret. The package's trusted publisher must be
 exactly repository `ChrisMarxDev/tinkercloud`, workflow
-`npm-sdk-publish.yml`, Environment `npm-sdk`, with only `npm publish` allowed.
+`release.yml`, Environment `npm-sdk`, with only `npm publish` allowed.
 
 The package must first be bootstrapped once with interactive 2FA from the exact
 verified prerelease tarball. The complete guarded procedure is in
@@ -188,10 +189,11 @@ verified prerelease tarball. The complete guarded procedure is in
 
 ```sh
 task release:npm-sdk-check
-gh workflow run npm-sdk-publish.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=beta \
   -f version="$VERSION" \
-  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+  -f confirmation="publish-beta-v$VERSION"
 ```
 
 Approve `npm-sdk` only after reviewing the existing public GitHub prerelease and
@@ -206,12 +208,10 @@ This path is governed by
 
 ## Publish stable CLI channels
 
-Stable distribution is implemented as two separate manual workflows:
-
-1. `stable-release.yml` builds, signs, remotely verifies, and publishes the
-   canonical GitHub release; and
-2. `npm-cli-publish.yml` downloads that release, verifies it, derives the exact
-   `@tinkercloud/cli` tarball, and publishes it with npm trusted-publisher OIDC.
+Stable distribution uses the same `release.yml` invocation with `channel=stable`.
+It builds, signs, remotely verifies, and publishes the canonical GitHub release,
+then publishes the exact same-version SDK and CLI npm artifacts through their
+separate protected OIDC environments.
 
 Both workflows fail while `packaging/release-key-policy.json` identifies the
 committed authority as `beta`. Rotate to a separately controlled production
@@ -222,7 +222,7 @@ The GitHub repository must be public, releases immutable, and the
 The first npm version is a one-time exception: npm requires a package to exist
 before it can be assigned a trusted publisher. Publish the exact generated
 tarball interactively with 2FA, then bind `@tinkercloud/cli` to
-`npm-cli-publish.yml`, repository `ChrisMarxDev/tinkercloud`, Environment
+`release.yml`, repository `ChrisMarxDev/tinkercloud`, Environment
 `npm-cli`, with only `npm publish` allowed. Later versions use Node 24, npm
 11.5.1 or newer, `id-token: write`, no registry token, and automatic
 provenance.
