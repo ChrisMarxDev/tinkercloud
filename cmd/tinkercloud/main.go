@@ -23,6 +23,7 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm/anthropic"
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm/gemini"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
+	"github.com/ChrisMarxDev/tinkercloud/internal/otp"
 	"github.com/ChrisMarxDev/tinkercloud/internal/persistence"
 	"github.com/ChrisMarxDev/tinkercloud/internal/ratelimit"
 	"github.com/ChrisMarxDev/tinkercloud/internal/requestlog"
@@ -141,9 +142,9 @@ func (h hostResolver) ActiveAppHost(host string) bool {
 	return h.store.EligibleAppHost(context.Background(), slug)
 }
 
-type resendCredential struct{ key string }
+type providerCredential struct{ key string }
 
-func (c resendCredential) ResendAPIKey() string { return c.key }
+func (c providerCredential) APIKey() string { return c.key }
 
 // llmCredentialValidator selects only a compiled-in provider validator. It
 // has no caller-controlled URL, header, or transport path.
@@ -167,7 +168,16 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 		return nil, hub, insights, err
 	}
 	insights.SetEnabled(insightsEnabled)
-	out := email.Resend{Credential: resendCredential{secrets.ResendAPIKey}, From: c.EmailFrom}
+	credential := providerCredential{secrets.EmailAPIKey}
+	var out otp.Outbox
+	switch c.EffectiveEmailProvider() {
+	case config.EmailProviderResend:
+		out = email.Resend{Credential: credential, From: c.EmailFrom}
+	case config.EmailProviderPostmark:
+		out = email.Postmark{Credential: credential, From: c.EmailFrom}
+	default:
+		return nil, hub, insights, errors.New("email provider unavailable")
+	}
 	liveSessions := compose.LiveSessions{Sessions: store, Hub: hub}
 	identityBroker := &compose.IdentityBroker{Store: store, Outbox: out, HMACKey: []byte(secrets.HMACKey), OTPExpiry: c.OTPExpiry, OTPMaxAttempt: c.OTPMaxAttempts, AppSessionTTL: c.SessionExpiry, PlatformHost: c.PlatformHost(), AppSuffix: c.AppSuffix(), RevokeChildren: func(refs []persistence.AppSessionRef) {
 		for _, ref := range refs {

@@ -13,7 +13,7 @@ import (
 )
 
 func llmCommandConfig(root string) config.Config {
-	return config.Config{Domain: "apps.tinker.example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "acme"), EmailFrom: "operator@example.test", ACMEEmail: "operator@example.test", ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", OTPExpiry: time.Minute, OTPMaxAttempts: 5, SessionExpiry: time.Hour}
+	return config.Config{Domain: "apps.tinker.example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "acme"), EmailFrom: "operator@example.test", ACMEEmail: "operator@example.test", EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", OTPExpiry: time.Minute, OTPMaxAttempts: 5, SessionExpiry: time.Hour}
 }
 
 func TestLLMEnableRetriesAfterConfigWriteFailureWithoutReplacingRoot(t *testing.T) {

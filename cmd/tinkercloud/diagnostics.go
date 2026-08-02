@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -31,7 +30,7 @@ const maxDoctorCredentialBytes = 64 << 10
 // doctorCredentials is intentionally local to diagnostic composition. It keeps
 // a provider value out of the process environment and gives no output path a
 // printable secret reference.
-type doctorCredentials struct{ resendAPIKey string }
+type doctorCredentials struct{ emailAPIKey string }
 
 var credentialOwnerUID = func(info os.FileInfo) (uint32, bool) {
 	st, ok := info.Sys().(*syscall.Stat_t)
@@ -42,14 +41,14 @@ var credentialOwnerUID = func(info os.FileInfo) (uint32, bool) {
 // broken host, so every dependency has a bounded, fail-closed default and tests
 // can prove failure and redaction paths without contacting a provider.
 type diagnosticDeps struct {
-	DiskFreePercent func(string) (uint64, error)
-	SQLiteCheck     func(context.Context, string) error
-	ClockOK         func(context.Context) error
-	ServiceOK       func(context.Context) error
-	PortOK          func(context.Context, string) error
-	DNSLookup       func(context.Context, string) ([]string, error)
-	TLSCheck        func(context.Context, string, string) error
-	ResendCheck     func(context.Context, string) error
+	DiskFreePercent    func(string) (uint64, error)
+	SQLiteCheck        func(context.Context, string) error
+	ClockOK            func(context.Context) error
+	ServiceOK          func(context.Context) error
+	PortOK             func(context.Context, string) error
+	DNSLookup          func(context.Context, string) ([]string, error)
+	TLSCheck           func(context.Context, string, string) error
+	EmailProviderCheck func(context.Context, config.EmailProvider, string) error
 }
 
 // diskFreePercent is retained as a focused test seam for the local watermark.
@@ -82,27 +81,61 @@ func productionDiagnosticDeps() diagnosticDeps {
 		DNSLookup: func(ctx context.Context, host string) ([]string, error) {
 			return net.DefaultResolver.LookupHost(ctx, host)
 		},
-		TLSCheck: tlsCertificateOK,
-		ResendCheck: func(ctx context.Context, key string) error {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.resend.com/domains", nil)
-			if err != nil {
-				return err
-			}
-			req.Header.Set("Authorization", "Bearer "+key)
-			client := &http.Client{Timeout: diagnosticTimeout}
-			resp, err := client.Do(req)
-			if err != nil {
-				return err
-			}
-			defer resp.Body.Close()
-			// Deliberately discard provider bodies: they may contain account data.
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-				return fmt.Errorf("resend status %d", resp.StatusCode)
-			}
-			return nil
+		TLSCheck:           tlsCertificateOK,
+		EmailProviderCheck: emailProviderCredentialCheck,
+	}
+}
+
+func emailProviderCredentialCheck(ctx context.Context, provider config.EmailProvider, key string) error {
+	req, err := emailProviderCredentialRequest(ctx, provider, key)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{
+		Timeout: diagnosticTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// Deliberately discard provider bodies: they may contain account data or
+	// credential metadata.
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errors.New("email provider rejected credential")
+	}
+	return nil
+}
+
+func emailProviderCredentialRequest(ctx context.Context, provider config.EmailProvider, key string) (*http.Request, error) {
+	if key == "" {
+		return nil, errors.New("email provider unavailable")
+	}
+	var endpoint string
+	switch provider {
+	case config.EmailProviderResend:
+		endpoint = "https://api.resend.com/domains"
+	case config.EmailProviderPostmark:
+		endpoint = "https://api.postmarkapp.com/stats/outbound/sends"
+	default:
+		return nil, errors.New("email provider unavailable")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	switch provider {
+	case config.EmailProviderResend:
+		req.Header.Set("Authorization", "Bearer "+key)
+	case config.EmailProviderPostmark:
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-Postmark-Server-Token", key)
+	}
+	return req, nil
 }
 
 func sqliteQuickCheck(ctx context.Context, dataDir string) error {
@@ -221,11 +254,11 @@ func diagnoseWithOptions(parent context.Context, c config.Config, network bool, 
 			}
 			return d.TLSCheck(ctx, c.PlatformHost(), port)
 		}))
-		checks = append(checks, checkWith(parent, "resend", "credential accepted", "unavailable", func(ctx context.Context) error {
-			if credentials.resendAPIKey == "" {
+		checks = append(checks, checkWith(parent, "email_provider", "credential accepted", "unavailable", func(ctx context.Context) error {
+			if credentials.emailAPIKey == "" {
 				return errors.New("credential unavailable")
 			}
-			return d.ResendCheck(ctx, credentials.resendAPIKey)
+			return d.EmailProviderCheck(ctx, c.EffectiveEmailProvider(), credentials.emailAPIKey)
 		}))
 	}
 	sort.Slice(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
@@ -256,7 +289,7 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 	if err != nil || len(b) == 0 || len(b) > maxDoctorCredentialBytes {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
-	resendName, hmacName, llmName, err := credentialNames(c)
+	emailName, hmacName, llmName, err := credentialNames(c)
 	if err != nil {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
@@ -274,7 +307,7 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 	}
 	for _, line := range lines {
 		name, value, ok := strings.Cut(line, "=")
-		if !ok || name == "" || !safeCredentialValue(value) || (name != resendName && name != hmacName && name != llmName) {
+		if !ok || name == "" || !safeCredentialValue(value) || (name != emailName && name != hmacName && name != llmName) {
 			return doctorCredentials{}, errors.New("credential unavailable")
 		}
 		if _, exists := values[name]; exists {
@@ -282,10 +315,10 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 		}
 		values[name] = value
 	}
-	if values[resendName] == "" || len(values[hmacName]) < 32 || (llmName != "" && len(values[llmName]) != 64) {
+	if values[emailName] == "" || len(values[hmacName]) < 32 || (llmName != "" && len(values[llmName]) != 64) {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
-	return doctorCredentials{resendAPIKey: values[resendName]}, nil
+	return doctorCredentials{emailAPIKey: values[emailName]}, nil
 }
 
 func safeCredentialValue(value string) bool {

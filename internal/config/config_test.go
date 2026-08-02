@@ -9,7 +9,7 @@ import (
 )
 
 func valid(root string) Config {
-	return Config{Domain: ".TINKER.TEST.", SessionCookie: "__Host-tinker_app", ListenHTTP: "127.0.0.1:80", ListenHTTPS: "127.0.0.1:443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "cache"), EmailFrom: "a@test", ACMEEmail: "a@test", ResendAPIKeyRef: "env:R", HMACKeyRef: "env:H", OTPExpiry: time.Minute, SessionExpiry: time.Hour, OTPMaxAttempts: 5}
+	return Config{Domain: ".TINKER.TEST.", SessionCookie: "__Host-tinker_app", ListenHTTP: "127.0.0.1:80", ListenHTTPS: "127.0.0.1:443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "cache"), EmailFrom: "a@test", ACMEEmail: "a@test", EmailAPIKeyRef: "env:R", HMACKeyRef: "env:H", OTPExpiry: time.Minute, SessionExpiry: time.Hour, OTPMaxAttempts: 5}
 }
 func TestConfigValidationAndSecrets(t *testing.T) {
 	c := valid(t.TempDir())
@@ -41,6 +41,68 @@ func TestLoadCanonical(t *testing.T) {
 	c, e := LoadYAML(p)
 	if e != nil || c.Domain != "tinker.test" || c.PlatformHost() != "admin.tinker.test" || c.AppSuffix() != "tinker.test" {
 		t.Fatal(c, e)
+	}
+}
+
+func TestEmailProviderConfigRoundTripAndLegacyResendCompatibility(t *testing.T) {
+	postmark := valid(t.TempDir())
+	postmark.EmailProvider = EmailProviderPostmark
+	postmark.EmailAPIKeyRef = "env:POSTMARK_SERVER_TOKEN"
+	body, err := postmark.RenderYAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "provider: postmark") || !strings.Contains(string(body), "api_key: env:POSTMARK_SERVER_TOKEN") || strings.Contains(string(body), "resend_api_key") {
+		t.Fatalf("rendered config = %s", body)
+	}
+	path := filepath.Join(t.TempDir(), "postmark.yaml")
+	if err := os.WriteFile(path, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadYAML(path)
+	if err != nil || loaded.EffectiveEmailProvider() != EmailProviderPostmark || loaded.EmailAPIKeyRef != "env:POSTMARK_SERVER_TOKEN" {
+		t.Fatalf("loaded = %#v, %v", loaded, err)
+	}
+
+	legacyPath := filepath.Join(t.TempDir(), "legacy.yaml")
+	legacy := strings.ReplaceAll(string(body), "  provider: postmark\n", "")
+	legacy = strings.ReplaceAll(legacy, "  api_key: env:POSTMARK_SERVER_TOKEN", "  resend_api_key: env:RESEND_API_KEY")
+	if err := os.WriteFile(legacyPath, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = LoadYAML(legacyPath)
+	if err != nil || loaded.EffectiveEmailProvider() != EmailProviderResend || loaded.EmailAPIKeyRef != "env:RESEND_API_KEY" {
+		t.Fatalf("legacy loaded = %#v, %v", loaded, err)
+	}
+}
+
+func TestEmailProviderConfigDenials(t *testing.T) {
+	base := valid(t.TempDir())
+	body, err := base.RenderYAML()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(string) string{
+		"unknown":      func(raw string) string { return strings.Replace(raw, "provider: resend", "provider: unknown", 1) },
+		"case variant": func(raw string) string { return strings.Replace(raw, "provider: resend", "provider: Resend", 1) },
+		"raw key":      func(raw string) string { return strings.Replace(raw, "api_key: env:R", "api_key: secret", 1) },
+		"both key fields": func(raw string) string {
+			return strings.Replace(raw, "  api_key: env:R", "  api_key: env:R\n  resend_api_key: env:R2", 1)
+		},
+		"postmark legacy key": func(raw string) string {
+			raw = strings.Replace(raw, "provider: resend", "provider: postmark", 1)
+			return strings.Replace(raw, "  api_key: env:R", "  resend_api_key: env:R", 1)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(mutate(string(body))), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadYAML(path); err == nil {
+				t.Fatal("invalid email provider config accepted")
+			}
+		})
 	}
 }
 
