@@ -41,7 +41,7 @@ repository visibility, version parity, release absence, production-key policy,
 and absence of both npm versions before entering any protected environment or
 reading a signing secret.
 
-The protected job builds once, verifies locally, creates a draft stable
+The protected top-level `release.yml` job builds once, verifies locally, creates a draft stable
 release, downloads the complete draft into a fresh directory, compares the
 asset set, verifies it again, and only then publishes it as `latest`. It smoke
 tests both exact-version and `latest` one-line installers. Published releases,
@@ -52,6 +52,9 @@ The production private key is stored only as
 temporary file is random, mode `0600`, outside the checkout, removed on every
 exit, and unavailable to child builds except through the canonical release
 builder's narrow input.
+
+Reusable validation workflows receive no Environment secret and cannot sign or
+publish a release.
 
 ## Protected npm stages
 

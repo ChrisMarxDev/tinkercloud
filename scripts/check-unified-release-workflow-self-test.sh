@@ -14,4 +14,6 @@ sed '/SDK version declarations do not match \$VERSION/d' "$source" >"$tmp/no-ver
 sed '/\[\[ "$GITHUB_SHA" == "$source_commit" \]\]/d' "$source" >"$tmp/wrong-workflow-ref.yml"; deny "$tmp/wrong-workflow-ref.yml" 'missing exact workflow ref gate'
 sed '/workflow_dispatch:/d' "$source" >"$tmp/no-dispatch.yml"; deny "$tmp/no-dispatch.yml" 'missing manual trigger'
 printf '\n  push:\n' >>"$tmp/no-dispatch.yml"; deny "$tmp/no-dispatch.yml" 'automatic trigger'
+sed '/beta-validation:/,/beta-release:/{s/contents: read/contents: write/;}' "$source" >"$tmp/beta-validation-write.yml"; deny "$tmp/beta-validation-write.yml" 'beta validation write authority'
+sed '/stable-validation:/,/stable-release:/{s/contents: read/contents: write/;}' "$source" >"$tmp/stable-validation-write.yml"; deny "$tmp/stable-validation-write.yml" 'stable validation write authority'
 echo 'unified release workflow checker self-test passed'

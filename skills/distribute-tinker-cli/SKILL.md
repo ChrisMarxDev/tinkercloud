@@ -152,7 +152,10 @@ gh workflow run release.yml \
   -f confirmation="publish-beta-v$VERSION"
 ```
 
-Do not obtain, transmit, or inspect the signing secret. Stop for the GitHub
+Do not obtain, transmit, or inspect the signing secret. The selected signing
+Environment secret is available only to the normal protected top-level
+`release.yml` job; its reusable validation workflows never receive it. Never
+use `secrets: inherit` or move the key to repository scope. Stop for the GitHub
 Environment approval. After completion, verify the release remains marked
 prerelease, download and verify its exact assets, verify SDK `beta` and CLI
 `next` on npm, and report the versioned URLs. Never publish JSR, update

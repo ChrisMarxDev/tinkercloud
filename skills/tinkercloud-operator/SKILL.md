@@ -76,6 +76,12 @@ mutation, confirm the exact target is a clean dedicated x86-64 Hetzner VPS
 running explicitly supported Ubuntu 24.04 LTS or 26.04 LTS. Ambiguous,
 interim, end-of-life, other-distribution, or future unverified releases deny.
 
+For hosted releases, dispatch only `release.yml`. Its reusable validation
+workflows never receive release Environment secrets; the selected direct,
+reviewer-protected top-level release job alone reads the channel signing key and
+creates the GitHub release. Never add `secrets: inherit`, a repository signing
+secret, or a second publication dispatch.
+
 For a clean host, begin in that VPS's root shell with the exact-version signed
 release command:
 

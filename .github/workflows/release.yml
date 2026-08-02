@@ -31,6 +31,8 @@ jobs:
   preflight:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      source_commit: ${{ steps.source.outputs.source_commit }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +43,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - name: Deny an incomplete release before public mutation
+        id: source
         env:
           GH_TOKEN: ${{ github.token }}
           CHANNEL: ${{ inputs.channel }}
@@ -73,6 +76,7 @@ jobs:
             exit 1
           }
           source_commit=$(git rev-list -n 1 "$tag")
+          echo "source_commit=$source_commit" >>"$GITHUB_OUTPUT"
           git merge-base --is-ancestor "$source_commit" origin/main || {
             echo "source tag is not reachable from origin/main" >&2
             exit 1
@@ -123,25 +127,85 @@ jobs:
             }
           done
 
-  beta-release:
+  beta-validation:
     needs: preflight
     if: inputs.channel == 'beta'
     permissions:
-      contents: write
+      contents: read
     uses: ./.github/workflows/beta-release.yml
     with:
       version: ${{ inputs.version }}
       confirmation: ${{ inputs.confirmation }}
 
-  stable-release:
+  beta-release:
+    needs: [preflight, beta-validation]
+    if: inputs.channel == 'beta'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: beta-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.preflight.outputs.source_commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - name: Build, verify, and publish the protected beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+          SIGNING_KEY_B64: ${{ secrets.TINKERCLOUD_BETA_RELEASE_SIGNING_KEY_B64 }}
+        run: ./scripts/publish-github-release.sh beta
+
+  stable-validation:
     needs: preflight
     if: inputs.channel == 'stable'
     permissions:
-      contents: write
+      contents: read
     uses: ./.github/workflows/stable-release.yml
     with:
       version: ${{ inputs.version }}
       confirmation: ${{ inputs.confirmation }}
+
+  stable-release:
+    needs: [preflight, stable-validation]
+    if: inputs.channel == 'stable'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: stable-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.preflight.outputs.source_commit }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - name: Build, verify, and publish the protected stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_COMMIT: ${{ needs.preflight.outputs.source_commit }}
+          SIGNING_KEY_B64: ${{ secrets.TINKERCLOUD_RELEASE_SIGNING_KEY_B64 }}
+        run: ./scripts/publish-github-release.sh stable
 
   beta-sdk:
     needs: beta-release

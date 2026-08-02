@@ -12,3 +12,9 @@ Beta denies `latest` and requires SDK `beta` plus CLI `next`. Stable denies
 prerelease tags and requires `latest` for both. Neither flow rebuilds the SDK
 tarball, overwrites, unpublishes, hides, or reuses public state. Any
 post-publication failure preserves evidence and fixes forward with a new version.
+
+The executable workflow checker rejects a beta or stable reusable validation
+workflow that references a release signing secret, attaches its release
+Environment, or gains release-write authority. It also rejects ambient secret
+inheritance: the selected signing secret must be attached directly to the
+normal protected job in top-level `release.yml`.

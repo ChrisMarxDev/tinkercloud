@@ -217,6 +217,7 @@ tasks:
       - ./scripts/check-npm-sdk-workflow-self-test.sh
       - ./scripts/check-stable-release-workflows.sh
       - ./scripts/check-stable-release-workflows-self-test.sh
+      - ./scripts/publish-github-release-self-test.sh
       - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - ./scripts/extract-sdk-version-self-test.sh
       - ./scripts/check-release-key-drift.sh
