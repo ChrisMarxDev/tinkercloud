@@ -72,7 +72,16 @@ PY
 test -n "${HOME:-}" && test -d "$HOME" && test ! -L "$HOME" || fail "a real HOME directory is required"
 uid=$(id -u)
 owner_uid() {
-  stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1" 2>/dev/null
+  python3 - "$1" <<'PY'
+import os, sys
+print(os.stat(sys.argv[1], follow_symlinks=False).st_uid)
+PY
+}
+file_mode() {
+  python3 - "$1" <<'PY'
+import os, sys
+print(format(os.stat(sys.argv[1], follow_symlinks=False).st_mode & 0o777, "o"))
+PY
 }
 safe_owned_directory() {
   case "$1" in /*) ;; *) return 1 ;; esac
@@ -120,7 +129,7 @@ ensure_profile_path() {
   esac
   if test -e "$profile" || test -L "$profile"; then
     test -f "$profile" && test ! -L "$profile" && test "$(owner_uid "$profile")" = "$uid" || fail "refusing unsafe shell profile path: $profile"
-    mode=$(stat -f '%Lp' "$profile" 2>/dev/null || stat -c '%a' "$profile" 2>/dev/null) || fail "cannot inspect shell profile: $profile"
+    mode=$(file_mode "$profile") || fail "cannot inspect shell profile: $profile"
     case "$mode" in *[2367][0-7]|*[2367]) fail "refusing group/world-writable shell profile: $profile" ;; esac
   fi
   marker='# Added by Tinker client installer'
