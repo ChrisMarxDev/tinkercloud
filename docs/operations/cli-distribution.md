@@ -83,7 +83,7 @@ It does not publish npm.
 After success, the convenient installer is one line:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh | TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/ sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh | sh
 ```
 
 For an exact immutable version, use

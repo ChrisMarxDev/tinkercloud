@@ -210,11 +210,11 @@ jobs:
             printf '```\n\n'
             printf 'Install the Tinker CLI with the stable one-line installer:\n\n'
             printf '```sh\n'
-            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | TINKER_RELEASE_BASE=%s sh\n" "$latest_base" "$latest_base"
+            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | sh\n" "$latest_base"
             printf '```\n\n'
             printf 'Reproducible exact-version installation:\n\n'
             printf '```sh\n'
-            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | TINKER_RELEASE_BASE=%s sh\n" "$release_base" "$release_base"
+            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | sh\n" "$release_base"
             printf '```\n\n'
             printf 'The npm CLI package is published separately from these exact verified bytes.\n\n'
             printf 'Every release payload is covered by checksums, Ed25519 signatures, and the signed release manifest.\n'
@@ -273,7 +273,7 @@ jobs:
             install_dir="$RUNNER_TEMP/tinkercloud-${selector//\//-}-bin"
             curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-all-errors \
               "$release_base/install-client.sh" |
-              TINKER_RELEASE_BASE="$release_base" TINKER_INSTALL_DIR="$install_dir" sh
+              TINKER_INSTALL_DIR="$install_dir" sh
             installed_version=$("$install_dir/tinker" version)
             if [[ "$installed_version" != "tinker $VERSION" ]]; then
               echo "public stable installer version mismatch" >&2

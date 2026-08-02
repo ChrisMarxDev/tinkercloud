@@ -23,17 +23,124 @@ case "$(uname -m)" in
 esac
 artifact="tinker-$platform-$arch"
 
-base=${TINKER_RELEASE_BASE:-}
-case "$base" in
-  https://*) ;;
-  *) fail "TINKER_RELEASE_BASE must be an HTTPS release directory" ;;
+embedded_base='__TINKERCLOUD_CLIENT_RELEASE_BASE__'
+development_placeholder_suffix='BASE__'
+case "$embedded_base" in
+"__TINKERCLOUD_CLIENT_RELEASE_$development_placeholder_suffix")
+  # Repository copies are deliberately not installable from an unspecified
+  # origin. Tests and reviewed custom distributions must name one explicitly.
+  base=${TINKER_RELEASE_BASE:-}
+  test -n "$base" || fail "TINKER_RELEASE_BASE must name an HTTPS release directory for this development installer"
+  ;;
+*)
+  test -z "${TINKER_RELEASE_BASE:-}" || fail "released installers use their embedded immutable release directory; TINKER_RELEASE_BASE cannot override it"
+  base=$embedded_base
+  ;;
 esac
-case "$base" in */) ;; *) base="$base/" ;; esac
+base=$(python3 - "$base" <<'PY'
+import ipaddress, re, sys
+from urllib.parse import urlsplit
 
-install_dir=${TINKER_INSTALL_DIR:-"${HOME:-}/.local/bin"}
-test -n "$install_dir" || fail "client install directory unavailable"
-mkdir -p "$install_dir"
-test -d "$install_dir" || fail "client install directory unavailable"
+raw = sys.argv[1]
+try:
+    if not raw or any(ord(c) <= 0x20 or ord(c) == 0x7f for c in raw):
+        raise ValueError()
+    url = urlsplit(raw)
+    host = url.hostname
+    if (url.scheme != 'https' or not url.hostname or url.username or url.password
+            or url.query or url.fragment or not raw.endswith('/')
+            or url.port not in (None, 443) or '//' in url.path
+            or any(part in ('.', '..') for part in url.path.split('/'))):
+        raise ValueError()
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # A DNS name must be canonical lowercase ASCII. Do not accept an
+        # alternate spelling which could bypass origin review.
+        if (host != host.encode('idna').decode('ascii') or
+                not re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', host)):
+            raise ValueError()
+    else:
+        if not address.is_global:
+            raise ValueError()
+except (ValueError, UnicodeError):
+    raise SystemExit(1)
+print(raw)
+PY
+) || fail "release base must be a credential-free canonical HTTPS directory"
+
+test -n "${HOME:-}" && test -d "$HOME" && test ! -L "$HOME" || fail "a real HOME directory is required"
+uid=$(id -u)
+owner_uid() {
+  stat -f '%u' "$1" 2>/dev/null || stat -c '%u' "$1" 2>/dev/null
+}
+safe_owned_directory() {
+  case "$1" in /*) ;; *) return 1 ;; esac
+  candidate=$1
+  while test "$candidate" != /; do
+    # macOS commonly presents /var as a compatibility symlink to /private/var.
+    # It is an OS-owned namespace root, not a caller-selected install ancestor.
+    test "$candidate" = /var || test ! -L "$candidate" || return 1
+    candidate=${candidate%/*}
+    test -n "$candidate" || candidate=/
+  done
+  test -d "$1" && test -w "$1" && test "$(owner_uid "$1")" = "$uid"
+}
+path_has() { case ":${PATH:-}:" in *":$1:"*) return 0 ;; *) return 1 ;; esac; }
+
+install_dir=
+if test -n "${TINKER_INSTALL_DIR:-}"; then
+  install_dir=$TINKER_INSTALL_DIR
+  safe_owned_directory "$install_dir" || fail "TINKER_INSTALL_DIR must be an existing, non-symlink directory owned and writable by this account"
+else
+  # Do not turn an arbitrary user-writable PATH entry into an install target.
+  # These are the conventional per-user locations plus opt-in system locations
+  # that must already be owned by this account and present in PATH.
+  for candidate in "$HOME/.local/bin" "$HOME/bin" /usr/local/bin /opt/homebrew/bin; do
+    if path_has "$candidate" && safe_owned_directory "$candidate"; then
+      install_dir=$candidate
+      break
+    fi
+  done
+  if test -z "$install_dir"; then
+    install_dir="$HOME/.local/bin"
+    test ! -L "$HOME/.local" && test ! -L "$install_dir" || fail "refusing symlinked local bin directory"
+    mkdir -p "$install_dir"
+    safe_owned_directory "$install_dir" || fail "local bin directory must be owned and writable by this account"
+  fi
+fi
+
+ensure_profile_path() {
+  path_has "$install_dir" && return 0
+  case "${SHELL:-}" in
+    */bash) profile="$HOME/.bash_profile" ;;
+    */zsh) profile="$HOME/.zprofile" ;;
+    */sh) profile="$HOME/.profile" ;;
+    *) echo "installed tinker, but no supported shell profile was identified; add $install_dir to PATH" >&2; return 0 ;;
+  esac
+  if test -e "$profile" || test -L "$profile"; then
+    test -f "$profile" && test ! -L "$profile" && test "$(owner_uid "$profile")" = "$uid" || fail "refusing unsafe shell profile path: $profile"
+    mode=$(stat -f '%Lp' "$profile" 2>/dev/null || stat -c '%a' "$profile" 2>/dev/null) || fail "cannot inspect shell profile: $profile"
+    case "$mode" in *[2367][0-7]|*[2367]) fail "refusing group/world-writable shell profile: $profile" ;; esac
+  fi
+  marker='# Added by Tinker client installer'
+  grep -Fqx "$marker" "$profile" 2>/dev/null && return 0
+  profile_tmp=$(mktemp "$HOME/.tinker-profile.XXXXXX") || fail "cannot create shell profile update"
+  trap 'rm -f "$profile_tmp" "${target_tmp:-}"; rm -rf "$work"' EXIT HUP INT TERM
+  if test -e "$profile"; then
+    cat "$profile" >"$profile_tmp" || fail "cannot read shell profile: $profile"
+    chmod "$mode" "$profile_tmp" || fail "cannot preserve shell profile mode"
+  else
+    chmod 0600 "$profile_tmp" || fail "cannot set shell profile mode"
+  fi
+  {
+    printf '\n%s\n' "$marker"
+    printf 'case ":$PATH:" in *":%s:"*) ;; *) export PATH="%s:$PATH" ;; esac\n' "$install_dir" "$install_dir"
+  } >>"$profile_tmp" || fail "cannot prepare shell profile update"
+  # rename replaces a raced symlink rather than following it; the old profile
+  # remains untouched until the complete replacement is ready.
+  mv -f "$profile_tmp" "$profile" || fail "cannot atomically update shell profile: $profile"
+}
 
 umask 077
 work=$(mktemp -d "${TMPDIR:-/tmp}/tinker-client-install.XXXXXX")
@@ -104,9 +211,12 @@ openssl pkeyutl -verify -pubin -inkey "$work/release-public-key.pem" -rawin \
   -in "$work/signed" -sigfile "$work/signature.raw" >/dev/null 2>&1 || fail "release signature invalid"
 
 # Stage in the destination directory so the final replacement is atomic. A
-# verified candidate is never executed by this installer.
+# verified candidate is never executed by this installer. Prepare the complete
+# binary before touching the profile, so a local install failure cannot leave a
+# new PATH entry pointing at no executable.
 target_tmp="$install_dir/.tinker.new.$$"
 trap 'rm -f "$target_tmp"; rm -rf "$work"' EXIT HUP INT TERM
 install -m 0755 "$work/$artifact" "$target_tmp"
+ensure_profile_path
 mv -f "$target_tmp" "$install_dir/tinker"
 echo "installed $artifact to $install_dir/tinker"

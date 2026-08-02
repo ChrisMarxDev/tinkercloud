@@ -65,6 +65,15 @@ dependency and provenance evidence. Passing `tinker host install --release-base`
 to such a release does not override a baked installer—it selects the release
 that already binds to the same directory.
 
+Before signing `install-client.sh`, the release build likewise replaces its
+sole `__TINKERCLOUD_CLIENT_RELEASE_BASE__` development placeholder with that
+same exact immutable release directory. A published client installer rejects a
+caller-supplied `TINKER_RELEASE_BASE`; only a reviewed development copy may
+accept an explicit credential-free canonical HTTPS directory. The client
+installer selects only a supported native client, verifies checksum and pinned
+Ed25519 evidence before replacing a binary, refuses root, and may write only a
+safe user-owned installation directory and supported non-symlink shell profile.
+
 `SHA256SUMS` covers every generated release file other than itself, including
 all payloads, sidecars, dependency evidence, and provenance. The signed
 schema-2 `release-manifest.json` binds the release version, the exact

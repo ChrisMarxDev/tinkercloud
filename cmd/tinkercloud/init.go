@@ -486,7 +486,7 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 		}
 	} else if err != nil {
 		return err
-	} else if info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0077 != 0 {
+	} else if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
 		return errors.New("tinkercloud: unsafe_credential_path")
 	}
 	if err := os.Chmod(credentialPath, 0600); err != nil {
@@ -563,7 +563,7 @@ func ensureStateDirectory(path string) error {
 
 func readSecretFile(path string) (string, error) {
 	st, err := os.Lstat(path)
-	if err != nil || st.Mode()&os.ModeSymlink != 0 || st.Mode().Perm()&0077 != 0 {
+	if err != nil || st.Mode()&os.ModeSymlink != 0 || !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
 		return "", errors.New("tinkercloud: unsafe_secret_file")
 	}
 	b, err := os.ReadFile(path)

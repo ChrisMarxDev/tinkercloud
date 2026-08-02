@@ -39,9 +39,9 @@ the next canonical setup recreates it and re-owns the preserved ACME cache.
 A released `tinker host install root@HOST` derives its immutable GitHub release
 directory from the strict build version. Development builds must use an
 explicit validated release directory. Installation and initialization remain
-separate: the former places signed server artifacts; implemented automation
-uses resumable `init --non-interactive`, while the minimum-question
-`tinkercloud setup` assistant remains planned.
+separate: the former places signed server artifacts; `tinkercloud setup` is the
+implemented minimum-question human path, while resumable
+`init --non-interactive` remains the deterministic automation interface.
 
 ## Consequences
 

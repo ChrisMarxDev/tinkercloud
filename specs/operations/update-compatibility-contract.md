@@ -63,6 +63,13 @@ authority credential unless a separately versioned migration contract names the
 credential class and its required invalidation reason. An update must never
 silently delete or recreate accounts, ownership, or access rules.
 
+Automatic updates require the candidate schema version to equal the installed
+schema version. Discovery of a different schema is a non-mutating stop that
+requires a separately accepted manual migration contract. The automatic path
+does not snapshot and later restore databases: retaining the same compatible
+durable authority prevents binary rollback from discarding writes accepted by
+either healthy binary.
+
 The preservation assertion applies before the candidate binary is considered
 healthy and again after the supported restart path. Failed verification,
 migration, replacement, or post-restart health must leave the prior healthy
@@ -71,3 +78,10 @@ must include an executable seeded-state regression for operator/deployer
 identity, owned-app policy, and valid authority continuity; a migration that
 intentionally changes credential validity requires an explicit compatibility
 decision and narrow regression in addition to this invariant.
+
+The cross-version regression uses credentials issued before replacement. It
+must prove that a stored CLI bearer, global browser identity, derived app
+session, owned app, active policy, immutable release, and app-local KV,
+document, and blob values remain usable after the candidate becomes healthy.
+The same seeded state must remain usable after a deliberately unhealthy signed
+candidate triggers automatic binary rollback.

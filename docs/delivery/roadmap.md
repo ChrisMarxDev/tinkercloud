@@ -70,11 +70,21 @@ Already implemented foundations:
   no-JavaScript selectable-copy fallback. This narrows only the first handoff;
   it does not complete the remaining guided-flow slice.
 
+Implemented code in this slice (clean-VPS acceptance remains pending):
+
+- the root/TTY-only, resumable human `tinkercloud setup` assistant delegates to
+  the strict non-interactive initialization contract, reuses safe existing
+  config/credentials, prompts only for missing base domain, operator email,
+  verified Resend sender, and a root-readable key file, and generates HMAC
+  material privately; and
+- root-local opt-in automatic signed `beta`/`stable` update channels with a
+  fixed systemd timer, strictly-newer official release discovery, same-schema
+  enforcement, health/denial-gated rollback, and preservation of configuration,
+  credentials, app/auth state, and ACME state.
+
 Remaining vertical path:
 
-- add the resumable human `tinkercloud setup` assistant over the strict
-  non-interactive initialization contract;
-- derive conventional platform/app/sender values from one base domain and
+- derive conventional platform/app values from one base domain and
   pause with exact DNS/Resend actions, including a fail-fast exact-admin and
   wildcard-resolution check before the ACME-capable service starts;
 - make project/output/capability discovery explicit and ask only when safe
@@ -547,37 +557,24 @@ Exit evidence:
 - source failure renders a clear unavailable state while the independent disk
   write gate continues to fail closed.
 
-### Planned M5 slice — guided operator setup
+### Implemented M5 slice — guided operator setup
 
 Outcome: after SSHing into a clean supported VPS, an operator can complete
 Tinkercloud setup through one understandable guided flow without composing the
 full `tinkercloud init --non-interactive` command by hand.
 
-The working CLI shape is a root-local `tinkercloud setup` assistant. Before
-implementation, its final command contract and deny charter must be added to
-the M5 operations contract. It must call the existing resumable init
-application service rather than create a second installation pipeline.
+The root-local `tinkercloud setup` assistant calls the existing resumable init
+application service rather than creating a second installation pipeline. It is
+TTY/root-only and retains `init --non-interactive` as the deterministic path.
 
 The assistant:
 
-- checks supported OS/architecture, root authority, NTP, disk, and ports before
-  asking for configuration;
-- asks for one controlled base domain and the operator email, derives
-  conventional platform/app/sender values and the internal ACME contact from
-  the normalized operator email, and puts non-standard choices
-  behind one edit step;
-- pauses with exact external DNS and Resend actions, persists validated
-  non-secret progress, and resumes without re-asking prior valid answers;
-- accepts secrets through explicit root-readable file paths, or through a
-  no-echo prompt only after supported-shell handling passes audit; never secret
-  values in argv, ordinary config, echoed output, generated shell commands,
-  logs, or summaries;
-- previews the resulting non-secret configuration and affected paths before
-  confirmation;
-- renders durable step progress for preflight, paths, database, operator,
-  service, and public verification, and resumes safely after interruption;
-- turns DNS, Resend, TLS, permission, port, and public-health failures into one
-  actionable next step without weakening fail-closed behavior;
+- checks root/TTY authority before collecting configuration and delegates host
+  validation, state progress, service setup, and public verification to init;
+- asks for missing controlled base domain, operator email, verified sender, and
+  root-readable Resend key source only; it normalizes emails, reuses safe
+  existing state, and generates private HMAC material;
+- denies unsafe config, credential, or secret-source paths before init;
 - retains `tinkercloud init --non-interactive` for agents, CI, and reproducible
   automation; and
 - opens no temporary web setup listener, issues no bootstrap URL/token, and
@@ -585,17 +582,10 @@ The assistant:
 
 Exit evidence:
 
-- a first-time operator completes a clean supported Hetzner host setup without
-  manually assembling the init argv;
-- cancellation and restart resume from the first incomplete durable step
-  without repeating completed mutations;
-- malformed input, unreadable or over-permissive secret files, unsupported
-  hosts, occupied ports, and dependency failures stop before unsafe mutation;
-- captured terminal output, process argv, config, logs, and generated summaries
-  contain no Resend key, HMAC key, session secret, or other credential; and
-- the guided and non-interactive paths produce the same validated config,
-  hardened systemd unit, init-state transitions, public gateway proof, and
-  anonymous-denial evidence.
+- focused command tests prove root/TTY denial, missing-input prompts, email
+  normalization, existing-state reuse, and unsafe config/credential/secret path
+  denial. Clean-VPS acceptance remains required before release evidence can
+  claim the full user journey.
 
 Release evidence is produced by `scripts/release-build.sh`, verified by
 `scripts/release-verify.sh`, and normatively described in
