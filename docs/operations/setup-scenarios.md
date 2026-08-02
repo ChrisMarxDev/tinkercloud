@@ -61,7 +61,7 @@ The PRD's setup target starts only after these external prerequisites exist:
 1. A supported Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
 2. Root SSH access with a pinned host key.
 3. Public platform and wildcard app DNS records pointing at the VPS.
-4. A verified Resend sending domain and root-readable API-key file.
+4. A verified Resend or Postmark sender and root-readable API-key file.
 5. An operator decision about the host/cloud firewall and SSH source rules.
 
 DNS propagation, buying the server, verifying the sending domain, and choosing
@@ -73,7 +73,7 @@ firewall policy are not part of the ten-minute Tinkercloud initialization target
 verify and install the signed tinkercloud binary
 → run tinkercloud setup
 → discover host state; ask base domain + operator email
-→ show exact DNS/Resend actions and resume after completion
+→ show exact DNS/email-provider actions and resume after completion
 → generate the service identity, config, credentials, SQLite, and operator
 → confirm `admin.<domain>` and a synthetic one-label app hostname resolve
   before starting the ACME-capable service
@@ -117,7 +117,7 @@ The operator owns:
 - SSH keys, SSH source restrictions, and root access;
 - host and cloud firewall policy;
 - Ubuntu security updates and VPS lifecycle;
-- DNS and Resend account security; and
+- DNS and email-provider account security; and
 - recovery from total VPS loss, because V1 has no backup guarantee.
 
 ### Security verdict
@@ -152,7 +152,8 @@ current policy allows them.
 - Tinkercloud can listen on the same TCP 80/443 gateway behind a firewall.
 - Hostname routing, cookies, app isolation, KV, and WebSockets are compatible
   with a VPN.
-- Resend can work when the server retains outbound HTTPS access.
+- the selected Resend or Postmark provider can work when the server retains
+  outbound HTTPS access.
 - Tinkercloud does not need to understand VPN users, routes, or credentials.
 
 ### What blocks V1 support

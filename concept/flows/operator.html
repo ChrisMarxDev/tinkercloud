@@ -46,7 +46,7 @@
         <ul>
           <li>Dedicated supported public Hetzner VPS.</li>
           <li>Operator-owned domain, DNS, SSH, and firewall.</li>
-          <li>Resend sending-domain verification and API credential.</li>
+          <li>Resend or Postmark sender verification and API credential.</li>
           <li>Signed install, resumable setup, TLS, and health proof.</li>
           <li>Operator login and exact active-deployer allowlist.</li>
           <li>Diagnostics, app intervention, signed update, and root recovery.</li>
@@ -165,16 +165,16 @@
           </tr>
           <tr>
             <td>10</td>
-            <td>Create or reuse a Resend account and add the derived sending domain.</td>
-            <td>Resend supplies domain-verification DNS records.</td>
+            <td>Choose Resend or Postmark, create or reuse an account, and add the derived sending domain.</td>
+            <td>The selected provider supplies domain-verification DNS records.</td>
             <td>Provider account/billing data remains external.</td>
             <td>The sending domain defaults to the controlled base domain.</td>
             <td>Collect provider records before visiting DNS so all records can be added together.</td>
           </tr>
           <tr>
             <td>11</td>
-            <td>Create a narrowly scoped Resend API key and keep it in a protected local/root-readable source while DNS is pending.</td>
-            <td>Resend creates the provider credential; Tinkercloud has not ingested it yet.</td>
+            <td>Create a narrowly scoped API key for the selected provider and keep it in a protected local/root-readable source while DNS is pending.</td>
+            <td>The selected provider creates the credential; Tinkercloud has not ingested it yet.</td>
             <td>No key value is entered into argv, config, or the paused assistant.</td>
             <td>The final root-owned destination and permissions are generated later.</td>
             <td>Creating the key now avoids a second provider visit and does not weaken its destination boundary.</td>
@@ -182,22 +182,22 @@
           <tr>
             <td>12</td>
             <td>Leave the assistant paused at one combined DNS checkpoint.</td>
-            <td>Tinkercloud saves validated non-secret progress and prints its records beside the Resend-supplied records.</td>
+            <td>Tinkercloud saves validated non-secret progress and prints its records beside the selected provider's records.</td>
             <td>None.</td>
             <td>One <code>A * → VPS IPv4</code> wildcard record; matching AAAA only for discovered usable IPv6.</td>
             <td>DNS is external and eventually consistent; re-entering prior answers is unnecessary.</td>
           </tr>
           <tr>
             <td>13</td>
-            <td>Add the Tinkercloud host records and Resend’s exact verification records in one DNS-provider session.</td>
-            <td>Public DNS propagates; Resend verifies domain ownership.</td>
-            <td>Only record names/values from Tinkercloud and Resend.</td>
+            <td>Add the Tinkercloud host records and the selected email provider's exact verification records in one DNS-provider session.</td>
+            <td>Public DNS propagates; the selected provider verifies domain ownership.</td>
+            <td>Only record names/values from Tinkercloud and the selected provider.</td>
             <td>No zone-file/config authoring and no Tinkercloud DNS-provider credential.</td>
             <td>One combined external visit preserves both ownership boundaries with less ceremony.</td>
           </tr>
           <tr>
             <td>14</td>
-            <td>After DNS and Resend verification, resume <code>tinkercloud setup</code> and provide the protected credential source.</td>
+            <td>After DNS and email-provider verification, resume <code>tinkercloud setup</code> and provide the protected credential source.</td>
             <td>The assistant verifies DNS/provider state and copies the key into the root-owned credential boundary.</td>
             <td>Either a root-readable key-file path or the secret through a no-echo prompt.</td>
             <td>The credential destination, permissions, provider name, and config reference are generated.</td>
@@ -229,7 +229,7 @@
           <tr>
             <td>16</td>
             <td>Continue waiting.</td>
-            <td>Install and start the hardened systemd service; obtain the platform certificate; validate Resend; prove direct HTTPS version and security headers.</td>
+            <td>Install and start the hardened systemd service; obtain the platform certificate; validate the selected email provider; prove direct HTTPS version and security headers.</td>
             <td>None.</td>
             <td>ACME contact, systemd unit, and probe URLs come from verified state.</td>
             <td>Readiness is evidence, not another question.</td>
@@ -379,7 +379,7 @@
 → ask base domain + operator email
 → derive conventional topology
 → persist validated non-secret progress
-→ pause for DNS + Resend ownership
+→ pause for DNS + selected email-provider ownership
 → ingest secret into root-owned credential boundary
 → generate config + internal keys + database + service
 → prove TLS, email, platform health, route classification, and safe unknown-host denial
@@ -397,7 +397,7 @@
           SDK, blob, realtime, update, and fuzz-derived operating headroom?</li>
         <li>Should the release source be compiled into V1 or selected once during
           installation from signed metadata?</li>
-        <li>Can a no-echo Resend-key prompt meet the secret-handling audit on all
+        <li>Can a no-echo provider-key prompt meet the secret-handling audit on all
           supported shells, or should V1 guide the operator to a protected file?</li>
         <li>Which setup steps can be safely undone before first readiness, and
           which should only be resumed?</li>

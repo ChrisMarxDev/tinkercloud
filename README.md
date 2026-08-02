@@ -80,6 +80,12 @@ the resulting state and can be rerun after an external DNS or email prerequisite
 is fixed. For deterministic automation, `tinkercloud init --non-interactive`
 remains available with explicit flags and protected secret files.
 
+For deterministic automation, use `--email-provider postmark` with a
+root-readable Postmark server-token file when Postmark is the approved
+transactional provider. Generated config records only the provider name and an
+`env:` reference; the credential remains in the root-owned systemd environment
+file.
+
 ### Optional: operate from a workstation over SSH
 
 The `tinker` CLI can also administer a VPS over the existing root SSH trust
