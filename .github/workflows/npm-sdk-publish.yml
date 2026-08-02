@@ -1,15 +1,23 @@
 name: npm-sdk-publish
-run-name: Publish @tinkercloud/sdk v${{ inputs.version }} to beta
+run-name: Publish @tinkercloud/sdk v${{ inputs.version }} to ${{ inputs.dist_tag }}
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
+      channel:
+        description: Parent release channel
+        required: true
+        type: string
       version:
-        description: Existing GitHub beta prerelease version
+        description: Existing GitHub release version
+        required: true
+        type: string
+      dist_tag:
+        description: Exact npm dist-tag selected by the parent release
         required: true
         type: string
       confirmation:
-        description: Type publish-npm-sdk-beta-vVERSION using the exact version above
+        description: Exact parent release confirmation
         required: true
         type: string
 
@@ -38,24 +46,39 @@ jobs:
           package-manager-cache: false
       - name: Install the pinned trusted-publishing npm CLI
         run: npm install --global npm@11.5.1
-      - name: Validate beta release and npm destination
+      - name: Validate release and npm destination
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
+          DIST_TAG: ${{ inputs.dist_tag }}
           CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
           if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "npm SDK beta version must be strict MAJOR.MINOR.PATCH" >&2
+            echo "npm SDK version must be strict MAJOR.MINOR.PATCH" >&2
             exit 1
           fi
           tag="v$VERSION"
-          if [[ "$CONFIRMATION" != "publish-npm-sdk-beta-$tag" ]]; then
-            echo "npm SDK beta publication confirmation mismatch" >&2
+          if [[ "$CHANNEL" != "beta" && "$CHANNEL" != "stable" ]]; then
+            echo "unsupported npm SDK release channel" >&2
             exit 1
           fi
-          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
+          if [[ "$CONFIRMATION" != "publish-$CHANNEL-$tag" ]]; then
+            echo "npm SDK publication confirmation mismatch" >&2
+            exit 1
+          fi
+          if [[ "$CHANNEL" == "beta" ]]; then
+            [[ "$DIST_TAG" == "beta" ]] || { echo "beta SDK release requires the beta npm tag" >&2; exit 1; }
+            required_authority=beta
+            expected_state=$'false\ttrue\t'"$tag"
+          else
+            [[ "$DIST_TAG" == "latest" ]] || { echo "stable SDK release requires the latest npm tag" >&2; exit 1; }
+            required_authority=production
+            expected_state=$'false\tfalse\t'"$tag"
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority" ./scripts/check-release-key-policy.sh
           ./scripts/check-release-key-drift.sh
           git show-ref --verify --quiet "refs/tags/$tag" || {
             echo "source tag is unavailable" >&2
@@ -63,19 +86,19 @@ jobs:
           }
           source_commit=$(git rev-list -n 1 "$tag")
           git merge-base --is-ancestor "$source_commit" origin/main || {
-            echo "npm SDK beta tag is not reachable from origin/main" >&2
+            echo "npm SDK tag is not reachable from origin/main" >&2
             exit 1
           }
           git checkout --detach "$source_commit"
           test -z "$(git status --porcelain=v1)" || {
-            echo "npm SDK beta source checkout is dirty" >&2
+            echo "npm SDK source checkout is dirty" >&2
             exit 1
           }
           state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,isPrerelease,tagName \
             --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
-          if [[ "$state" != $'false\ttrue\t'"$tag" ]]; then
-            echo "npm SDK requires an existing published GitHub prerelease" >&2
+          if [[ "$state" != "$expected_state" ]]; then
+            echo "npm SDK requires the matching published GitHub release channel" >&2
             exit 1
           fi
           visibility=$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)
@@ -136,23 +159,34 @@ jobs:
           package-manager-cache: false
       - name: Install the pinned trusted-publishing npm CLI
         run: npm install --global npm@11.5.1
-      - name: Download and verify the canonical beta release
+      - name: Download and verify the canonical release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=beta ./scripts/check-release-key-policy.sh
+          if [[ "$CHANNEL" == "beta" ]]; then
+            required_authority=beta
+            expected_state=$'false\ttrue\t'"v$VERSION"
+          elif [[ "$CHANNEL" == "stable" ]]; then
+            required_authority=production
+            expected_state=$'false\tfalse\t'"v$VERSION"
+          else
+            echo "unsupported npm SDK release channel" >&2
+            exit 1
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority" ./scripts/check-release-key-policy.sh
           ./scripts/check-release-key-drift.sh
           tag="v$VERSION"
           state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,isPrerelease,tagName \
             --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
-          [[ "$state" == $'false\ttrue\t'"$tag" ]] || {
-            echo "GitHub beta release state changed" >&2
+          [[ "$state" == "$expected_state" ]] || {
+            echo "GitHub release state changed" >&2
             exit 1
           }
-          release_dir="$RUNNER_TEMP/tinkercloud-beta-release-v$VERSION"
+          release_dir="$RUNNER_TEMP/tinkercloud-release-v$VERSION"
           mkdir -p "$release_dir"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir"
           ./scripts/release-verify.sh "$release_dir"
@@ -180,10 +214,13 @@ jobs:
             exit 1
           }
       - name: Publish the exact SDK tarball with trusted publishing
-        run: npm publish "$SDK_TARBALL" --access public --tag beta --ignore-scripts --provenance
-      - name: Verify the public npm beta
+        env:
+          DIST_TAG: ${{ inputs.dist_tag }}
+        run: npm publish "$SDK_TARBALL" --access public --tag "$DIST_TAG" --ignore-scripts --provenance
+      - name: Verify the public npm package
         env:
           VERSION: ${{ inputs.version }}
+          DIST_TAG: ${{ inputs.dist_tag }}
         run: |
           set -euo pipefail
           metadata="$RUNNER_TEMP/npm-sdk-version.json"
@@ -205,14 +242,14 @@ jobs:
           if (version.dist?.integrity !== process.env.SDK_INTEGRITY) process.exit(1);
           if (!version.dist?.attestations?.url) process.exit(1);
           if (version.repository?.url !== "git+https://github.com/ChrisMarxDev/tinkercloud.git") process.exit(1);
-          if (root["dist-tags"]?.beta !== process.env.VERSION) process.exit(1);
+          if (root["dist-tags"]?.[process.env.DIST_TAG] !== process.env.VERSION) process.exit(1);
           NODE
               then
                 break
               fi
             fi
             [[ "$attempt" != 12 ]] || {
-              echo "published npm SDK beta did not reach the verified registry state" >&2
+              echo "published npm SDK did not reach the verified registry state" >&2
               exit 1
             }
             sleep 5
