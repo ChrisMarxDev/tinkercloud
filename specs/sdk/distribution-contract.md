@@ -59,7 +59,9 @@ tag, reserve a name, create a scope, or mutate registry state.
 
 ## Publication gate
 
-Publication remains blocked until maintainers confirm the canonical repository
-and control the `@tinkercloud` scope on each registry. The first real publication
-must come from a reviewed release tag using short-lived trusted publishing,
-with no registry token stored in this repository.
+npm beta publication is governed by
+`specs/sdk/npm-beta-publishing-contract.md`: it comes from the exact SDK tarball
+in a reviewed signed GitHub prerelease, uses the fixed `beta` dist-tag and
+short-lived trusted publishing, and stores no registry token in this
+repository. JSR publication remains blocked until its namespace, channel, and
+trusted-publisher flow receive separate authorization.
