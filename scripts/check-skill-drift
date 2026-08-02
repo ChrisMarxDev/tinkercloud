@@ -130,3 +130,15 @@ grep -F 'GitHub beta workflow publishes the SDK tarball' skills/distribute-tinke
   echo "SDK GitHub beta workflow drift" >&2
   exit 1
 }
+grep -F 'specs/sdk/npm-beta-publishing-contract.md' skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK npm beta contract drift" >&2
+  exit 1
+}
+grep -F 'task release:npm-sdk-check' skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK npm beta verification drift" >&2
+  exit 1
+}
+grep -F 'gh workflow run npm-sdk-publish.yml' skills/distribute-tinkercloud-sdk/SKILL.md >/dev/null || {
+  echo "SDK npm trusted-publish workflow drift" >&2
+  exit 1
+}
