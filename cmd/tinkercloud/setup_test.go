@@ -121,7 +121,7 @@ func TestSetupDeniesDirectoryConfigAndCredentialPaths(t *testing.T) {
 		t.Fatalf("directory config: %v", err)
 	}
 	cfgPath := filepath.Join(root, "config.yaml")
-	cfg, err := (config.Config{Domain: "example.test", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: "/var/lib/tinkercloud", ACMECachedir: "/var/lib/tinkercloud-acme", ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}).RenderYAML()
+	cfg, err := (config.Config{Domain: "example.test", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: "/var/lib/tinkercloud", ACMECachedir: "/var/lib/tinkercloud-acme", EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}).RenderYAML()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestSetupDeniesDirectoryConfigAndCredentialPaths(t *testing.T) {
 func TestSetupResumeReusesConfigAndCredentialsWithoutPrompts(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := filepath.Join(root, "config.yaml")
-	cfg, err := (config.Config{Domain: "example.test", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: "/var/lib/tinkercloud", ACMECachedir: "/var/lib/tinkercloud-acme", ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}).RenderYAML()
+	cfg, err := (config.Config{Domain: "example.test", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test", SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: "/var/lib/tinkercloud", ACMECachedir: "/var/lib/tinkercloud-acme", EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}).RenderYAML()
 	if err != nil {
 		t.Fatal(err)
 	}
