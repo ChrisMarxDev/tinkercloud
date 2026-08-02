@@ -67,17 +67,20 @@ sudo tinkercloud init --non-interactive \
 ```
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
-secret files. `--email-provider` accepts `resend` or `postmark` and defaults to
-Resend for compatibility; both use the neutral `--email-api-key-file` secret
-boundary. It derives the internal ACME contact from the required normalized
-operator email; it never accepts a separate ACME-contact flag. The implemented
-human `setup` assistant guides the Resend path, accepts only a root-readable
-protected key file as its credential source, and creates HMAC material
-privately. Neither path places a secret in argv, ordinary config, or terminal
-output. Initialization
+secret files. `--email-provider` accepts `resend`, `postmark`, `sendgrid`, or
+`smtp` and defaults to Resend for compatibility; all use the neutral
+`--email-api-key-file` boundary for the API key or SMTP password. SMTP also
+requires its host, port, username, and TLS-mode flags. It derives the internal
+ACME contact from the required normalized operator email; it never accepts a
+separate ACME-contact flag. The implemented human `setup` assistant guides the
+Resend path, accepts only a root-readable protected key file as its credential
+source, and creates HMAC material privately. Neither path places a secret in
+argv, ordinary config, or terminal output. Initialization
 copies the values into
 `/etc/tinkercloud/credentials/tinkercloud.env` at mode `0600`; the config contains
-only `env:` references. Do not pass API keys as command-line values.
+no provider credential or selection. Do not pass API keys or passwords as
+command-line values. See [Outbound Mail Setup](mail-setup.md) for every adapter
+and the environment-variable priority.
 
 The shared initialization domain:
 
@@ -112,7 +115,8 @@ The operator must provide:
 
 - a clean supported Hetzner VPS with a public IP;
 - one wildcard `A`/`AAAA` record for the root domain;
-- a verified sender and API key from Resend or Postmark.
+- a verified sender and Resend, Postmark, SendGrid, or authenticated TLS SMTP
+  credential.
 
 Strict VPN-only ingress is not supported in V1. Public ACME HTTP-01 and the
 public HTTPS health proof must succeed; initialization never bypasses them.

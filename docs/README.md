@@ -13,6 +13,7 @@ path that matches the work you need to do.
 ## Operate a host
 
 - [Hetzner-first deployment](operations/hetzner-deployment.md)
+- [Outbound mail setup](operations/mail-setup.md)
 - [Common setup scenarios](operations/setup-scenarios.md)
 - [External VPS smoke acceptance](operations/vps-e2e.md)
 - [Signed release pipeline](operations/release-pipeline.md)

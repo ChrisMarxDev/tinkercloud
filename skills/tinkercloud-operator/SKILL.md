@@ -1,6 +1,6 @@
 ---
 name: tinkercloud-operator
-description: Install, configure, diagnose, update, and recover a Tinkercloud server. Use for operator-owned Hetzner VPS setup, DNS, TLS, Resend or Postmark, deployer authorization, status, doctor, signed updates, disk incidents, root recovery, and Tinkercloud security verification.
+description: Install, configure, diagnose, update, and recover a Tinkercloud server. Use for operator-owned Hetzner VPS setup, DNS, TLS, Resend, Postmark, SendGrid, or SMTP mail, deployer authorization, status, doctor, signed updates, disk incidents, root recovery, and Tinkercloud security verification.
 ---
 
 # Tinkercloud operator
@@ -96,8 +96,14 @@ resumable `sudo tinkercloud setup` path. It asks only for the controlled root
 domain, initial operator email, verified Resend sender, and a root-readable
 Resend credential source that cannot be derived. It generates private HMAC
 material and delegates to the strict initialization state machine. Keep
-`init --non-interactive` for deterministic automation and explicit Resend or
-Postmark selection.
+`init --non-interactive` for deterministic automation and explicit Resend,
+Postmark, SendGrid, or SMTP selection.
+Mail adapter selection is environment-presence based in fixed order:
+`RESEND_API_KEY`, `POSTMARK_SERVER_TOKEN`, `SENDGRID_API_KEY`, then the complete
+`TINKERCLOUD_SMTP_*` set. The first present provider wins; do not invent a
+selector variable or failure-based failover. SMTP is send-only, authenticated,
+and requires certificate-verified `starttls` or implicit `tls`. Follow
+`docs/operations/mail-setup.md` for preparation, switching, and diagnostics.
 Derive `admin.<domain>` and `<slug>.<domain>`, and persist the normalized
 operator email as the internal ACME contact; never ask for, accept, or override
 it through a separate ACME-contact flag, question, or environment input.
