@@ -211,6 +211,9 @@ tasks:
     cmds:
       - ./scripts/check-beta-release-workflow.sh
       - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - ./scripts/extract-sdk-version-self-test.sh
       - ./scripts/check-stable-release-workflows.sh
       - ./scripts/check-stable-release-workflows-self-test.sh
@@ -224,8 +227,20 @@ tasks:
     cmds:
       - ./scripts/check-beta-release-workflow.sh
       - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - ./scripts/extract-sdk-version-self-test.sh
       - ./scripts/check-release-key-drift.sh
+      - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
+  release:npm-sdk-check:
+    desc: Validate the SDK-only npm beta publisher without publishing
+    summary: Checks the OIDC, beta-channel, exact-artifact, provenance, and denial contracts. It never changes GitHub or npm state.
+    cmds:
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   release:stable-check:
