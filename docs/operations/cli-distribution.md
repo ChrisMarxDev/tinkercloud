@@ -9,7 +9,7 @@ JavaScript registry.
 
 ## Current activation gates
 
-Do not dispatch the stable workflows until all of these are true:
+Do not dispatch the stable unified release until all of these are true:
 
 - `https://github.com/ChrisMarxDev/tinkercloud` is publicly readable and
   release immutability is enabled;
@@ -69,8 +69,9 @@ that exact value, merge the reviewed commit to `main`, then tag the commit:
 VERSION=0.1.0
 git tag -a "v$VERSION" -m "Tinkercloud v$VERSION"
 git push origin "v$VERSION"
-gh workflow run stable-release.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=stable \
   -f version="$VERSION" \
   -f confirmation="publish-stable-v$VERSION"
 ```
@@ -120,7 +121,7 @@ to the exact GitHub workflow and protected Environment:
 ```sh
 npm trust github @tinkercloud/cli \
   --repo ChrisMarxDev/tinkercloud \
-  --file npm-cli-publish.yml \
+  --file release.yml \
   --env npm-cli \
   --allow-publish \
   --yes
@@ -135,11 +136,11 @@ After the corresponding stable GitHub release succeeds, dispatch:
 
 ```sh
 VERSION=0.1.1
-gh workflow run npm-cli-publish.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=stable \
   -f version="$VERSION" \
-  -f dist_tag=latest \
-  -f confirmation="publish-npm-cli-v$VERSION"
+  -f confirmation="publish-stable-v$VERSION"
 ```
 
 Approve the `npm-cli` Environment. The workflow downloads and verifies the
