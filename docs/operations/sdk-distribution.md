@@ -81,12 +81,17 @@ After reviewing the exact version and tarball, publish it once with 2FA:
 npm publish "$RELEASE_DIR/tinkercloud-sdk-$VERSION.tgz" \
   --access public \
   --tag beta \
+  --provenance=false \
   --ignore-scripts
 ```
 
-Do not use `latest` or rebuild the tarball. Bootstrap the CLI separately from
+The initial public publish may necessarily receive npm's default `latest` tag
+even while this flow requests `beta`. Accept that immutable first-publication
+fact: do not unpublish or mutate tags. Beta consumers select `@beta`. Do not
+rebuild the tarball. Bootstrap the CLI separately from
 the same verified release using the CLI distribution procedure. The
-first interactive publish may not carry CI provenance; every later OIDC
+first interactive publish uses `--provenance=false` because it is local rather
+than GitHub Actions; every later OIDC
 publication must.
 
 Immediately configure the package's npm trusted publisher:

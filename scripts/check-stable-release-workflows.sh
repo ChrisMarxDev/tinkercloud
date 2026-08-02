@@ -1,63 +1,45 @@
 #!/bin/sh
-# Deny drift in stable signing and internal CLI npm workflows.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-stable=${TINKERCLOUD_STABLE_WORKFLOW_FILE:-"$root/.github/workflows/stable-release.yml"}
+release=${TINKERCLOUD_RELEASE_WORKFLOW_FILE:-"$root/.github/workflows/release.yml"}
+reusable=${TINKERCLOUD_STABLE_WORKFLOW_FILE:-"$root/.github/workflows/stable-release.yml"}
+publisher=${TINKERCLOUD_RELEASE_PUBLISHER_FILE:-"$root/scripts/publish-github-release.sh"}
 npm=${TINKERCLOUD_NPM_WORKFLOW_FILE:-"$root/.github/workflows/npm-cli-publish.yml"}
-require() { grep -F -- "$2" "$1" >/dev/null || { echo "$3" >&2; exit 1; }; }
-reject() { ! grep -E -- "$2" "$1" >/dev/null || { echo "$3" >&2; exit 1; }; }
-for file in "$stable" "$npm"; do test -f "$file" || exit 1; require "$file" 'workflow_call:' 'internal workflow must be reusable only'; reject "$file" '^  workflow_dispatch:' 'internal workflow must not dispatch directly'; done
-require "$stable" 'environment: stable-release' 'stable signing environment is required'
-require "$stable" 'TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production' 'stable production key policy is required'
-require "$stable" 'publish-stable-$tag' 'stable confirmation is required'
-require "$stable" 'cancel-in-progress: false' 'stable release must not cancel publication'
-test "$(grep -c -F -- 'contents: write' "$stable")" = 1 || { echo 'stable contents write scope drift' >&2; exit 1; }
-reject "$stable" '^[[:space:]]+(actions|checks|deployments|discussions|id-token|issues|packages|pages|pull-requests|security-events|statuses):[[:space:]]+write' 'stable grants unnecessary write permission'
-require "$stable" 'git merge-base --is-ancestor "$source_commit" origin/main' 'stable ancestry gate missing'
-require "$stable" 'GitHub release already exists' 'stable existing release denial missing'
-require "$stable" 'visibility" != "PUBLIC"' 'stable public repository gate missing'
-require "$stable" 'TINKERCLOUD_RELEASE_SIGNING_KEY_B64' 'stable signing secret missing'
-test "$(grep -c -F -- 'TINKERCLOUD_RELEASE_SIGNING_KEY_B64' "$stable")" = 1 || { echo 'stable signing secret exposure drift' >&2; exit 1; }
-require "$stable" 'mktemp "$RUNNER_TEMP/.tinkercloud-stable-release-key.XXXXXX"' 'random stable key path missing'
-require "$stable" 'unset SIGNING_KEY_B64' 'stable key cleanup missing'
-require "$stable" './scripts/release-build.sh "$VERSION" "$release_dir"' 'stable builder missing'
-test "$(grep -c -F -- './scripts/release-verify.sh' "$stable")" -ge 2 || { echo 'stable local/remote verification missing' >&2; exit 1; }
-require "$stable" '--draft' 'stable draft-first missing'
-require "$stable" 'gh release download "$tag"' 'stable remote download missing'
-require "$stable" 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' 'stable asset comparison missing'
-require "$stable" '--latest' 'stable latest promotion missing'
-reject "$stable" 'npm[[:space:]]+(publish|unpublish)' 'stable signing workflow must not publish npm'
-reject "$stable" '--prerelease([[:space:]]|$)' 'stable may not become prerelease'
-reject "$stable" '--clobber|gh[[:space:]]+release[[:space:]]+(delete|upload)' 'stable may not replace release state'
-require "$npm" 'environment: npm-cli' 'CLI publisher requires npm-cli environment'
-require "$npm" 'id-token: write' 'CLI publisher requires OIDC'
-require "$npm" '[[ "$DIST_TAG" == "next" ]]' 'CLI beta next tag must be fixed'
-require "$npm" '[[ "$DIST_TAG" == "latest" ]]' 'CLI stable latest tag must be fixed'
-require "$npm" 'publish-$CHANNEL-$tag' 'CLI must use parent confirmation'
-require "$npm" 'npm publish "$CLI_TARBALL"' 'CLI must publish verified candidate'
-require "$npm" 'cancel-in-progress: false' 'CLI publisher must not cancel publication'
-reject "$npm" 'contents:[[:space:]]+write' 'CLI publisher does not need contents write'
-test "$(grep -c -F -- 'id-token: write' "$npm")" = 1 || { echo 'CLI OIDC scope drift' >&2; exit 1; }
-require "$npm" 'TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority"' 'CLI selected key policy missing'
-require "$npm" 'required_authority=beta' 'CLI beta authority missing'
-require "$npm" 'required_authority=production' 'CLI stable authority missing'
-require "$npm" 'git merge-base --is-ancestor "$source_commit" origin/main' 'CLI ancestry gate missing'
-require "$npm" 'false\ttrue\t' 'CLI prerelease-state gate missing'
-require "$npm" 'false\tfalse\t' 'CLI stable-state gate missing'
-require "$npm" 'package_status" == "200"' 'CLI bootstrap denial missing'
-require "$npm" 'version_status" == "404"' 'CLI existing-version denial missing'
-require "$npm" 'node-version: "24"' 'CLI trusted-publishing Node missing'
-test "$(grep -c -F -- 'npm install --global npm@11.5.1' "$npm")" = 2 || { echo 'CLI pinned npm drift' >&2; exit 1; }
-require "$npm" 'gh release download "$tag"' 'CLI release download missing'
-require "$npm" './scripts/release-verify.sh "$release_dir"' 'CLI release verification missing'
-require "$npm" './scripts/distribution-prepare.sh' 'CLI candidate generator missing'
-reject "$npm" 'NODE_AUTH_TOKEN|NPM_TOKEN|npm[[:space:]]+unpublish' 'CLI publisher may not use long-lived credentials or unpublish'
-reject "$npm" 'secrets:[[:space:]]+inherit' 'CLI publisher may not inherit secrets'
-reject "$npm" 'npm[[:space:]]+(unpublish|deprecate|dist-tag[[:space:]]+(rm|remove))' 'CLI publisher may not conceal state'
-for file in "$stable" "$npm"; do
-  reject "$file" 'git[[:space:]]+(tag[[:space:]]+-f|push[[:space:]].*--force)' 'release workflow may not move tags'
-  for ref in $(sed -n 's/.*uses: [^@]*@\([^ #]*\).*/\1/p' "$file"); do
-    printf '%s\n' "$ref" | grep -E '^[0-9a-f]{40}$' >/dev/null || { echo "unpinned release action: $ref" >&2; exit 1; }
-  done
-done
-echo 'stable and CLI reusable workflow contracts passed'
+require() { grep -F -- "$1" "$2" >/dev/null || { echo "$3" >&2; exit 1; }; }
+reject() { ! grep -E -- "$1" "$2" >/dev/null || { echo "$3" >&2; exit 1; }; }
+require 'stable-release:' "$release" 'direct stable release job is missing'
+require 'environment: stable-release' "$release" 'direct stable environment is missing'
+require 'SIGNING_KEY_B64: ${{ secrets.TINKERCLOUD_RELEASE_SIGNING_KEY_B64 }}' "$release" 'stable secret must be attached directly to release.yml'
+require './scripts/publish-github-release.sh stable' "$release" 'direct stable publisher is missing'
+test "$(grep -c -F -- 'contents: write' "$release")" = 2 || { echo 'only direct protected jobs may have contents write' >&2; exit 1; }
+require 'stable-validation:' "$release" 'stable validation job is missing'
+require 'TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production' "$reusable" 'stable production key policy is required'
+require 'publish-stable-$tag' "$reusable" 'stable confirmation is required'
+require 'git merge-base --is-ancestor "$source_commit" origin/main' "$reusable" 'stable ancestry gate is missing'
+require './scripts/release-test.sh' "$reusable" 'stable release tamper gate is missing'
+require 'latest/download' "$publisher" 'stable latest installer smoke is missing'
+reject 'npm[[:space:]]+(publish|unpublish)' "$release" 'GitHub signing stage must not publish npm'
+require 'workflow_call:' "$reusable" 'stable validation must remain reusable only'
+reject 'TINKERCLOUD_RELEASE_SIGNING_KEY_B64|SIGNING_KEY_B64|environment:[[:space:]]+stable-release|contents:[[:space:]]+write' "$reusable" 'stable reusable workflow must not receive signing authority'
+reject 'secrets:[[:space:]]+inherit' "$release" 'release must not inherit ambient secrets'
+reject '--clobber|gh[[:space:]]+release[[:space:]]+(delete|upload)' "$publisher" 'release may not replace public state'
+test -f "$release" && test -f "$reusable" && test -f "$publisher" && test -f "$npm" || { echo 'release component unavailable' >&2; exit 1; }
+require 'cancel-in-progress: false' "$release" 'release must not cancel publication'
+require 'GitHub release already exists' "$reusable" 'stable existing release denial missing'
+require '[[ "$visibility" == "PUBLIC" ]]' "$reusable" 'stable public repository gate missing'
+test "$(grep -c -F -- 'TINKERCLOUD_RELEASE_SIGNING_KEY_B64' "$release")" = 1 || { echo 'stable signing secret exposure drift' >&2; exit 1; }
+require 'mktemp "$RUNNER_TEMP/.tinkercloud-${key_label}-release-key.XXXXXX"' "$publisher" 'random stable key path missing'; require 'unset SIGNING_KEY_B64' "$publisher" 'stable key cleanup missing'; require './scripts/release-build.sh "$VERSION" "$release_dir"' "$publisher" 'stable builder missing'; test "$(grep -c -F -- './scripts/release-verify.sh' "$publisher")" -ge 2 || { echo 'stable local/remote verification missing' >&2; exit 1; }; require '--draft' "$publisher" 'stable draft-first missing'; require 'gh release download "$tag"' "$publisher" 'stable remote download missing'; require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' "$publisher" 'stable asset comparison missing'; require '--prerelease=false --latest' "$publisher" 'stable may not become prerelease'
+require 'environment: npm-cli' "$npm" 'CLI publisher requires npm-cli environment'
+require 'id-token: write' "$npm" 'CLI publisher requires OIDC'
+require '[[ "$DIST_TAG" == "next" ]]' "$npm" 'CLI beta next tag must be fixed'
+require '[[ "$DIST_TAG" == "latest" ]]' "$npm" 'CLI stable latest tag must be fixed'
+require 'publish-$CHANNEL-$tag' "$npm" 'CLI must use parent confirmation'
+require 'npm publish "$CLI_TARBALL"' "$npm" 'CLI must publish verified candidate'
+require 'cancel-in-progress: false' "$npm" 'CLI publisher must not cancel publication'
+reject 'contents:[[:space:]]+write' "$npm" 'CLI publisher does not need contents write'
+reject 'NODE_AUTH_TOKEN|NPM_TOKEN|npm[[:space:]]+unpublish' "$npm" 'CLI publisher may not use long-lived credentials or unpublish'
+reject 'secrets:[[:space:]]+inherit' "$npm" 'CLI publisher may not inherit secrets'
+reject 'npm[[:space:]]+(unpublish|deprecate|dist-tag[[:space:]]+(rm|remove))' "$npm" 'CLI publisher may not conceal state'
+test "$(grep -c -F -- 'id-token: write' "$npm")" = 1 || { echo 'CLI OIDC scope drift' >&2; exit 1; }; require 'TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority"' "$npm" 'CLI selected key policy missing'; require 'required_authority=beta' "$npm" 'CLI beta authority missing'; require 'required_authority=production' "$npm" 'CLI stable authority missing'; require 'git merge-base --is-ancestor "$source_commit" origin/main' "$npm" 'CLI ancestry gate missing'; require 'false\ttrue\t' "$npm" 'CLI prerelease-state gate missing'; require 'false\tfalse\t' "$npm" 'CLI stable-state gate missing'; require 'package_status" == "200"' "$npm" 'CLI bootstrap denial missing'; require 'version_status" == "404"' "$npm" 'CLI existing-version denial missing'; require 'node-version: "24"' "$npm" 'CLI trusted-publishing Node missing'; test "$(grep -c -F -- 'npm install --global npm@11.5.1' "$npm")" = 2 || { echo 'CLI pinned npm drift' >&2; exit 1; }; require 'gh release download "$tag"' "$npm" 'CLI release download missing'; require './scripts/release-verify.sh "$release_dir"' "$npm" 'CLI release verification missing'; require './scripts/distribution-prepare.sh' "$npm" 'CLI candidate generator missing'
+for file in "$release" "$reusable" "$npm"; do reject 'git[[:space:]]+(tag[[:space:]]+-f|push[[:space:]].*--force)' "$file" 'release workflow may not move tags'; for ref in $(sed -n 's/.*uses: [^@]*@\([^ #]*\).*/\1/p' "$file"); do printf '%s\n' "$ref" | grep -E '^[0-9a-f]{40}$' >/dev/null || { echo "unpinned release action: $ref" >&2; exit 1; }; done; done
+echo 'stable release secret-boundary contract passed'

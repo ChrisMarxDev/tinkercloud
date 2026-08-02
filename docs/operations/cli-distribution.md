@@ -63,6 +63,12 @@ task release:check
 
 ## Publish the first complete stable release
 
+The first manual npm bootstrap uses the exact verified tarball with
+`--provenance=false`. npm assigns its initial `latest` tag as part of that
+immutable first publication; do not unpublish or mutate tags to hide it. Later
+reviewed `release.yml` publications use trusted OIDC provenance and their fixed
+channel tags.
+
 After both npm packages are bootstrapped, choose one new strict numeric version. Update
 `sdk/typescript/package.json`, `sdk/typescript/jsr.json`, and `SDK_VERSION` to
 that exact value, merge the reviewed commit to `main`, then tag and dispatch

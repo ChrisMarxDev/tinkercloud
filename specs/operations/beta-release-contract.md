@@ -38,7 +38,9 @@ The workflow is manually dispatched with:
 - the exact numeric version; and
 - the exact confirmation `publish-beta-vVERSION`.
 
-The signing job uses the protected GitHub Environment `beta-release`.
+The protected top-level `release.yml` signing job uses the GitHub Environment
+`beta-release`. Reusable validation workflows receive no Environment secret and
+cannot sign or publish a release.
 Operators configure required reviewers, prevent self-review where their GitHub
 plan supports it, and restrict deployment branches to `main` and protected
 version tags. They also enable GitHub release immutability before the first beta.

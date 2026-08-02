@@ -13,8 +13,10 @@ existing GitHub release and either existing npm version. It builds one signed
 GitHub release, then publishes the exact SDK tarball and release-derived CLI
 package from that same version.
 
-The signing job keeps separate protected `beta-release` and `stable-release`
-environments. The npm jobs keep separate protected `npm-sdk` and `npm-cli`
+The signing and GitHub-publication jobs are normal top-level `release.yml` jobs
+with separate protected `beta-release` and `stable-release` environments. Their
+reusable validation workflows receive no Environment secret or release-write
+authority. The npm jobs keep separate protected `npm-sdk` and `npm-cli`
 environments and OIDC boundaries, while both packages trust the one workflow
 filename. Beta tags are `beta` (SDK) and `next` (CLI); stable uses `latest`.
 

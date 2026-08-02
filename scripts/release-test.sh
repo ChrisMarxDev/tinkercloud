@@ -4,6 +4,11 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+version=$(node "$root/scripts/extract-sdk-version.mjs" "$root/sdk/typescript/src/index.ts")
+case "$version" in
+  ''|*[!0-9.]*|*.*.*.*|.*|*.) echo "invalid SDK semantic version" >&2; exit 1;;
+esac
+printf '%s' "$version" | grep -E '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' >/dev/null || { echo "invalid SDK semantic version" >&2; exit 1; }
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-release-test.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 openssl genpkey -algorithm ED25519 -out "$tmp/private.pem" >/dev/null 2>&1
@@ -21,16 +26,16 @@ fi
 # A key that is not the repository's release authority must be rejected before
 # compilation, so an accidental developer key cannot create a trusted-looking
 # artifact.
-if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" "$root/scripts/release-build.sh" 0.1.3 "$tmp/wrong-key" >/dev/null 2>&1; then
+if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" "$root/scripts/release-build.sh" "$version" "$tmp/wrong-key" >/dev/null 2>&1; then
   echo "mismatched release key accepted" >&2
   exit 1
 fi
 
 TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.3 "$tmp/release" >/dev/null
+SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" "$version" "$tmp/release" >/dev/null
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" "$root/scripts/release-verify.sh" "$tmp/release" >/dev/null
-release_base="https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/"
+release_base="https://github.com/ChrisMarxDev/tinkercloud/releases/download/v$version/"
 test "$(grep -F -c -- '__TINKERCLOUD_RELEASE_BASE__' "$root/packaging/install-host.sh")" = 1 || {
   echo "source host installer placeholder count drifted" >&2
   exit 1
@@ -55,40 +60,40 @@ if grep -F -- '__TINKERCLOUD_CLIENT_RELEASE_BASE__' "$tmp/release/install-client
   echo "released client installer shipped the development origin placeholder" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/wrong-package" \
+if "$root/scripts/distribution-prepare.sh" "$version" "$tmp/release" "$tmp/wrong-package" \
   "@wrong/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/" >/dev/null 2>&1; then
+  "$release_base" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical npm package" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/wrong-formula" \
+if "$root/scripts/distribution-prepare.sh" "$version" "$tmp/release" "$tmp/wrong-formula" \
   "@tinkercloud/cli" Wrong tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/" >/dev/null 2>&1; then
+  "$release_base" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical Homebrew formula" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/wrong-command" \
+if "$root/scripts/distribution-prepare.sh" "$version" "$tmp/release" "$tmp/wrong-command" \
   "@tinkercloud/cli" Tinker wrong \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/" >/dev/null 2>&1; then
+  "$release_base" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical CLI command" >&2
   exit 1
 fi
-if "$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/wrong-origin" \
+if "$root/scripts/distribution-prepare.sh" "$version" "$tmp/release" "$tmp/wrong-origin" \
   "@tinkercloud/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/elsewhere/releases/download/v0.1.3/" >/dev/null 2>&1; then
+  "https://github.com/ChrisMarxDev/elsewhere/releases/download/v$version/" >/dev/null 2>&1; then
   echo "distribution accepted a noncanonical release origin" >&2
   exit 1
 fi
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-"$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/distribution" \
+"$root/scripts/distribution-prepare.sh" "$version" "$tmp/release" "$tmp/distribution" \
   "@tinkercloud/cli" Tinker tinker \
-  "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/" >/dev/null
-node - "$tmp/distribution" <<'NODE'
+  "$release_base" >/dev/null
+VERSION="$version" node - "$tmp/distribution" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 const root = process.argv[2];
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "npm", "package.json"), "utf8"));
-if (manifest.name !== "@tinkercloud/cli" || manifest.version !== "0.1.3" || manifest.dependencies || manifest.scripts) {
+if (manifest.name !== "@tinkercloud/cli" || manifest.version !== process.env.VERSION || manifest.dependencies || manifest.scripts) {
   throw new Error("invalid npm CLI candidate");
 }
 const vendors = fs.readdirSync(path.join(root, "npm", "vendor")).sort();
@@ -96,7 +101,7 @@ if (vendors.join(" ") !== "tinker-darwin-amd64 tinker-darwin-arm64 tinker-linux-
   throw new Error("incomplete npm CLI platform matrix");
 }
 const formula = fs.readFileSync(path.join(root, "homebrew", "tinker.rb"), "utf8");
-if (!formula.includes('version "0.1.3"') || !formula.includes("tinker-darwin-amd64") || !formula.includes("tinker-darwin-arm64")) {
+if (!formula.includes(`version "${process.env.VERSION}"`) || !formula.includes("tinker-darwin-amd64") || !formula.includes("tinker-darwin-arm64")) {
   throw new Error("invalid Homebrew formula candidate");
 }
 NODE
@@ -105,16 +110,16 @@ NODE
 # assert the release promises are not merely documentation.
 TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.3 "$tmp/release-again" >/dev/null
+SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" "$version" "$tmp/release-again" >/dev/null
 for artifact in tinkercloud-linux-amd64 tinker-linux-amd64 tinker-linux-arm64 tinker-darwin-amd64 tinker-darwin-arm64; do
   cmp "$tmp/release/$artifact" "$tmp/release-again/$artifact" || { echo "build was not reproducible: $artifact" >&2; exit 1; }
 done
 
-custom_release_base=https://releases.example.test/tinkercloud/v0.1.3/
+custom_release_base="https://releases.example.test/tinkercloud/v$version/"
 TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
 TINKERCLOUD_HOST_INSTALL_RELEASE_BASE="$custom_release_base" \
-SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" 0.1.3 "$tmp/custom-release" >/dev/null
+SOURCE_DATE_EPOCH=0 "$root/scripts/release-build.sh" "$version" "$tmp/custom-release" >/dev/null
 grep -F -- "$custom_release_base" "$tmp/custom-release/install-host.sh" >/dev/null || {
   echo "custom release build did not bind the host installer to its explicit release base" >&2
   exit 1
@@ -122,14 +127,14 @@ grep -F -- "$custom_release_base" "$tmp/custom-release/install-host.sh" >/dev/nu
 if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
 TINKERCLOUD_HOST_INSTALL_RELEASE_BASE=http://releases.example.test/ \
-"$root/scripts/release-build.sh" 0.1.3 "$tmp/insecure-custom-release" >/dev/null 2>&1; then
+"$root/scripts/release-build.sh" "$version" "$tmp/insecure-custom-release" >/dev/null 2>&1; then
   echo "release build accepted an insecure custom host-installer release base" >&2
   exit 1
 fi
 if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \
 TINKERCLOUD_RELEASE_PUBLIC_KEY="$tmp/public.pem" \
-TINKERCLOUD_HOST_INSTALL_RELEASE_BASE=https://releases.example.test/tinkercloud/../v0.1.3/ \
-"$root/scripts/release-build.sh" 0.1.3 "$tmp/ambiguous-custom-release" >/dev/null 2>&1; then
+TINKERCLOUD_HOST_INSTALL_RELEASE_BASE="https://releases.example.test/tinkercloud/../v$version/" \
+"$root/scripts/release-build.sh" "$version" "$tmp/ambiguous-custom-release" >/dev/null 2>&1; then
   echo "release build accepted an ambiguous custom host-installer release base" >&2
   exit 1
 fi
