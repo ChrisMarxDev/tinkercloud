@@ -2,10 +2,12 @@
 
 ## Scope
 
-This contract authorizes one pre-stable distribution channel: manually approved
-GitHub prereleases containing the complete signed Tinkercloud release. It does
-not authorize npm, JSR, Homebrew, stable GitHub releases, `latest` promotion,
-DNS changes, or scheduled updates.
+This contract authorizes the canonical pre-stable release origin: manually
+approved GitHub prereleases containing the complete signed Tinkercloud release.
+The GitHub workflow does not publish npm, JSR, Homebrew, stable GitHub releases,
+`latest` promotion, DNS changes, or scheduled updates. After that prerelease is
+public and verified, the separate SDK npm beta contract may publish only its
+exact SDK tarball under npm's `beta` dist-tag.
 
 Product and artifact identities are locked by ADR 0052. Every release under
 this contract is visibly marked as beta. Stable distribution requires a new
@@ -73,7 +75,9 @@ retires the beta authority. Beta trust never silently becomes stable trust.
    advanced operator flows.
 
 The workflow creates no package-manager candidate and invokes no registry or
-tap publisher.
+tap publisher. Any downstream SDK beta publication is a separate manual,
+reviewer-gated workflow governed by
+`specs/sdk/npm-beta-publishing-contract.md`.
 
 ## Failure and recovery
 
@@ -99,6 +103,7 @@ base. A released `tinker host install root@HOST` derives that exact base from
 its embedded release version; development builds must use the explicit
 `--release-base URL` form. `tinker host update` uses an explicit exact release
 base. TypeScript consumers may install the exact
-`tinkercloud-sdk-VERSION.tgz` GitHub asset by URL without publishing it to an npm
-or JSR registry. Consumers must opt into the beta explicitly; documentation
-does not advertise an unversioned stable or latest installer.
+`tinkercloud-sdk-VERSION.tgz` GitHub asset by URL or, after its separately
+approved registry publication, install `@tinkercloud/sdk@beta`. Consumers must
+opt into the beta explicitly; documentation does not advertise an unversioned
+stable or latest installer.

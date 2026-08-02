@@ -1,6 +1,6 @@
 # ADR 0046: GitHub prereleases are the pre-stable beta channel
 
-Status: Accepted for beta distribution
+Status: Superseded in part by ADR 0054
 
 ## Context
 
@@ -42,3 +42,7 @@ approval and the authority is never promoted to production trust.
 
 Every public beta consumes a new strict numeric patch version. Failures after
 publication reconcile forward; published assets and tags are never replaced.
+
+ADR 0054 later authorizes one downstream registry action: publishing only the
+exact verified SDK tarball to npm under the `beta` dist-tag. This workflow
+continues to publish only the canonical GitHub prerelease.
