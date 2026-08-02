@@ -24,7 +24,7 @@ acquire domain + supported dedicated VPS + root SSH
 → tinkercloud setup discovers the host
 → ask root domain + operator email
 → derive admin.<domain>, <slug>.<domain>, and sender
-→ pause with one wildcard DNS + Resend actions
+→ choose Resend or Postmark and pause with one wildcard DNS + provider actions
 → resume without repeating valid state
 → ingest provider secret into root-owned credentials
 → generate config, internal secrets, SQLite, service, TLS, and probes

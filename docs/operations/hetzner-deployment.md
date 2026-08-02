@@ -60,17 +60,21 @@ Automation and recovery still use the explicit contract:
 sudo tinkercloud init --non-interactive \
   --domain example.com \
   --operator-email operator@example.com \
+  --email-provider postmark \
   --email-from access@example.com \
-  --resend-api-key-file /root/tinkercloud-resend.key \
+  --email-api-key-file /root/tinkercloud-postmark-token \
   --hmac-key-file /root/tinkercloud-hmac.key
 ```
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
-secret files. It derives the internal ACME contact from the required normalized
-operator email; it never accepts a separate ACME-contact flag. The human
-`setup` assistant generates these inputs, accepts only a root-readable protected
-Resend-key file as its credential source, and creates HMAC material privately.
-Neither path places a secret in argv, ordinary config, or terminal output. Initialization
+secret files. `--email-provider` accepts `resend` or `postmark` and defaults to
+Resend for compatibility; both use the neutral `--email-api-key-file` secret
+boundary. It derives the internal ACME contact from the required normalized
+operator email; it never accepts a separate ACME-contact flag. The implemented
+human `setup` assistant guides the Resend path, accepts only a root-readable
+protected key file as its credential source, and creates HMAC material
+privately. Neither path places a secret in argv, ordinary config, or terminal
+output. Initialization
 copies the values into
 `/etc/tinkercloud/credentials/tinkercloud.env` at mode `0600`; the config contains
 only `env:` references. Do not pass API keys as command-line values.
@@ -86,8 +90,8 @@ The shared initialization domain:
 3. Writes root-owned secret references and non-secret typed configuration.
 4. Initializes SQLite and applies embedded migrations.
 5. Creates the first operator.
-6. validates the root-only Resend credential file and config references without
-   sending a test message;
+6. validates the root-only selected email-provider credential file and config
+   references without sending a test message;
 7. Generates, installs, enables, and starts a hardened systemd unit whose
    writable allowlist contains exactly the configured data and ACME directories.
 8. Verifies the service is locally active.
@@ -108,7 +112,7 @@ The operator must provide:
 
 - a clean supported Hetzner VPS with a public IP;
 - one wildcard `A`/`AAAA` record for the root domain;
-- a verified sending domain and Resend API key.
+- a verified sender and API key from Resend or Postmark.
 
 Strict VPN-only ingress is not supported in V1. Public ACME HTTP-01 and the
 public HTTPS health proof must succeed; initialization never bypasses them.
@@ -120,8 +124,8 @@ pair covering the admin and app hostnames, as described in
 service starts, but Tinkercloud cannot safely create DNS or verify email-domain
 ownership without additional provider credentials. Unlike the offline-safe
 `tinkercloud status`, doctor reads the root-only systemd credential file directly
-for its read-only Resend check; it never prints the file path, references, key,
-or provider response body. The default is
+for its read-only selected email-provider check; it never prints the file path,
+references, key, or provider response body. The default is
 `/etc/tinkercloud/credentials/tinkercloud.env`; use `--config` and `--credentials`
 only for an explicit root-owned test or recovery layout.
 
@@ -297,5 +301,6 @@ release, or mutate policy, even if OTP delivery was requested successfully.
   releases fail preflight.
 - No Docker requirement or bundled reverse proxy.
 - No operator backup/disaster-recovery feature.
-- Resend is the only shipped email adapter, behind a provider interface.
+- Resend and Postmark are the only shipped email adapters; exactly one is
+  selected behind the provider-neutral interface.
 - Private apps only; there is no public-app switch in V1.

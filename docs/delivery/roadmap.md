@@ -85,7 +85,7 @@ Implemented code in this slice (clean-VPS acceptance remains pending):
 Remaining vertical path:
 
 - derive conventional platform/app values from one base domain and
-  pause with exact DNS/Resend actions, including a fail-fast exact-admin and
+  pause with exact DNS/email-provider actions, including a fail-fast exact-admin and
   wildcard-resolution check before the ACME-capable service starts;
 - make project/output/capability discovery explicit and ask only when safe
   evidence is ambiguous;
@@ -163,7 +163,7 @@ Components:
   one-time app-bound handoff, and
   local app-session child revocation;
 - host router, authorization context, protected static runtime;
-- minimal auth/operator pages and Resend adapter;
+- minimal auth/operator pages and provider-neutral Resend/Postmark adapters;
 - route registry and negative security matrix.
 
 Exit gate:
@@ -498,9 +498,10 @@ Components:
 Evidence implemented: `tinkercloud status` remains an offline diagnostic and does
 not load provider credentials. `sudo tinkercloud doctor` independently validates
 the root-only systemd credential file before making its bounded read-only
-Resend request, so it does not depend on systemd's inherited environment.
+selected email-provider request, so it does not depend on systemd's inherited
+environment.
 Absent, symlinked, non-root-owned, permissive, malformed, duplicate, and
-unexpected credential assignments fail the Resend check closed without a
+unexpected credential assignments fail the email-provider check closed without a
 provider request or secret/path/reference disclosure. Focused, race, full Go,
 skill-drift, and offline security-gate evidence pass.
 

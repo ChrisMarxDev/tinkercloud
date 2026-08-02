@@ -25,8 +25,8 @@ The reviewed HTML flows already include the accepted edits below.
 - create a supported dedicated VPS and retain root SSH;
 - own firewall policy while exposing only required 80/443;
 - provide one root domain and initial operator email;
-- establish Resend domain ownership and provide the provider secret through the
-  root-owned credential boundary;
+- choose Resend or Postmark, establish sender ownership, and provide the provider
+  secret through the root-owned credential boundary;
 - enter browser OTP only when no valid global identity exists;
 - choose the exact active-deployer email set and confirm additions/reactivations;
 - confirm app suspension; and
@@ -40,7 +40,8 @@ The reviewed HTML flows already include the accepted edits below.
 - the trusted release source is default; alternate source is advanced;
 - the generic setup confirmation is removed because `tinkercloud setup` already
   expresses intent;
-- Resend records are collected before one combined DNS-provider visit;
+- selected email-provider records are collected before one combined DNS-provider
+  visit;
 - saving dashboard/recovery output is optional operator runbook practice;
 - granting the operator a deployer role and sharing invitations are delayed
   until requested; and
