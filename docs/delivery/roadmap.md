@@ -640,11 +640,11 @@ SSH lifecycle endpoint: exact local confirmation precedes a root-only command
 that rejects custom, symlinked, and mounted state, removes only canonical
 configuration/application/service/binary identity, and preserves the ACME
 cache for reinstall.
-Stable distribution scaffolding is executable but intentionally inactive:
-`stable-release.yml` can publish and remotely verify an immutable GitHub
-release only when the committed key policy identifies a rotated production
-authority, while `npm-cli-publish.yml` derives `@tinkercloud/cli` from that
-exact release and uses npm trusted-publisher OIDC. A denial charter and static
+Stable distribution scaffolding is executable but intentionally inactive: the
+stable path of `release.yml` can publish and remotely verify an immutable
+GitHub release only when the committed key policy identifies a rotated
+production authority, then its internal jobs publish the exact SDK and
+release-derived CLI through npm trusted-publisher OIDC. A denial charter and static
 self-tests reject automatic triggers, beta-key promotion, private repositories,
 existing versions, long-lived npm tokens, unverified downloads, and mixed
 GitHub/npm mutation. The npm candidate has an exact content allowlist and

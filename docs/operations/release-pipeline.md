@@ -86,10 +86,10 @@ beta or production signing key.
 
 ## Publish a GitHub beta
 
-The canonical beta release is an exact GitHub prerelease. It uses the locked
-Tinkercloud identities without claiming JSR, Homebrew, DNS, or stable/latest
-availability. After it is public and verified, its exact SDK tarball may be
-published separately to npm's opt-in `beta` dist-tag.
+The canonical beta release is an exact GitHub prerelease plus matching npm SDK
+and CLI packages. It uses the locked Tinkercloud identities without claiming
+JSR, Homebrew, DNS, or stable/latest availability. The SDK uses npm's opt-in
+`beta` tag and the CLI uses `next`.
 
 Configure the repository once:
 
@@ -113,14 +113,15 @@ base64 <"$HOME/.tinkercloud/release/tinkercloud-ed25519.pem" |
 
 For each beta, update `package.json`, `jsr.json`, and exported `SDK_VERSION` to
 one new strict numeric version, merge the reviewed commit to `main`, then create
-and push its exact tag:
+and push its exact tag. Dispatch from that tag: the workflow denies a caller
+commit that differs from the tag so release logic and source cannot drift.
 
 ```sh
 VERSION=0.1.0
 git tag -a "v$VERSION" -m "Beta v$VERSION"
 git push origin "v$VERSION"
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"
@@ -130,8 +131,9 @@ Approve the `beta-release` Environment only after checking the tag, commit, and
 workflow diff. The workflow tests without the private key, signs the complete
 release, verifies it locally, uploads it as a draft, downloads and verifies the
 draft bytes, publishes it as a prerelease, and smoke-tests the public CLI
-installer plus SDK tarball. This workflow itself never publishes npm/JSR or
-changes Homebrew.
+installer plus SDK tarball. The same run then enters the separately protected
+npm SDK and CLI stages, publishes the exact version, and verifies clean
+consumers. It never publishes JSR, Homebrew, or the server through npm.
 
 Every public beta uses a new patch version. Do not rerun against an existing
 release, replace an asset, move its tag, or promote it to stable/latest. A
@@ -171,37 +173,31 @@ tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tink
 The GitHub beta workflow is governed by
 [`specs/operations/beta-release-contract.md`](../../specs/operations/beta-release-contract.md).
 
-## Publish the SDK npm beta
+## One-time npm bootstrap
 
-Only `@tinkercloud/sdk` is eligible for npm during beta. The native CLI remains
-on the signed GitHub installer, and the server is never placed in a JavaScript
-registry. The npm version stays strict numeric for compatibility; npm's fixed
-`beta` dist-tag and the GitHub prerelease flag identify the channel.
+Both `@tinkercloud/sdk` and `@tinkercloud/cli` are eligible during beta. The SDK
+uses `beta`, the CLI uses `next`, and the server is never placed in a JavaScript
+registry. Both npm versions match the strict numeric GitHub release version.
 
-Configure GitHub Environment `npm-sdk` once with a required reviewer, access
-from `main`, and no npm token secret. The package's trusted publisher must be
-exactly repository `ChrisMarxDev/tinkercloud`, workflow
-`release.yml`, Environment `npm-sdk`, with only `npm publish` allowed.
+Configure GitHub Environments `npm-sdk` and `npm-cli` once with required
+reviewers, access from protected release tags, and no npm token secret. Each
+package's trusted publisher must be repository `ChrisMarxDev/tinkercloud`,
+workflow `release.yml`, its matching Environment, with only `npm publish`
+allowed.
 
-The package must first be bootstrapped once with interactive 2FA from the exact
-verified prerelease tarball. The complete guarded procedure is in
-[SDK distribution](sdk-distribution.md). After that, each later beta is:
+Each package must first be bootstrapped once with interactive 2FA from exact
+artifacts derived from a verified release. The complete guarded procedures are
+in [SDK distribution](sdk-distribution.md) and
+[CLI distribution](cli-distribution.md). After that, the one beta command above
+owns all outputs; there is no second npm dispatch.
 
 ```sh
-task release:npm-sdk-check
-gh workflow run release.yml \
-  --ref main \
-  -f channel=beta \
-  -f version="$VERSION" \
-  -f confirmation="publish-beta-v$VERSION"
+task release:check
 ```
 
-Approve `npm-sdk` only after reviewing the existing public GitHub prerelease and
-confirming the npm version is unused. The workflow downloads and verifies the
-complete release, publishes the exact SDK tarball without lifecycle scripts or
-repacking, then verifies its integrity, provenance, repository metadata,
-`beta` dist-tag, and clean import. It cannot select `latest` or publish the CLI,
-server, JSR, or Homebrew.
+Approve `npm-sdk` and `npm-cli` only inside that reviewed run. The jobs download
+and verify the complete release, publish exact candidates, then verify their
+integrity, provenance, repository metadata, channel tags, and clean consumers.
 
 This path is governed by
 [`specs/sdk/npm-beta-publishing-contract.md`](../../specs/sdk/npm-beta-publishing-contract.md).
@@ -213,11 +209,11 @@ It builds, signs, remotely verifies, and publishes the canonical GitHub release,
 then publishes the exact same-version SDK and CLI npm artifacts through their
 separate protected OIDC environments.
 
-Both workflows fail while `packaging/release-key-policy.json` identifies the
+The stable path fails while `packaging/release-key-policy.json` identifies the
 committed authority as `beta`. Rotate to a separately controlled production
 key and synchronize every embedded trust anchor before changing that policy.
 The GitHub repository must be public, releases immutable, and the
-`stable-release` and `npm-cli` Environments reviewer-protected.
+`stable-release`, `npm-sdk`, and `npm-cli` Environments reviewer-protected.
 
 The first npm version is a one-time exception: npm requires a package to exist
 before it can be assigned a trusted publisher. Publish the exact generated

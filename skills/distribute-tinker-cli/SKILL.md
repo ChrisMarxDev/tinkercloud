@@ -125,7 +125,7 @@ git diff --check
 Record exactly which checks ran. Do not claim Homebrew or registry behavior
 from local package inspection alone.
 
-## Publish a GitHub beta
+## Publish a complete beta
 
 Use this exception only when the user explicitly authorizes the exact beta
 version and GitHub destination. Require:
@@ -133,6 +133,8 @@ version and GitHub destination. Require:
 - an existing `vVERSION` tag reachable from `main`;
 - exact package/SDK/source version parity;
 - a configured, reviewer-protected `beta-release` Environment;
+- configured `npm-sdk` and `npm-cli` Environments plus bootstrapped packages
+  trusting `release.yml`;
 - the beta-only signing secret matching the committed public key; and
 - confirmation that no release already exists for the tag.
 
@@ -144,7 +146,7 @@ Dispatch only the reviewed workflow:
 
 ```sh
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"
@@ -152,10 +154,10 @@ gh workflow run release.yml \
 
 Do not obtain, transmit, or inspect the signing secret. Stop for the GitHub
 Environment approval. After completion, verify the release remains marked
-prerelease, download and verify its exact assets, and report the versioned CLI,
-host, and SDK-tarball URLs. Never publish npm/JSR, update Homebrew, promote
-latest/stable, or overwrite a beta asset. A failed public beta moves forward
-under a new numeric version.
+prerelease, download and verify its exact assets, verify SDK `beta` and CLI
+`next` on npm, and report the versioned URLs. Never publish JSR, update
+Homebrew, promote latest/stable, or overwrite a beta asset or npm version. A
+failed public beta moves forward under a new numeric version.
 
 ## Publish stable and package-manager channels
 
@@ -171,42 +173,33 @@ Before any external mutation, require:
 - `packaging/release-key-policy.json` classifies the synchronized committed
   trust anchor as `production`, never `beta`;
 - the public repository has immutable releases and reviewer-protected
-  `stable-release` and `npm-cli` Environments; and
-- `@tinkercloud/cli` already exists and trusts only
-  `release.yml`/`npm-cli` for `npm publish` OIDC.
+  `stable-release`, `npm-sdk`, and `npm-cli` Environments; and
+- both npm packages already exist and trust only `release.yml` with their
+  matching Environment for `npm publish` OIDC.
 
-Run `task release:stable-check` before any dispatch. Publish GitHub first:
+Run `task release:stable-check` before the one complete dispatch:
 
 ```sh
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=stable \
   -f version="$VERSION" \
   -f confirmation="publish-stable-v$VERSION"
 ```
 
-This must stop for the `stable-release` Environment approval. After it
-finishes, verify the exact and `latest` one-line installers anonymously.
+This must stop for the signing and npm Environment approvals. After it
+finishes, verify the exact and `latest` one-line installers and both npm
+packages anonymously.
 
 npm trusted publishing cannot create a package that does not yet exist. For
-the first version only, generate the tarball from the downloaded stable release
-and publish that exact tarball interactively with 2FA. Then configure the npm
-trusted publisher named in the contract. Never introduce a bootstrap token in
-GitHub Actions.
+the first version only, generate candidates from an existing verified release
+and publish those exact packages interactively with 2FA before attempting the
+unified flow. Then configure the trusted publishers named in the contract.
+Never introduce a bootstrap token in GitHub Actions.
 
-For every later version, dispatch only:
-
-```sh
-gh workflow run release.yml \
-  --ref main \
-  -f channel=stable \
-  -f version="$VERSION" \
-  -f confirmation="publish-stable-v$VERSION"
-```
-
-The workflow stops for `npm-cli` approval, downloads the stable release,
-verifies it, generates and allowlist-checks the tarball, rejects an existing
-version, and publishes through short-lived OIDC with provenance.
+The internal npm jobs download the stable release, verify it, allowlist-check
+the candidates, reject existing versions, and publish through short-lived OIDC
+with provenance.
 
 Continue in dependency order:
 

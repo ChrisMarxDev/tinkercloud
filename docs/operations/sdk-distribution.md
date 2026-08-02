@@ -2,9 +2,9 @@
 
 **Status:** unified release workflow prepared; first package bootstrap still manual
 
-`@tinkercloud/sdk` is the only package published to npm during beta. The native
-`tinker` CLI remains on the signed GitHub installer. JSR, Homebrew, stable npm,
-and npm's `latest` dist-tag remain disabled.
+`@tinkercloud/sdk` is published under `beta` by the same release invocation that
+publishes the signed GitHub prerelease and `@tinkercloud/cli` under `next`.
+JSR, Homebrew, stable npm, and npm's `latest` dist-tag remain disabled in beta.
 
 ## Consumer formats
 
@@ -63,7 +63,7 @@ Prerequisites:
 Download and verify every canonical release asset before selecting the SDK:
 
 ```sh
-VERSION=0.1.3
+VERSION=0.1.2
 RELEASE_DIR=$(mktemp -d)
 gh release download "v$VERSION" \
   --repo ChrisMarxDev/tinkercloud \
@@ -84,11 +84,23 @@ npm publish "$RELEASE_DIR/tinkercloud-sdk-$VERSION.tgz" \
   --ignore-scripts
 ```
 
-Do not use `latest`, rebuild the tarball, or bootstrap the CLI package. The
+Do not use `latest` or rebuild the tarball. Bootstrap the CLI separately from
+the same verified release using the CLI distribution procedure. The
 first interactive publish may not carry CI provenance; every later OIDC
 publication must.
 
 Immediately configure the package's npm trusted publisher:
+
+```sh
+npm trust github @tinkercloud/sdk \
+  --repo ChrisMarxDev/tinkercloud \
+  --file release.yml \
+  --env npm-sdk \
+  --allow-publish \
+  --yes
+```
+
+This command requires npm 11.15.0 or newer. Verify the resulting fields:
 
 ```text
 Provider: GitHub Actions
@@ -103,20 +115,19 @@ There is no npm token or GitHub npm secret.
 
 ## Publish subsequent betas
 
-First publish and anonymously verify a new numeric-patch GitHub prerelease.
-Then dispatch:
+Dispatch the one complete release after creating the reviewed numeric-patch tag:
 
 ```sh
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"
 ```
 
-Approve Environment `npm-sdk` only after reviewing the tag, GitHub prerelease,
-workflow commit, package absence, and fixed beta channel. The workflow downloads
-and verifies the complete signed release, publishes its exact SDK tarball with
+Approve Environment `npm-sdk` only within that reviewed run after checking the
+tag, workflow commit, package absence, and fixed beta channel. The internal job
+downloads and verifies the complete signed release, publishes its exact SDK tarball with
 OIDC and provenance under `beta`, then verifies registry integrity,
 attestation, repository metadata, dist-tag, and a clean consumer import.
 

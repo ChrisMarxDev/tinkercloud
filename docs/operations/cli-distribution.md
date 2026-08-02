@@ -16,13 +16,15 @@ Do not dispatch the stable unified release until all of these are true:
 - the beta release key has been replaced with a separately controlled
   production key across `packaging/release-public-key.pem`, both installers,
   the CLI host bootstrap, and `packaging/release-key-policy.json`;
-- GitHub Environments `stable-release` and `npm-cli` exist with required
+- GitHub Environments `stable-release`, `npm-sdk`, and `npm-cli` exist with required
   reviewers and reviewed-tag deployment restrictions;
 - the production private key is base64-encoded only into the
   `stable-release` Environment secret
   `TINKERCLOUD_RELEASE_SIGNING_KEY_B64`;
 - the npm `@tinkercloud` scope is controlled by the operator and the local npm
   account uses 2FA; and
+- both npm packages have completed the one-time bootstrap described by their
+  distribution runbooks; and
 - the GitHub CLI and npm CLI are authenticated for the one-time setup actions.
 
 The stable checks intentionally fail while the committed key policy says
@@ -59,18 +61,20 @@ task release:stable-check
 task release:check
 ```
 
-## Publish the first stable GitHub release
+## Publish the first complete stable release
 
-Choose one new strict numeric version. Update
+After both npm packages are bootstrapped, choose one new strict numeric version. Update
 `sdk/typescript/package.json`, `sdk/typescript/jsr.json`, and `SDK_VERSION` to
-that exact value, merge the reviewed commit to `main`, then tag the commit:
+that exact value, merge the reviewed commit to `main`, then tag and dispatch
+that exact tag. The workflow requires its caller SHA to equal the source tag
+SHA.
 
 ```sh
 VERSION=0.1.0
 git tag -a "v$VERSION" -m "Tinkercloud v$VERSION"
 git push origin "v$VERSION"
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=stable \
   -f version="$VERSION" \
   -f confirmation="publish-stable-v$VERSION"
@@ -79,7 +83,8 @@ gh workflow run release.yml \
 Approve `stable-release` only after reviewing the tag and workflow. The job
 builds once, verifies locally, uploads a draft, downloads and verifies the
 draft, publishes it as stable/latest, and smoke-tests both installer paths.
-It does not publish npm.
+The same unified run continues into the protected SDK and CLI npm stages after
+the stable GitHub release is verified.
 
 After success, the convenient installer is one line:
 
@@ -90,16 +95,17 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkerclou
 For an exact immutable version, use
 `releases/download/vVERSION/` in both URLs.
 
-## Bootstrap the npm package once
+## Bootstrap the npm package once before unified publication
 
 npm trusted publishing cannot be configured until the package exists. The
 first `@tinkercloud/cli` version is therefore one deliberate interactive 2FA
-publish from the exact stable release; it is not rebuilt locally.
+publish from an exact verified release that predates the unified flow; it is
+not rebuilt locally. The existing `v0.1.2` beta is suitable and uses `next`.
 
 Download every release asset, verify it, and derive the package:
 
 ```sh
-VERSION=0.1.0
+VERSION=0.1.2
 RELEASE_DIR="$(mktemp -d)"
 DISTRIBUTION_DIR="$(mktemp -d)/prepared"
 gh release download "v$VERSION" \
@@ -112,10 +118,10 @@ task distribution:prepare \
   OUTPUT="$DISTRIBUTION_DIR"
 npm publish "$DISTRIBUTION_DIR/tinkercloud-cli-$VERSION.tgz" \
   --access public \
-  --tag latest
+  --tag next
 ```
 
-Complete the 2FA prompt. Then use npm 11.5.1 or newer to bind future publishes
+Complete the 2FA prompt. Then use npm 11.15.0 or newer to bind future publishes
 to the exact GitHub workflow and protected Environment:
 
 ```sh
@@ -130,14 +136,14 @@ npm trust github @tinkercloud/cli \
 The npm account must have 2FA enabled. On npmjs.com, verify the trusted
 publisher fields and that the only allowed action is `npm publish`.
 
-## Publish later npm versions
+## Publish later complete releases
 
-After the corresponding stable GitHub release succeeds, dispatch:
+The one dispatch creates the GitHub release and both npm versions:
 
 ```sh
 VERSION=0.1.1
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=stable \
   -f version="$VERSION" \
   -f confirmation="publish-stable-v$VERSION"

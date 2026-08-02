@@ -63,6 +63,13 @@ shell profile, add the printed directory to `PATH` yourself:
 tinker version
 ```
 
+After the npm beta channel is published, package-manager users may install the
+same reviewed native CLI matrix with one command:
+
+```sh
+npm install --global @tinkercloud/cli@next
+```
+
 ## Operator first: run the platform
 
 After the root-shell install, run the guided, resumable setup. It asks only for

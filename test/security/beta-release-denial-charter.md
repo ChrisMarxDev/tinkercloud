@@ -1,8 +1,8 @@
 # GitHub Beta Release Denial Charter
 
-- A branch push, tag push, pull request, schedule, repository dispatch, or
-  workflow call never publishes a beta; only an explicit manual dispatch may
-  enter the release workflow.
+- A branch push, tag push, pull request, schedule, or repository dispatch never
+  publishes a beta; only an explicit manual dispatch may enter `release.yml`.
+  Its beta signing and npm modules accept only internal workflow calls.
 - A malformed version, mismatched confirmation, absent tag, tag not reachable
   from `origin/main`, dirty checkout, non-public repository, version drift, or
   existing GitHub release fails before signing-secret access.
@@ -18,8 +18,10 @@
   verified release prevents publication and leaves the release as a draft.
 - The workflow never uses asset clobbering, moves a version tag, overwrites a
   release, marks a beta as stable/latest, or silently deletes partial state.
-- The workflow never runs `npm publish`, `jsr publish`, `brew`, mutates a
-  Homebrew tap, reserves a namespace, changes DNS, or enables scheduled/silent
+- Missing npm package bootstrap, an occupied or unreadable SDK/CLI version, a
+  wrong SDK/CLI beta tag, missing OIDC, or a missing package Environment denies
+  the complete release. The workflow never runs `jsr publish`, `brew`, mutates
+  a Homebrew tap, reserves a namespace, changes DNS, or enables scheduled/silent
   server updates.
 - The signing key never appears in argv, the checkout, cache, artifacts,
   metadata, logs, outputs, release notes, or the installed CLI/server.

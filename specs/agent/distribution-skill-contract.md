@@ -24,17 +24,17 @@ that identifies or approves the exact version, finalized public identity,
 destinations, and channel/tag. “Get ready,” “prepare distribution,” “test the
 release,” and equivalent requests do not authorize publication.
 
-Before stable distribution, an explicitly authorized GitHub beta may publish
-one complete signed prerelease through the protected repository workflow. It
-uses the locked Tinkercloud identities and never mutates npm, JSR, Homebrew,
+Before stable distribution, an explicitly authorized beta may publish one
+complete signed prerelease plus matching SDK `beta` and CLI `next` npm packages
+through the protected unified workflow. It never mutates JSR, Homebrew,
 stable/latest, or DNS state.
 
-After identity lock, the stable GitHub and npm CLI workflows remain disabled
+After identity lock, the stable path of the unified release workflow remains disabled
 until the beta trust anchor is rotated to a production authority, the GitHub
 repository is public, protected Environments exist, and the npm package has
-been bootstrapped interactively with 2FA. Later npm CLI versions use the exact
-`npm-cli-publish.yml` trusted publisher with OIDC and provenance; no registry
-token is stored in GitHub.
+been bootstrapped interactively with 2FA. Later npm SDK and CLI versions trust
+only `release.yml` with their fixed Environments, OIDC, and provenance; no
+registry token is stored in GitHub.
 
 ## Shared gates
 

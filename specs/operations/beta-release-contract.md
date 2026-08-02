@@ -59,8 +59,8 @@ retires the beta authority. Beta trust never silently becomes stable trust.
 ## Workflow
 
 1. Validate the input, confirmation, tag, main ancestry, clean checkout,
-   version parity, and absence of an existing release without signing-secret
-   access.
+   version parity, absence of an existing release, presence of both bootstrapped
+   npm packages, and absence of both npm versions without signing-secret access.
 2. Run the normal SDK, Go, race, security, vulnerability, agent-skill,
    workflow, release-tamper, and installer gates.
 3. Build the complete release once with the beta authority.
@@ -74,11 +74,13 @@ retires the beta authority. Beta trust never silently becomes stable trust.
    immutable versioned release base from that embedded build version. The
    explicit `--release-base URL` form remains available for development and
    advanced operator flows.
+9. Through the fixed `npm-sdk` and `npm-cli` environments, recheck the registry,
+   publish the exact SDK tarball under `beta` and the release-derived CLI under
+   `next`, then verify integrity, provenance, tags, and clean consumers.
 
-The workflow creates no package-manager candidate and invokes no registry or
-tap publisher. Any downstream SDK beta publication is a separate manual,
-reviewer-gated workflow governed by
-`specs/sdk/npm-beta-publishing-contract.md`.
+The workflow never publishes JSR, Homebrew, or the server through a JavaScript
+registry. Its SDK publication remains governed by
+`specs/sdk/npm-beta-publishing-contract.md` as an internal protected stage.
 
 ## Failure and recovery
 
@@ -104,8 +106,8 @@ base. A released `tinker host install root@HOST` derives that exact base from
 its embedded release version; development builds must use the explicit
 `--release-base URL` form. `tinker host update` uses an explicit exact release
 base. TypeScript consumers may install the exact
-`tinkercloud-sdk-VERSION.tgz` GitHub asset by URL or, after its separately
-approved registry publication, install `@tinkercloud/sdk@beta`. Consumers must
+`tinkercloud-sdk-VERSION.tgz` GitHub asset by URL or install
+`@tinkercloud/sdk@beta` after the complete release succeeds. Consumers must
 opt into the beta explicitly; documentation does not advertise an unversioned
 stable or latest installer. The root-local automatic beta channel is a separate
 explicit opt-in and accepts only a strictly newer prerelease with the installed

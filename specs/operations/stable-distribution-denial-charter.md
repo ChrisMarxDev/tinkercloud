@@ -24,24 +24,25 @@ No denial may be bypassed to repair a partial publication.
 - Reject a `latest` installer smoke test whose installed `tinker version` does
   not equal the exact source version.
 
-## npm CLI publication
+## npm SDK and CLI publication
 
 - Reject automatic triggers, a non-stable GitHub release, source/release
   version drift, a source tag outside `main`, or a release that fails complete
   checksum, metadata, signature, and manifest verification.
-- Reject npm publication when `@tinkercloud/cli` does not already exist. The
-  first package must be created interactively with 2FA from the exact generated
-  tarball before trusted publishing can be configured.
+- Reject the complete release before public mutation when either npm package
+  does not already exist or either same-version package is occupied. Each first
+  package must be created interactively with 2FA from exact verified artifacts
+  before trusted publishing can be configured.
 - Reject an already-published version, an implicit dist-tag, a private scoped
   package, a repository URL other than the canonical GitHub repository, or a
-  workflow without the protected `npm-cli` Environment and OIDC
+  workflow without the matching protected `npm-sdk` or `npm-cli` Environment and OIDC
   `id-token: write` permission.
 - Reject a candidate containing lifecycle scripts, runtime/peer dependencies,
   the `tinkercloud` server, a download URL, a credential or signing key, or any
   platform outside Linux/macOS on amd64/arm64.
-- Reject publication from a rebuilt release. Generate the npm wrapper only
-  from the anonymously downloaded, verified stable release and the source at
-  its exact tag.
+- Reject publication from a rebuilt release. Use the exact SDK tarball and
+  generate the CLI wrapper only from the anonymously downloaded, verified
+  stable release and source at its exact tag.
 - Reject overwrite, unpublish, or concealment after a partial publication.
   Preserve the external state and reconcile forward.
 
