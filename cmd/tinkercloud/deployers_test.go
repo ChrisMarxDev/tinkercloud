@@ -43,7 +43,7 @@ func deployerCommandConfig(t *testing.T) string {
 	cfg := config.Config{
 		Domain: "apps.example.test", SessionCookie: "__Host-tinker_app",
 		ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "acme"),
-		ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test",
+		EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test",
 		OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour,
 	}
 	if err := os.Mkdir(cfg.DataDirectory, 0700); err != nil {

@@ -24,7 +24,7 @@ func rootDoctorTest(t *testing.T) {
 }
 
 func doctorCredentialConfig() config.Config {
-	return config.Config{ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY"}
+	return config.Config{EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY"}
 }
 
 func writeDoctorCredential(t *testing.T, body string, mode os.FileMode) string {
@@ -48,7 +48,7 @@ var validDoctorCredential = credentialTestFixture(testResendCredentialValue)
 func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) {
 	rootDoctorTest(t)
 	cfg, state := diagnosticFixture(t)
-	cfg.ResendAPIKeyRef = "env:RESEND_API_KEY"
+	cfg.EmailAPIKeyRef = "env:RESEND_API_KEY"
 	cfg.HMACKeyRef = "env:TINKERCLOUD_HMAC_KEY"
 	path := writeDoctorCredential(t, validDoctorCredential, 0600)
 	t.Setenv("RESEND_API_KEY", "ambient-wrong-key")
@@ -56,22 +56,25 @@ func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if credentials.resendAPIKey != testResendCredentialValue {
+	if credentials.emailAPIKey != testResendCredentialValue {
 		t.Fatal("doctor did not receive the credential-file key")
 	}
 	if got := os.Getenv("RESEND_API_KEY"); got != "ambient-wrong-key" {
 		t.Fatalf("doctor changed ambient environment: %q", got)
 	}
 	d := goodDeps()
-	d.ResendCheck = func(_ context.Context, key string) error {
+	d.EmailProviderCheck = func(_ context.Context, provider config.EmailProvider, key string) error {
+		if provider != config.EmailProviderResend {
+			t.Fatalf("provider = %q", provider)
+		}
 		if key != testResendCredentialValue {
 			t.Fatalf("provider key = %q", key)
 		}
 		return nil
 	}
 	for _, check := range diagnoseWith(context.Background(), cfg, true, d, credentials, state) {
-		if check.Name == "resend" && !check.Healthy {
-			t.Fatal("correct credential failed Resend diagnostic")
+		if check.Name == "email_provider" && !check.Healthy {
+			t.Fatal("correct credential failed email-provider diagnostic")
 		}
 	}
 }
@@ -79,7 +82,7 @@ func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) 
 func TestDoctorCredentialDenialsDoNotReachProvider(t *testing.T) {
 	rootDoctorTest(t)
 	cfg, state := diagnosticFixture(t)
-	cfg.ResendAPIKeyRef = "env:RESEND_API_KEY"
+	cfg.EmailAPIKeyRef = "env:RESEND_API_KEY"
 	cfg.HMACKeyRef = "env:TINKERCLOUD_HMAC_KEY"
 	valid := validDoctorCredential
 	for name, tc := range map[string]struct {
@@ -113,19 +116,19 @@ func TestDoctorCredentialDenialsDoNotReachProvider(t *testing.T) {
 				path = link
 			}
 			credentials, err := readDoctorCredentials(cfg, path)
-			if err == nil || credentials.resendAPIKey != "" {
+			if err == nil || credentials.emailAPIKey != "" {
 				t.Fatalf("accepted invalid credential: %#v, %v", credentials, err)
 			}
 			if strings.Contains(err.Error(), "RESEND_API_KEY") || strings.Contains(err.Error(), "tinkercloud.env") || strings.Contains(err.Error(), "one") {
 				t.Fatalf("credential error leaked detail: %v", err)
 			}
 			d := goodDeps()
-			d.ResendCheck = func(context.Context, string) error {
+			d.EmailProviderCheck = func(context.Context, config.EmailProvider, string) error {
 				t.Fatal("invalid credential reached provider")
 				return nil
 			}
 			for _, check := range diagnoseWith(context.Background(), cfg, true, d, credentials, state) {
-				if check.Name == "resend" && check.Healthy {
+				if check.Name == "email_provider" && check.Healthy {
 					t.Fatal("invalid credential reported healthy")
 				}
 			}
@@ -169,7 +172,7 @@ func TestStatusNeverLoadsDoctorCredentials(t *testing.T) {
 	cfg := config.Config{
 		Domain: "apps.example.test", SessionCookie: "__Host-tinker_app",
 		ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: filepath.Join(root, "data"), ACMECachedir: filepath.Join(root, "acme"),
-		ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test",
+		EmailAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", EmailFrom: "sender@example.test", ACMEEmail: "operator@example.test",
 		OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour,
 	}
 	if err := os.Mkdir(cfg.DataDirectory, 0700); err != nil {

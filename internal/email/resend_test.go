@@ -10,7 +10,7 @@ import (
 
 type cred string
 
-func (c cred) ResendAPIKey() string { return string(c) }
+func (c cred) APIKey() string { return string(c) }
 func TestResendSchemaAndRedactedFailure(t *testing.T) {
 	var auth, body string
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

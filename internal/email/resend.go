@@ -13,7 +13,7 @@ import (
 
 var ErrUnavailable = errors.New("email unavailable")
 
-type Credential interface{ ResendAPIKey() string }
+type Credential interface{ APIKey() string }
 type Resend struct {
 	Credential Credential
 	From       string
@@ -22,7 +22,7 @@ type Resend struct {
 }
 
 func (r Resend) EnqueueOTP(ctx context.Context, m otp.Message) error {
-	if r.Credential == nil || r.Credential.ResendAPIKey() == "" || r.From == "" {
+	if r.Credential == nil || r.Credential.APIKey() == "" || r.From == "" {
 		return ErrUnavailable
 	}
 	body, _ := json.Marshal(map[string]any{"from": r.From, "to": []string{m.Email}, "subject": "Your sign-in code", "text": "Your code: " + m.Code})
@@ -34,7 +34,7 @@ func (r Resend) EnqueueOTP(ctx context.Context, m otp.Message) error {
 	if err != nil {
 		return ErrUnavailable
 	}
-	req.Header.Set("Authorization", "Bearer "+r.Credential.ResendAPIKey())
+	req.Header.Set("Authorization", "Bearer "+r.Credential.APIKey())
 	req.Header.Set("Content-Type", "application/json")
 	client := r.Client
 	if client == nil {

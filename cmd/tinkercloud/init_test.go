@@ -107,6 +107,10 @@ func initArgs(root string) []string {
 	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--resend-api-key-file", filepath.Join(root, "resend"), "--hmac-key-file", filepath.Join(root, "hmac")}
 }
 
+func postmarkInitArgs(root string) []string {
+	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-provider", "postmark", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--email-api-key-file", filepath.Join(root, "postmark"), "--hmac-key-file", filepath.Join(root, "hmac")}
+}
+
 func TestSupportedUbuntuHostDenyCharter(t *testing.T) {
 	t.Parallel()
 	for name, osRelease := range map[string]string{
@@ -230,6 +234,69 @@ func TestInitCompletesOnlyAfterAllDurableSteps(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(root, "etc", "config.yaml")); !strings.Contains(string(b), "acme:\n  email: operator@example.test\n") {
 		t.Fatalf("ACME contact was not derived from operator email: %s", b)
+	}
+}
+
+func TestInitSelectsPostmarkAndWritesNeutralConfig(t *testing.T) {
+	root := t.TempDir()
+	writeInitSecrets(t, root)
+	if err := os.WriteFile(filepath.Join(root, "postmark"), []byte("postmark-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rt, _ := fakeInitRuntime(t)
+	oldUID := effectiveUID
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() { effectiveUID = oldUID })
+	if err := runInit(postmarkInitArgs(root), os.Stdout, rt); err != nil {
+		t.Fatal(err)
+	}
+	configBody, err := os.ReadFile(filepath.Join(root, "etc", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(configBody), "email:\n  provider: postmark\n  from: operator@example.test\n  api_key: env:POSTMARK_SERVER_TOKEN\n") || strings.Contains(string(configBody), "postmark-token") {
+		t.Fatalf("config = %s", configBody)
+	}
+	credentialBody, err := os.ReadFile(filepath.Join(root, "etc", "credentials", "tinkercloud.env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(credentialBody), "POSTMARK_SERVER_TOKEN=postmark-token\n") || strings.Contains(string(credentialBody), "RESEND_API_KEY=") {
+		t.Fatalf("credential shape = %q", credentialBody)
+	}
+}
+
+func TestInitRejectsInvalidOrAmbiguousProviderFlagsBeforeHostMutation(t *testing.T) {
+	for name, mutate := range map[string]func([]string) []string{
+		"unknown provider": func(args []string) []string {
+			return append(args, "--email-provider", "unknown")
+		},
+		"postmark with resend alias": func(args []string) []string {
+			return append(args, "--email-provider", "postmark")
+		},
+		"both key flags": func(args []string) []string {
+			return append(args, "--email-api-key-file", "/unused")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeInitSecrets(t, root)
+			rt, _ := fakeInitRuntime(t)
+			mutated := false
+			rt.ReadFile = func(string) ([]byte, error) {
+				mutated = true
+				return nil, errors.New("must not be called")
+			}
+			oldUID := effectiveUID
+			effectiveUID = func() int { return 0 }
+			t.Cleanup(func() { effectiveUID = oldUID })
+			if err := runInit(mutate(initArgs(root)), os.Stdout, rt); err == nil || err.Error() != "tinkercloud: invalid_arguments" {
+				t.Fatalf("result = %v", err)
+			}
+			if mutated {
+				t.Fatal("invalid provider input reached host preflight")
+			}
+		})
 	}
 }
 

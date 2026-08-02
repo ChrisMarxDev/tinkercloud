@@ -18,19 +18,19 @@ func installServiceFixture(t *testing.T) (root string, cfg config.Config, config
 		t.Fatal(err)
 	}
 	cfg = config.Config{
-		Domain:          "apps.tinker.example.test",
-		SessionCookie:   "__Host-tinker_app",
-		ListenHTTP:      ":80",
-		ListenHTTPS:     ":443",
-		DataDirectory:   filepath.Join(root, "custom-data"),
-		ACMECachedir:    filepath.Join(root, "custom-acme"),
-		EmailFrom:       "operator@example.test",
-		ACMEEmail:       "operator@example.test",
-		ResendAPIKeyRef: "env:RESEND_API_KEY",
-		HMACKeyRef:      "env:TINKERCLOUD_HMAC_KEY",
-		OTPExpiry:       10 * time.Minute,
-		OTPMaxAttempts:  5,
-		SessionExpiry:   24 * time.Hour,
+		Domain:         "apps.tinker.example.test",
+		SessionCookie:  "__Host-tinker_app",
+		ListenHTTP:     ":80",
+		ListenHTTPS:    ":443",
+		DataDirectory:  filepath.Join(root, "custom-data"),
+		ACMECachedir:   filepath.Join(root, "custom-acme"),
+		EmailFrom:      "operator@example.test",
+		ACMEEmail:      "operator@example.test",
+		EmailAPIKeyRef: "env:RESEND_API_KEY",
+		HMACKeyRef:     "env:TINKERCLOUD_HMAC_KEY",
+		OTPExpiry:      10 * time.Minute,
+		OTPMaxAttempts: 5,
+		SessionExpiry:  24 * time.Hour,
 	}
 	for _, path := range []string{cfg.DataDirectory, cfg.ACMECachedir} {
 		if err := os.Mkdir(path, 0700); err != nil {

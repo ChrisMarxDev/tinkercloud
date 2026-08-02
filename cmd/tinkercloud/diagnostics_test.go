@@ -31,7 +31,7 @@ func diagnosticFixture(t *testing.T) (config.Config, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return config.Config{Domain: "apps.tinker.example.test", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: data, ACMECachedir: cache, ResendAPIKeyRef: "env:TINKER_TEST_RESEND"}, state
+	return config.Config{Domain: "apps.tinker.example.test", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: data, ACMECachedir: cache, EmailAPIKeyRef: "env:TINKER_TEST_RESEND"}, state
 }
 
 func goodDeps() diagnosticDeps {
@@ -39,7 +39,7 @@ func goodDeps() diagnosticDeps {
 		DiskFreePercent: func(string) (uint64, error) { return 80, nil },
 		SQLiteCheck:     sqliteQuickCheck,
 		ClockOK:         func(context.Context) error { return nil }, ServiceOK: func(context.Context) error { return nil }, PortOK: func(context.Context, string) error { return nil },
-		DNSLookup: func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil }, TLSCheck: func(context.Context, string, string) error { return nil }, ResendCheck: func(context.Context, string) error { return nil },
+		DNSLookup: func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil }, TLSCheck: func(context.Context, string, string) error { return nil }, EmailProviderCheck: func(context.Context, config.EmailProvider, string) error { return nil },
 	}
 }
 
@@ -56,7 +56,10 @@ func TestStatusIsLocalOnlyAndSorted(t *testing.T) {
 	d := goodDeps()
 	d.DNSLookup = func(context.Context, string) ([]string, error) { t.Fatal("status resolved DNS"); return nil, nil }
 	d.TLSCheck = func(context.Context, string, string) error { t.Fatal("status checked TLS"); return nil }
-	d.ResendCheck = func(context.Context, string) error { t.Fatal("status checked Resend"); return nil }
+	d.EmailProviderCheck = func(context.Context, config.EmailProvider, string) error {
+		t.Fatal("status checked provider")
+		return nil
+	}
 	got := diagnoseWith(context.Background(), cfg, false, d, doctorCredentials{}, state)
 	want := []string{"acme_cache", "clock", "config", "data_directory", "disk", "init_state", "port_http", "port_https", "service", "sqlite", "update_rollback", "version"}
 	if strings.Join(named(got), ",") != strings.Join(want, ",") {
@@ -87,14 +90,14 @@ func TestDoctorChecksNetworkWithoutLeakingSecret(t *testing.T) {
 		}
 		return nil
 	}
-	d.ResendCheck = func(_ context.Context, key string) error {
+	d.EmailProviderCheck = func(_ context.Context, provider config.EmailProvider, key string) error {
 		resend++
-		if key != "super-secret-value" {
+		if provider != config.EmailProviderResend || key != "super-secret-value" {
 			t.Fatal("missing credential")
 		}
 		return nil
 	}
-	got := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{resendAPIKey: "super-secret-value"}, state)
+	got := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{emailAPIKey: "super-secret-value"}, state)
 	if dns != 2 || tls != 1 || resend != 1 {
 		t.Fatalf("dns=%d tls=%d resend=%d", dns, tls, resend)
 	}
@@ -110,9 +113,11 @@ func TestDoctorFailuresAreTypedAndRedacted(t *testing.T) {
 	d := goodDeps()
 	d.DNSLookup = func(context.Context, string) ([]string, error) { return nil, errors.New("dns 198.51.100.7 secret") }
 	d.TLSCheck = func(context.Context, string, string) error { return errors.New("certificate detail") }
-	d.ResendCheck = func(context.Context, string) error { return errors.New("Bearer forbidden-secret body") }
-	got := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{resendAPIKey: "forbidden-secret"}, state)
-	for _, name := range []string{"dns_platform", "dns_wildcard", "tls_platform", "resend"} {
+	d.EmailProviderCheck = func(context.Context, config.EmailProvider, string) error {
+		return errors.New("Bearer forbidden-secret body")
+	}
+	got := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{emailAPIKey: "forbidden-secret"}, state)
+	for _, name := range []string{"dns_platform", "dns_wildcard", "tls_platform", "email_provider"} {
 		for _, c := range got {
 			if c.Name == name && c.Healthy {
 				t.Fatalf("%s healthy", name)
@@ -123,6 +128,54 @@ func TestDoctorFailuresAreTypedAndRedacted(t *testing.T) {
 		if strings.Contains(c.Detail, "secret") || strings.Contains(c.Detail, "198.51") || strings.Contains(c.Detail, "certificate detail") {
 			t.Fatalf("leaked detail: %#v", c)
 		}
+	}
+}
+
+func TestDoctorSelectsConfiguredPostmarkCheck(t *testing.T) {
+	cfg, state := diagnosticFixture(t)
+	cfg.EmailProvider = config.EmailProviderPostmark
+	d := goodDeps()
+	d.EmailProviderCheck = func(_ context.Context, provider config.EmailProvider, key string) error {
+		if provider != config.EmailProviderPostmark || key != "postmark-token" {
+			t.Fatalf("provider=%q key=%q", provider, key)
+		}
+		return nil
+	}
+	checks := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{emailAPIKey: "postmark-token"}, state)
+	for _, check := range checks {
+		if check.Name == "email_provider" && !check.Healthy {
+			t.Fatal(check)
+		}
+	}
+}
+
+func TestEmailProviderDiagnosticRequestsUseFixedOriginsAndScopedHeaders(t *testing.T) {
+	for _, tc := range []struct {
+		provider config.EmailProvider
+		url      string
+		header   string
+	}{
+		{config.EmailProviderResend, "https://api.resend.com/domains", "Authorization"},
+		{config.EmailProviderPostmark, "https://api.postmarkapp.com/stats/outbound/sends", "X-Postmark-Server-Token"},
+	} {
+		req, err := emailProviderCredentialRequest(context.Background(), tc.provider, "provider-secret")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if req.URL.String() != tc.url || req.Header.Get(tc.header) == "" {
+			t.Fatalf("request = %s %#v", req.URL, req.Header)
+		}
+		if tc.provider == config.EmailProviderPostmark && req.Header.Get("Authorization") != "" {
+			t.Fatal("Postmark credential copied into bearer authorization")
+		}
+	}
+	for _, provider := range []config.EmailProvider{"", "unknown"} {
+		if _, err := emailProviderCredentialRequest(context.Background(), provider, "provider-secret"); err == nil {
+			t.Fatalf("provider %q accepted", provider)
+		}
+	}
+	if _, err := emailProviderCredentialRequest(context.Background(), config.EmailProviderResend, ""); err == nil {
+		t.Fatal("empty credential accepted")
 	}
 }
 
@@ -176,7 +229,7 @@ func TestUpdateRollbackStateFailsClosed(t *testing.T) {
 func TestCandidateDoctorOnlyAcceptsExpectedSecureRollbackSnapshot(t *testing.T) {
 	cfg, state := diagnosticFixture(t)
 	rollback := filepath.Join(cfg.DataDirectory, "update-rollback")
-	checks := diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{resendAPIKey: "key"}, true, state)
+	checks := diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{emailAPIKey: "key"}, true, state)
 	for _, c := range checks {
 		if c.Name == "update_rollback" && c.Healthy {
 			t.Fatal("missing candidate rollback snapshot was accepted", c)
@@ -188,7 +241,7 @@ func TestCandidateDoctorOnlyAcceptsExpectedSecureRollbackSnapshot(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(rollback, "previous"), []byte("old"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	checks = diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{resendAPIKey: "key"}, true, state)
+	checks = diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{emailAPIKey: "key"}, true, state)
 	for _, c := range checks {
 		if c.Name == "update_rollback" && !c.Healthy {
 			t.Fatal("candidate rollback snapshot was not accepted", c)
@@ -197,7 +250,7 @@ func TestCandidateDoctorOnlyAcceptsExpectedSecureRollbackSnapshot(t *testing.T) 
 	if err := os.Chmod(filepath.Join(rollback, "previous"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	checks = diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{resendAPIKey: "key"}, true, state)
+	checks = diagnoseWithOptions(context.Background(), cfg, true, goodDeps(), doctorCredentials{emailAPIKey: "key"}, true, state)
 	for _, c := range checks {
 		if c.Name == "update_rollback" && c.Healthy {
 			t.Fatal("unsafe rollback snapshot was accepted", c)
@@ -216,7 +269,7 @@ func TestCandidateDoctorDoesNotMaskOtherFailures(t *testing.T) {
 	}
 	d := goodDeps()
 	d.ServiceOK = func(context.Context) error { return errors.New("inactive") }
-	checks := diagnoseWithOptions(context.Background(), cfg, true, d, doctorCredentials{resendAPIKey: "key"}, true, state)
+	checks := diagnoseWithOptions(context.Background(), cfg, true, d, doctorCredentials{emailAPIKey: "key"}, true, state)
 	for _, c := range checks {
 		if c.Name == "service" && c.Healthy {
 			t.Fatal("candidate doctor masked service failure", c)

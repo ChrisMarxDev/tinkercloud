@@ -262,11 +262,13 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	credentialPath := fs.String("credentials", defaultCredentialPath, "root-owned systemd environment file")
 	domain := fs.String("domain", "", "root domain; derives admin.<domain> and <slug>.<domain>")
 	email := fs.String("operator-email", "", "initial operator email")
-	emailFrom := fs.String("email-from", "", "verified Resend sender")
+	emailProvider := fs.String("email-provider", "", "email provider: resend or postmark (default resend)")
+	emailFrom := fs.String("email-from", "", "verified email-provider sender")
 	dataDir := fs.String("data-directory", "/var/lib/tinkercloud", "private data directory")
 	acmeDir := fs.String("acme-cache-directory", "/var/lib/tinkercloud-acme", "private ACME cache directory")
 	updateReleaseBase := fs.String("update-release-base", "", "HTTPS release directory used by manual updates")
-	resendFile := fs.String("resend-api-key-file", "", "root-readable file containing the Resend key")
+	emailAPIKeyFile := fs.String("email-api-key-file", "", "root-readable file containing the selected provider key")
+	resendFile := fs.String("resend-api-key-file", "", "deprecated Resend-only alias for --email-api-key-file")
 	hmacFile := fs.String("hmac-key-file", "", "root-readable file containing >=32 byte session HMAC key")
 	nonInteractive := fs.Bool("non-interactive", false, "never prompt; require explicit values")
 	if fs.Parse(args) != nil || len(fs.Args()) != 0 || !*nonInteractive || *email == "" {
@@ -287,6 +289,12 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if loadErr != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
+		if *emailProvider != "" {
+			requested, parseErr := config.ParseEmailProvider(*emailProvider)
+			if parseErr != nil || requested != cfg.EffectiveEmailProvider() {
+				return errors.New("tinkercloud: invalid_arguments")
+			}
+		}
 	} else if os.IsNotExist(err) {
 		if *domain == "" || *emailFrom == "" {
 			return errors.New("tinkercloud: config_values_required")
@@ -295,13 +303,35 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		if normalizeErr != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
-		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailFrom: *emailFrom, ACMEEmail: normalizedOperatorEmail, ResendAPIKeyRef: "env:RESEND_API_KEY", HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
+		providerName := *emailProvider
+		if providerName == "" {
+			providerName = string(config.EmailProviderResend)
+		}
+		provider, parseErr := config.ParseEmailProvider(providerName)
+		if parseErr != nil {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		apiKeyRef := "env:RESEND_API_KEY"
+		if provider == config.EmailProviderPostmark {
+			apiKeyRef = "env:POSTMARK_SERVER_TOKEN"
+		}
+		cfg = config.Config{Domain: *domain, SessionCookie: "__Host-tinker_app", ListenHTTP: ":80", ListenHTTPS: ":443", DataDirectory: *dataDir, ACMECachedir: *acmeDir, UpdateReleaseBase: *updateReleaseBase, EmailProvider: provider, EmailFrom: *emailFrom, ACMEEmail: normalizedOperatorEmail, EmailAPIKeyRef: apiKeyRef, HMACKeyRef: "env:TINKERCLOUD_HMAC_KEY", LLMRootKeyRef: "env:TINKERCLOUD_LLM_ROOT_KEY", OTPExpiry: 10 * time.Minute, OTPMaxAttempts: 5, SessionExpiry: 24 * time.Hour}
 		if err := cfg.Validate(); err != nil {
 			return errors.New("tinkercloud: config_invalid")
 		}
 		createdConfig = true
 	} else {
 		return err
+	}
+	providerKeyFile := *emailAPIKeyFile
+	if providerKeyFile != "" && *resendFile != "" {
+		return errors.New("tinkercloud: invalid_arguments")
+	}
+	if *resendFile != "" {
+		if cfg.EffectiveEmailProvider() != config.EmailProviderResend {
+			return errors.New("tinkercloud: invalid_arguments")
+		}
+		providerKeyFile = *resendFile
 	}
 	statePath := filepath.Join(filepath.Dir(*cfgPath), "init-state.json")
 	if err := ensureStateDirectory(filepath.Dir(statePath)); err != nil {
@@ -336,7 +366,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 		}
 	}
 	if state.Next() == operations.InitPaths {
-		if err := provisionPaths(ctx, rt, cfg, *credentialPath, *resendFile, *hmacFile, createdConfig, *cfgPath); err != nil {
+		if err := provisionPaths(ctx, rt, cfg, *credentialPath, providerKeyFile, *hmacFile, createdConfig, *cfgPath); err != nil {
 			return err
 		}
 		if err := state.Complete(operations.InitPaths); err != nil {
@@ -415,7 +445,7 @@ func runInit(args []string, out *os.File, rt initRuntime) error {
 	return nil
 }
 
-func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, credentialPath, resendFile, hmacFile string, writeConfig bool, configPath string) error {
+func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, credentialPath, emailAPIKeyFile, hmacFile string, writeConfig bool, configPath string) error {
 	if err := ensureServiceUser(ctx, rt); err != nil {
 		return err
 	}
@@ -455,10 +485,10 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 		return errors.New("tinkercloud: ownership_failed")
 	}
 	if info, err := os.Lstat(credentialPath); os.IsNotExist(err) {
-		if resendFile == "" || hmacFile == "" {
+		if emailAPIKeyFile == "" || hmacFile == "" {
 			return errors.New("tinkercloud: credential_files_required")
 		}
-		resend, err := readSecretFile(resendFile)
+		emailAPIKey, err := readSecretFile(emailAPIKeyFile)
 		if err != nil {
 			return err
 		}
@@ -469,11 +499,11 @@ func provisionPaths(ctx context.Context, rt initRuntime, cfg config.Config, cred
 		if len(hmac) < 32 {
 			return errors.New("tinkercloud: hmac_invalid")
 		}
-		resendName, hmacName, llmName, err := credentialNames(cfg)
+		emailName, hmacName, llmName, err := credentialNames(cfg)
 		if err != nil {
 			return err
 		}
-		credential := resendName + "=" + resend + "\n" + hmacName + "=" + hmac + "\n"
+		credential := emailName + "=" + emailAPIKey + "\n" + hmacName + "=" + hmac + "\n"
 		if llmName != "" {
 			root := make([]byte, 32)
 			if _, err = rand.Read(root); err != nil {
@@ -511,22 +541,22 @@ func credentialNames(cfg config.Config) (string, string, string, error) {
 		}
 		return v, true
 	}
-	resend, ok := name(cfg.ResendAPIKeyRef)
+	emailName, ok := name(cfg.EmailAPIKeyRef)
 	if !ok {
 		return "", "", "", errors.New("tinkercloud: unsafe_secret_reference")
 	}
 	hmac, ok := name(cfg.HMACKeyRef)
-	if !ok || resend == hmac {
+	if !ok || emailName == hmac {
 		return "", "", "", errors.New("tinkercloud: unsafe_secret_reference")
 	}
 	if cfg.LLMRootKeyRef == "" {
-		return resend, hmac, "", nil
+		return emailName, hmac, "", nil
 	}
 	llm, ok := name(cfg.LLMRootKeyRef)
-	if !ok || llm == resend || llm == hmac {
+	if !ok || llm == emailName || llm == hmac {
 		return "", "", "", errors.New("tinkercloud: unsafe_secret_reference")
 	}
-	return resend, hmac, llm, nil
+	return emailName, hmac, llm, nil
 }
 
 func ensurePrivateDirectory(path string) error {
