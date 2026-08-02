@@ -111,6 +111,14 @@ func postmarkInitArgs(root string) []string {
 	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-provider", "postmark", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--email-api-key-file", filepath.Join(root, "postmark"), "--hmac-key-file", filepath.Join(root, "hmac")}
 }
 
+func sendGridInitArgs(root string) []string {
+	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-provider", "sendgrid", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--email-api-key-file", filepath.Join(root, "sendgrid"), "--hmac-key-file", filepath.Join(root, "hmac")}
+}
+
+func smtpInitArgs(root string) []string {
+	return []string{"--non-interactive", "--config", filepath.Join(root, "etc", "config.yaml"), "--credentials", filepath.Join(root, "etc", "credentials", "tinkercloud.env"), "--domain", "apps.tinker.example.test", "--operator-email", "operator@example.test", "--email-provider", "smtp", "--email-from", "operator@example.test", "--data-directory", filepath.Join(root, "data"), "--acme-cache-directory", filepath.Join(root, "acme"), "--email-api-key-file", filepath.Join(root, "smtp-password"), "--smtp-host", "smtp.example.test", "--smtp-port", "465", "--smtp-username", "operator@example.test", "--smtp-tls", "tls", "--hmac-key-file", filepath.Join(root, "hmac")}
+}
+
 func TestSupportedUbuntuHostDenyCharter(t *testing.T) {
 	t.Parallel()
 	for name, osRelease := range map[string]string{
@@ -254,7 +262,7 @@ func TestInitSelectsPostmarkAndWritesNeutralConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(configBody), "email:\n  provider: postmark\n  from: operator@example.test\n  api_key: env:POSTMARK_SERVER_TOKEN\n") || strings.Contains(string(configBody), "postmark-token") {
+	if !strings.Contains(string(configBody), "email:\n  from: operator@example.test\n") || strings.Contains(string(configBody), "provider:") || strings.Contains(string(configBody), "api_key:") || strings.Contains(string(configBody), "postmark-token") {
 		t.Fatalf("config = %s", configBody)
 	}
 	credentialBody, err := os.ReadFile(filepath.Join(root, "etc", "credentials", "tinkercloud.env"))
@@ -263,6 +271,50 @@ func TestInitSelectsPostmarkAndWritesNeutralConfig(t *testing.T) {
 	}
 	if !strings.Contains(string(credentialBody), "POSTMARK_SERVER_TOKEN=postmark-token\n") || strings.Contains(string(credentialBody), "RESEND_API_KEY=") {
 		t.Fatalf("credential shape = %q", credentialBody)
+	}
+}
+
+func TestInitWritesSendGridProviderEnvironment(t *testing.T) {
+	root := t.TempDir()
+	writeInitSecrets(t, root)
+	if err := os.WriteFile(filepath.Join(root, "sendgrid"), []byte("sendgrid-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rt, _ := fakeInitRuntime(t)
+	oldUID := effectiveUID
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() { effectiveUID = oldUID })
+	if err := runInit(sendGridInitArgs(root), os.Stdout, rt); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "etc", "credentials", "tinkercloud.env"))
+	if err != nil || !strings.Contains(string(body), "SENDGRID_API_KEY=sendgrid-token\n") || strings.Contains(string(body), "RESEND_API_KEY=") {
+		t.Fatalf("credential shape = %q, %v", body, err)
+	}
+}
+
+func TestInitWritesSMTPProviderEnvironment(t *testing.T) {
+	root := t.TempDir()
+	writeInitSecrets(t, root)
+	if err := os.WriteFile(filepath.Join(root, "smtp-password"), []byte("smtp-password"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	rt, _ := fakeInitRuntime(t)
+	oldUID := effectiveUID
+	effectiveUID = func() int { return 0 }
+	t.Cleanup(func() { effectiveUID = oldUID })
+	if err := runInit(smtpInitArgs(root), os.Stdout, rt); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "etc", "credentials", "tinkercloud.env"))
+	for _, want := range []string{
+		"TINKERCLOUD_SMTP_HOST=smtp.example.test\n", "TINKERCLOUD_SMTP_PORT=465\n",
+		"TINKERCLOUD_SMTP_USERNAME=operator@example.test\n", "TINKERCLOUD_SMTP_PASSWORD=smtp-password\n",
+		"TINKERCLOUD_SMTP_TLS=tls\n",
+	} {
+		if err != nil || !strings.Contains(string(body), want) {
+			t.Fatalf("credential shape missing %q: %q, %v", want, body, err)
+		}
 	}
 }
 
@@ -276,6 +328,12 @@ func TestInitRejectsInvalidOrAmbiguousProviderFlagsBeforeHostMutation(t *testing
 		},
 		"both key flags": func(args []string) []string {
 			return append(args, "--email-api-key-file", "/unused")
+		},
+		"smtp missing settings": func(args []string) []string {
+			return append(args, "--email-provider", "smtp")
+		},
+		"smtp settings with resend": func(args []string) []string {
+			return append(args, "--smtp-host", "smtp.example.test")
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

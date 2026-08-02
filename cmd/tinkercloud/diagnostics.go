@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/config"
+	"github.com/ChrisMarxDev/tinkercloud/internal/email"
 	"github.com/ChrisMarxDev/tinkercloud/internal/operations"
 )
 
@@ -30,7 +31,11 @@ const maxDoctorCredentialBytes = 64 << 10
 // doctorCredentials is intentionally local to diagnostic composition. It keeps
 // a provider value out of the process environment and gives no output path a
 // printable secret reference.
-type doctorCredentials struct{ emailAPIKey string }
+type doctorCredentials struct {
+	emailProvider config.EmailProvider
+	emailAPIKey   string
+	smtp          config.SMTPCredentials
+}
 
 var credentialOwnerUID = func(info os.FileInfo) (uint32, bool) {
 	st, ok := info.Sys().(*syscall.Stat_t)
@@ -49,6 +54,7 @@ type diagnosticDeps struct {
 	DNSLookup          func(context.Context, string) ([]string, error)
 	TLSCheck           func(context.Context, string, string) error
 	EmailProviderCheck func(context.Context, config.EmailProvider, string) error
+	SMTPProviderCheck  func(context.Context, config.SMTPCredentials) error
 }
 
 // diskFreePercent is retained as a focused test seam for the local watermark.
@@ -83,7 +89,12 @@ func productionDiagnosticDeps() diagnosticDeps {
 		},
 		TLSCheck:           tlsCertificateOK,
 		EmailProviderCheck: emailProviderCredentialCheck,
+		SMTPProviderCheck:  smtpProviderCredentialCheck,
 	}
+}
+
+func smtpProviderCredentialCheck(ctx context.Context, credentials config.SMTPCredentials) error {
+	return email.SMTP{Host: credentials.Host, Port: credentials.Port, Username: credentials.Username, Password: credentials.Password, TLSMode: credentials.TLS, From: "doctor@example.invalid"}.Check(ctx)
 }
 
 func emailProviderCredentialCheck(ctx context.Context, provider config.EmailProvider, key string) error {
@@ -121,6 +132,8 @@ func emailProviderCredentialRequest(ctx context.Context, provider config.EmailPr
 		endpoint = "https://api.resend.com/domains"
 	case config.EmailProviderPostmark:
 		endpoint = "https://api.postmarkapp.com/stats/outbound/sends"
+	case config.EmailProviderSendGrid:
+		endpoint = "https://api.sendgrid.com/v3/scopes"
 	default:
 		return nil, errors.New("email provider unavailable")
 	}
@@ -134,6 +147,8 @@ func emailProviderCredentialRequest(ctx context.Context, provider config.EmailPr
 	case config.EmailProviderPostmark:
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("X-Postmark-Server-Token", key)
+	case config.EmailProviderSendGrid:
+		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	return req, nil
 }
@@ -255,10 +270,20 @@ func diagnoseWithOptions(parent context.Context, c config.Config, network bool, 
 			return d.TLSCheck(ctx, c.PlatformHost(), port)
 		}))
 		checks = append(checks, checkWith(parent, "email_provider", "credential accepted", "unavailable", func(ctx context.Context) error {
-			if credentials.emailAPIKey == "" {
+			provider := credentials.emailProvider
+			if provider == "" && credentials.emailAPIKey != "" {
+				provider = c.EffectiveEmailProvider()
+			}
+			if provider == config.EmailProviderSMTP {
+				if d.SMTPProviderCheck == nil {
+					return errors.New("credential unavailable")
+				}
+				return d.SMTPProviderCheck(ctx, credentials.smtp)
+			}
+			if provider == "" || credentials.emailAPIKey == "" {
 				return errors.New("credential unavailable")
 			}
-			return d.EmailProviderCheck(ctx, c.EffectiveEmailProvider(), credentials.emailAPIKey)
+			return d.EmailProviderCheck(ctx, provider, credentials.emailAPIKey)
 		}))
 	}
 	sort.Slice(checks, func(i, j int) bool { return checks[i].Name < checks[j].Name })
@@ -289,25 +314,34 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 	if err != nil || len(b) == 0 || len(b) > maxDoctorCredentialBytes {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
-	emailName, hmacName, llmName, err := credentialNames(c)
+	_, hmacName, llmName, err := credentialNames(c)
 	if err != nil {
 		return doctorCredentials{}, errors.New("credential unavailable")
+	}
+	allowed := map[string]bool{
+		"RESEND_API_KEY": true, "POSTMARK_SERVER_TOKEN": true,
+		"SENDGRID_API_KEY": true, "TINKERCLOUD_SMTP_HOST": true,
+		"TINKERCLOUD_SMTP_PORT": true, "TINKERCLOUD_SMTP_USERNAME": true,
+		"TINKERCLOUD_SMTP_PASSWORD": true, "TINKERCLOUD_SMTP_TLS": true,
+		hmacName: true,
+	}
+	if c.EmailAPIKeyRef != "" {
+		allowed[strings.TrimPrefix(c.EmailAPIKeyRef, "env:")] = true
+	}
+	if llmName != "" {
+		allowed[llmName] = true
 	}
 	values := map[string]string{}
 	lines := strings.Split(string(b), "\n")
 	if lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
-	wantLines := 2
-	if llmName != "" {
-		wantLines = 3
-	}
-	if len(lines) != wantLines {
+	if len(lines) < 2 || len(lines) > len(allowed) {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
 	for _, line := range lines {
 		name, value, ok := strings.Cut(line, "=")
-		if !ok || name == "" || !safeCredentialValue(value) || (name != emailName && name != hmacName && name != llmName) {
+		if !ok || name == "" || !safeCredentialValue(value) || !allowed[name] {
 			return doctorCredentials{}, errors.New("credential unavailable")
 		}
 		if _, exists := values[name]; exists {
@@ -315,10 +349,14 @@ func readDoctorCredentials(c config.Config, path string) (doctorCredentials, err
 		}
 		values[name] = value
 	}
-	if values[emailName] == "" || len(values[hmacName]) < 32 || (llmName != "" && len(values[llmName]) != 64) {
+	if len(values[hmacName]) < 32 || (llmName != "" && len(values[llmName]) != 64) {
 		return doctorCredentials{}, errors.New("credential unavailable")
 	}
-	return doctorCredentials{emailAPIKey: values[emailName]}, nil
+	emailCredentials, err := c.ResolveEmailCredentials(func(name string) string { return values[name] })
+	if err != nil {
+		return doctorCredentials{}, errors.New("credential unavailable")
+	}
+	return doctorCredentials{emailProvider: emailCredentials.Provider, emailAPIKey: emailCredentials.APIKey, smtp: emailCredentials.SMTP}, nil
 }
 
 func safeCredentialValue(value string) bool {

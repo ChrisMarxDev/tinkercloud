@@ -79,6 +79,29 @@ func TestDoctorReadsValidatedCredentialWithoutEnvironmentMutation(t *testing.T) 
 	}
 }
 
+func TestDoctorReadsSMTPEnvironmentWithoutSending(t *testing.T) {
+	rootDoctorTest(t)
+	cfg := doctorCredentialConfig()
+	cfg.EmailAPIKeyRef = ""
+	body := strings.Join([]string{
+		"TINKERCLOUD_SMTP_HOST=smtp.example.test",
+		"TINKERCLOUD_SMTP_PORT=587",
+		"TINKERCLOUD_SMTP_USERNAME=operator@example.test",
+		"TINKERCLOUD_SMTP_PASSWORD=smtp-password",
+		"TINKERCLOUD_SMTP_TLS=starttls",
+		"TINKERCLOUD_HMAC_KEY=" + testHMACCredentialValue(),
+		"",
+	}, "\n")
+	credentials, err := readDoctorCredentials(cfg, writeDoctorCredential(t, body, 0600))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := config.SMTPCredentials{Host: "smtp.example.test", Port: 587, Username: "operator@example.test", Password: "smtp-password", TLS: "starttls"}
+	if credentials.emailProvider != config.EmailProviderSMTP || credentials.smtp != want || credentials.emailAPIKey != "" {
+		t.Fatalf("SMTP credentials = %#v", credentials)
+	}
+}
+
 func TestDoctorCredentialDenialsDoNotReachProvider(t *testing.T) {
 	rootDoctorTest(t)
 	cfg, state := diagnosticFixture(t)

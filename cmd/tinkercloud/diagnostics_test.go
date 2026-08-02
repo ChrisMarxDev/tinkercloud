@@ -40,6 +40,7 @@ func goodDeps() diagnosticDeps {
 		SQLiteCheck:     sqliteQuickCheck,
 		ClockOK:         func(context.Context) error { return nil }, ServiceOK: func(context.Context) error { return nil }, PortOK: func(context.Context, string) error { return nil },
 		DNSLookup: func(context.Context, string) ([]string, error) { return []string{"127.0.0.1"}, nil }, TLSCheck: func(context.Context, string, string) error { return nil }, EmailProviderCheck: func(context.Context, config.EmailProvider, string) error { return nil },
+		SMTPProviderCheck: func(context.Context, config.SMTPCredentials) error { return nil },
 	}
 }
 
@@ -157,6 +158,7 @@ func TestEmailProviderDiagnosticRequestsUseFixedOriginsAndScopedHeaders(t *testi
 	}{
 		{config.EmailProviderResend, "https://api.resend.com/domains", "Authorization"},
 		{config.EmailProviderPostmark, "https://api.postmarkapp.com/stats/outbound/sends", "X-Postmark-Server-Token"},
+		{config.EmailProviderSendGrid, "https://api.sendgrid.com/v3/scopes", "Authorization"},
 	} {
 		req, err := emailProviderCredentialRequest(context.Background(), tc.provider, "provider-secret")
 		if err != nil {
@@ -169,13 +171,35 @@ func TestEmailProviderDiagnosticRequestsUseFixedOriginsAndScopedHeaders(t *testi
 			t.Fatal("Postmark credential copied into bearer authorization")
 		}
 	}
-	for _, provider := range []config.EmailProvider{"", "unknown"} {
+	for _, provider := range []config.EmailProvider{"", "unknown", config.EmailProviderSMTP} {
 		if _, err := emailProviderCredentialRequest(context.Background(), provider, "provider-secret"); err == nil {
 			t.Fatalf("provider %q accepted", provider)
 		}
 	}
 	if _, err := emailProviderCredentialRequest(context.Background(), config.EmailProviderResend, ""); err == nil {
 		t.Fatal("empty credential accepted")
+	}
+}
+
+func TestDoctorSelectsSMTPCheckWithoutSending(t *testing.T) {
+	cfg, state := diagnosticFixture(t)
+	d := goodDeps()
+	want := config.SMTPCredentials{Host: "smtp.example.test", Port: 587, Username: "operator@example.test", Password: "smtp-secret", TLS: "starttls"}
+	d.EmailProviderCheck = func(context.Context, config.EmailProvider, string) error {
+		t.Fatal("SMTP diagnostic used HTTP provider check")
+		return nil
+	}
+	d.SMTPProviderCheck = func(_ context.Context, got config.SMTPCredentials) error {
+		if got != want {
+			t.Fatalf("SMTP credentials = %#v", got)
+		}
+		return nil
+	}
+	checks := diagnoseWith(context.Background(), cfg, true, d, doctorCredentials{emailProvider: config.EmailProviderSMTP, smtp: want}, state)
+	for _, check := range checks {
+		if check.Name == "email_provider" && !check.Healthy {
+			t.Fatal(check)
+		}
 	}
 }
 
