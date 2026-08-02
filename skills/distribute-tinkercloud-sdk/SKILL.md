@@ -141,15 +141,16 @@ task release:npm-sdk-check
 If the npm package does not exist, stop and route the operator through the
 documented one-time 2FA bootstrap from the exact verified SDK tarball. Then
 configure the trusted publisher for repository `ChrisMarxDev/tinkercloud`,
-workflow `npm-sdk-publish.yml`, Environment `npm-sdk`, and only `npm publish`.
+workflow `release.yml`, Environment `npm-sdk`, and only `npm publish`.
 
 For later versions, publish only through:
 
 ```sh
-gh workflow run npm-sdk-publish.yml \
+gh workflow run release.yml \
   --ref main \
+  -f channel=beta \
   -f version="$VERSION" \
-  -f confirmation="publish-npm-sdk-beta-v$VERSION"
+  -f confirmation="publish-beta-v$VERSION"
 ```
 
 Approve the `npm-sdk` Environment only after verifying the version, tag,
