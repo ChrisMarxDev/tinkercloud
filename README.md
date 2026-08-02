@@ -147,6 +147,49 @@ collections, snapshot recovery, and live change hints. It deliberately excludes
 production login, policy, deployment, blobs, TLS/protection proof, and
 LLM/provider capabilities. Local success is development evidence only.
 
+### Install the TypeScript SDK beta
+
+Apps served by Tinkercloud use one browser-first ESM package for viewer and app
+identity, capability discovery, KV, collections, private blobs, and ephemeral
+realtime. During prerelease, opt in explicitly with the `beta` tag using the
+package manager already used by the app:
+
+```sh
+npm install @tinkercloud/sdk@beta
+pnpm add @tinkercloud/sdk@beta
+yarn add @tinkercloud/sdk@beta
+bun add @tinkercloud/sdk@beta
+deno add npm:@tinkercloud/sdk@beta
+```
+
+All five commands consume the same reviewed npm artifact; there is no separate
+package-manager build. If npm reports that the package is unavailable, the
+first registry beta has not been published yet. Install an exact SDK from its
+signed GitHub prerelease instead, replacing both `VERSION` values:
+
+```sh
+npm install https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/tinkercloud-sdk-VERSION.tgz
+```
+
+Use the SDK only inside an app served by Tinkercloud:
+
+```ts
+import { tinker } from "@tinkercloud/sdk";
+
+const current = await tinker.user.current();
+const capabilities = await tinker.capabilities.list();
+
+console.log(current.identity.email);
+console.log(current.app.slug);
+console.log(capabilities);
+```
+
+The SDK uses the current app's same-origin browser session. It accepts no app
+ID, deployer token, database credential, provider key, or endpoint secret. Pin
+an exact numeric version instead of `beta` when a build must remain
+reproducible. See the [client SDK guide](docs/architecture/client-sdk.md) for
+the complete API and compatibility model.
+
 ## What Tinkercloud protects
 
 - Every app has an isolated origin and storage namespace.

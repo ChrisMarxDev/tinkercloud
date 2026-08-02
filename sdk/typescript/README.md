@@ -6,27 +6,33 @@ private utility-grade blobs, and ephemeral realtime channels.
 The SDK is designed for static apps served by Tinkercloud. It uses same-origin
 platform endpoints and accepts neither an app ID nor a platform secret.
 
-> The package is prepared but has not been published. Tinkercloud is pre-release
-> software and the SDK API may change.
+> Tinkercloud is pre-release software. Opt in with the npm `beta` tag or pin an
+> exact numeric version; the SDK API may change between betas.
 
 ## Install
 
-After the first npm release, use the package manager you already have:
+During prerelease, use the package manager you already have and select the
+`beta` channel explicitly:
 
 ```sh
-npm install @tinkercloud/sdk
-pnpm add @tinkercloud/sdk
-yarn add @tinkercloud/sdk
-bun add @tinkercloud/sdk
-deno add npm:@tinkercloud/sdk
+npm install @tinkercloud/sdk@beta
+pnpm add @tinkercloud/sdk@beta
+yarn add @tinkercloud/sdk@beta
+bun add @tinkercloud/sdk@beta
+deno add npm:@tinkercloud/sdk@beta
 ```
 
 The npm artifact is one ESM package; npm, pnpm, Yarn, Bun, and Deno consume the
-same reviewed files. A matching JSR source package is also prepared:
+same reviewed files. If npm reports that the package is unavailable, the first
+registry beta has not been published yet. Install an exact SDK directly from
+its signed GitHub prerelease instead, replacing both `VERSION` values:
 
 ```sh
-deno add jsr:@tinkercloud/sdk
+npm install https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/tinkercloud-sdk-VERSION.tgz
 ```
+
+Use `@tinkercloud/sdk@VERSION` instead of `@beta` when a build must stay pinned
+to one immutable registry version. JSR is not a published beta channel.
 
 ## Use
 
@@ -79,10 +85,9 @@ boundary.
 npm ci
 npm test
 npm publish --dry-run
-deno publish --dry-run
 ```
 
-The dry-run commands validate the registry artifacts without publishing them.
+The dry-run command validates the npm artifact without publishing it.
 Release preparation and namespace blockers are documented in the repository's
 [SDK distribution guide](https://github.com/ChrisMarxDev/tinkercloud/blob/main/docs/operations/sdk-distribution.md).
 
