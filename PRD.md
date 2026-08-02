@@ -161,7 +161,8 @@ can be established through local test and release evidence.
 - Automatic per-host ACME certificates.
 - Resend email adapter behind a provider-neutral interface.
 - Root-only operator recovery without email.
-- Signed manual self-update with health-gated automatic rollback.
+- Signed manual and explicitly enabled automatic self-update with
+  health-gated automatic rollback and durable app/auth-state preservation.
 - Status, doctor, logs, audit, quotas, cleanup, and disk-watermark controls.
 - A small operator-only host resource chart for bounded recent CPU, RAM, and
   Tinkercloud data-volume storage usage, collected by the existing server.
@@ -582,7 +583,21 @@ sudo tinkercloud update
 → commit update or automatically restore prior version/state
 ```
 
-No unattended silent updates in V1.
+An operator may enable one signed official update channel once:
+
+```text
+sudo tinkercloud updates enable --channel beta|stable
+→ install the fixed systemd update service and timer
+→ periodically discover only a strictly newer release
+→ treat discovery as untrusted and verify the complete signed release
+→ require the current persistence schema for unattended updates
+→ run the same update, health, denial, and automatic rollback gates
+```
+
+Automatic updates are disabled until explicitly enabled. They never replace
+configuration, credentials, control/app databases, releases, blobs, sessions,
+or ACME state. A schema-changing release requires a separately reviewed manual
+migration path.
 
 ## 8. Functional requirements
 
@@ -1852,7 +1867,8 @@ uploaded draft bytes, and publish only a prerelease. CLI, host, and SDK tarball
 consumers use the same exact versioned GitHub release.
 
 This beta path MUST NOT publish npm, JSR, Homebrew, stable/latest channels,
-claim registry availability, change DNS, or enable silent updates. The committed
+claim registry availability, change DNS, or silently enable updates. An
+operator may separately opt into the signed beta update channel. The committed
 beta authority MUST be replaced across every embedded trust anchor by a new
 operator-controlled production authority before the first stable release.
 Public beta notes advertise the exact-version root-shell `install-host.sh`
@@ -1885,7 +1901,8 @@ revocation behavior.
 - No Docker initially.
 - No backup feature initially.
 - No outbound telemetry by default.
-- Manual signed `tinkercloud update`; optional scheduled updates later.
+- Manual signed `tinkercloud update`, plus an operator-enabled signed automatic
+  beta or stable channel whose unattended updates remain same-schema.
 - Stable app hostnames reused across releases.
 - Global viewer identity with app-scoped local sessions and app-bound handoffs;
   never a parent-domain app cookie.

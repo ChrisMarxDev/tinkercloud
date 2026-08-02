@@ -47,8 +47,10 @@ and stable mutations are separately governed by
   connection. `--release-base URL` remains an explicit development or advanced
   operator override. The command does not accept an arbitrary remote command
   or weaken host-key verification.
-- Manual `tinkercloud update` remains the only V1 update action. Preparing
-  distribution does not enable scheduled or silent updates.
+- Manual `tinkercloud update` and an explicitly enabled official beta/stable
+  channel use the same signed release artifacts. Preparing distribution never
+  enables the timer; channel enablement is a separate root-local operator
+  action.
 
 ## Naming and publication boundary
 

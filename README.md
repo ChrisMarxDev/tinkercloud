@@ -49,38 +49,36 @@ with a published beta version; beta installation never follows a mutable
 `latest` channel.
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/ sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | sh
 ```
 
-The installer selects the macOS or Linux binary for the local architecture,
-verifies its checksum and Ed25519 signature, and installs `tinker` into
-`~/.local/bin`. Run it as the current user, never with `sudo`:
+The installer is bound to that exact immutable release. It selects the macOS or
+Linux binary for the local architecture, verifies its checksum and Ed25519
+signature, and installs `tinker` into a safe per-user directory. It adds that
+directory to a supported shell profile only when needed. Run it as the current
+user, never with `sudo`, then open a new terminal. If it reports an unsupported
+shell profile, add the printed directory to `PATH` yourself:
 
 ```sh
-export PATH="$HOME/.local/bin:$PATH"
 tinker version
 ```
 
 ## Operator first: run the platform
 
-After the root-shell install, initialize the instance through the current
-deterministic operator contract:
+After the root-shell install, run the guided, resumable setup. It asks only for
+the base domain, operator email, verified Resend sender, and a root-readable
+file containing the Resend key. It creates the private HMAC material itself:
 
 ```sh
-sudo tinkercloud init --non-interactive \
-  --domain example.com \
-  --operator-email operator@example.com \
-  --email-from access@example.com \
-  --resend-api-key-file /root/tinkercloud-resend.key \
-  --hmac-key-file /root/tinkercloud-hmac.key
+sudo tinkercloud setup
 sudo tinkercloud status
 sudo tinkercloud doctor
 ```
 
-The minimum-question `tinkercloud setup` assistant remains planned; the README
-does not treat it as implemented installation behavior. Installation places the
-verified server binary and systemd unit; it does not guess the domain, operator
-identity, or protected email credential needed to initialize an instance.
+Installation places the verified server binary and systemd unit. Setup persists
+the resulting state and can be rerun after an external DNS or email prerequisite
+is fixed. For deterministic automation, `tinkercloud init --non-interactive`
+remains available with explicit flags and protected secret files.
 
 ### Optional: operate from a workstation over SSH
 
@@ -110,6 +108,20 @@ credential and exposes no arbitrary remote shell.
 permanently removes Tinkercloud configuration, credentials, apps, data,
 service, binary, and service identity while preserving the ACME cache so a
 manual reinstall does not request the same certificates again.
+
+### Optional: safe automatic server updates
+
+Automatic updates are off by default. An operator can opt into one signed
+channel; the timer accepts only a strictly newer compatible release, verifies
+the full signed evidence, health-checks it, and rolls back on failure. It never
+replaces configuration, credentials, apps, app data, sessions, or ACME state:
+
+```sh
+sudo tinkercloud updates enable --channel beta
+sudo tinkercloud updates status
+# Disable future checks without changing installed state:
+sudo tinkercloud updates disable
+```
 
 `status` reports redacted local health for SQLite, disk, permissions, clock,
 service state, listeners, version, and rollback state. `doctor` performs bounded

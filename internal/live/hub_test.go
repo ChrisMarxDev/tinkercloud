@@ -10,6 +10,7 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/kv"
 	"github.com/ChrisMarxDev/tinkercloud/internal/policies"
 	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
+	"sync"
 	"testing"
 	"time"
 )
@@ -32,12 +33,22 @@ func authorized(t *testing.T, appID string) appauth.AuthorizationContext {
 }
 
 type transport struct {
+	mu     sync.Mutex
 	sent   []Envelope
 	closed bool
 }
 
-func (t *transport) Send(_ context.Context, e Envelope) error { t.sent = append(t.sent, e); return nil }
-func (t *transport) Close(int, string)                        { t.closed = true }
+func (t *transport) Send(_ context.Context, e Envelope) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.sent = append(t.sent, e)
+	return nil
+}
+func (t *transport) Close(int, string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.closed = true
+}
 func TestAppIsolationAndRevocation(t *testing.T) {
 	h := New(DefaultLimits())
 	ta, tb := &transport{}, &transport{}

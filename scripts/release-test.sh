@@ -43,6 +43,18 @@ if grep -F -- '__TINKERCLOUD_RELEASE_BASE__' "$tmp/release/install-host.sh" >/de
   echo "released host installer shipped the development origin placeholder" >&2
   exit 1
 fi
+test "$(grep -F -c -- '__TINKERCLOUD_CLIENT_RELEASE_BASE__' "$root/packaging/install-client.sh")" = 1 || {
+  echo "source client installer placeholder count drifted" >&2
+  exit 1
+}
+grep -F -- "$release_base" "$tmp/release/install-client.sh" >/dev/null || {
+  echo "released client installer does not embed its exact versioned release base" >&2
+  exit 1
+}
+if grep -F -- '__TINKERCLOUD_CLIENT_RELEASE_BASE__' "$tmp/release/install-client.sh" >/dev/null; then
+  echo "released client installer shipped the development origin placeholder" >&2
+  exit 1
+fi
 if "$root/scripts/distribution-prepare.sh" 0.1.3 "$tmp/release" "$tmp/wrong-package" \
   "@wrong/cli" Tinker tinker \
   "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/" >/dev/null 2>&1; then

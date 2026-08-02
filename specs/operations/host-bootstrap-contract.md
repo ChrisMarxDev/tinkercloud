@@ -46,8 +46,9 @@ second server or a remote control plane.
   directory from its strict semantic build version for `host install`; a
   development build must receive an explicit validated `--release-base`.
   This installs the signed binaries and service unit only. Host initialization
-  remains separate: `init --non-interactive` is implemented today, while the
-  minimum-question `tinkercloud setup` assistant remains planned.
+  remains separate: `tinkercloud setup` is the implemented minimum-question
+  human path, while `init --non-interactive` remains the deterministic
+  automation interface.
 - `uninstall` requires a deliberate workstation confirmation of the exact
   target, or the deterministic explicit `--yes` acknowledgement for a
   non-interactive operator workflow. It invokes only

@@ -13,16 +13,16 @@ topologies that are secure in principle but still need product work.
 The VPN is an additional network boundary. It does not replace Tinkercloud's
 per-app policy, viewer authentication, session, or authorization checks.
 
-## Accepted planned setup experience
+## Implemented guided setup experience
 
-The future operator flow runs `sudo tinkercloud setup` on a fresh supported machine. The
-assistant asks for the root domain and initial operator email, then derives
-`admin.<domain>`, `<slug>.<domain>`, the sending address, and ACME contact. It asks only
-for values it cannot discover or safely default:
+The operator runs `sudo tinkercloud setup` on a fresh supported machine. The
+assistant asks for the root domain, initial operator email, and verified sender,
+then derives `admin.<domain>`, `<slug>.<domain>`, and the ACME contact. It asks
+only for values it cannot discover or safely default:
 
 1. the controlled root domain;
 2. the initial operator email;
-3. the verified Resend credential source; and
+3. the verified Resend sender and credential source; and
 4. for the future VPN-only mode, the certificate and private-key credential
    sources.
 
@@ -86,7 +86,7 @@ verify and install the signed tinkercloud binary
 ```
 
 The deterministic automation contract remains
-`tinkercloud init --non-interactive`. The human product path is the planned
+`tinkercloud init --non-interactive`. The human product path is the implemented
 `tinkercloud setup` assistant in the
 [complete operator flow](../../concept/flows/operator.html); it calls the same
 validation/domain services and generates the explicit automation state.
@@ -208,7 +208,7 @@ complete, not to weaken the gateway.
 
 ## Current open setup issues
 
-1. Implement and test the guided `tinkercloud setup` assistant.
+1. Maintain regression coverage for the guided `tinkercloud setup` assistant.
 2. Benchmark and document the smallest recommended Hetzner plan.
 3. Implement the accepted operator-supplied VPN certificate and
    trusted-network verification model.

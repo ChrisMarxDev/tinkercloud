@@ -632,6 +632,8 @@ func run(args []string, out, errout *os.File) error {
 			return errors.New("tinkercloud: root_required")
 		}
 		return runUpdate(args[1:], out)
+	case "updates":
+		return runUpdates(args[1:], out)
 	case "uninstall":
 		return runUninstall(args[1:], out, productionUninstallRuntime)
 	case "verify-artifact":
@@ -703,6 +705,8 @@ func run(args []string, out, errout *os.File) error {
 		return nil
 	case "init":
 		return runInit(args[1:], out, productionInitRuntime)
+	case "setup":
+		return runSetup(args[1:], out, errout, productionSetupRuntime)
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		cfgPath := fs.String("config", "", "")

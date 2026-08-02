@@ -91,11 +91,12 @@ verification before installation. Repository/development verification and the
 optional workstation flow retain explicit `--release-base` support where their
 contracts require it.
 
-For a new server, start with the signed installer and the implemented resumable
-`tinkercloud init --non-interactive` path. The minimum-question
-`tinkercloud setup` assistant remains planned and must not be invoked or claimed
-as current behavior. Inspect first, then collect only the controlled root domain,
-initial operator email, and root-readable Resend credential source that cannot be derived.
+For a new server, start with the signed installer and run the implemented
+resumable `sudo tinkercloud setup` path. It asks only for the controlled root
+domain, initial operator email, verified Resend sender, and a root-readable
+Resend credential source that cannot be derived. It generates private HMAC
+material and delegates to the strict initialization state machine. Keep
+`init --non-interactive` for deterministic automation.
 Derive `admin.<domain>` and `<slug>.<domain>`, and persist the normalized
 operator email as the internal ACME contact; never ask for, accept, or override
 it through a separate ACME-contact flag, question, or environment input.
@@ -126,8 +127,8 @@ re-owns the preserved ACME cache.
 A released `tinker host install root@HOST` derives its pinned GitHub release
 directory from the installed CLI version. Development builds must receive an
 explicit `--release-base`; installing artifacts and initialization are
-intentionally separate. Use resumable `init --non-interactive` today; do not
-claim the planned `tinkercloud setup` assistant exists until it is implemented.
+intentionally separate. Follow the install with `sudo tinkercloud setup`; use
+resumable `init --non-interactive` only for deterministic automation.
 
 Keep provider and Tinkercloud secrets in root-owned mode-0600 credential files or
 systemd credentials. Never accept them in argv, ordinary YAML, chat, browser
@@ -195,6 +196,15 @@ sudo tinkercloud doctor
 ```
 
 Do not invent another rollback command or delete rollback state by hand.
+
+Automatic server updates are disabled until the operator explicitly enables
+one official channel with `sudo tinkercloud updates enable --channel beta` or
+`sudo tinkercloud updates enable --channel stable`. The fixed timer accepts only
+a strictly newer same-schema release, then uses the exact signed update and
+rollback gates above. It must preserve configuration, root credentials, apps,
+app databases/blobs/releases, browser sessions, deployer bearers, and ACME
+state. `sudo tinkercloud updates disable` stops future checks without changing
+that durable state.
 
 Local app insights default enabled. To stop or resume new local tracking, use
 the root-local `tinkercloud insights disable` or `tinkercloud insights enable`.

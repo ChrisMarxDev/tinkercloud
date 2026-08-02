@@ -67,8 +67,10 @@ require 'gh release download "$tag"' "remote draft download is missing"
 require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' \
   "remote draft asset-set comparison is missing"
 require "--latest=false" "beta latest-channel denial is missing"
-require 'TINKER_RELEASE_BASE="$release_base"' \
+require 'TINKER_INSTALL_DIR="$install_dir" sh' \
   "public installer smoke test is missing"
+reject 'TINKER_RELEASE_BASE=' \
+  "released client installer must use its baked immutable release directory"
 require 'install-host.sh | sh\n" "$release_base"' \
   "beta release notes must document the root-shell host installer"
 require "--proto-redir '=https'" \

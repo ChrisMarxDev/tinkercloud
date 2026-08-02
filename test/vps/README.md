@@ -57,8 +57,33 @@ marker at `/var/lib/tinkercloud-vps-e2e/marker` to exactly match the SSH target
 and root domain. Reuse also requires
 `TINKERCLOUD_VPS_RELEASE_DIR`: the suite verifies the supplied candidate against
 the installed server's pinned key and uses only the normal signed update and
-health-gate path after a new active probe app exists. It does not create a
+health-gate path. The reused host is the prior release and the supplied release
+directory is the candidate; therefore the prior release must already support
+the V1 KV, document, and blob APIs. Before replacement the suite seeds a
+private deployed app and policy, retains a pre-update CLI bearer plus global
+browser identity and derived app cookie, and writes KV, control-plane document,
+app document, and blob fixtures. After the normal signed update, it uses those
+same clients (without another OTP or login) to prove that the active release,
+policy, app URL, and all seeded values remain usable. It does not create a
 test-only authorization or network path, re-initialize, or clean the host.
+It then reuses the verified candidate triplets with a fixture-scoped config
+whose domain is `update-rollback.invalid`. The real service keeps its installed
+systemd config and listeners, but the updater's derived public health probes
+must fail; acceptance requires exactly `update_failed`, a healthy real-config
+doctor result, cleanup of that temporary config, and the same bearer/cookie
+continuity evidence after automatic rollback.
+
+The required reuse/update variables are exactly:
+
+```sh
+export TINKERCLOUD_VPS_REUSE=1
+export TINKERCLOUD_VPS_RELEASE_DIR=/absolute/path/to/signed-candidate-release
+```
+
+`TINKERCLOUD_VPS_RELEASE_DIR` must be a real, absolute, non-symlink directory
+whose signed artifacts verify locally before SSH begins. Keep it distinct from
+the installed prior release when using this regression; a same-version update
+cannot provide cross-version continuity evidence.
 
 For unattended real OTPs, use the local-only Resend reader documented in the
 [VPS guide](../../docs/operations/vps-e2e.md#unattended-resend-otp-reading).

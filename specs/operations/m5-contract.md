@@ -186,13 +186,28 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
   locally verified installed app state, never caller input. If no active app
   exists, the updater must prove that exact database state, platform health,
   socket confinement, and safe unknown-app-host denial; any ambiguous read is
-  unhealthy. Update URLs are never accepted as arbitrary health-probe targets
-  and V1 has no scheduled updater.
+  unhealthy. Update URLs are never accepted as arbitrary health-probe targets.
+  Automatic updates are disabled by default. Root may enable exactly `beta` or
+  `stable`; a fixed systemd timer invokes no shell, arbitrary path, URL, or
+  operator-controlled command. Discovery is bounded untrusted input and may
+  select only a strictly newer official GitHub release. The candidate artifact
+  and complete release manifest remain the authority and must pass pinned
+  Ed25519 verification. Automatic updates reject same/older versions,
+  redirects, cross-origin components, prerelease/stable channel mismatches,
+  and every persistence-schema change before snapshot. Disabling the channel
+  stops future timer runs without changing installed or durable server state.
 - A signed update candidate is also rejected before snapshot or replacement
   unless its strict semantic version, control API, and persistence schema
   labels satisfy the current compatibility contract. The complete signed
   release manifest binds the CLI and SDK ranges used by runtime HTTP and
   WebSocket negotiation.
+- A supported update replaces only the installed server binary. Configuration,
+  root-owned credentials, the control database, immutable app releases,
+  app-local databases and blobs, browser identity/session rows, deployer
+  bearers, and ACME state retain their existing paths and authority. Release
+  acceptance seeds these objects before an actual version transition and
+  proves them usable after success and after an injected failed-candidate
+  rollback.
 - The workstation `tinker host install|status|doctor|update|uninstall` surface is only a
   fixed SSH adapter to these root-local operations. It opens no listener,
   stores no root credential, preserves normal host-key verification, and

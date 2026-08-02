@@ -101,3 +101,50 @@ func (h AnonymousDenyHealth) Check(ctx context.Context) error {
 	}
 	return nil
 }
+
+// UnknownHostDenyHealth is used only when the control database proves there
+// are no active apps.  It makes the empty-install health gate explicit without
+// ever accepting a caller-selected app host.
+type UnknownHostDenyHealth struct{ HTTPHealth }
+
+func (h UnknownHostDenyHealth) Check(ctx context.Context) error {
+	if h.URL == "" || h.Client == nil {
+		return ErrHealth
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, h.URL, nil)
+	if err != nil {
+		return ErrHealth
+	}
+	resp, err := h.Client.Do(req)
+	if err != nil || resp == nil || resp.Body == nil || resp.Request == nil || resp.Request.URL == nil || resp.Request.URL.String() != req.URL.String() {
+		return ErrHealth
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound || resp.Header.Get("Location") != "" || resp.Header.Get("Cache-Control") != "no-store" || resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		return ErrHealth
+	}
+	contentType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil || contentType != "application/json" {
+		return ErrHealth
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAnonymousDenyEvidenceBytes+1))
+	if err != nil || int64(len(body)) > maxAnonymousDenyEvidenceBytes {
+		return ErrHealth
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(body, &envelope) != nil || len(envelope) != 1 {
+		return ErrHealth
+	}
+	var denial struct {
+		Code      string `json:"code"`
+		Message   string `json:"message"`
+		RequestID string `json:"request_id"`
+	}
+	raw, ok := envelope["error"]
+	if !ok || json.Unmarshal(raw, &denial) != nil || denial.Code != "not_found" || denial.Message != "This request is not authorized." || !gatewayRequestID.MatchString(denial.RequestID) || denial.RequestID != resp.Header.Get("X-Request-ID") {
+		return ErrHealth
+	}
+	return nil
+}

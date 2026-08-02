@@ -614,6 +614,54 @@ func TestReuseUpdateStagesOnlySignedManifestEvidence(t *testing.T) {
 		}
 	}
 }
+
+type rollbackProbeRunner struct{ got [][]string }
+
+func (r *rollbackProbeRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
+	r.got = append(r.got, append([]string{name}, args...))
+	remote := args[len(args)-1]
+	if strings.Contains(remote, "--config") && strings.Contains(remote, "rollback-health-config.yaml") {
+		return []byte("tinkercloud: update_failed\n"), errors.New("exit status 1")
+	}
+	return nil, nil
+}
+
+func TestInjectedFailedCandidateUsesFixtureConfigThenCleansUp(t *testing.T) {
+	r := &rollbackProbeRunner{}
+	s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: r}
+	if err := s.injectFailedCandidateRollback(context.Background(), "/stage", "update-probe"); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.got) != 4 {
+		t.Fatalf("remote command count=%d, want 4", len(r.got))
+	}
+	got := make([]string, len(r.got))
+	for i, call := range r.got {
+		got[i] = call[len(call)-1]
+	}
+	for i, want := range []string{"'cp' '--' '/etc/tinkercloud/config.yaml' '/stage/rollback-health-config.yaml'", "'sed' '-i' '-e' 's/^domain:.*/domain: update-rollback.invalid/' '/stage/rollback-health-config.yaml'", "'update' '--config' '/stage/rollback-health-config.yaml'", "'rm' '-f' '--' '/stage/rollback-health-config.yaml'"} {
+		if !strings.Contains(got[i], want) {
+			t.Fatalf("command %d = %q, want %q", i, got[i], want)
+		}
+	}
+	if !strings.Contains(got[2], "'--release-manifest'") || !strings.Contains(got[2], "'--app-slug' 'update-probe'") {
+		t.Fatalf("rollback probe did not use complete signed evidence: %q", got[2])
+	}
+}
+
+func TestInjectedFailedCandidateRejectsUnexpectedSuccessOrFailure(t *testing.T) {
+	for name, runner := range map[string]Runner{
+		"success":       &calls{},
+		"wrong failure": &updateCompatibilityRunner{genericReject: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := Suite{Config: Config{Target: "root@host", KnownHosts: "/kh"}, Runner: runner}
+			if err := s.injectFailedCandidateRollback(context.Background(), "/stage", "update-probe"); err == nil {
+				t.Fatal("accepted rollback injection without exact update_failed evidence")
+			}
+		})
+	}
+}
 func TestHiddenTransactionAndCSRFExtractionIsFixedToKnownServerFields(t *testing.T) {
 	if got := hiddenValue(`<input name="transaction" value="otp_x">`, "transaction"); got != "otp_x" {
 		t.Fatal(got)

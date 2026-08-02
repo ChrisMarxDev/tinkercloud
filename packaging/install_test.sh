@@ -3,6 +3,7 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+test_uid=$(id -u)
 
 if test "$(id -u)" != 0 && "$root/packaging/install-host.sh" https://releases.example.test/v1/ >/dev/null 2>&1; then
   echo "host installer accepted a non-root caller" >&2
@@ -111,6 +112,10 @@ cat >"$tmp/bin/uname" <<'EOF'
 case "$1" in -s) echo Linux;; -m) echo x86_64;; esac
 EOF
 chmod +x "$tmp/bin/curl" "$tmp/bin/id" "$tmp/bin/uname"
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" "$root/packaging/install-client.sh" >/dev/null 2>&1; then
+  echo "development client installer accepted an unspecified release base" >&2
+  exit 1
+fi
 if PATH="$tmp/bin:$PATH" TINKER_TEST_UID=0 "$root/packaging/install-client.sh" >"$tmp/client-root.stdout" 2>"$tmp/client-root.stderr"; then
   echo "client installer accepted a root caller" >&2
   exit 1
@@ -141,6 +146,13 @@ if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_RELEASE_BASE=http://rele
   echo "client installer accepted insecure release origin" >&2
   exit 1
 fi
+for invalid_base in https://127.0.0.1/v1/ https://10.0.0.1/v1/ https://[::1]/v1/ https://localhost/v1/ https://RELEASES.example.test/v1/ https://releases..example.test/v1/; do
+  if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_RELEASE_BASE="$invalid_base" \
+    "$root/packaging/install-client.sh" >/dev/null 2>&1; then
+    echo "client installer accepted unsafe or noncanonical release origin: $invalid_base" >&2
+    exit 1
+  fi
+done
 printf '#!/bin/sh\ncase "$1" in -s) echo Windows;; -m) echo x86_64;; esac\n' >"$tmp/bin/uname"
 chmod +x "$tmp/bin/uname"
 if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_RELEASE_BASE=https://releases.example.test/v1 \
@@ -164,9 +176,12 @@ awk -v key="$tmp/client-public.pem" '
   in_key && $0 == "-----END PUBLIC KEY-----" { in_key = 0; next }
   !in_key { print }
 ' "$root/packaging/install-client.sh" >"$tmp/install-client-valid.sh"
+sed -i.bak 's|__TINKERCLOUD_CLIENT_RELEASE_BASE__|https://releases.example.test/v0.1.0/|' "$tmp/install-client-valid.sh"
+rm "$tmp/install-client-valid.sh.bak"
 chmod +x "$tmp/install-client-valid.sh"
 rm -rf "$tmp/client-release" "$tmp/client-home"
 mkdir "$tmp/client-release" "$tmp/client-home"
+mkdir "$tmp/client-home/.local" "$tmp/client-home/.local/bin"
 printf '#!/bin/sh\necho inert client\n' >"$tmp/client-release/tinker-linux-amd64"
 client_digest=$(sha256sum "$tmp/client-release/tinker-linux-amd64" | awk '{print $1}')
 printf '{"version":"0.1.0","api":"1","schema":"1","sha256":"%s"}\n' "$client_digest" >"$tmp/client-release/tinker-linux-amd64.metadata.json"
@@ -181,14 +196,56 @@ chmod +x "$tmp/bin/uname"
 # The unprivileged client test may safely use the real tools inside its temp
 # HOME; otherwise the fake privileged installer would require its marker.
 rm -f "$tmp/bin/install" "$tmp/bin/mv" "$tmp/bin/systemctl"
-PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_RELEASE="$tmp/client-release" \
-  TINKER_RELEASE_BASE=https://releases.example.test/v1 "$tmp/install-client-valid.sh" >/dev/null
+ln -s "$(command -v python3)" "$tmp/bin/python3"
+ln -s "$(command -v openssl)" "$tmp/bin/openssl"
+PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null
 test -f "$tmp/client-home/.local/bin/tinker" || { echo "client installer rejected canonical trailing newline" >&2; exit 1; }
+grep -Fqx '# Added by Tinker client installer' "$tmp/client-home/.profile" || { echo "client installer did not add a safe PATH profile entry" >&2; exit 1; }
+mkdir "$tmp/unsafe-path"
+PATH="$tmp/unsafe-path:$tmp/bin:/usr/bin:/bin" HOME="$tmp/client-home" SHELL=/bin/unsupported TINKER_TEST_UID="$test_uid" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null
+test ! -e "$tmp/unsafe-path/tinker" || { echo "client installer used an arbitrary writable PATH directory" >&2; exit 1; }
+test -f "$tmp/client-home/.local/bin/tinker" || { echo "client installer did not fall back to the safe local bin directory" >&2; exit 1; }
+mkdir "$tmp/linked-parent"
+ln -s "$tmp/linked-parent" "$tmp/client-home/linked"
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/unsupported TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/linked/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+  echo "client installer accepted an install directory with a symlinked ancestor" >&2
+  exit 1
+fi
+profile_before=$(sha256sum "$tmp/client-home/.profile" | awk '{print $1}')
+PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null
+test "$profile_before" = "$(sha256sum "$tmp/client-home/.profile" | awk '{print $1}')" || { echo "client installer profile edit was not idempotent" >&2; exit 1; }
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  TINKER_RELEASE_BASE=https://attacker.example.test/ "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+  echo "released client installer accepted a caller release-base override" >&2
+  exit 1
+fi
+rm "$tmp/client-home/.profile"
+ln -s "$tmp/client-home/profile-target" "$tmp/client-home/.profile"
+binary_before=$(sha256sum "$tmp/client-home/.local/bin/tinker" | awk '{print $1}')
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+  echo "client installer accepted a symlinked shell profile" >&2
+  exit 1
+fi
+test "$binary_before" = "$(sha256sum "$tmp/client-home/.local/bin/tinker" | awk '{print $1}')" || { echo "client installer replaced binary before rejecting symlinked profile" >&2; exit 1; }
+rm "$tmp/client-home/.profile"
+printf '# existing profile\n' >"$tmp/client-home/.profile"
+chmod 0666 "$tmp/client-home/.profile"
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+  echo "client installer accepted an unsafe shell profile" >&2
+  exit 1
+fi
+chmod 0600 "$tmp/client-home/.profile"
 sed 's/./& /2' "$tmp/client-release/tinker-linux-amd64.signature" >"$tmp/client-inner-signature"
 mv "$tmp/client-inner-signature" "$tmp/client-release/tinker-linux-amd64.signature"
 (cd "$tmp/client-release" && sha256sum tinker-linux-amd64 tinker-linux-amd64.metadata.json tinker-linux-amd64.signature >SHA256SUMS)
-if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_RELEASE="$tmp/client-release" \
-  TINKER_RELEASE_BASE=https://releases.example.test/v1 "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
+if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_UID="$test_uid" TINKER_INSTALL_DIR="$tmp/client-home/.local/bin" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null 2>&1; then
   echo "client installer accepted internal signature whitespace" >&2
   exit 1
 fi

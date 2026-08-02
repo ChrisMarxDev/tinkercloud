@@ -11,8 +11,10 @@ after every prerequisite is satisfied:
 
 The npm artifact is the one executable package consumed by npm, pnpm, Yarn,
 Bun, and their package runners. This contract does not publish the TypeScript
-SDK, JSR package, Homebrew tap, server through a JavaScript registry, or a
-scheduled update channel.
+SDK, JSR package, Homebrew tap, or server through a JavaScript registry. An
+operator-enabled stable server channel may discover the immutable GitHub
+release, but its signed server artifact and manifest remain the installation
+authority.
 
 ## Prerequisites
 
@@ -69,10 +71,12 @@ exact registry version into a clean consumer and verifies `tinker version`.
 The stable one-line installer is:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh | TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/ sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh | sh
 ```
 
-The exact-version form replaces both `latest` path segments with `vVERSION`.
+The exact-version form replaces `latest` with `vVERSION`. The signed released
+installer embeds that same immutable base and rejects `TINKER_RELEASE_BASE`;
+only a reviewed development installer accepts that explicit origin.
 The npm-registry package is installed with any of:
 
 ```sh

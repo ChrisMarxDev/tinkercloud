@@ -5,9 +5,12 @@
 This contract authorizes the canonical pre-stable release origin: manually
 approved GitHub prereleases containing the complete signed Tinkercloud release.
 The GitHub workflow does not publish npm, JSR, Homebrew, stable GitHub releases,
-`latest` promotion, DNS changes, or scheduled updates. After that prerelease is
-public and verified, the separate SDK npm beta contract may publish only its
-exact SDK tarball under npm's `beta` dist-tag.
+`latest` promotion, DNS changes, or automatic update enablement. After that
+prerelease is public and verified, the separate SDK npm beta contract may
+publish only its exact SDK tarball under npm's `beta` dist-tag. A server whose
+operator explicitly chose the beta update channel may discover these
+prereleases, but still trusts only their pinned signed artifact and complete
+release manifest.
 
 Product and artifact identities are locked by ADR 0052. Every release under
 this contract is visibly marked as beta. Stable distribution requires a new
@@ -106,4 +109,6 @@ base. TypeScript consumers may install the exact
 `tinkercloud-sdk-VERSION.tgz` GitHub asset by URL or, after its separately
 approved registry publication, install `@tinkercloud/sdk@beta`. Consumers must
 opt into the beta explicitly; documentation does not advertise an unversioned
-stable or latest installer.
+stable or latest installer. The root-local automatic beta channel is a separate
+explicit opt-in and accepts only a strictly newer prerelease with the installed
+schema version.

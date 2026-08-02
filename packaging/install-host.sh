@@ -130,4 +130,4 @@ install -m 0644 "$work/tinkercloud.service" /etc/systemd/system/.tinkercloud.ser
 mv /usr/local/bin/.tinkercloud.new /usr/local/bin/tinkercloud
 mv /etc/systemd/system/.tinkercloud.service.new /etc/systemd/system/tinkercloud.service
 systemctl daemon-reload
-echo "tinkercloud installed; run tinkercloud init with the required operator configuration"
+echo "tinkercloud installed; run tinkercloud setup"

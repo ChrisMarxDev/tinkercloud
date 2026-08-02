@@ -219,8 +219,7 @@ jobs:
             printf '```\n\n'
             printf 'Install the workstation CLI:\n\n'
             printf '```sh\n'
-            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | \\\\\n" "$release_base"
-            printf '  TINKER_RELEASE_BASE=%s sh\n' "$release_base"
+            printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | sh\n" "$release_base"
             printf '```\n\n'
             printf 'Optional workstation SSH installation after installing the CLI:\n\n'
             printf '```sh\n'
@@ -309,7 +308,6 @@ jobs:
           install_dir="$RUNNER_TEMP/tinkercloud-beta-bin"
           curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location \
             --retry 5 --retry-all-errors "$release_base/install-client.sh" |
-            TINKER_RELEASE_BASE="$release_base" \
             TINKER_INSTALL_DIR="$install_dir" sh
           installed_version=$("$install_dir/tinker" version)
           if [[ "$installed_version" != "tinker $VERSION" ]]; then

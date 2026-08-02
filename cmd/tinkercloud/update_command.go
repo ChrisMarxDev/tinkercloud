@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"syscall"
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/compatibility"
@@ -57,6 +59,11 @@ func runUpdate(args []string, out io.Writer) error {
 	if err != nil {
 		return errors.New("tinkercloud: config_invalid")
 	}
+	unlock, err := acquireUpdateLock(cfg.DataDirectory)
+	if err != nil {
+		return errors.New("tinkercloud: update_in_progress")
+	}
+	defer unlock()
 	installer := update.FileInstaller{Target: *target, RollbackDir: filepath.Join(cfg.DataDirectory, "update-rollback")}
 	if *rollback {
 		if *binary != "" || *metadata != "" || *signature != "" || *releaseManifest != "" || *releaseManifestMetadata != "" || *releaseManifestSignature != "" || *releaseBase != "" || *metadataURL != "" {
@@ -79,16 +86,16 @@ func runUpdate(args []string, out io.Writer) error {
 		_, err := io.WriteString(out, "rollback restored and healthy\n")
 		return err
 	}
+	noActive := false
 	if *appSlug == "" {
-		*appSlug, err = firstActiveProbeApp(context.Background(), cfg)
+		*appSlug, noActive, err = updateProbeApp(context.Background(), cfg)
 		if err != nil {
 			return errors.New("tinkercloud: active_app_required")
 		}
-	}
-	if err := requireActiveProbeApp(context.Background(), cfg, *appSlug); err != nil {
+	} else if err := requireActiveProbeApp(context.Background(), cfg, *appSlug); err != nil {
 		return errors.New("tinkercloud: active_app_required")
 	}
-	checks := updateChecks(cfg, *appSlug, *target, *cfgPath)
+	checks := updateChecksForState(cfg, *appSlug, noActive, *target, *cfgPath)
 	a, key, err := updateArtifact(context.Background(), *binary, *metadata, *signature, *releaseBase, *metadataURL, cfg.UpdateReleaseBase, *artifactName)
 	if err != nil || !compatibility.CompatibleArtifact(a.Version, a.API, a.Schema) {
 		return errors.New("tinkercloud: verification_failed")
@@ -193,13 +200,21 @@ func updateArtifact(ctx context.Context, binary, metadata, signature, releaseBas
 }
 
 func updateChecks(cfg config.Config, slug, target, cfgPath string) []update.Health {
+	return updateChecksForState(cfg, slug, false, target, cfgPath)
+}
+
+func updateChecksForState(cfg config.Config, slug string, noActive bool, target, cfgPath string) []update.Health {
 	client := updateHTTPClient
-	return []update.Health{
+	checks := []update.Health{
 		update.ListenerHealth{Addresses: []string{cfg.ListenHTTP, cfg.ListenHTTPS}},
 		update.ExecHealth{Binary: target, Config: cfgPath, Env: os.Environ()},
 		update.HTTPHealth{URL: "https://" + cfg.PlatformHost() + "/api/v1/version", Client: client},
-		update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix() + updateAnonymousDenyPath, Client: client}},
 	}
+	if noActive {
+		// The reserved label cannot be a valid app slug and is derived locally.
+		return append(checks, update.UnknownHostDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://unknown-update-probe." + cfg.AppSuffix() + updateAnonymousDenyPath, Client: client}})
+	}
+	return append(checks, update.AnonymousDenyHealth{HTTPHealth: update.HTTPHealth{URL: "https://" + slug + "." + cfg.AppSuffix() + updateAnonymousDenyPath, Client: client}})
 }
 
 func allHealthy(ctx context.Context, checks []update.Health) bool {
@@ -243,6 +258,53 @@ func firstActiveProbeApp(ctx context.Context, cfg config.Config) (string, error)
 	return store.FirstActiveAppSlug(ctx)
 }
 
+// updateProbeApp distinguishes an exact empty active-app set from a database
+// read failure.  A failed/ambiguous query must never be treated as empty.
+func updateProbeApp(ctx context.Context, cfg config.Config) (string, bool, error) {
+	store, err := persistence.OpenSQLite(ctx, filepath.Join(cfg.DataDirectory, "tinkercloud.db"))
+	if err != nil {
+		return "", false, err
+	}
+	defer store.Close()
+	var count int
+	if err := store.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM applications a JOIN deployments d ON d.id=a.current_deployment_id AND d.app_id=a.id WHERE a.status='active' AND d.state='active' AND d.release_hash <> ''").Scan(&count); err != nil || count < 0 {
+		return "", false, fmt.Errorf("active apps unavailable")
+	}
+	if count == 0 {
+		return "", true, nil
+	}
+	slug, err := store.FirstActiveAppSlug(ctx)
+	return slug, false, err
+}
+
 type restarterFunc func(context.Context) error
 
 func (f restarterFunc) Restart(ctx context.Context) error { return f(ctx) }
+
+func acquireUpdateLock(dataDir string) (func(), error) {
+	dir := filepath.Join(dataDir, "update")
+	if !pathHasNoSymlink(dir, true) {
+		return nil, errors.New("unsafe update lock directory")
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, ".lock")
+	if st, err := os.Lstat(path); err == nil && (st.Mode()&os.ModeSymlink != 0 || !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0) {
+		return nil, errors.New("unsafe update lock")
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return func() {
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}, nil
+}

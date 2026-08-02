@@ -1,6 +1,6 @@
 # 0041 — Minimum-necessary guided human flows
 
-**Status:** Accepted for V1
+**Status:** Accepted and implemented for V1
 
 ## Context
 
@@ -18,17 +18,18 @@ defaults, and ask one bounded question only when a required value cannot be
 discovered or safely defaulted. Optional values appear behind one review/edit
 step rather than as mandatory questions.
 
-`tinkercloud setup` owns generation of non-secret server configuration. It may ask
-for a base domain, operator email, and a Resend credential source, then derive
- conventional platform/app hostnames, sending defaults, and the internal ACME
- contact from the normalized operator email. It never asks for or accepts a
- separate ACME-contact value. Missing external DNS
+`tinkercloud setup` owns generation of non-secret server configuration. It asks
+only for a base domain, operator email, verified Resend sender, and protected
+Resend credential source, then derives conventional platform/app hostnames and
+the internal ACME contact from the normalized operator email. The verified
+sender cannot safely be guessed because it may use a different sending domain.
+Setup never asks for or accepts a separate ACME-contact value. Missing external DNS
 or email state produces one exact external action and a resumable continuation.
 Resend records are collected before the DNS checkpoint so Tinkercloud and provider
 records can be added in one DNS-provider session.
 Secrets never appear in argv or ordinary config: setup consumes a root-readable
-file or writes one from a no-echo prompt directly into the root-owned
-credential boundary.
+mode-private Resend key file and writes only generated HMAC material to a
+private temporary source before the existing credentials boundary adopts it.
 
 `tinker deploy [DIR]` owns first-run local onboarding. It reuses a verified default
 platform and bearer, inspects the project, derives safe slug/output defaults,
@@ -47,3 +48,10 @@ automation or secret boundaries. Config files remain valuable records, but
 their schemas no longer dictate the order or number of human questions.
 Every new prompt must name the decision it unlocks and demonstrate that the
 value is necessary, not already known, and unsafe to default.
+
+## Implementation evidence
+
+`cmd/tinkercloud/setup.go` delegates to the same strict resumable initialization
+state machine as `init --non-interactive`. Focused tests cover root/TTY denial,
+minimal prompting, safe existing config/credential reuse, normalisation, and
+unsafe secret/config paths.

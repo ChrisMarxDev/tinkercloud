@@ -140,10 +140,8 @@ For repository `ChrisMarxDev/tinkercloud` and version `0.1.0`, install the beta
 CLI:
 
 ```sh
-RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/
 curl --proto '=https' --tlsv1.2 -fsSL \
-  "${RELEASE_BASE}install-client.sh" |
-  TINKER_RELEASE_BASE="$RELEASE_BASE" sh
+  https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/install-client.sh | sh
 ```
 
 Install the SDK directly from the same GitHub release without using the npm
@@ -158,7 +156,7 @@ Install a beta host from that VPS's root shell with the exact same release:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL \
-  "${RELEASE_BASE}install-host.sh" | sh
+  https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/install-host.sh | sh
 ```
 
 The signed host installer embeds `RELEASE_BASE`; HTTPS redirects may carry
@@ -166,7 +164,7 @@ release assets but signed checksum and Ed25519 evidence remains the trust
 decision. Update an installed beta host with:
 
 ```sh
-tinker host update root@HOST --release-base "$RELEASE_BASE"
+tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/
 ```
 
 The GitHub beta workflow is governed by
@@ -251,8 +249,8 @@ release key, then atomically writes `tinker` to `~/.local/bin` (or
 `TINKER_INSTALL_DIR`).
 
 ```sh
-TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/ \
-  ./packaging/install-client.sh
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 tinker login --server https://tinker.example.net
 ```
@@ -266,8 +264,7 @@ published and anonymously verified:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsS \
-  https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh |
-  TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/ sh
+  https://github.com/ChrisMarxDev/tinkercloud/releases/latest/download/install-client.sh | sh
 ```
 
 Replace both `latest` path segments with `download/vVERSION` for an exact,

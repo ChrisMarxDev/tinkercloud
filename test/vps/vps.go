@@ -696,18 +696,9 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	if err := resetFixtureApps(ctx, secondOwner); err != nil {
 		return err
 	}
-	// A reused VPS may deliberately be on a pre-blob release. Deploy a legacy
-	// manifest solely to create the updater's active anonymous-denial probe,
-	// then upgrade through the signed health-gated path before any blob feature
-	// is requested or parsed by that old server.
-	if s.Config.Reuse {
-		if _, _, err := s.deploySmokeApp(ctx, c, vpsUpdateProbeSlug, false); err != nil {
-			return fmt.Errorf("deploy legacy update probe: %w", err)
-		}
-		if err := s.applyReuseUpdate(ctx, remoteDir, vpsUpdateProbeSlug); err != nil {
-			return err
-		}
-	}
+	// Reuse is the cross-version path. Its installed release must already
+	// support the durable V1 primitives below: the update regression is only
+	// meaningful when all of this state exists before replacement.
 	publicState, err := s.beginPublicMatrix(ctx, c, secondOwner)
 	if err != nil {
 		return err
@@ -753,6 +744,30 @@ func (s *Suite) exercise(ctx context.Context, remoteDir string) error {
 	}
 	if err := s.anonymousBlobDenied(ctx, appHost, blobID); err != nil {
 		return err
+	}
+	continuity, err := s.seedUpdateContinuity(ctx, c, viewer, slug, appHost, marker, blobID, collectionID)
+	if err != nil {
+		return err
+	}
+	if s.Config.Reuse {
+		if _, _, err := s.deploySmokeApp(ctx, c, vpsUpdateProbeSlug, false); err != nil {
+			return fmt.Errorf("deploy update health probe after durable seed: %w", err)
+		}
+		if err := s.applyReuseUpdate(ctx, remoteDir, vpsUpdateProbeSlug); err != nil {
+			return err
+		}
+		if err := s.verifyUpdateContinuity(ctx, continuity); err != nil {
+			return fmt.Errorf("successful signed update did not preserve seeded state: %w", err)
+		}
+		if err := s.injectFailedCandidateRollback(ctx, remoteDir, vpsUpdateProbeSlug); err != nil {
+			return err
+		}
+		if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "doctor", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
+			return fmt.Errorf("doctor after injected candidate rollback: %w", err)
+		}
+		if err := s.verifyUpdateContinuity(ctx, continuity); err != nil {
+			return fmt.Errorf("rollback after failed signed candidate did not preserve seeded state: %w", err)
+		}
 	}
 	if err := s.remote(ctx, "systemctl", "restart", "tinkercloud.service"); err != nil {
 		return fmt.Errorf("restart service for app-data durability check: %w", err)
@@ -1780,6 +1795,139 @@ func (s *Suite) applyReuseUpdate(ctx context.Context, remoteDir, probeSlug strin
 	}
 	if err := s.remote(ctx, "/usr/local/bin/tinkercloud", "doctor", "--config", "/etc/tinkercloud/config.yaml"); err != nil {
 		return fmt.Errorf("doctor after LLM root enable: %w", err)
+	}
+	return nil
+}
+
+// injectFailedCandidateRollback uses the same already-verified signed release
+// triplets. Only its fixture-scoped update-health config has an RFC-reserved
+// .invalid domain: the real systemd service continues to use the installed
+// config and listeners, while the updater's derived public probes must fail.
+// This proves post-restart rollback without copying or reading credentials.
+func (s *Suite) injectFailedCandidateRollback(ctx context.Context, remoteDir, probeSlug string) error {
+	const realConfig = "/etc/tinkercloud/config.yaml"
+	fakeConfig := remoteDir + "/rollback-health-config.yaml"
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_ = s.remote(cleanup, "rm", "-f", "--", fakeConfig)
+	}()
+	if err := s.remote(ctx, "cp", "--", realConfig, fakeConfig); err != nil {
+		return fmt.Errorf("create rollback health fixture config: %w", err)
+	}
+	if err := s.remote(ctx, "sed", "-i", "-e", "s/^domain:.*/domain: update-rollback.invalid/", fakeConfig); err != nil {
+		return fmt.Errorf("set unreachable rollback health domain: %w", err)
+	}
+	args := []string{"/usr/local/bin/tinkercloud", "update", "--config", fakeConfig,
+		"--binary", remoteDir + "/tinkercloud-linux-amd64",
+		"--metadata", remoteDir + "/tinkercloud-linux-amd64.metadata.json",
+		"--signature", remoteDir + "/tinkercloud-linux-amd64.signature",
+		"--release-manifest", remoteDir + "/release-manifest.json",
+		"--release-manifest-metadata", remoteDir + "/release-manifest.json.metadata.json",
+		"--release-manifest-signature", remoteDir + "/release-manifest.json.signature",
+		"--app-slug", probeSlug}
+	out, err := s.remoteRun(ctx, args...)
+	if err == nil || strings.TrimSpace(string(out)) != "tinkercloud: update_failed" {
+		if err == nil {
+			return errors.New("injected unreachable health candidate was accepted as an update success")
+		}
+		return fmt.Errorf("injected candidate did not fail only as update_failed: %w", remoteError(err, out))
+	}
+	return nil
+}
+
+// updateContinuityState contains only bounded fixture identifiers and values;
+// it deliberately retains neither the OTP nor the bearer text. The client and
+// browser jar are the pre-update credentials whose continued use is evidence.
+type updateContinuityState struct {
+	owner                          client.Client
+	viewer                         *http.Client
+	slug, host, marker             string
+	releaseID                      string
+	policyRevision                 uint64
+	kvKey                          string
+	documentCollection, documentID string
+	blobID, appDocumentID          string
+}
+
+func (s *Suite) seedUpdateContinuity(ctx context.Context, owner client.Client, viewer *http.Client, slug, host, marker, blobID, appDocumentID string) (updateContinuityState, error) {
+	state := updateContinuityState{owner: owner, viewer: viewer, slug: slug, host: host, marker: marker, blobID: blobID, appDocumentID: appDocumentID, kvKey: "update-continuity" + "-kv", documentCollection: "update-continuity" + "-documents"}
+	policy, err := owner.Access(ctx, slug)
+	if err != nil || policy.Mode != "private" || policy.Revision == 0 || !containsFold(policy.Allow.Emails, s.Config.ViewerEmail) {
+		return state, errors.New("pre-update private policy receipt unavailable")
+	}
+	state.policyRevision = policy.Revision
+	releases, err := owner.ListReleases(ctx, slug)
+	if err != nil {
+		return state, fmt.Errorf("list pre-update releases: %w", err)
+	}
+	for _, release := range releases {
+		if release.State == "active" {
+			state.releaseID = release.ID
+			break
+		}
+	}
+	if state.releaseID == "" {
+		return state, errors.New("pre-update active release receipt unavailable")
+	}
+	key, err := client.IdempotencyKey()
+	if err != nil {
+		return state, err
+	}
+	entry, err := owner.SetDataKV(ctx, slug, state.kvKey, json.RawMessage(`{"seed":"before-update"}`), nil, key)
+	if err != nil || entry.Key != state.kvKey || !bytes.Contains(entry.Value, []byte("before-update")) {
+		return state, errors.New("pre-update KV seed unavailable")
+	}
+	key, err = client.IdempotencyKey()
+	if err != nil {
+		return state, err
+	}
+	document, err := owner.CreateDataDocument(ctx, slug, state.documentCollection, json.RawMessage(`{"seed":"before-update"}`), key)
+	if err != nil || document.ID == "" || !bytes.Contains(document.Data, []byte("before-update")) {
+		return state, errors.New("pre-update control document seed unavailable")
+	}
+	state.documentID = document.ID
+	return state, nil
+}
+
+func containsFold(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(value, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Suite) verifyUpdateContinuity(ctx context.Context, state updateContinuityState) error {
+	// Do not acquire a new login or handoff here: both clients are the exact
+	// pre-update bearer and browser cookie jar.
+	if err := assertActiveDeployment(ctx, state.owner, state.slug, state.releaseID); err != nil {
+		return fmt.Errorf("pre-update release receipt changed: %w", err)
+	}
+	policy, err := state.owner.Access(ctx, state.slug)
+	if err != nil || policy.Mode != "private" || policy.Revision != state.policyRevision || !containsFold(policy.Allow.Emails, s.Config.ViewerEmail) {
+		return errors.New("pre-update policy receipt is no longer usable")
+	}
+	entry, err := state.owner.GetDataKV(ctx, state.slug, state.kvKey)
+	if err != nil || entry.Key != state.kvKey || !bytes.Contains(entry.Value, []byte("before-update")) {
+		return errors.New("pre-update KV is no longer usable through the existing bearer")
+	}
+	document, err := state.owner.GetDataDocument(ctx, state.slug, state.documentCollection, state.documentID)
+	if err != nil || document.ID != state.documentID || !bytes.Contains(document.Data, []byte("before-update")) {
+		return errors.New("pre-update document is no longer usable through the existing bearer")
+	}
+	if err := s.assertExactAppDocument(ctx, state.viewer, state.host, []byte("<!doctype html><title>tinker</title>"+state.marker)); err != nil {
+		return fmt.Errorf("pre-update derived app session did not survive: %w", err)
+	}
+	if _, status, err := fetchPlatformPage(ctx, state.viewer, "https://"+s.Config.PlatformHost()+"/apps"); err != nil || status != http.StatusOK {
+		return fmt.Errorf("pre-update global browser identity did not survive: status=%d err=%w", status, err)
+	}
+	if err := s.verifyBlobPersistsAfterRestart(ctx, state.viewer, state.host, state.blobID); err != nil {
+		return fmt.Errorf("pre-update blob did not survive: %w", err)
+	}
+	if err := s.verifyCollectionPersistsAfterRestart(ctx, state.viewer, state.host, state.appDocumentID); err != nil {
+		return fmt.Errorf("pre-update app document did not survive: %w", err)
 	}
 	return nil
 }

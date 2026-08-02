@@ -26,17 +26,18 @@ from a released CLI version. A development CLI must pass a reviewed explicit
 for that same directory.
 
 Installation does not guess platform configuration. Initialize the installed
-host with the deterministic command below. The minimum-question
-`tinkercloud setup` assistant described in the target flow is still planned
-and must not be documented as current behavior.
+host with the implemented guided command:
 
-The planned guided setup will discover the host, ask for one controlled base domain and
-the initial operator email, derives conventional platform/app/sender values,
-and pauses with exact DNS and Resend actions. It resumes without asking for
-prior valid answers, ingests the provider key into the root-owned credential
-boundary, generates non-secret config and internal secrets, and completes the
-ordinary health/security gates. See the
-[complete operator flow](../../concept/flows/operator.html).
+```bash
+sudo tinkercloud setup
+```
+
+It discovers host state and asks only for the controlled base domain, initial
+operator email, verified Resend sender, and a root-readable Resend API-key
+file. It derives conventional platform/app hostnames and the internal ACME
+contact from the operator email, generates internal HMAC material, pauses with
+one exact DNS or Resend action when needed, and resumes without re-asking
+valid answers. See the [complete operator flow](../../concept/flows/operator.html).
 
 The install script is a thin convenience wrapper. It:
 
@@ -66,11 +67,10 @@ sudo tinkercloud init --non-interactive \
 
 `init --non-interactive` requires explicit non-secret flags and root-readable
 secret files. It derives the internal ACME contact from the required normalized
-operator email; it never accepts a separate ACME-contact flag. The planned human
-`setup` assistant will generate these inputs and may accept the Resend secret through a
-no-echo prompt only if that path passes the supported-shell secret-handling
-audit; otherwise it guides creation/selection of a protected file. Neither path
-places a secret in argv, ordinary config, or terminal output. Initialization
+operator email; it never accepts a separate ACME-contact flag. The human
+`setup` assistant generates these inputs, accepts only a root-readable protected
+Resend-key file as its credential source, and creates HMAC material privately.
+Neither path places a secret in argv, ordinary config, or terminal output. Initialization
 copies the values into
 `/etc/tinkercloud/credentials/tinkercloud.env` at mode `0600`; the config contains
 only `env:` references. Do not pass API keys as command-line values.
@@ -174,7 +174,7 @@ updates:
 ```
 
 Changing this value selects where the manually invoked updater looks; it never
-enables scheduled or unattended updates.
+enables scheduled updates.
 
 The update command:
 
@@ -196,7 +196,19 @@ cookie or a CLI token. After the healthy upgrade, operators and deployers run
 `tinker login` once to obtain a fresh CLI-only bearer; browser dashboard users
 sign in again. No legacy credential is converted or retained.
 
-No silent auto-update in V1. A later opt-in schedule can call the same command.
+Automatic updates remain off by default. To opt into the official signed beta
+or stable channel, use:
+
+```bash
+sudo tinkercloud updates enable --channel beta
+sudo tinkercloud updates status
+sudo tinkercloud updates disable
+```
+
+The fixed systemd timer discovers only a strictly newer channel-matching GitHub
+release and then runs the same signed update, health, denial, and rollback
+gates. It refuses persistence-schema changes and never replaces configuration,
+credentials, releases, app data, sessions, or ACME state.
 
 ## Recovery
 
@@ -217,8 +229,8 @@ failed update; it is not a deployer application-release rollback.
 Deployer machines install only the smaller `tinker` client:
 
 ```bash
-TINKER_RELEASE_BASE=https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/ \
-  ./packaging/install-client.sh
+curl --proto '=https' --tlsv1.2 -fsSL \
+  https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | sh
 tinker login
 tinker deploy .
 ```
