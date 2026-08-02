@@ -2,21 +2,22 @@ name: npm-cli-publish
 run-name: Publish @tinkercloud/cli v${{ inputs.version }} to ${{ inputs.dist_tag }}
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
+      channel:
+        description: Parent release channel
+        required: true
+        type: string
       version:
-        description: Existing stable GitHub release version
+        description: Existing GitHub release version
         required: true
         type: string
       dist_tag:
-        description: Explicit npm dist-tag
+        description: Exact npm dist-tag selected by the parent release
         required: true
-        type: choice
-        options:
-          - latest
-          - next
+        type: string
       confirmation:
-        description: Type publish-npm-cli-vVERSION using the exact version above
+        description: Exact parent release confirmation
         required: true
         type: string
 
@@ -45,10 +46,11 @@ jobs:
           package-manager-cache: false
       - name: Install the pinned trusted-publishing npm CLI
         run: npm install --global npm@11.5.1
-      - name: Validate stable release and npm destination
+      - name: Validate release and npm destination
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
           DIST_TAG: ${{ inputs.dist_tag }}
           CONFIRMATION: ${{ inputs.confirmation }}
@@ -59,15 +61,24 @@ jobs:
             exit 1
           fi
           tag="v$VERSION"
-          if [[ "$CONFIRMATION" != "publish-npm-cli-$tag" ]]; then
+          if [[ "$CHANNEL" != "beta" && "$CHANNEL" != "stable" ]]; then
+            echo "unsupported npm CLI release channel" >&2
+            exit 1
+          fi
+          if [[ "$CONFIRMATION" != "publish-$CHANNEL-$tag" ]]; then
             echo "npm CLI publication confirmation mismatch" >&2
             exit 1
           fi
-          [[ "$DIST_TAG" == "latest" || "$DIST_TAG" == "next" ]] || {
-            echo "unsupported npm dist-tag" >&2
-            exit 1
-          }
-          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production ./scripts/check-release-key-policy.sh
+          if [[ "$CHANNEL" == "beta" ]]; then
+            [[ "$DIST_TAG" == "next" ]] || { echo "beta CLI release requires the next npm tag" >&2; exit 1; }
+            required_authority=beta
+            expected_state=$'false\ttrue\t'"$tag"
+          else
+            [[ "$DIST_TAG" == "latest" ]] || { echo "stable CLI release requires the latest npm tag" >&2; exit 1; }
+            required_authority=production
+            expected_state=$'false\tfalse\t'"$tag"
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority" ./scripts/check-release-key-policy.sh
           ./scripts/check-release-key-drift.sh
           git show-ref --verify --quiet "refs/tags/$tag" || { echo "source tag is unavailable" >&2; exit 1; }
           source_commit=$(git rev-list -n 1 "$tag")
@@ -78,8 +89,8 @@ jobs:
           git checkout --detach "$source_commit"
           test -z "$(git status --porcelain=v1)" || { echo "npm CLI source checkout is dirty" >&2; exit 1; }
           state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
-          if [[ "$state" != $'false\tfalse\t'"$tag" ]]; then
-            echo "npm CLI requires an existing published stable GitHub release" >&2
+          if [[ "$state" != "$expected_state" ]]; then
+            echo "npm CLI requires the matching published GitHub release channel" >&2
             exit 1
           fi
           visibility=$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)
@@ -128,16 +139,27 @@ jobs:
           package-manager-cache: false
       - name: Install the pinned trusted-publishing npm CLI
         run: npm install --global npm@11.5.1
-      - name: Download and verify the canonical stable release
+      - name: Download and verify the canonical release
         env:
           GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL=production ./scripts/check-release-key-policy.sh
+          if [[ "$CHANNEL" == "beta" ]]; then
+            required_authority=beta
+            expected_state=$'false\ttrue\t'"v$VERSION"
+          elif [[ "$CHANNEL" == "stable" ]]; then
+            required_authority=production
+            expected_state=$'false\tfalse\t'"v$VERSION"
+          else
+            echo "unsupported npm CLI release channel" >&2
+            exit 1
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority" ./scripts/check-release-key-policy.sh
           tag="v$VERSION"
           state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,tagName --jq '[.isDraft,.isPrerelease,.tagName] | @tsv')
-          [[ "$state" == $'false\tfalse\t'"$tag" ]] || { echo "stable release state changed" >&2; exit 1; }
+          [[ "$state" == "$expected_state" ]] || { echo "release state changed" >&2; exit 1; }
           release_dir="$RUNNER_TEMP/tinkercloud-release-v$VERSION"
           mkdir -p "$release_dir"
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$release_dir"

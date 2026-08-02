@@ -1,0 +1,192 @@
+name: release
+run-name: ${{ inputs.channel }} release v${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Public release channel
+        required: true
+        type: choice
+        options:
+          - beta
+          - stable
+      version:
+        description: Strict MAJOR.MINOR.PATCH version with an existing vVERSION tag on main
+        required: true
+        type: string
+      confirmation:
+        description: Type publish-CHANNEL-vVERSION using the exact channel and version above
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Deny an incomplete release before public mutation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ inputs.version }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "release version must be strict MAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          tag="v$VERSION"
+          [[ "$CHANNEL" == "beta" || "$CHANNEL" == "stable" ]] || {
+            echo "unsupported release channel" >&2
+            exit 1
+          }
+          [[ "$CONFIRMATION" == "publish-$CHANNEL-$tag" ]] || {
+            echo "release confirmation mismatch" >&2
+            exit 1
+          }
+          if [[ "$CHANNEL" == "beta" ]]; then
+            required_authority=beta
+          else
+            required_authority=production
+          fi
+          TINKERCLOUD_REQUIRED_RELEASE_CHANNEL="$required_authority" ./scripts/check-release-key-policy.sh
+          ./scripts/check-release-key-drift.sh
+          git show-ref --verify --quiet "refs/tags/$tag" || {
+            echo "source tag is unavailable" >&2
+            exit 1
+          }
+          source_commit=$(git rev-list -n 1 "$tag")
+          git merge-base --is-ancestor "$source_commit" origin/main || {
+            echo "source tag is not reachable from origin/main" >&2
+            exit 1
+          }
+          [[ "$GITHUB_SHA" == "$source_commit" ]] || {
+            echo "release workflow ref must resolve to the exact source tag commit" >&2
+            exit 1
+          }
+          git checkout --detach "$source_commit"
+          test -z "$(git status --porcelain=v1)" || {
+            echo "source checkout is dirty" >&2
+            exit 1
+          }
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release already exists for $tag" >&2
+            exit 1
+          fi
+          visibility=$(gh repo view "$GITHUB_REPOSITORY" --json visibility --jq .visibility)
+          [[ "$visibility" == "PUBLIC" ]] || {
+            echo "public release requires a public GitHub repository" >&2
+            exit 1
+          }
+          package_version=$(node -p "require('./sdk/typescript/package.json').version")
+          jsr_version=$(node -p "require('./sdk/typescript/jsr.json').version")
+          sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)
+          if [[ "$package_version" != "$VERSION" || "$jsr_version" != "$VERSION" || "$sdk_version" != "$VERSION" ]]; then
+            echo "SDK version declarations do not match $VERSION" >&2
+            exit 1
+          fi
+          for package in %40tinkercloud%2Fsdk %40tinkercloud%2Fcli; do
+            package_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+              --output /dev/null --write-out '%{http_code}' \
+              "https://registry.npmjs.org/$package")
+            [[ "$package_status" == "200" ]] || {
+              echo "npm package must be bootstrapped before unified releases" >&2
+              exit 1
+            }
+            version_status=$(curl --proto '=https' --tlsv1.2 --silent --show-error \
+              --output /dev/null --write-out '%{http_code}' \
+              "https://registry.npmjs.org/$package/$VERSION")
+            [[ "$version_status" == "404" ]] || {
+              if [[ "$version_status" == "200" ]]; then
+                echo "npm package version already exists" >&2
+              else
+                echo "npm registry version check failed" >&2
+              fi
+              exit 1
+            }
+          done
+
+  beta-release:
+    needs: preflight
+    if: inputs.channel == 'beta'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/beta-release.yml
+    with:
+      version: ${{ inputs.version }}
+      confirmation: ${{ inputs.confirmation }}
+
+  stable-release:
+    needs: preflight
+    if: inputs.channel == 'stable'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/stable-release.yml
+    with:
+      version: ${{ inputs.version }}
+      confirmation: ${{ inputs.confirmation }}
+
+  beta-sdk:
+    needs: beta-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/npm-sdk-publish.yml
+    with:
+      channel: beta
+      version: ${{ inputs.version }}
+      dist_tag: beta
+      confirmation: ${{ inputs.confirmation }}
+
+  beta-cli:
+    needs: beta-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/npm-cli-publish.yml
+    with:
+      channel: beta
+      version: ${{ inputs.version }}
+      dist_tag: next
+      confirmation: ${{ inputs.confirmation }}
+
+  stable-sdk:
+    needs: stable-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/npm-sdk-publish.yml
+    with:
+      channel: stable
+      version: ${{ inputs.version }}
+      dist_tag: latest
+      confirmation: ${{ inputs.confirmation }}
+
+  stable-cli:
+    needs: stable-release
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/npm-cli-publish.yml
+    with:
+      channel: stable
+      version: ${{ inputs.version }}
+      dist_tag: latest
+      confirmation: ${{ inputs.confirmation }}

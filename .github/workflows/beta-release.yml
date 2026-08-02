@@ -2,7 +2,7 @@ name: beta-release
 run-name: Beta release v${{ inputs.version }}
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       version:
         description: Strict MAJOR.MINOR.PATCH version with an existing vVERSION tag on main

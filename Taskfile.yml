@@ -211,11 +211,18 @@ tasks:
     cmds:
       - ./scripts/check-unified-release-workflow.sh
       - ./scripts/check-unified-release-workflow-self-test.sh
+      - ./scripts/check-beta-release-workflow.sh
+      - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/check-stable-release-workflows.sh
+      - ./scripts/check-stable-release-workflows-self-test.sh
       - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - ./scripts/extract-sdk-version-self-test.sh
       - ./scripts/check-release-key-drift.sh
       - ./scripts/release-test.sh
       - ./packaging/install_test.sh
+      - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
   release:beta-check:
     desc: Validate the beta path of the unified release workflow without publishing
@@ -223,6 +230,12 @@ tasks:
     cmds:
       - ./scripts/check-unified-release-workflow.sh
       - ./scripts/check-unified-release-workflow-self-test.sh
+      - ./scripts/check-beta-release-workflow.sh
+      - ./scripts/check-beta-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/check-stable-release-workflows.sh
+      - ./scripts/check-stable-release-workflows-self-test.sh
       - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - ./scripts/extract-sdk-version-self-test.sh
       - ./scripts/check-release-key-drift.sh
@@ -234,6 +247,8 @@ tasks:
     cmds:
       - ./scripts/check-unified-release-workflow.sh
       - ./scripts/check-unified-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
       - ./scripts/verify-sdk-publish-candidate-self-test.sh
       - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
@@ -243,6 +258,10 @@ tasks:
     cmds:
       - ./scripts/check-unified-release-workflow.sh
       - ./scripts/check-unified-release-workflow-self-test.sh
+      - ./scripts/check-npm-sdk-workflow.sh
+      - ./scripts/check-npm-sdk-workflow-self-test.sh
+      - ./scripts/check-stable-release-workflows.sh
+      - ./scripts/check-stable-release-workflows-self-test.sh
       - ./scripts/check-release-key-drift.sh
       - go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
