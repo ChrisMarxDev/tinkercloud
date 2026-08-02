@@ -2,15 +2,15 @@
 
 ## Scope
 
-This contract authorizes one registry mutation during the pre-stable phase:
-publishing the exact `@tinkercloud/sdk` tarball from an already-public,
-verified Tinkercloud GitHub prerelease to the public npm registry under the
-`beta` dist-tag.
+This contract governs the SDK registry stage of the unified pre-stable release:
+publishing the exact `@tinkercloud/sdk` tarball from the same-version verified
+Tinkercloud GitHub prerelease to the public npm registry under the `beta`
+dist-tag.
 
-It does not authorize npm publication of the `tinker` CLI or `tinkercloud`
-server, JSR publication, Homebrew, a stable GitHub release, npm's `latest`
-dist-tag, automatic triggers, scheduled publication, or rebuilding registry
-bytes.
+It does not govern the separately isolated CLI npm stage and does not authorize
+publication of the `tinkercloud` server, JSR, Homebrew, a stable GitHub release,
+npm's `latest` dist-tag, automatic triggers, scheduled publication, or
+rebuilding registry bytes.
 
 ## Version and source identity
 
@@ -29,13 +29,13 @@ bytes.
 
 ## Publication authority
 
-Publication is a manual dispatch with the exact numeric version and exact
-confirmation `publish-npm-sdk-beta-vVERSION`. The mutation job uses the
+Publication follows the sole `release.yml` dispatch with channel `beta`, the
+exact numeric version, and confirmation `publish-beta-vVERSION`. The mutation job uses the
 reviewer-protected GitHub Environment `npm-sdk` and grants `id-token: write`
 only in that job.
 
 The npm package trusts only GitHub Actions from repository
-`ChrisMarxDev/tinkercloud`, workflow `npm-sdk-publish.yml`, Environment
+`ChrisMarxDev/tinkercloud`, workflow `release.yml`, Environment
 `npm-sdk`, for `npm publish`. No npm token, developer npm session, `.npmrc`
 credential, or inherited secret is available to the workflow. npm trusted
 publishing supplies short-lived OIDC authentication and provenance.
@@ -49,10 +49,10 @@ the protected workflow.
 
 ## Workflow
 
-1. Validate the input, confirmation, tag, main ancestry, clean checkout,
-   repository visibility, SDK version parity, beta signing-key policy, public
-   GitHub prerelease state, existing npm package bootstrap, and absent npm
-   version before entering the protected Environment.
+1. Before any public mutation, the unified preflight validates input,
+   confirmation, tag, main ancestry, repository visibility, version parity,
+   package bootstrap, and absence of both npm versions. The SDK stage repeats
+   its relevant checks before entering the protected Environment.
 2. Check out the exact source commit, download every asset from the canonical
    GitHub prerelease, and verify the complete signed release with the committed
    beta trust anchor.
@@ -77,5 +77,5 @@ the protected workflow.
   reviewed operator action; the publish workflow never silently changes tags.
 - Changed bytes or source fixes advance to a new patch version and repeat the
   canonical GitHub prerelease flow first.
-- Stable publication requires the separately controlled production authority
-  and a new explicit decision; beta trust is never promoted implicitly.
+- Stable publication requires the separately controlled production authority;
+  beta trust is never promoted implicitly.

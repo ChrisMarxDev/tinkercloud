@@ -53,20 +53,21 @@ temporary file is random, mode `0600`, outside the checkout, removed on every
 exit, and unavailable to child builds except through the canonical release
 builder's narrow input.
 
-## npm CLI workflow
+## Protected npm stages
 
-The npm workflow is a separate manual dispatch with the exact version,
-explicit dist-tag, and `publish-npm-cli-vVERSION`. It checks out the tag,
-requires the corresponding GitHub release to be stable and published,
-downloads all release assets anonymously, and verifies the complete release.
-It generates one npm tarball through `distribution-prepare.sh`, inspects its
-contents and manifest, and refuses an existing registry version.
+After the canonical GitHub release succeeds, internal reusable jobs check out
+the same tag, require that release to be stable and published, download all
+release assets anonymously, and verify the complete release. The SDK job uses
+the signed SDK tarball directly. The CLI job generates one npm tarball through
+`distribution-prepare.sh` from the signed native artifacts. Both inspect their
+contents and manifests and recheck that the registry version remains unused.
 
-Publication runs on a GitHub-hosted runner with Node 24, npm 11.5.1 or newer,
-`id-token: write`, the `npm-cli` Environment, no npm token, and
-`npm publish --access public --tag DIST_TAG`. npm trusted publishing supplies
-short-lived OIDC authentication and provenance. The workflow then installs the
-exact registry version into a clean consumer and verifies `tinker version`.
+Publication runs on GitHub-hosted runners with Node 24, npm 11.5.1 or newer,
+`id-token: write`, fixed `npm-sdk` and `npm-cli` Environments, no npm token, and
+`npm publish --access public --tag latest`. npm trusted publishing supplies
+short-lived OIDC authentication and provenance. The jobs then install the exact
+registry versions into clean consumers and verify the SDK API and
+`tinker version`.
 
 ## Consumer commands
 

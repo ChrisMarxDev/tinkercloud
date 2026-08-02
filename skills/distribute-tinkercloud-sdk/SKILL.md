@@ -110,10 +110,10 @@ and report that missing supply-chain input instead of executing an unpinned
 
 ## Use the GitHub beta as the source
 
-The explicitly approved GitHub beta workflow publishes the SDK tarball as part
-of the complete signed prerelease. The GitHub workflow itself does not publish
-npm or JSR. Consumers may install that exact versioned tarball URL directly, or
-a separately approved SDK workflow may publish the same bytes to npm beta.
+The explicitly approved unified beta workflow publishes the SDK tarball as part
+of the complete signed prerelease, then its protected SDK job publishes those
+same bytes to npm beta. It does not publish JSR. Consumers may install either
+the exact versioned GitHub tarball URL or the verified npm package.
 
 Verify the GitHub asset against the complete signed release and test an import
 from a clean temporary consumer. Do not call a GitHub asset an npm-registry or
@@ -147,7 +147,7 @@ For later versions, publish only through:
 
 ```sh
 gh workflow run release.yml \
-  --ref main \
+  --ref "v$VERSION" \
   -f channel=beta \
   -f version="$VERSION" \
   -f confirmation="publish-beta-v$VERSION"

@@ -1,6 +1,10 @@
 # ADR 0054: Publish only the SDK to npm during beta
 
-Status: Accepted
+Status: Superseded by ADR 0058
+
+ADR 0058 retains the exact-artifact, OIDC, fixed-environment, and immutable
+version guarantees while moving SDK publication into the one complete release
+invocation and adding the matching CLI npm stage.
 
 ## Context
 

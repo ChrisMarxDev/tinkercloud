@@ -5,14 +5,15 @@ below before registry mutation.
 
 ## Authority and trigger denials
 
-- Any trigger other than `workflow_dispatch` is denied.
-- Missing or mismatched `publish-npm-sdk-beta-vVERSION` confirmation is denied.
+- The SDK publisher accepts only an internal `workflow_call` from the sole
+  manually dispatched `release.yml`; it has no direct or automatic trigger.
+- Missing or mismatched `publish-beta-vVERSION` parent confirmation is denied.
 - A job without Environment `npm-sdk`, or with OIDC granted outside the
   mutation job, is denied.
 - `NODE_AUTH_TOKEN`, `NPM_TOKEN`, repository npm secrets, inherited secrets,
   developer sessions, and credential-bearing `.npmrc` files are denied.
-- npm publication of `@tinkercloud/cli`, the server, JSR, Homebrew, `latest`,
-  `next`, or an input-selected dist-tag is denied.
+- The beta SDK stage denies publication of `@tinkercloud/cli`, the server, JSR,
+  Homebrew, `latest`, `next`, or any tag other than the parent-fixed `beta`.
 
 ## Source and release denials
 
