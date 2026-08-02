@@ -61,7 +61,8 @@ The PRD's setup target starts only after these external prerequisites exist:
 1. A supported Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
 2. Root SSH access with a pinned host key.
 3. Public platform and wildcard app DNS records pointing at the VPS.
-4. A verified Resend or Postmark sender and root-readable API-key file.
+4. A verified sender and root-readable Resend, Postmark, SendGrid, or SMTP
+   credential file.
 5. An operator decision about the host/cloud firewall and SSH source rules.
 
 DNS propagation, buying the server, verifying the sending domain, and choosing
@@ -152,7 +153,7 @@ current policy allows them.
 - Tinkercloud can listen on the same TCP 80/443 gateway behind a firewall.
 - Hostname routing, cookies, app isolation, KV, and WebSockets are compatible
   with a VPN.
-- the selected Resend or Postmark provider can work when the server retains
+- the selected Resend, Postmark, SendGrid, or SMTP provider can work when the server retains
   outbound HTTPS access.
 - Tinkercloud does not need to understand VPN users, routes, or credentials.
 

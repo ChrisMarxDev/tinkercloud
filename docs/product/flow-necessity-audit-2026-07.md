@@ -25,7 +25,7 @@ The reviewed HTML flows already include the accepted edits below.
 - create a supported dedicated VPS and retain root SSH;
 - own firewall policy while exposing only required 80/443;
 - provide one root domain and initial operator email;
-- choose Resend or Postmark, establish sender ownership, and provide the provider
+- choose Resend, Postmark, SendGrid, or SMTP, establish sender ownership, and provide the provider
   secret through the root-owned credential boundary;
 - enter browser OTP only when no valid global identity exists;
 - choose the exact active-deployer email set and confirm additions/reactivations;
