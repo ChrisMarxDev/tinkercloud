@@ -159,8 +159,8 @@ can be established through local test and release evidence.
 - One private data directory containing immutable releases and keys.
 - Embedded migrations, login/admin/deployer UI, and local assets.
 - Automatic per-host ACME certificates.
-- Operator-selected Resend or Postmark email adapter behind a provider-neutral
-  interface.
+- Environment-selected Resend, Postmark, SendGrid, or send-only authenticated
+  TLS SMTP email adapter behind a provider-neutral interface.
 - Root-only operator recovery without email.
 - Signed manual and explicitly enabled automatic self-update with
   health-gated automatic rollback and durable app/auth-state preservation.
@@ -641,8 +641,9 @@ Requirement keywords use MUST, SHOULD, and MAY in their normal normative sense.
 
 ### 8.3 OTP authentication
 
-- **FR-AUTH-001:** V1 MUST support numeric email OTP login through an
-  operator-selected Resend or Postmark adapter.
+- **FR-AUTH-001:** V1 MUST support numeric email OTP login through the
+  environment-selected Resend, Postmark, SendGrid, or authenticated TLS SMTP
+  adapter.
 - **FR-AUTH-002:** OTP request responses MUST not reveal policy membership.
 - **FR-AUTH-003:** Challenges MUST be random, short-lived, one-time, hashed at
   rest, attempt-limited, and invalidated by a newer challenge.
@@ -1343,8 +1344,6 @@ data:
   directory: /var/lib/tinkercloud
 
 email:
-  provider: resend # or postmark
-  api_key: env:RESEND_API_KEY
   from: Tinkercloud <access@example.com>
 
 auth:
@@ -1355,7 +1354,7 @@ auth:
 
 Tinkercloud’s own secrets:
 
-- selected email-provider API key;
+- selected email-provider API key or SMTP password;
 - session/challenge hashing keys;
 - future capability encryption root;
 - release/update trust configuration where applicable.
@@ -1899,8 +1898,10 @@ revocation behavior.
 ## 23. Additional accepted defaults
 
 - Email OTP only in V1; no password and no required magic-link flow.
-- Resend and Postmark in V1 behind one provider-neutral adapter interface; no
-  automatic failover or runtime provider endpoints.
+- Resend, Postmark, SendGrid, and send-only authenticated TLS SMTP in V1 behind
+  one provider-neutral adapter interface. A documented first-present
+  environment cascade selects one adapter; there is no per-message failover or
+  runtime provider endpoint.
 - Per-host HTTP-challenge ACME first.
 - Server-rendered admin/deployer UI.
 - No automatic build command inside `tinker deploy`.

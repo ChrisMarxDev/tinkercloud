@@ -11,7 +11,7 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 - `tinkercloud doctor` includes every `status` check and makes bounded (five
   second) outbound checks for platform DNS, the configured wildcard DNS record,
   platform TLS hostname/chain/expiry, and a read-only authenticated request to
-  the configured Resend or Postmark provider. It requires local root before
+  the environment-selected Resend, Postmark, SendGrid, or SMTP adapter. It requires local root before
   reading provider credentials.
   By default it reads `/etc/tinkercloud/credentials/tinkercloud.env`; an explicit
   absolute credential-file path is allowed only when it has no symlinked path
