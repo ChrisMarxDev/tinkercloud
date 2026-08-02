@@ -11,6 +11,14 @@ commands would also make verified installation and update behavior inconsistent.
 
 ## Decision
 
+The primary clean-host flow is root-shell first: on a supported fresh VPS, the
+operator runs the exact-version GitHub `install-host.sh` one-liner. The signed
+release build bakes that immutable versioned release directory into the host
+installer, so the root command carries no repeated `--release-base` value.
+GitHub's release-asset HTTPS redirects are permitted as transport only; the
+installer permits HTTPS redirects and verifies checksums plus pinned Ed25519
+evidence before it installs either the server or service unit.
+
 Add `tinker host install|status|doctor|update|uninstall` as a workstation-side OpenSSH
 adapter. It requires an explicit `root@HOST`, keeps normal host-key checking,
 and permits only fixed remote commands. Install sends a reviewed bootstrap
@@ -37,6 +45,7 @@ uses resumable `init --non-interactive`, while the minimum-question
 
 ## Consequences
 
-Operators get one tool and a testable command grammar while the server remains
-one gateway binary. SSH authentication and host-key ownership remain operator
+Operators can start with a short root-shell command on a clean VPS, while the
+optional workstation command remains a testable SSH grammar for existing
+operator workflows. SSH authentication and host-key ownership remain operator
 responsibilities. More advanced fleet management is outside V1.

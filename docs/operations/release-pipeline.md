@@ -152,10 +152,18 @@ npm install \
   https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.0/tinkercloud-sdk-0.1.0.tgz
 ```
 
-Install or update a beta host from the exact same release:
+Install a beta host from that VPS's root shell with the exact same release:
 
 ```sh
-tinker host install root@HOST --release-base "$RELEASE_BASE"
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL \
+  "${RELEASE_BASE}install-host.sh" | sh
+```
+
+The signed host installer embeds `RELEASE_BASE`; HTTPS redirects may carry
+release assets but signed checksum and Ed25519 evidence remains the trust
+decision. Update an installed beta host with:
+
+```sh
 tinker host update root@HOST --release-base "$RELEASE_BASE"
 ```
 
@@ -277,7 +285,10 @@ before executing it. Existing servers refuse the install path and use the local
 rollback-capable updater. `tinker host` does not store root credentials, weaken
 known-host verification, accept arbitrary SSH options, or expose remote exec.
 A released CLI derives the exact immutable install release from its embedded
-version; development builds require an explicit `--release-base`. Uninstall
+version; development builds require an explicit `--release-base`. A custom
+release base is valid only when its signed `install-host.sh` was built with that
+same base; it is not a runtime override of the released root installer.
+Uninstall
 requires confirmation of the exact host and preserves the ACME cache by
 default.
 

@@ -5,6 +5,24 @@ second server or a remote control plane.
 
 ## Boundary
 
+- The canonical clean-host installation begins in the fresh supported VPS root
+  shell. The operator runs the exact-version GitHub command
+  `curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh`.
+  The released `install-host.sh` contains that exact immutable release directory
+  and accepts no release-base argument. Repository/development copies alone may
+  accept one validated explicit release directory for offline tests.
+- The root installer refuses a non-root caller, non-Linux host, unsupported
+  Ubuntu release, non-x86-64 architecture, existing installation, malformed or
+  credentialed origin, and every missing/invalid checksum, metadata, or Ed25519
+  sidecar before replacing either installed file. It never accepts signing or
+  provider secrets.
+- Release asset transport may follow redirects only with curl's
+  `--location --proto '=https' --proto-redir '=https'` policy and bounded
+  downloads. A redirect is transport only, never a trust decision: checksum
+  and pinned Ed25519 verification of each downloaded installer input complete
+  before host mutation. HTTP downgrade, redirect loop, transport failure,
+  unsigned/tampered bytes, and origin validation failure are non-zero.
+
 - `tinker host ...` is a workstation-side SSH transport for a fixed command
   grammar. Root authority comes from the operator's SSH authentication and the
   target host, never from a deployer bearer.
@@ -20,8 +38,10 @@ second server or a remote control plane.
   `update` passes only a validated HTTPS release directory to the local,
   signed, rollback-capable updater.
 - `install` sends the reviewed embedded bootstrap on standard input and invokes
-  it with a validated HTTPS release directory. The bootstrap never contains a
-  signing private key.
+  it with a validated HTTPS release directory. This optional workstation flow
+  retains explicit release-base support for development and compatibility. The
+  bootstrap never contains a signing private key and follows only HTTPS
+  redirects before it verifies the signed root installer.
 - A released `tinker` binary derives the exact immutable GitHub release
   directory from its strict semantic build version for `host install`; a
   development build must receive an explicit validated `--release-base`.
@@ -70,3 +90,17 @@ second server or a remote control plane.
   arbitrary remote response body.
 - An interrupted install never reports success. An interrupted update retains
   the server updater's rollback state and recovery behavior.
+
+## Root installer deny-path test charter
+
+- Prove root-only, supported Ubuntu/x86-64, clean-host, and exact-argument
+  checks deny before any `install`, `mv`, or `systemctl` call.
+- Prove malformed, insecure, credentialed, private-address, and development
+  origin inputs deny; prove a released installer rejects a caller-supplied base.
+- Prove HTTPS redirect transport succeeds only when the resulting server,
+  service unit, metadata, signatures, and checksum evidence verify; prove an
+  HTTP downgrade, loop/transport failure, metadata/signature whitespace, or
+  tampered payload denies before mutation.
+- Prove the release build embeds `vVERSION`'s exact GitHub directory in
+  `install-host.sh` and rejects any staged installer still containing the source
+  placeholder.

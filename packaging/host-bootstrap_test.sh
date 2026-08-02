@@ -11,6 +11,7 @@ real_python=$(command -v python3)
 fail() { echo "host bootstrap test: $*" >&2; exit 1; }
 
 mkdir -p "$tmp/bin" "$tmp/release"
+printf 'ID=ubuntu\nVERSION_ID=24.04\n' >"$tmp/os-release"
 openssl genpkey -algorithm ED25519 -out "$tmp/private.pem" >/dev/null 2>&1
 openssl pkey -in "$tmp/private.pem" -pubout -out "$tmp/public.pem" >/dev/null 2>&1
 
@@ -20,6 +21,7 @@ openssl pkey -in "$tmp/private.pem" -pubout -out "$tmp/public.pem" >/dev/null 2>
 replace_key() {
   source=$1
   destination=$2
+  bake=${3:-0}
   awk -v key="$tmp/public.pem" '
     BEGIN {
       while ((getline line < key) > 0) replacement = replacement line "\n"
@@ -29,10 +31,16 @@ replace_key() {
     in_key && $0 == "-----END PUBLIC KEY-----" { in_key = 0; next }
     !in_key { print }
   ' "$source" >"$destination"
+  if test "$bake" = 1; then
+    sed 's|__TINKERCLOUD_RELEASE_BASE__|https://releases.example.test/v0.1.0/|g' \
+      "$destination" >"$destination.baked"
+    mv "$destination.baked" "$destination"
+  fi
   chmod +x "$destination"
 }
 replace_key "$root/internal/hostops/bootstrap.sh" "$tmp/bootstrap.sh"
-replace_key "$root/packaging/install-host.sh" "$tmp/install-host.sh"
+replace_key "$root/packaging/install-host.sh" "$tmp/install-host.sh" 1
+replace_key "$root/packaging/install-host.sh" "$tmp/install-host-development.sh"
 
 sign() {
   artifact=$1
@@ -83,21 +91,25 @@ EOF
 cat >"$tmp/bin/curl" <<'EOF'
 #!/bin/sh
 set -eu
-out= url= saw_location=0
+out= url= saw_location=0 proto= proto_redir=
 while test $# -gt 0; do
   case "$1" in
     --output|-o) out=$2; shift 2 ;;
     --location|-L) saw_location=1; shift ;;
+    --proto) proto=$2; shift 2 ;;
+    --proto-redir) proto_redir=$2; shift 2 ;;
     *) url=$1; shift ;;
   esac
 done
 test -n "$out" && test -n "$url"
+test "$proto" = '=https'
+test "$proto_redir" = '=https'
 case "$url" in "$TINKER_TEST_RELEASE_BASE"*) ;; *) exit 1;; esac
-# Simulate a redirect response. A bootstrap that does not opt into redirect
-# following must fail the fetch rather than accepting a different origin.
+# GitHub asset URLs redirect to another HTTPS origin. The fetch accepts that
+# transport redirect, but verification still authenticates every downloaded
+# byte before the installer can mutate the host.
 if test "${TINKER_TEST_REDIRECT:-0}" != 0; then
-  test "$saw_location" = 0 || exit 1
-  exit 1
+  test "$saw_location" = 1 || exit 1
 fi
 cp "$TINKER_TEST_RELEASE/${url##*/}" "$out"
 EOF
@@ -132,6 +144,7 @@ run_bootstrap() {
   rm -rf "$markers"
   mkdir -p "$markers"
   PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python" \
+    TINKERCLOUD_OS_RELEASE_FILE="$tmp/os-release" \
     TINKER_TEST_RELEASE="$tmp/release" TINKER_TEST_RELEASE_BASE=https://releases.example.test/v0.1.0/ \
     TINKER_TEST_MARKERS="$markers" "$tmp/bootstrap.sh" "$@"
 }
@@ -147,16 +160,35 @@ TINKER_TEST_UID=1000 PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python
   "$tmp/bootstrap.sh" https://releases.example.test/v0.1.0/ >/dev/null 2>&1 &&
   fail "bootstrap accepted a non-root caller"
 TINKER_TEST_UID=0 PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python" \
-  "$tmp/install-host.sh" http://releases.example.test/v0.1.0/ >/dev/null 2>&1 &&
-  fail "host installer accepted an insecure origin"
+  TINKERCLOUD_OS_RELEASE_FILE="$tmp/os-release" \
+  "$tmp/install-host.sh" https://releases.example.test/v0.1.0/ >/dev/null 2>&1 &&
+  fail "released host installer accepted a caller-supplied origin"
+printf 'ID=ubuntu\nVERSION_ID=$(touch "%s/os-release-executed")\n' "$tmp" >"$tmp/os-release-malicious"
+TINKER_TEST_UID=0 PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python" \
+  TINKERCLOUD_OS_RELEASE_FILE="$tmp/os-release-malicious" \
+  "$tmp/install-host.sh" >/dev/null 2>&1 &&
+  fail "host installer accepted malicious os-release data"
+test ! -e "$tmp/os-release-executed" || fail "host installer executed os-release data"
+printf 'ID=debian\nVERSION_ID=12\n' >"$tmp/os-release-unsupported"
+TINKER_TEST_UID=0 PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python" \
+  TINKERCLOUD_OS_RELEASE_FILE="$tmp/os-release-unsupported" \
+  "$tmp/install-host.sh" >/dev/null 2>&1 &&
+  fail "host installer accepted an unsupported operating system"
+for invalid_origin in \
+  http://releases.example.test/v0.1.0/ \
+  https://user:password@releases.example.test/v0.1.0/ \
+  https://127.0.0.1/v0.1.0/ \
+  not-a-url; do
+  TINKER_TEST_UID=0 PATH="$tmp/bin:$PATH" TINKER_TEST_REAL_PYTHON="$real_python" \
+    TINKERCLOUD_OS_RELEASE_FILE="$tmp/os-release" \
+    "$tmp/install-host-development.sh" "$invalid_origin" >/dev/null 2>&1 &&
+    fail "development host installer accepted invalid origin: $invalid_origin"
+done
+grep -F -- '--location' "$tmp/bootstrap.sh" >/dev/null || fail "bootstrap HTTPS redirect support missing"
 grep -F -- '--proto-redir' "$tmp/bootstrap.sh" >/dev/null || fail "bootstrap redirect protocol denial missing"
-if grep -E -- 'curl[^\n]*(--location|-L)' "$tmp/bootstrap.sh" >/dev/null; then
-  fail "bootstrap may follow a cross-origin redirect"
-fi
 prepare_release
-TINKER_TEST_REDIRECT=1 run_bootstrap "$tmp/redirect" https://releases.example.test/v0.1.0/ >/dev/null 2>&1 &&
-  fail "bootstrap followed a redirect"
-test ! -e "$tmp/redirect/systemctl" || fail "redirect failure reached the installer"
+TINKER_TEST_REDIRECT=1 run_bootstrap "$tmp/redirect" https://releases.example.test/v0.1.0/
+test -f "$tmp/redirect/systemctl" || fail "bootstrap did not accept an HTTPS redirect before verification"
 
 prepare_release
 printf '{"version":"0.1.0","api":"1","schema":"1","sha256":"%064d"}\n' 0 >"$tmp/release/install-host.sh.metadata.json"

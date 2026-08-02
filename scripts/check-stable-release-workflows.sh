@@ -65,6 +65,10 @@ require "$stable" 'gh release download "$tag"' "stable remote draft download mis
 require "$stable" 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' "stable asset-set comparison missing"
 require "$stable" "--latest" "stable latest promotion missing"
 require "$stable" '"download/v$VERSION" "latest/download"' "exact and latest installer smoke tests missing"
+require "$stable" 'install-host.sh | sh\n" "$release_base"' \
+  "stable release notes must document the exact-version root-shell host installer"
+require "$stable" "--proto-redir '=https'" \
+  "stable root-shell installer command must deny redirect downgrades"
 reject "$stable" '(^|[[:space:]])(npm[[:space:]]+publish|jsr[[:space:]]+publish|brew([[:space:]]|$))' \
   "stable GitHub workflow may not publish a package-manager channel"
 reject "$stable" '--prerelease([[:space:]]|$)' "stable release may not become a prerelease"

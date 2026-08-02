@@ -69,6 +69,10 @@ require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' \
 require "--latest=false" "beta latest-channel denial is missing"
 require 'TINKER_RELEASE_BASE="$release_base"' \
   "public installer smoke test is missing"
+require 'install-host.sh | sh\n" "$release_base"' \
+  "beta release notes must document the root-shell host installer"
+require "--proto-redir '=https'" \
+  "beta root-shell installer command must deny redirect downgrades"
 require "printf 'tinker host install root@HOST\\n'" \
   "beta release notes must document version-derived host installation"
 require 'embedded build version' \

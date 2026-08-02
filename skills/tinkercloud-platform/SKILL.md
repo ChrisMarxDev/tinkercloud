@@ -568,6 +568,21 @@ mutation, confirm the exact target is a clean dedicated x86-64 Hetzner VPS
 running explicitly supported Ubuntu 24.04 LTS or 26.04 LTS. Ambiguous,
 interim, end-of-life, other-distribution, or future unverified releases deny.
 
+For a clean host, begin in that VPS's root shell with the exact-version signed
+release command:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh
+```
+
+Replace `VERSION` only with the intended published exact version. The released
+host installer embeds that immutable release directory; do not add an origin,
+`latest` selector, provider credential, or signing material. HTTPS release-asset
+redirects are transport-only and still require checksum plus pinned Ed25519
+verification before installation. Repository/development verification and the
+optional workstation flow retain explicit `--release-base` support where their
+contracts require it.
+
 For a new server, start with the signed installer and the implemented resumable
 `tinkercloud init --non-interactive` path. The minimum-question
 `tinkercloud setup` assistant remains planned and must not be invoked or claimed

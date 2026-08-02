@@ -207,16 +207,20 @@ jobs:
           {
             printf '# Beta release %s\n\n' "$tag"
             printf 'This is a beta prerelease. It is not a stable or latest release.\n\n'
+            printf 'Install Tinkercloud from a fresh supported VPS root shell:\n\n'
+            printf '```sh\n'
+            printf "curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL %sinstall-host.sh | sh\n" "$release_base"
+            printf '```\n\n'
             printf 'Install the workstation CLI:\n\n'
             printf '```sh\n'
             printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | \\\\\n" "$release_base"
             printf '  TINKER_RELEASE_BASE=%s sh\n' "$release_base"
             printf '```\n\n'
-            printf 'Install Tinkercloud on a reviewed SSH host after installing the CLI:\n\n'
+            printf 'Optional workstation SSH installation after installing the CLI:\n\n'
             printf '```sh\n'
             printf 'tinker host install root@HOST\n'
             printf '```\n\n'
-            printf 'The released CLI derives that exact immutable versioned release URL from its embedded build version. Development or advanced operator flows may pass '
+            printf 'The released root installer embeds that exact immutable versioned release URL. The released CLI also derives it from its embedded build version. Development or advanced operator flows may pass '
             printf "\`--release-base %s\`" "$release_base"
             printf ' explicitly.\n\n'
             printf 'Install the TypeScript SDK directly from this GitHub release:\n\n'
