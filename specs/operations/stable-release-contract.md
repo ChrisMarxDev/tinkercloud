@@ -1,17 +1,18 @@
-# Stable GitHub and npm CLI Release Contract
+# Stable unified GitHub and npm Release Contract
 
 ## Scope
 
-This contract authorizes two manually approved stable distribution mutations
-after every prerequisite is satisfied:
+This contract authorizes one manually approved stable distribution flow after
+every prerequisite is satisfied:
 
 1. an immutable GitHub release containing the complete signed Tinkercloud
    release; and
-2. the `@tinkercloud/cli` npm package derived from that exact release.
+2. the `@tinkercloud/sdk` and `@tinkercloud/cli` npm packages derived from
+   that exact release.
 
-The npm artifact is the one executable package consumed by npm, pnpm, Yarn,
-Bun, and their package runners. This contract does not publish the TypeScript
-SDK, JSR package, Homebrew tap, or server through a JavaScript registry. An
+The CLI npm artifact is the one executable package consumed by npm, pnpm, Yarn,
+Bun, and their package runners. This contract does not publish JSR, a Homebrew
+tap, or server through a JavaScript registry. An
 operator-enabled stable server channel may discover the immutable GitHub
 release, but its signed server artifact and manifest remain the installation
 authority.
@@ -25,19 +26,20 @@ authority.
   every embedded copy have been rotated together to a separately controlled
   production key, and `release-key-policy.json` records `production` plus the
   matching SHA-256 fingerprint of its DER public key.
-- The `stable-release` and `npm-cli` GitHub Environments require a reviewer and
+- The `stable-release`, `npm-sdk`, and `npm-cli` GitHub Environments require a reviewer and
   restrict deployment to reviewed release tags.
 - The `@tinkercloud` npm scope is operator-controlled. The package has been
   bootstrapped once with interactive 2FA, then configured to trust only
-  `npm-cli-publish.yml` in `ChrisMarxDev/tinkercloud`, Environment `npm-cli`,
-  for `npm publish`.
+  `release.yml` in `ChrisMarxDev/tinkercloud` and its own Environment for
+  `npm publish`.
 
 ## Stable release workflow
 
-The workflow is manually dispatched with the exact numeric version and
-`publish-stable-vVERSION`. It validates source, repository visibility, version
-parity, release absence, production-key policy, and the full normal test suite
-before entering `stable-release` or reading its signing secret.
+The `release.yml` workflow is manually dispatched with channel `stable`, the
+exact numeric version, and `publish-stable-vVERSION`. It validates source,
+repository visibility, version parity, release absence, production-key policy,
+and absence of both npm versions before entering any protected environment or
+reading a signing secret.
 
 The protected job builds once, verifies locally, creates a draft stable
 release, downloads the complete draft into a fresh directory, compares the

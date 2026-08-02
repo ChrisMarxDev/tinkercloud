@@ -2,15 +2,12 @@
 
 ## Scope
 
-This contract authorizes the canonical pre-stable release origin: manually
-approved GitHub prereleases containing the complete signed Tinkercloud release.
-The GitHub workflow does not publish npm, JSR, Homebrew, stable GitHub releases,
-`latest` promotion, DNS changes, or automatic update enablement. After that
-prerelease is public and verified, the separate SDK npm beta contract may
-publish only its exact SDK tarball under npm's `beta` dist-tag. A server whose
-operator explicitly chose the beta update channel may discover these
-prereleases, but still trusts only their pinned signed artifact and complete
-release manifest.
+This contract authorizes the `beta` path of one manually approved
+`release.yml` workflow. It publishes a complete signed GitHub prerelease plus
+the exact release-derived `@tinkercloud/sdk` and `@tinkercloud/cli` packages.
+Their beta npm tags are fixed to `beta` and `next` respectively. JSR, Homebrew,
+stable GitHub releases, DNS changes, and automatic update enablement remain
+outside this flow.
 
 Product and artifact identities are locked by ADR 0052. Every release under
 this contract is visibly marked as beta. Stable distribution requires a new
@@ -37,6 +34,7 @@ new patch version.
 
 The workflow is manually dispatched with:
 
+- channel `beta`;
 - the exact numeric version; and
 - the exact confirmation `publish-beta-vVERSION`.
 
