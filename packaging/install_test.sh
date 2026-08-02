@@ -104,13 +104,25 @@ cp "$TINKER_TEST_RELEASE/${url##*/}" "$out"
 EOF
 cat >"$tmp/bin/id" <<'EOF'
 #!/bin/sh
-echo 1000
+echo "${TINKER_TEST_UID:-1000}"
 EOF
 cat >"$tmp/bin/uname" <<'EOF'
 #!/bin/sh
 case "$1" in -s) echo Linux;; -m) echo x86_64;; esac
 EOF
 chmod +x "$tmp/bin/curl" "$tmp/bin/id" "$tmp/bin/uname"
+if PATH="$tmp/bin:$PATH" TINKER_TEST_UID=0 "$root/packaging/install-client.sh" >"$tmp/client-root.stdout" 2>"$tmp/client-root.stderr"; then
+  echo "client installer accepted a root caller" >&2
+  exit 1
+fi
+grep -F 'deployer/workstation Tinker CLI installer' "$tmp/client-root.stderr" >/dev/null || {
+  echo "client installer root refusal lacks the deployer/workstation boundary" >&2
+  exit 1
+}
+grep -F 'version-matched install-host.sh release installer' "$tmp/client-root.stderr" >/dev/null || {
+  echo "client installer root refusal lacks the bounded VPS installer guidance" >&2
+  exit 1
+}
 if PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" TINKER_TEST_RELEASE="$tmp/client-release" \
   TINKER_RELEASE_BASE=https://releases.example.test/v1 \
   TINKERCLOUD_TEST_MARKER="$tmp/client-invoked" "$root/packaging/install-client.sh" >/dev/null 2>&1; then

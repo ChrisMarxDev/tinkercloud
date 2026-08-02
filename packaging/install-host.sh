@@ -7,12 +7,48 @@ fail() { echo "tinkercloud installer: $*" >&2; exit 1; }
 test "$(id -u)" = 0 || fail "run as root"
 test "$(uname -s)" = Linux || fail "Linux required"
 case "$(uname -m)" in x86_64|amd64) ;; *) fail "x86_64 required" ;; esac
-test ! -e /usr/local/bin/tinkercloud || fail "tinkercloud already installed; use tinkercloud update"
 for command in curl openssl python3 install systemctl; do
   command -v "$command" >/dev/null 2>&1 || fail "$command is required"
 done
-test $# -eq 1 || fail "usage: install-host.sh HTTPS_RELEASE_DIRECTORY"
-base=$1
+os_release_file=${TINKERCLOUD_OS_RELEASE_FILE:-/etc/os-release}
+test -r "$os_release_file" || fail "supported Ubuntu release required"
+os_version=$(python3 - "$os_release_file" <<'PY' 2>/dev/null || true
+import pathlib, re, sys
+try:
+    raw = pathlib.Path(sys.argv[1]).read_bytes()
+    if len(raw) > 16384:
+        raise ValueError()
+    values = {}
+    for line in raw.decode("ascii").splitlines():
+        match = re.fullmatch(r'(ID|VERSION_ID)=("?)([A-Za-z0-9.]+)\2', line)
+        if match:
+            if match.group(1) in values:
+                raise ValueError()
+            values[match.group(1)] = match.group(3)
+    if values.get("ID") != "ubuntu" or values.get("VERSION_ID") not in {"24.04", "26.04"}:
+        raise ValueError()
+    print(values["VERSION_ID"])
+except Exception:
+    raise SystemExit(1)
+PY
+)
+case "$os_version" in 24.04|26.04) ;; *) fail "Ubuntu 24.04 LTS or 26.04 LTS required" ;; esac
+test ! -e /usr/local/bin/tinkercloud || fail "tinkercloud already installed; use tinkercloud update"
+# The repository source remains usable for offline/development verification by
+# accepting one explicit base. The signed release copy has this placeholder
+# replaced with its exact immutable GitHub release directory and accepts no
+# caller-controlled release origin.
+release_base='__TINKERCLOUD_RELEASE_BASE__'
+case "$release_base" in
+https://*)
+  test $# -eq 0 || fail "this released installer has a pinned release directory"
+  base=$release_base
+  ;;
+*)
+  test $# -eq 1 || fail "development usage: install-host.sh HTTPS_RELEASE_DIRECTORY"
+  base=$1
+  ;;
+esac
 
 python3 - "$base" <<'PY' || exit 1
 import ipaddress, socket, sys, urllib.parse
@@ -40,7 +76,7 @@ MCowBQYDK2VwAyEAYhkssT8gJdyQLriNH5b4f+olvZ90xXbE2G6CrVVAX4g=
 -----END PUBLIC KEY-----
 EOF
 fetch() {
-  curl --fail --silent --show-error --proto '=https' --proto-redir '=https' \
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
     --max-filesize 134217728 --output "$work/$1" "$base$1"
 }
 for name in tinkercloud-linux-amd64 tinkercloud-linux-amd64.metadata.json tinkercloud-linux-amd64.signature tinkercloud.service tinkercloud.service.metadata.json tinkercloud.service.signature SHA256SUMS; do

@@ -9,21 +9,24 @@
 Tinkercloud is a self-hosted private micro-app platform: one operator runs one
 gateway, deployers publish small apps, and viewers authenticate by email.
 
+For an operator on a fresh supported VPS root shell, installation is one exact
+versioned command:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh
+```
+
+The installer downloads only its baked exact release, follows HTTPS-only asset
+redirects, and verifies checksums plus Ed25519 signatures before it changes the
+host. Replace `VERSION` with a published version. Run it only as root on a
+clean Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
+
 For a deployer, the shortest useful path is preview, then publish the current
 project directory:
 
 ```sh
 tinker dev
 tinker deploy .
-```
-
-For an operator, signed installation and everyday host checks stay equally
-direct:
-
-```sh
-tinker host install root@HOST
-tinker host status root@HOST
-tinker host doctor root@HOST
 ```
 
 The first `tinker deploy .` asks only for required information it cannot safely
@@ -60,35 +63,7 @@ tinker version
 
 ## Operator first: run the platform
 
-From the operator workstation, the same CLI installs and administers the
-Tinkercloud server over the existing root SSH trust boundary:
-
-```sh
-tinker host install root@HOST
-tinker host status root@HOST
-tinker host doctor root@HOST
-tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
-tinker host uninstall root@HOST
-```
-
-The released CLI derives the exact immutable GitHub release URL from its own
-signed build version. A local development build instead requires the explicit
-`--release-base` form. Installation places the verified server binary and
-systemd unit; it does not guess the domain, operator identity, or protected
-email credential needed to initialize an instance.
-
-`tinker host update` invokes the server's signed self-updater. The host verifies
-the complete compatibility evidence, restarts the service, runs health and
-anonymous-denial checks, and automatically restores the previous binary if a
-gate fails. Tinker uses a fixed SSH command grammar; it stores no root
-credential and exposes no arbitrary remote shell.
-
-`tinker host uninstall` requires confirmation of the exact SSH target. It
-permanently removes Tinkercloud configuration, credentials, apps, data,
-service, binary, and service identity while preserving the ACME cache so a
-manual reinstall does not request the same certificates again.
-
-After installing the host binary, initialize the instance through the current
+After the root-shell install, initialize the instance through the current
 deterministic operator contract:
 
 ```sh
@@ -103,7 +78,38 @@ sudo tinkercloud doctor
 ```
 
 The minimum-question `tinkercloud setup` assistant remains planned; the README
-does not treat it as implemented installation behavior.
+does not treat it as implemented installation behavior. Installation places the
+verified server binary and systemd unit; it does not guess the domain, operator
+identity, or protected email credential needed to initialize an instance.
+
+### Optional: operate from a workstation over SSH
+
+The `tinker` CLI can also administer a VPS over the existing root SSH trust
+boundary. This is optional; it is useful when the operator already has the CLI
+installed on a workstation:
+
+```sh
+tinker host install root@HOST
+tinker host status root@HOST
+tinker host doctor root@HOST
+tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host uninstall root@HOST
+```
+
+The released CLI derives the exact immutable GitHub release URL from its own
+signed build version. A local development build instead requires the explicit
+`--release-base` form.
+
+`tinker host update` invokes the server's signed self-updater. The host verifies
+the complete compatibility evidence, restarts the service, runs health and
+anonymous-denial checks, and automatically restores the previous binary if a
+gate fails. Tinker uses a fixed SSH command grammar; it stores no root
+credential and exposes no arbitrary remote shell.
+
+`tinker host uninstall` requires confirmation of the exact SSH target. It
+permanently removes Tinkercloud configuration, credentials, apps, data,
+service, binary, and service identity while preserving the ACME cache so a
+manual reinstall does not request the same certificates again.
 
 `status` reports redacted local health for SQLite, disk, permissions, clock,
 service state, listeners, version, and rollback state. `doctor` performs bounded

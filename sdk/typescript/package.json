@@ -1,6 +1,6 @@
 {
   "name": "@tinkercloud/sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Typed browser SDK for Tinkercloud app identity, KV, and realtime capabilities",
   "license": "Apache-2.0",
   "repository": {

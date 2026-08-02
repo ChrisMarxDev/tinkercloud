@@ -45,6 +45,12 @@ sed "s/printf 'tinker host install root@HOST\\\\n'/printf 'tinker host install r
   "$source_workflow" >"$tmp/no-version-derived-host-install.yml"
 expect_denied "missing version-derived host installation notes" "$tmp/no-version-derived-host-install.yml"
 
+sed '/install-host\.sh | sh/d' "$source_workflow" >"$tmp/no-root-shell-install.yml"
+expect_denied "missing root-shell host installation notes" "$tmp/no-root-shell-install.yml"
+
+sed "s/--proto-redir '=https' //" "$source_workflow" >"$tmp/root-shell-redirect-downgrade.yml"
+expect_denied "a root-shell installer command without HTTPS-only redirects" "$tmp/root-shell-redirect-downgrade.yml"
+
 sed 's#sdk_version=$(node ./scripts/extract-sdk-version.mjs sdk/typescript/src/index.ts)#sdk_version=0.0.0#' \
   "$source_workflow" >"$tmp/no-portable-version-extraction.yml"
 expect_denied "missing portable exact SDK version extraction" "$tmp/no-portable-version-extraction.yml"

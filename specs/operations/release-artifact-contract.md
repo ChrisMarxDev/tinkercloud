@@ -47,6 +47,24 @@ The release version must exactly match the semantic version inside the SDK
 tarball and the SDK's npm, JSR, and exported runtime version declarations.
 Version drift is a release-build failure rather than a filename rewrite.
 
+Before signing `install-host.sh`, the release build replaces its sole
+`__TINKERCLOUD_RELEASE_BASE__` development placeholder with
+`https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/`.
+The placeholder must not occur in a published artifact. Consequently an
+operator can retrieve the exact-version host installer into a fresh supported
+VPS root shell and run it without passing an origin again. Redirects used to
+serve GitHub assets are permitted only as HTTPS transport redirects; the
+installer verifies the downloaded signed evidence before installation.
+For a reviewed development or custom distribution, the release builder may
+instead receive one credential-free HTTPS directory through
+`TINKERCLOUD_HOST_INSTALL_RELEASE_BASE`; it rejects whitespace/control bytes,
+credentials, query/fragment, non-443 ports, dot-segment/canonicalization
+ambiguity, and noncanonical directories before it bakes that exact directory
+with a one-occurrence byte-safe replacement. The baked base is recorded in both
+dependency and provenance evidence. Passing `tinker host install --release-base`
+to such a release does not override a baked installer—it selects the release
+that already binds to the same directory.
+
 `SHA256SUMS` covers every generated release file other than itself, including
 all payloads, sidecars, dependency evidence, and provenance. The signed
 schema-2 `release-manifest.json` binds the release version, the exact

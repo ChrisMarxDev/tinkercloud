@@ -38,10 +38,10 @@ func TestHostInstallRoutesReviewedBootstrap(t *testing.T) {
 func TestHostInstallDerivesPinnedReleaseOnlyForReleasedBuild(t *testing.T) {
 	oldRunner, oldVersion := hostRunner, client.BuildVersion
 	runner := &cliHostRunner{}
-	hostRunner, client.BuildVersion = runner, "0.1.2"
+	hostRunner, client.BuildVersion = runner, "0.1.3"
 	t.Cleanup(func() { hostRunner, client.BuildVersion = oldRunner, oldVersion })
 	var out, stderr strings.Builder
-	if code := runWith([]string{"host", "install", "root@host.example"}, &out, &stderr, runnerDeps{}); code != 0 || !runner.called || !strings.Contains(strings.Join(runner.args, " "), "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.2/") {
+	if code := runWith([]string{"host", "install", "root@host.example"}, &out, &stderr, runnerDeps{}); code != 0 || !runner.called || !strings.Contains(strings.Join(runner.args, " "), "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.3/") {
 		t.Fatalf("released install code=%d called=%v args=%q", code, runner.called, runner.args)
 	}
 	runner.called = false

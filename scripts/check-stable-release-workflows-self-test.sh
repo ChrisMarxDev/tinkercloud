@@ -47,4 +47,10 @@ expect_denied "a missing first-package bootstrap gate" "$stable" "$tmp/no-bootst
 sed 's/--access public/--access restricted/' "$npm" >"$tmp/private-package.yml"
 expect_denied "a private CLI package" "$stable" "$tmp/private-package.yml"
 
+sed '/install-host\.sh | sh/d' "$stable" >"$tmp/no-root-shell-install.yml"
+expect_denied "missing root-shell host installation notes" "$tmp/no-root-shell-install.yml" "$npm"
+
+sed "s/--proto-redir '=https' //" "$stable" >"$tmp/root-shell-redirect-downgrade.yml"
+expect_denied "a root-shell installer command without HTTPS-only redirects" "$tmp/root-shell-redirect-downgrade.yml" "$npm"
+
 echo "stable distribution workflow checker self-test passed"

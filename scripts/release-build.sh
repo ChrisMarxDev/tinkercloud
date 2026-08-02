@@ -69,7 +69,49 @@ client_build_flags="-buildid= -s -w -X github.com/ChrisMarxDev/tinkercloud/inter
 )
 chmod 0755 "$stage/tinkercloud-linux-amd64" "$stage"/tinker-linux-* "$stage"/tinker-darwin-*
 cp "$root/packaging/systemd/tinkercloud.service" "$stage/tinkercloud.service"
-cp "$root/packaging/install-host.sh" "$stage/install-host.sh"
+# A root-shell install has no safe opportunity to pass an origin separately.
+# Bake the exact immutable release directory into the signed installer, before
+# its metadata and signature are generated. The source placeholder is only for
+# repository development/tests and must never enter a published release.
+release_base=${TINKERCLOUD_HOST_INSTALL_RELEASE_BASE:-"https://github.com/ChrisMarxDev/tinkercloud/releases/download/v$version/"}
+if ! node - "$release_base" <<'NODE'
+const raw = process.argv[2];
+try {
+  const url = new URL(raw);
+  if (url.protocol !== "https:" || !url.hostname || url.username || url.password ||
+      url.search || url.hash || (url.port && url.port !== "443") ||
+      !raw.endsWith("/") || /[\x00-\x20\x7f]/.test(raw) || url.href !== raw) throw new Error();
+} catch {
+  process.exit(1);
+}
+NODE
+then
+  echo "host installer release base must be a credential-free HTTPS directory" >&2
+  exit 1
+fi
+placeholder='__TINKERCLOUD_RELEASE_BASE__'
+if ! node - "$root/packaging/install-host.sh" "$stage/install-host.sh" "$placeholder" "$release_base" <<'NODE'
+const fs = require("node:fs");
+const [sourcePath, destinationPath, placeholder, releaseBase] = process.argv.slice(2);
+const source = fs.readFileSync(sourcePath, "utf8");
+const count = source.split(placeholder).length - 1;
+if (count !== 1) process.exit(1);
+fs.writeFileSync(destinationPath, source.replace(placeholder, releaseBase), { mode: 0o755 });
+NODE
+then
+  echo "release host installer placeholder replacement failed" >&2
+  exit 1
+fi
+staged_placeholder_count=$(grep -F -c -- "$placeholder" "$stage/install-host.sh" || true)
+test "$staged_placeholder_count" = 0 || {
+  echo "release host installer still contains the development origin placeholder" >&2
+  exit 1
+}
+baked_base_count=$(grep -F -c -- "$release_base" "$stage/install-host.sh" || true)
+test "$baked_base_count" = 1 || {
+  echo "release host installer does not contain its exact immutable release directory" >&2
+  exit 1
+}
 cp "$root/packaging/install-client.sh" "$stage/install-client.sh"
 chmod 0644 "$stage/tinkercloud.service"
 chmod 0755 "$stage/install-host.sh"
@@ -124,6 +166,7 @@ sign_artifact "tinkercloud-sdk-$version.tgz"
     echo "go=$(go version)"
     echo "source_date_epoch=${SOURCE_DATE_EPOCH:-unset}"
     echo "public_key_sha256=$(sha256sum "$public_key" | awk '{print $1}')"
+    echo "host_installer_release_base=$release_base"
     echo
     go list -m all
     echo
@@ -142,6 +185,7 @@ sign_artifact "tinkercloud-sdk-$version.tgz"
   echo "go_ldflags=-buildid= -s -w"
   echo "source_date_epoch=${SOURCE_DATE_EPOCH:-unset}"
   echo "release_public_key_sha256=$(sha256sum "$public_key" | awk '{print $1}')"
+  echo "host_installer_release_base=$release_base"
   for artifact in tinkercloud-linux-amd64 tinker-linux-amd64 tinker-linux-arm64 tinker-darwin-amd64 tinker-darwin-arm64 tinkercloud.service install-host.sh install-client.sh "tinkercloud-sdk-$version.tgz"; do
     echo "artifact=$artifact sha256=$(sha256sum "$stage/$artifact" | awk '{print $1}')"
   done

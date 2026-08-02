@@ -5,7 +5,7 @@ set -eu
 
 fail() { echo "tinker client installer: $*" >&2; exit 1; }
 
-test "$(id -u)" != 0 || fail "refusing to run as root"
+test "$(id -u)" != 0 || fail "this is the deployer/workstation Tinker CLI installer; on a VPS root shell use the version-matched install-host.sh release installer"
 command -v curl >/dev/null 2>&1 || fail "curl is required"
 command -v openssl >/dev/null 2>&1 || fail "openssl is required"
 command -v python3 >/dev/null 2>&1 || fail "python3 is required"

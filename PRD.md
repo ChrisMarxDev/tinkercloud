@@ -360,7 +360,7 @@ from config documentation.
 Journey:
 
 ```text
-curl thin installer | sudo sh
+fresh supported VPS root shell runs exact-version signed install-host.sh
 → detect OS/architecture
 → download tinkercloud
 → verify checksum and signature
@@ -1855,6 +1855,9 @@ This beta path MUST NOT publish npm, JSR, Homebrew, stable/latest channels,
 claim registry availability, change DNS, or enable silent updates. The committed
 beta authority MUST be replaced across every embedded trust anchor by a new
 operator-controlled production authority before the first stable release.
+Public beta notes advertise the exact-version root-shell `install-host.sh`
+command first; the optional workstation CLI and deployer installer remain
+separate flows.
 
 ### D11 — Dashboard token management deferred
 

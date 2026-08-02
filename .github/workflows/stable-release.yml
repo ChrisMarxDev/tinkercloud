@@ -204,6 +204,10 @@ jobs:
           notes="$RUNNER_TEMP/stable-release-notes.md"
           {
             printf '# Tinkercloud %s\n\n' "$tag"
+            printf 'Install Tinkercloud from a fresh supported VPS root shell:\n\n'
+            printf '```sh\n'
+            printf "curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL %sinstall-host.sh | sh\n" "$release_base"
+            printf '```\n\n'
             printf 'Install the Tinker CLI with the stable one-line installer:\n\n'
             printf '```sh\n'
             printf "curl --proto '=https' --tlsv1.2 -fsSL %sinstall-client.sh | TINKER_RELEASE_BASE=%s sh\n" "$latest_base" "$latest_base"

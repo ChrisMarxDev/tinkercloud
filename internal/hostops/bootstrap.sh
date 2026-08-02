@@ -20,7 +20,7 @@ MCowBQYDK2VwAyEAYhkssT8gJdyQLriNH5b4f+olvZ90xXbE2G6CrVVAX4g=
 -----END PUBLIC KEY-----
 EOF
 for name in install-host.sh install-host.sh.metadata.json install-host.sh.signature; do
-  curl --fail --silent --show-error --proto '=https' --proto-redir '=https' \
+  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
     --max-filesize 1048576 --output "$work/$name" "$base$name"
 done
 python3 - "$work" <<'PY'
@@ -50,4 +50,4 @@ PY
 openssl pkeyutl -verify -pubin -inkey "$work/key.pem" -rawin \
   -in "$work/signed" -sigfile "$work/signature.raw" >/dev/null 2>&1 ||
   fail "installer signature invalid"
-exec sh "$work/install-host.sh" "$base"
+exec sh "$work/install-host.sh"
