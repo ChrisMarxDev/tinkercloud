@@ -39,6 +39,67 @@ func TestPlatformUIInsightsRenderAggregateTextOrUnavailableNeverZero(t *testing.
 	}
 }
 
+func TestPlatformUIAppRowsUseCompactMoreDialogsWithNativeFallback(t *testing.T) {
+	day := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	app := DashboardApp{
+		Slug:      "owned-app",
+		Status:    "active",
+		StableURL: "https://owned-app.apps.example.test/",
+		Access:    DashboardAccess{Mode: "private", Revision: 1},
+		Releases:  []DashboardRelease{{ID: "release-1", State: "active"}},
+		Insights: DashboardInsights{
+			Available:  true,
+			Last7Days:  DashboardInsightPeriod{PageViews: 4, ApproximateVisitors: 2},
+			Last30Days: DashboardInsightPeriod{PageViews: 9, ApproximateVisitors: 3, LastActivity: day, Days: []DashboardInsightDay{{Day: day, PageViews: 4, ApproximateVisitors: 2}}},
+		},
+	}
+	operator := Platform{Auth: uiAuth{actor: Actor{ID: "operator", Role: "operator", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{app}}}}
+	body := dashboardAppCardHTML(t, uiRequest(t, operator, http.MethodGet, "/dashboard", "").Body.String(), "owned-app")
+	for _, required := range []string{
+		`tinker-app-card__identity`,
+		`tinker-app-card__title-row`,
+		`tinker-app-card__tools`,
+		`data-tinker-app-more hidden`,
+		`aria-label="More options for owned-app"`,
+		`data-tinker-app-more-option`,
+		`data-tinker-app-dialog="access-owned-app"`,
+		`data-tinker-app-dialog="releases-owned-app"`,
+		`data-tinker-app-dialog="llm-owned-app"`,
+		`data-tinker-app-dialog="controls-owned-app"`,
+		`data-tinker-app-dialog-source="access-owned-app"`,
+		`class="tinker-insight-layout"`,
+		`class="tinker-insight-layout__summary"`,
+		`class="tinker-insight-layout__chart"`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("compact operator app row missing %q: %s", required, body)
+		}
+	}
+
+	deployer := Platform{Auth: uiAuth{actor: Actor{ID: "deployer", Role: "deployer", Active: true}}, Views: &uiViews{value: DashboardView{Apps: []DashboardApp{app}}}}
+	body = dashboardAppCardHTML(t, uiRequest(t, deployer, http.MethodGet, "/dashboard", "").Body.String(), "owned-app")
+	for _, forbidden := range []string{`data-tinker-app-more`, `data-tinker-app-dialog=`, `data-tinker-app-dialog-source=`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("deployer app row rendered operator enhancement %q: %s", forbidden, body)
+		}
+	}
+}
+
+func dashboardAppCardHTML(t *testing.T, page, slug string) string {
+	t.Helper()
+	needle := `data-tinker-app-slug="` + slug + `"`
+	attribute := strings.Index(page, needle)
+	if attribute < 0 {
+		t.Fatalf("dashboard app %q missing from page", slug)
+	}
+	start := strings.LastIndex(page[:attribute], "<article")
+	end := strings.Index(page[attribute:], "</article>")
+	if start < 0 || end < 0 {
+		t.Fatalf("dashboard app %q has incomplete article markup", slug)
+	}
+	return page[start : attribute+end+len("</article>")]
+}
+
 type uiAuth struct {
 	actor Actor
 	err   error
@@ -413,7 +474,7 @@ func TestPlatformUIUsesEmbeddedNativeDesignSystem(t *testing.T) {
 		`data-tinker-app-status="active"`,
 		`data-tinker-app-filter-count role="status" aria-live="polite"`,
 		`No matching apps.`,
-		`<details class="tinker-details">`,
+		`<details class="tinker-details" data-tinker-app-dialog-source=`,
 		`Replace current policy`,
 		`Type <code>delete:alpha</code>`,
 		`Your VPS remains the recovery authority`,

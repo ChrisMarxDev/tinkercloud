@@ -143,31 +143,57 @@
             {{$qr := tinkerQR .StableURL}}
             <article class="tinker-card tinker-app-card" data-tinker-app-card data-tinker-app-slug="{{.Slug}}" data-tinker-app-description="{{.Description}}" data-tinker-app-status="{{.Status}}">
               <div class="tinker-app-card__summary">
-                <div class="tinker-card__header">
-                  <div><p class="tinker-eyebrow">Application</p><h3>{{.Slug}}</h3>{{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}</div>
-                  {{if .StableURL}}
-                    <div class="tinker-app-card__actions">
-                      <a class="tinker-button tinker-button--secondary tinker-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>
-                      {{if $qr}}<button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="qr-{{.Slug}}" aria-label="Show QR code for {{.Slug}}" title="Show QR code for {{.Slug}}"><span aria-hidden="true">▦</span></button>{{end}}
+                <div class="tinker-app-card__header">
+                  <div class="tinker-app-card__identity">
+                    <p class="tinker-eyebrow">Application</p>
+                    <div class="tinker-app-card__title-row">
+                      <h3>{{.Slug}}</h3>
+                      {{if .StableURL}}
+                        <div class="tinker-app-card__actions">
+                          <a class="tinker-button tinker-button--secondary tinker-icon-action" href="{{.StableURL}}" target="_blank" rel="noopener noreferrer" aria-label="Open {{.Slug}} in a new tab" title="Open {{.Slug}} in a new tab"><span aria-hidden="true">↗</span></a>
+                          {{if $qr}}<button class="tinker-button tinker-button--secondary tinker-icon-action" type="button" data-tinker-dialog-open="qr-{{.Slug}}" aria-label="Show QR code for {{.Slug}}" title="Show QR code for {{.Slug}}"><span aria-hidden="true">▦</span></button>{{end}}
+                        </div>
+                      {{end}}
                     </div>
-                  {{end}}
-                  <span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span>
+                    {{if .Description}}<p class="tinker-card__meta">{{.Description}}</p>{{end}}
+                    <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}</p>
+                  </div>
+                  <div class="tinker-app-card__tools">
+                    <span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span>
+                    {{if eq $.Actor.Role "operator"}}
+                      <details class="tinker-app-more" data-tinker-app-more hidden>
+                        <summary aria-label="More options for {{.Slug}}" title="More options for {{.Slug}}"><span aria-hidden="true">•••</span></summary>
+                        <div class="tinker-app-more__menu">
+                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="access-{{.Slug}}">Access policy</button>
+                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="releases-{{.Slug}}">Releases</button>
+                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="llm-{{.Slug}}">LLM chat grant</button>
+                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="controls-{{.Slug}}">App controls</button>
+                        </div>
+                      </details>
+                    {{end}}
+                  </div>
                 </div>
-                <p class="tinker-card__meta">Current posture: {{.Access.Mode}}{{if eq .Access.Mode "public"}} · indexing {{if .Access.Indexing}}enabled{{else}}disabled{{end}}{{end}} (policy revision {{.Access.Revision}}); releases: {{len .Releases}}</p>
                 <section class="tinker-inset" aria-labelledby="insights-{{.Slug}}">
-                  <div class="tinker-card__header"><div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div></div>
                   {{if .Insights.Available}}
-                    <div class="tinker-insight-summary">
-                      <p><strong>Last 7 days</strong> · {{.Insights.Last7Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last7Days.ApproximateVisitors}}</p>
-                      <p><strong>Last 30 days</strong> · {{.Insights.Last30Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last30Days.ApproximateVisitors}}</p>
-                      <p>Last activity · {{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</p>
+                    <div class="tinker-insight-layout">
+                      <div class="tinker-insight-layout__summary">
+                        <div class="tinker-card__header"><div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div></div>
+                        <div class="tinker-insight-summary">
+                          <p><strong>Last 7 days</strong> · {{.Insights.Last7Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last7Days.ApproximateVisitors}}</p>
+                          <p><strong>Last 30 days</strong> · {{.Insights.Last30Days.PageViews}} page views · <strong>Approximate visitors</strong> {{.Insights.Last30Days.ApproximateVisitors}}</p>
+                          <p>Last activity · {{if .Insights.Last30Days.LastActivity.IsZero}}No counted document views yet.{{else}}{{.Insights.Last30Days.LastActivity.UTC.Format "2006-01-02 15:04 UTC"}}{{end}}</p>
+                        </div>
+                      </div>
+                      <div class="tinker-insight-layout__chart">
+                        <figure class="tinker-insight-chart" aria-labelledby="insight-chart-{{.Slug}}">
+                          <figcaption id="insight-chart-{{.Slug}}"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption>
+                          <div class="tinker-insight-chart__bars">{{range .Insights.Last30Days.Days}}<span class="tinker-insight-chart__day" data-page-level="{{insightLevel .PageViews}}" data-visitor-level="{{insightLevel .ApproximateVisitors}}" tabindex="0" role="img" aria-label="{{.Day.Format "2006-01-02"}}: {{.PageViews}} page views; {{.ApproximateVisitors}} approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">{{.Day.Format "Jan 02"}} · {{.PageViews}} page views · {{.ApproximateVisitors}} Approximate visitors</span></span>{{end}}</div>
+                        </figure>
+                      </div>
                     </div>
-                    <figure class="tinker-insight-chart" aria-labelledby="insight-chart-{{.Slug}}">
-                      <figcaption id="insight-chart-{{.Slug}}"><span class="tinker-insight-chart__title">Last 30 days</span><span class="tinker-insight-chart__legend"><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--page" aria-hidden="true"></i>Page views</span><span><i class="tinker-insight-chart__legend-swatch tinker-insight-chart__legend-swatch--visitors" aria-hidden="true"></i>Approximate visitors</span></span></figcaption>
-                      <div class="tinker-insight-chart__bars">{{range .Insights.Last30Days.Days}}<span class="tinker-insight-chart__day" data-page-level="{{insightLevel .PageViews}}" data-visitor-level="{{insightLevel .ApproximateVisitors}}" tabindex="0" role="img" aria-label="{{.Day.Format "2006-01-02"}}: {{.PageViews}} page views; {{.ApproximateVisitors}} approximate visitors."><span class="tinker-insight-chart__series" aria-hidden="true"><span class="tinker-insight-chart__bar tinker-insight-chart__bar--page"></span><span class="tinker-insight-chart__bar tinker-insight-chart__bar--visitors"></span></span><span class="tinker-insight-chart__tooltip">{{.Day.Format "Jan 02"}} · {{.PageViews}} page views · {{.ApproximateVisitors}} Approximate visitors</span></span>{{end}}</div>
-                    </figure>
                     <div class="tinker-visually-hidden"><table><caption>Last 30 UTC days raw local insights values</caption><thead><tr><th scope="col">Day</th><th scope="col">Approximate visitors</th><th scope="col">Page views</th></tr></thead><tbody>{{range .Insights.Last30Days.Days}}<tr><td>{{.Day.Format "2006-01-02"}}</td><td>{{.ApproximateVisitors}}</td><td>{{.PageViews}}</td></tr>{{end}}</tbody></table></div>
                   {{else}}
+                    <div><p class="tinker-eyebrow">Local insights</p><h4 id="insights-{{.Slug}}">Recent app activity</h4></div>
                     <div class="tinker-state tinker-state--unavailable" role="status"><div><h4>Local insights unavailable</h4><p>New tracking is disabled or unavailable. Existing activity is not shown as zero; ask the operator to check the local insights setting.</p></div></div>
                   {{end}}
                 </section>
@@ -196,8 +222,36 @@
                 </dialog>
               {{end}}
               {{if eq $.Actor.Role "operator"}}
+              <dialog class="tinker-dialog" id="access-{{.Slug}}" data-tinker-app-dialog="access-{{.Slug}}" aria-labelledby="access-title-{{.Slug}}">
+                <div class="tinker-dialog__header">
+                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="access-title-{{.Slug}}">Access policy</h2></div>
+                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close access policy for {{.Slug}}">×</button></form>
+                </div>
+                <div class="tinker-dialog__body tinker-app-dialog__body" data-tinker-app-dialog-slot></div>
+              </dialog>
+              <dialog class="tinker-dialog tinker-dialog--compact" id="releases-{{.Slug}}" data-tinker-app-dialog="releases-{{.Slug}}" aria-labelledby="releases-title-{{.Slug}}">
+                <div class="tinker-dialog__header">
+                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="releases-title-{{.Slug}}">Releases</h2></div>
+                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close releases for {{.Slug}}">×</button></form>
+                </div>
+                <div class="tinker-dialog__body tinker-app-dialog__body" data-tinker-app-dialog-slot></div>
+              </dialog>
+              <dialog class="tinker-dialog" id="llm-{{.Slug}}" data-tinker-app-dialog="llm-{{.Slug}}" aria-labelledby="llm-title-{{.Slug}}">
+                <div class="tinker-dialog__header">
+                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="llm-title-{{.Slug}}">LLM chat grant</h2></div>
+                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close LLM chat grant for {{.Slug}}">×</button></form>
+                </div>
+                <div class="tinker-dialog__body tinker-app-dialog__body" data-tinker-app-dialog-slot></div>
+              </dialog>
+              <dialog class="tinker-dialog tinker-dialog--compact" id="controls-{{.Slug}}" data-tinker-app-dialog="controls-{{.Slug}}" aria-labelledby="controls-title-{{.Slug}}">
+                <div class="tinker-dialog__header">
+                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="controls-title-{{.Slug}}">App controls</h2></div>
+                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close app controls for {{.Slug}}">×</button></form>
+                </div>
+                <div class="tinker-dialog__body tinker-app-dialog__body" data-tinker-app-dialog-slot></div>
+              </dialog>
               <div class="tinker-app-card__body">
-                <details class="tinker-details">
+                <details class="tinker-details" data-tinker-app-dialog-source="access-{{.Slug}}">
                   <summary>Access policy</summary>
                   <div class="tinker-details__body tinker-stack">
                     <div class="tinker-notice">
@@ -242,7 +296,7 @@
                   </div>
                 </details>
 
-                <details class="tinker-details">
+                <details class="tinker-details" data-tinker-app-dialog-source="releases-{{.Slug}}">
                   <summary>Releases</summary>
                   <div class="tinker-details__body tinker-stack">
                     {{if .Releases}}
@@ -256,7 +310,7 @@
                 </details>
 
                 {{if eq $.Actor.Role "operator"}}
-                  <details class="tinker-details">
+                  <details class="tinker-details" data-tinker-app-dialog-source="llm-{{.Slug}}">
                     <summary>LLM chat grant</summary>
                     <div class="tinker-details__body tinker-stack">
                       {{if .LLMGrant}}
@@ -288,7 +342,7 @@
                   </details>
                 {{end}}
 
-                <details class="tinker-details">
+                <details class="tinker-details" data-tinker-app-dialog-source="controls-{{.Slug}}">
                   <summary>App controls</summary>
                   <div class="tinker-details__body tinker-stack">
                     {{if eq .Status "active"}}

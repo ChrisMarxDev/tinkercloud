@@ -89,13 +89,21 @@ the control-plane mark, stylesheet, or chrome.
   daily values; unavailable is never rendered as zero. No viewer, app SDK,
   deployment-agent, or unrelated-deployer markup may contain analytics values.
 - Dashboard app lists are full-width compact rows, never a two-column app-card
-  grid. Keep owner/operator insights secondary: compact 7/30 totals and last
-  activity plus a local 30-day quantized CSS bar chart with a tiny visible
-  two-series page-view/Approximate-visitors legend. Bars reveal exact daily values on
+  grid. Keep stable launch and QR actions beside the title. Keep owner/operator
+  insights secondary: compact 7/30 totals and last activity occupy one desktop
+  half, while a local 30-day quantized CSS bar chart with a tiny visible
+  two-series page-view/Approximate-visitors legend occupies the other. Bars reveal exact daily values on
   hover and keyboard focus, while an assistive semantic daily table preserves
   the raw series. No inline geometry, chart runtime, fetch, storage, marker,
   identity, or authorization behavior is allowed. Unavailable remains explicit
   and never renders as zero.
+- Keep operator app management out of the resting row. Use one compact native
+  More disclosure whose options open separate focused native dialogs for the
+  existing Access policy, Releases, optional LLM chat grant, and App controls
+  content. Enhancement may move the existing server-rendered body but must not
+  clone or rewrite forms. Keep More hidden and the original native fallback
+  details usable until every dialog pairing initializes; deployer rows omit
+  operator options and empty dialogs.
 - Dashboard release descriptions come only from a valid stored manifest on a
   `verified`, `active`, or `superseded` immutable release. Known
   `uploading`, `uploaded`, `validating`, `staged`, `rejected`, and `failed`

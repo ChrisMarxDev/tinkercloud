@@ -153,8 +153,11 @@ fail-closed dashboard read-model error.
   never as zero. Viewers and unrelated
   deployers receive no analytics markup or serialized values.
 - Dashboard app lists use full-width compact rows, not a two-column card grid.
-  Owner/operator rows keep local insights secondary: compact 7-day and 30-day
-  totals, last activity, and a 30-day two-series chart with a visible legend.
+  Stable launch and QR actions sit beside the app title rather than occupying a
+  separate action column. Owner/operator rows keep local insights secondary:
+  compact 7-day and 30-day totals and last activity use one half of the desktop
+  row, while a 30-day two-series chart with a tiny visible legend uses the other
+  half. The halves stack at narrow widths.
   Quantized page-view and approximate-visitor bars use bounded `data-*` levels
   and local CSS only; no inline style, external chart runtime, request,
   storage, or inferred value is permitted. Each day exposes its exact page
@@ -162,6 +165,13 @@ fail-closed dashboard read-model error.
   while a semantic textual daily table remains available to assistive
   technology. An unavailable result remains an explicit unavailable state and
   never becomes a zero chart or zero totals.
+- Operator-only app management stays out of the resting row. One compact More
+  disclosure lists the existing Access policy, Releases, optional LLM chat
+  grant, and App controls surfaces; each option opens a focused native dialog
+  containing the existing server-rendered read model or form. The enhancement
+  changes presentation only: without JavaScript the same content remains
+  available through native fallback `details`, and every form retains its
+  server-owned target, CSRF value, revision, confirmation, and authorization.
 - Public-policy and operator-gate states use visible exact text. Enabling public
   authority states “Anyone on the internet can open this app” and requires the
   normal exact server-side broadening confirmation; color/icon styling is only
@@ -367,6 +377,14 @@ Before a styled happy path is accepted, tests must prove:
     form. Direct scoped API and CLI token behavior remains independently
     authorized and tested; the omission is not a client-side hiding rule or an
     authorization substitute.
+28. Compact app-row enhancement must not make management dependent on
+    JavaScript. The More disclosure remains hidden until every listed dialog
+    can be paired with its server-rendered fallback detail body; otherwise the
+    fallback details remain visible and usable. Moving that existing body into
+    a native dialog may change only presentation. It must not clone or rewrite
+    a form, request data, persist state, select an app, change a target, or
+    suppress server validation. Deployer rows render neither operator options
+    nor empty operator dialogs.
 
 ## Accessibility contract
 
@@ -396,6 +414,12 @@ Before a styled happy path is accepted, tests must prove:
   least the standard four-module quiet zone around the code.
 - Expandable cards use native `details` and `summary`, so disclosure remains
   keyboard-operable without JavaScript.
+- The compact app-row More control uses native disclosure semantics, a visible
+  accessible name, ordinary focusable option buttons, and Escape/outside-click
+  dismissal when enhanced. Every focused option dialog has a programmatic title
+  naming the app and operation, a visible close action, and browser-native focus
+  containment and return. Its fallback detail remains keyboard-operable when
+  JavaScript is unavailable.
 - Page landmarks, heading order, table headers, and native button/link
   semantics are preserved.
 - Layout reflows without horizontal page scrolling at 320 CSS pixels. Wide
