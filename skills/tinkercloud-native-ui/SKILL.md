@@ -143,17 +143,26 @@ the control-plane mark, stylesheet, or chrome.
   come from validated canonical server configuration, never a query/form/browser
   value; omit it when that host is malformed. The prompt contains no token,
   cookie, one-time-code value, secret, or browser identity data; it names
-  `skills/tinkercloud-deployer/SKILL.md`, asks only for the deployer email, and
+  `skills/tinkercloud-deployer/SKILL.md`, initially asks only for the deployer
+  email (with the bounded OTP exception below), and
   directs the normal Tinker CLI and deployer-skill flow. It first checks for
   and reuses the exact server-scoped saved identity; only when it is missing,
   unauthorized, or expired may it request at most one CLI OTP. The agent asks
-  the human only for the deployer email. If an OTP is needed, the Tinker CLI
-  itself prompts the deployer to enter the mailed code directly; never request,
-  read, copy, paste, relay, or handle that code in chat. On CLI OTP failure,
-  stop and report the failure. Never retry the OTP, switch deployer identity,
-  clear, log out, or delete saved CLI authentication, or create another OTP
-  path. Then ask only minimal generate/build/deploy questions; never ask for
-  bearer tokens, tokens, secrets, or operator access.
+  the human initially only for the deployer email. Human-supervised coding-agent OTP
+  handoff: only when no reusable server-bound bearer exists and after endpoint,
+  email, and manifest validation, when the same CLI process reaches its normal
+  `Code: ` prompt, the agent may ask the human
+  exactly once for the short-lived emailed OTP, accept it in the agent
+  interaction, and immediately submit it only to that same CLI process. Use this
+  only with a trusted human-supervised agent; its provider may retain the
+  interaction. Do not restate it or copy it into files, source, argv, logs, summaries, or final
+  output; never ask for a bearer. A failed, malformed, timed-out, or denied OTP is
+  terminal: there is no second code, retry, forced login, identity/account/server
+  switch, or alternate collection path. The CLI stores the resulting scoped
+  bearer for later exact-server reuse. Fully unattended
+  `tinkercloud-deployment-agent` and VPS Resend-reader paths must not fall back
+  to an agent interaction OTP. Then ask only minimal generate/build/deploy
+  questions; never ask for bearer tokens, tokens, secrets, or operator access.
   “No OTP” forbids a code value, not this conditional normal CLI flow. Keep the prompt focusable and selectable
   without JavaScript. A labelled native copy button and polite feedback may
   enhance it only through local clipboard behavior; deployer dashboards omit it.

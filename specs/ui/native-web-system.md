@@ -176,14 +176,13 @@ fail-closed dashboard read-model error.
   validated server configuration; no query, form, or browser-controlled value
   selects it. A malformed host omits the prompt. The prompt contains no
   credential, token, one-time-code value, or secret; it names the deployer
-  skill, asks only for the deployer email, and directs the normal Tinker CLI
+  skill, initially asks only for the deployer email (with the bounded OTP
+  exception below), and directs the normal Tinker CLI
   and deployer-skill flow. It first checks for and reuses the exact
   server-scoped saved identity for that deployer. Only when that identity is
   missing, unauthorized, or expired may it request at most one CLI OTP. The
-  agent still asks the human only for the deployer email: if an OTP is needed,
-  the Tinker CLI itself prompts the deployer to enter the mailed code directly.
-  The agent never requests, reads, copies, pastes, relays, or handles the code
-  in chat. On CLI OTP failure it stops and reports the failure; it never retries
+  agent uses only the bounded supervised same-CLI OTP handoff. On CLI OTP
+  failure it stops and reports the failure; it never retries
   the OTP, switches deployer identity, clears, logs out, or deletes saved CLI
   authentication, or creates another OTP path. It asks only the minimal
   remaining generate/build/deploy questions and never asks for bearer tokens,
@@ -337,12 +336,21 @@ Before a styled happy path is accepted, tests must prove:
     for the deployer email, follows the normal Tinker CLI and deployer-skill
     flow, first reuses the exact server-scoped saved identity, and requests at
     most one CLI OTP only when that identity is missing, unauthorized, or
-    expired. The agent asks the human only for the deployer email; the CLI
-    itself prompts the deployer to enter any mailed code directly, and the
-    agent never requests or handles it in chat. On CLI OTP failure the prompt
-    stops and reports failure; it never retries, switches deployer identity,
-    clears, logs out, or deletes saved CLI authentication, or creates another
-    OTP path. “No OTP” means no one-time-code value, not that this conditional
+    expired. Human-supervised coding-agent OTP handoff: only when no reusable
+    server-bound bearer exists and after endpoint, email, and manifest
+    validation, when the same CLI process reaches its normal
+    `Code: ` prompt, the agent may ask the human exactly once for the
+    short-lived emailed OTP, accept it in the agent interaction, and
+    immediately submit it only to that same CLI process. Use this only with a
+    trusted human-supervised agent; its provider may retain the interaction. Do not restate it or
+    copy it into files, source, argv, logs, summaries, or final output; never
+    ask for a bearer. A failed, malformed, timed-out, or denied OTP is
+    terminal: there is no second code, retry, forced login,
+    identity/account/server switch, or alternate collection path. The CLI
+    stores the resulting scoped bearer for later exact-server reuse. Fully
+    unattended `tinkercloud-deployment-agent` and VPS Resend-reader paths must
+    not fall back to an agent interaction OTP. “No OTP” means no one-time-code
+    value, not that this conditional
     normal CLI flow may be omitted from the prompt. Its
     no-JavaScript state remains selectable text; clipboard success or failure
     is presentation-only.

@@ -32,8 +32,10 @@ an opaque app-host session. App code must never select either identity.
 
 Fail closed. Missing, stale, malformed, redirected, incompatible, or ambiguous
 security state is a denial, not a value to guess. Never expose or request a
-deployer token, OTP, provider secret, database credential, app ID, or viewer ID
-in chat, argv, source code, `tinker.yaml`, browser storage, logs, or output.
+deployer token, provider secret, database credential, app ID, or viewer ID in
+chat, argv, source code, `tinker.yaml`, browser storage, logs, or output. The
+only OTP exception is the supervised deployer handoff in the applicable
+deployer workflow.
 
 V1's historical release boundary is private-only, and the app owner is always
 an implicit viewer. In the accepted post-V1 extension, public is never a
@@ -129,13 +131,30 @@ download an unsigned executable, or treat an unauthenticated installer URL as
 its own trust root. Ask the operator for the signed client source/release
 location when it cannot be discovered safely.
 
-Do not ask the deployer for a bearer or OTP. During fresh deployment, let the
-one deploy command manage its internal server verification and authentication;
+Do not ask the deployer for a bearer. During fresh deployment, let the one
+deploy command manage its internal server verification and authentication;
 authentication starts only after the local manifest setup described below
-succeeds. Enter any code only in the CLI. For later troubleshooting after this
-fresh single-command deployment, `tinker whoami --server <remembered-server>`
-and `tinker login --server <remembered-server>` may diagnose or refresh a
-credential; they are explicitly not part of the fresh first-deploy path.
+succeeds. A human directly using the CLI enters any code there. For later
+troubleshooting after this fresh single-command deployment, `tinker whoami
+--server <remembered-server>` and `tinker login --server <remembered-server>`
+may diagnose or refresh a credential; they are explicitly not part of the fresh
+first-deploy path.
+
+Human-supervised coding-agent OTP handoff: A human-supervised coding agent
+acting as the deployer may, only when no reusable server-bound bearer exists and
+after endpoint, email, and manifest validation
+have succeeded and the same CLI process reaches its normal `Code: ` prompt,
+ask the human exactly once for the short-lived emailed OTP, accept it in the
+agent interaction, and immediately submit it only to that same CLI process. Use
+this only with a trusted human-supervised agent; its provider may retain the
+interaction.
+Do not restate it or copy it into files, source, argv, logs, summaries, or
+final output; never ask for a bearer. A failed, malformed, timed-out, or denied
+OTP is terminal: there is no second code, retry, forced login,
+identity/account/server switch, or alternate collection path. The CLI stores
+the resulting scoped bearer for later exact-server reuse. Fully unattended
+`tinkercloud-deployment-agent` and VPS Resend-reader paths must not fall back
+to an agent interaction OTP.
 This bounded beta path permits one human CLI OTP only when that saved bearer is
 absent, unauthorized, or expired. Prepare the first deploy **owner-only**, but
 do not invoke it until the final reviewed deployment step. Private combined
@@ -153,8 +172,9 @@ Do not run standalone `tinker whoami` or `tinker login` before this fresh first
 deployment; those later troubleshooting commands are not a retry path.
 Do not retry `tinker login`, use `--force`, switch account or identity, log out,
 delete or clear saved credentials, or create an alternate OTP path. A valid
-exact server-scoped saved identity uses zero OTP. Enter an eligible OTP directly
-in the CLI, never chat.
+exact server-scoped saved identity uses zero OTP. The supervised handoff above
+is the only agent-interaction exception; it submits the one accepted OTP only
+to the same CLI process.
 
 One-invocation deployment rule: after the final review, invoke `tinker --server
 <SERVER> deploy .` (or the equivalent explicit public-confirmation form)

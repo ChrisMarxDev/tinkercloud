@@ -194,13 +194,14 @@ func TestPlatformUIOperatorCodingAgentPromptUsesConfiguredHostOnly(t *testing.T)
 		"https://github.com/ChrisMarxDev/tinkercloud",
 		"Tinkercloud endpoint: https://admin.testing.tinkercloud.example",
 		"skills/tinkercloud-deployer/SKILL.md",
-		"Ask me only for the deployer email.",
-		"Never ask me to paste or share a one-time code in chat.",
+		"Initially ask me only for the deployer email; the bounded OTP exception below is the only later credential question.",
 		"Run the normal Tinker CLI and deployer skill flow.",
 		"First check for and reuse the exact server-scoped saved identity for that deployer.",
 		"Request at most one CLI OTP only when that saved identity is missing, unauthorized, or expired.",
-		"If an OTP is needed, let the Tinker CLI itself prompt the deployer to enter the mailed code directly.",
-		"Do not request, read, copy, paste, relay, or handle the code in chat.",
+		"Only a trusted human-supervised coding agent may ask once for the short-lived emailed OTP after endpoint, email, and manifest validation and the same live CLI process reaches `Code:`.",
+		"The agent provider may retain the interaction.",
+		"Immediately submit it only to that same CLI process.",
+		"Do not deliberately restate or copy it into project files, source, argv, command/tool logs, summaries, or final output.",
 		"If the CLI OTP fails, stop and report the failure.",
 		"Never retry the OTP, switch deployer identity, clear, log out, or delete saved CLI authentication, or create another OTP path.",
 		"Never ask for bearer tokens, tokens, secrets, or operator access.",
@@ -213,7 +214,7 @@ func TestPlatformUIOperatorCodingAgentPromptUsesConfiguredHostOnly(t *testing.T)
 			t.Fatalf("operator prompt missing %q: %s", want, body)
 		}
 	}
-	for _, forbidden := range []string{"attacker.example", "name=\"endpoint\"", "tinker_only_once", "then ask for the one-time code when it is sent", "ask only when the CLI sends it", "ask only for that code"} {
+	for _, forbidden := range []string{"attacker.example", "name=\"endpoint\"", "tinker_only_once", "Never ask me to paste or share a one-time code in chat.", "Do not request, read, copy, paste, relay, or handle the code in chat."} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("operator prompt rendered unsafe input %q: %s", forbidden, body)
 		}
