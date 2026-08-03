@@ -505,7 +505,7 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{"deploy_failed", "Deployment could not be verified."}})
 			return 1
 		}
-		writeTo(stdout, stderr, *jsonOutput, result{Valid: true, Name: out.URL})
+		writeDeploySuccess(stdout, stderr, *jsonOutput, out)
 		return 0
 	}
 	if len(args) != 2 || args[0] != "inspect-manifest" {
@@ -1353,4 +1353,17 @@ func writeTo(stdout, stderr io.Writer, j bool, r result) {
 		return
 	}
 	fmt.Fprintf(stdout, "Manifest valid: %s\n", r.Name)
+}
+
+func writeDeploySuccess(stdout, stderr io.Writer, jsonOutput bool, deployment client.DeploymentResult) {
+	receipt := deploymentReceipt{
+		ID:    deployment.DeploymentID,
+		URL:   deployment.URL,
+		State: "active",
+	}
+	if jsonOutput {
+		writeTo(stdout, stderr, true, result{Valid: true, Deployment: &receipt})
+		return
+	}
+	fmt.Fprintf(stdout, "Deployment: %s\nState: %s\nURL: %s\n", receipt.ID, receipt.State, receipt.URL)
 }

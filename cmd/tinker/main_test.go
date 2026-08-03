@@ -889,6 +889,82 @@ func TestDeployCreatesMissingManifestVerifiesSavedBearerAndArchivesOnlyOutput(t 
 	}
 }
 
+func TestDeploySuccessWritesBoundedHumanReceipt(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var archiveNames, calls []string
+	deps := runnerDeps{
+		store:     client.MemoryStore{"https://tinker.example": "saved-token"},
+		newClient: tokenClient(successfulDeployTransport(t, "saved-token", &archiveNames, &calls)),
+	}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps)
+	want := "Deployment: deployment\nState: active\nURL: https://demo.tinker.example/\n"
+	if code != 0 || stderr.Len() != 0 || out.String() != want {
+		t.Fatalf("code=%d out=%q stderr=%q", code, out.String(), stderr.String())
+	}
+	if deploymentCreates(calls) != 1 {
+		t.Fatalf("deployment invocations=%v", calls)
+	}
+	for _, secret := range []string{"saved-token", "tinker.yaml", "viewer_"} {
+		if strings.Contains(out.String(), secret) {
+			t.Fatalf("human receipt leaked %q: %q", secret, out.String())
+		}
+	}
+}
+
+func TestDeploySuccessWritesBoundedJSONReceipt(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	var archiveNames, calls []string
+	deps := runnerDeps{
+		store:     client.MemoryStore{"https://tinker.example": "saved-token"},
+		newClient: tokenClient(successfulDeployTransport(t, "saved-token", &archiveNames, &calls)),
+	}
+	var out, stderr bytes.Buffer
+	code := runWith([]string{"--json", "--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps)
+	want := "{\"valid\":true,\"deployment\":{\"deployment_id\":\"deployment\",\"url\":\"https://demo.tinker.example/\",\"state\":\"active\"}}\n"
+	if code != 0 || stderr.Len() != 0 || out.String() != want {
+		t.Fatalf("code=%d out=%q stderr=%q", code, out.String(), stderr.String())
+	}
+	if deploymentCreates(calls) != 1 {
+		t.Fatalf("deployment invocations=%v", calls)
+	}
+	for _, secret := range []string{"saved-token", "tinker.yaml", "viewer_"} {
+		if strings.Contains(out.String(), secret) {
+			t.Fatalf("JSON receipt leaked %q: %q", secret, out.String())
+		}
+	}
+}
+
+func deploymentCreates(calls []string) int {
+	creates := 0
+	for _, call := range calls {
+		if call == "POST /api/v1/apps/demo/deployments" {
+			creates++
+		}
+	}
+	return creates
+}
+
 func TestDeployReportsActiveButUnverifiedReceipt(t *testing.T) {
 	project := t.TempDir()
 	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
