@@ -26,8 +26,6 @@ compare_block role-common skills/tinkercloud-operator/SKILL.md
 compare_block operator skills/tinkercloud-operator/SKILL.md
 compare_block role-common skills/tinkercloud-full-stack-test/SKILL.md
 
-./scripts/test-beta-onboarding-docs.sh
-
 check_distribution_skill() {
   skill=$1
   file="skills/${skill}/SKILL.md"

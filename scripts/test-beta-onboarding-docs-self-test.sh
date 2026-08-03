@@ -358,13 +358,36 @@ printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executab
   exit 1
 }
 
-# `check` reaches the docs mutation self-test through `skills:check` exactly
-# once, without independently running the happy docs checker a second time.
-dry_check=$(cd "$repo_root" && task --dry check 2>&1)
-for command in ./scripts/test-beta-onboarding-docs.sh ./scripts/test-beta-onboarding-docs-self-test.sh ./scripts/check-skill-drift; do
-  count=$(printf '%s\n' "$dry_check" | grep -F -c -- "$command" || true)
+# This focused Taskfile composition test proves `check` reaches the docs
+# mutation self-test through `skills:check` exactly once, without independently
+# running the happy docs checker a second time. Do not invoke Task recursively:
+# this script itself runs under `task test:beta-onboarding-docs`.
+taskfile=$(cat "$repo_root/Taskfile.yml")
+while IFS= read -r command; do
+  count=$(printf '%s\n' "$taskfile" | grep -F -c -- "- $command" || true)
   test "$count" -eq 1 || {
-    echo "beta onboarding documentation self-test expected check graph to run ${command} exactly once; found ${count}" >&2
+    echo "beta onboarding documentation self-test expected Taskfile to declare ${command} exactly once; found ${count}" >&2
     exit 1
   }
-done
+done <<'EOF'
+./scripts/test-beta-onboarding-docs.sh
+./scripts/test-beta-onboarding-docs-self-test.sh
+python3 test/security/test_beta_onboarding_docs.py
+./scripts/check-skill-drift
+EOF
+
+skills_block=$(sed -n '/^  skills:check:/,/^  [^ ]/p' "$repo_root/Taskfile.yml")
+printf '%s\n' "$skills_block" | grep -F -- 'deps: [test:beta-onboarding-docs]' >/dev/null || {
+  echo "beta onboarding documentation self-test expected skills:check to depend on test:beta-onboarding-docs" >&2
+  exit 1
+}
+check_block=$(sed -n '/^  check:/,/^  [^ ]/p' "$repo_root/Taskfile.yml")
+! printf '%s\n' "$check_block" | grep -F -- 'test:beta-onboarding-docs' >/dev/null || {
+  echo "beta onboarding documentation self-test expected check to compose docs verification only through skills:check" >&2
+  exit 1
+}
+
+! grep -F -- './scripts/test-beta-onboarding-docs.sh' "$repo_root/scripts/check-skill-drift" >/dev/null || {
+  echo "beta onboarding documentation self-test expected skill drift to avoid rerunning the happy docs checker" >&2
+  exit 1
+}
