@@ -5,7 +5,7 @@ repo_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-beta-onboarding.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT HUP INT TERM
 
-mkdir -p "$fixture/scripts" "$fixture/sdk/typescript/src" "$fixture/skills"
+mkdir -p "$fixture/scripts" "$fixture/sdk/typescript/src" "$fixture/skills" "$fixture/specs/agent" "$fixture/specs/control" "$fixture/docs/getting-started"
 cp "$repo_root/scripts/test-beta-onboarding-docs.sh" "$fixture/scripts/"
 cp "$repo_root/scripts/extract-sdk-version.mjs" "$fixture/scripts/"
 cp "$repo_root/sdk/typescript/src/index.ts" "$fixture/sdk/typescript/src/"
@@ -15,6 +15,9 @@ cp -R "$repo_root/skills/tinkercloud-deployer" "$fixture/skills/"
 cp -R "$repo_root/skills/tinkercloud-full-stack-test" "$fixture/skills/"
 cp "$repo_root/README.md" "$fixture/README.md"
 cp "$repo_root/CHANGELOG.md" "$fixture/CHANGELOG.md"
+cp "$repo_root/specs/agent/beta-onboarding-contract.md" "$fixture/specs/agent/"
+cp "$repo_root/specs/control/deployment-contract.md" "$fixture/specs/control/"
+cp "$repo_root/docs/getting-started/first-app.md" "$fixture/docs/getting-started/"
 
 perl -0pi -e 's/sudo tinkercloud setup\n//; s/Setup derives `https:\/\/admin\.<domain>\/login`//; s/Sign in there with one human browser\nOTP only when there is no reusable browser identity//; s/and record the no-redirect `https:\/\/admin\.<domain>\/api\/v1\/version` gateway proof//;' "$fixture/README.md"
 
@@ -107,6 +110,7 @@ done
 # The standalone operator skill must carry the executable beta path itself.
 cp "$repo_root/README.md" "$fixture/README.md"
 perl -0pi -e 's/scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root\@<HOST>:\/root\/\.config\/tinkercloud\/resend-api-key"/copy credential separately/; s/1\. `Base domain:`\n2\. `Operator email:`/1. `Operator email:`\n2. `Base domain:`/; s/\*\*Deployers\*\*, then \*\*Active deployer allowlist\*\*/**Active deployer allowlist**, then **Deployers**/; s/VPS provider console is the trust source for the SSH host-key fingerprint/ssh-keyscan is the trust source/; s/uname -m && \. \/etc\/os-release && printf/uname -m && printf/; s/Create one `\*\.<DOMAIN>` wildcard record/Create a separate admin record/; s/\(dig \+short A admin\.<DOMAIN>; dig \+short AAAA admin\.<DOMAIN>\)/dig +short A admin.<DOMAIN>/; s/\(dig \+short A onboarding-check\.<DOMAIN>; dig \+short AAAA onboarding-check\.<DOMAIN>\)/dig +short A onboarding-check.<DOMAIN>/; s/copy\/paste installer verifies checksums/copy\/paste installer downloads/; s/no other addresses/optional extra addresses/; s/uses zero when a reusable browser identity is valid/uses one even when a reusable browser identity is valid/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+perl -0pi -e 's/getent ahosts admin\.<DOMAIN> >\/dev\/null/getent omitted/; s/getent ahosts onboarding-check\.<DOMAIN> >\/dev\/null/getent omitted/' "$fixture/skills/tinkercloud-operator/SKILL.md"
 
 set +e
 output=$(
@@ -130,8 +134,8 @@ for expected in \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: VPS provider console is the trust source for the SSH host-key fingerprint' \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: uname -m && . /etc/os-release && printf' \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: Create one `*.<DOMAIN>` wildcard record using `A`/`AAAA` or `CNAME` as the DNS provider supports.' \
-  'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: (dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q .' \
-  'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: (dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q .' \
+  'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: getent ahosts admin.<DOMAIN> >/dev/null' \
+  'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: getent ahosts onboarding-check.<DOMAIN> >/dev/null' \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: The copy/paste installer verifies checksums and a pinned Ed25519 signature before installation.' \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: Replace the initial active deployer allowlist with exactly the intended normalized deployer email set and no other addresses; the operator email alone is sufficient only when that is the exact intended set.' \
   'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: Operator setup permits at most one human browser OTP, uses zero when a reusable browser identity is valid, and uses no CLI deployer OTP.'; do
@@ -181,10 +185,10 @@ check_completion_mutation() {
       perl -0pi -e 's/curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https:\/\/admin\.<domain>\/api\/v1\/version/version proof omitted/' "$fixture/skills/tinkercloud-operator/SKILL.md"
       ;;
     evidence)
-      perl -0pi -e 's/included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON/unbounded response/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+      perl -0pi -e 's/Completion requires HTTP `200`,\s+an `application\/json` media type, and exact bounded body `\{"api_version":1\}`\s+with no extra or error fields/unbounded response/' "$fixture/skills/tinkercloud-operator/SKILL.md"
       ;;
     boundary)
-      perl -0pi -e 's/Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty\s+operator setup\./anonymous denial fabricated/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+      perl -0pi -e 's/Protected-app/anonymous/' "$fixture/skills/tinkercloud-operator/SKILL.md"
       ;;
   esac
 
@@ -215,9 +219,46 @@ check_completion_mutation doctor \
 check_completion_mutation version \
   'beta onboarding documentation missing operator completion version command in skills/tinkercloud-operator/SKILL.md: curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version'
 check_completion_mutation evidence \
-  'beta onboarding documentation missing operator completion header/body evidence in skills/tinkercloud-operator/SKILL.md: included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON'
+  'beta onboarding documentation missing operator completion header/body evidence in skills/tinkercloud-operator/SKILL.md: Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields'
 check_completion_mutation boundary \
   'beta onboarding documentation missing operator completion anonymous-denial boundary in skills/tinkercloud-operator/SKILL.md: Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty operator setup.'
+
+# A failed operator browser OTP is terminal for onboarding, independently of the
+# unattended machine OTP path.
+cp "$repo_root/skills/tinkercloud-operator/SKILL.md" "$fixture/skills/tinkercloud-operator/SKILL.md"
+perl -0pi -e 's/stop operator onboarding/continue operator onboarding/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected terminal operator OTP mutation to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: Terminal operator browser authentication rule: immediately after an operator browser OTP attempt fails, is malformed, times out, or is denied, stop operator onboarding.' >/dev/null || {
+  echo "beta onboarding documentation self-test missed terminal operator OTP diagnostic" >&2
+  exit 1
+}
+
+# The fully fresh human path requires exactly its two nonfungible role codes.
+cp "$repo_root/skills/tinkercloud-operator/SKILL.md" "$fixture/skills/tinkercloud-operator/SKILL.md"
+perl -0pi -e 's/requests exactly two codes total/requests one or two codes total/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected exact human OTP-count mutation to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing from skills/tinkercloud-operator/SKILL.md: A fully fresh successful human onboarding with neither a reusable browser identity nor a saved CLI bearer requests exactly two codes total: exactly one operator browser code and exactly one deployer CLI code. A reusable identity reduces the relevant lane to zero.' >/dev/null || {
+  echo "beta onboarding documentation self-test missed exact human OTP-count diagnostic" >&2
+  exit 1
+}
 
 # Moving the intact completion block before dashboard authorization must fail.
 cp "$repo_root/skills/tinkercloud-operator/SKILL.md" "$fixture/skills/tinkercloud-operator/SKILL.md"
@@ -282,6 +323,47 @@ check_terminal_cli_auth_mutation forcepath 'beta onboarding documentation missin
 check_terminal_cli_auth_mutation zero 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: valid exact server-scoped saved identity uses zero OTP'
 check_terminal_cli_auth_mutation cli 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: directly in the CLI, never chat'
 check_terminal_cli_auth_mutation ordering '-'
+
+# Authentication owns only Email/Code prompts; the six manifest prompts remain
+# legitimate human prompts later in the same workflow.
+cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's/only\s+authentication prompts are exactly/only human prompts are exactly/' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected authentication-prompt wording regression to fail" >&2
+  exit 1
+}
+for expected in \
+  'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: only authentication prompts are exactly `Email: ` and `Code: `' \
+  'beta onboarding documentation contains forbidden text in skills/tinkercloud-deployer/SKILL.md: only human prompts are exactly `Email: ` and `Code: `'; do
+  printf '%s\n' "$output" | grep -F -- "$expected" >/dev/null || {
+    echo "beta onboarding documentation self-test missed authentication-prompt wording diagnostic: $expected" >&2
+    exit 1
+  }
+done
+
+# The standalone deployer skill must retain the exact fully-fresh two-code rule.
+cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's/requests exactly two codes total/requests one or two codes total/' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected standalone deployer OTP-count mutation to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: A fully fresh successful human onboarding with neither a reusable browser identity nor a saved CLI bearer requests exactly two codes total: exactly one operator browser code and exactly one deployer CLI code. A reusable identity reduces the relevant lane to zero.' >/dev/null || {
+  echo "beta onboarding documentation self-test missed standalone deployer OTP-count diagnostic" >&2
+  exit 1
+}
 
 # A reviewed deploy command is invoked once. Internal readiness retries and the
 # one exact-URL recheck are not authority to create a second deployment.

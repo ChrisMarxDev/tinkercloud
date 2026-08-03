@@ -13,6 +13,10 @@ until then it is not an installation path and must not be replaced with
 Cloud Ubuntu 24.04 LTS or Ubuntu 26.04 LTS x86-64 VPS dedicated to Tinkercloud,
 install the signed server binary and systemd unit with that exact version:
 
+If the exact tag page or `install-host.sh` asset is unavailable over HTTPS, stop:
+do not install, deploy, or substitute another version. This is only minimal
+release readiness; the released installer remains checksum/signature authority.
+
 ```bash
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 ```
@@ -76,8 +80,10 @@ secret files. `--email-provider` accepts `resend`, `postmark`, `sendgrid`, or
 requires its host, port, username, and TLS-mode flags. It derives the internal
 ACME contact from the required normalized operator email; it never accepts a
 separate ACME-contact flag. The implemented human `setup` assistant guides the
-Resend path, accepts only a root-readable protected key file as its credential
-source, and creates HMAC material privately. Neither path places a secret in
+Resend path, explicitly selects and persists Resend from the verified sender
+and root credential path, accepts only a root-readable protected key file as
+its credential source, and creates HMAC material privately. Environment
+priority applies only to noninteractive and other-provider flows. Neither path places a secret in
 argv, ordinary config, or terminal output. Initialization
 copies the values into
 `/etc/tinkercloud/credentials/tinkercloud.env` at mode `0600`; the config contains
@@ -308,6 +314,6 @@ release, or mutate policy, even if OTP delivery was requested successfully.
   releases fail preflight.
 - No Docker requirement or bundled reverse proxy.
 - No operator backup/disaster-recovery feature.
-- Resend and Postmark are the only shipped email adapters; exactly one is
-  selected behind the provider-neutral interface.
+- Resend, Postmark, SendGrid, and authenticated TLS SMTP are the shipped email
+  adapters; exactly one is selected behind the provider-neutral interface.
 - Private apps only; there is no public-app switch in V1.

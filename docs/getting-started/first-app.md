@@ -48,12 +48,34 @@ authentication, TLS, blobs, deployment policy, or provider capabilities.
 ## 3. Deploy
 
 ```sh
-tinker deploy .
+tinker --server <remembered-server> deploy .
 ```
 
-On the first run, Tinker asks for the platform endpoint, your deployer email,
-and the code sent to that email. It reuses those verified values later. Review
-the owner-only access summary and confirm the deployment.
+After a verified `whoami --server <remembered-server>`, the first manifest
+wizard asks exactly: `App slug (<suggested>, Enter to accept):`, `Description
+(optional):`, `Build output (<default>, Enter to accept):`, `Allowed emails or
+domains, comma-separated (optional):`, `Features (kv,blobs,realtime;
+optional):`, and `SPA fallback (optional):`. Enter empty allowlist and features
+for owner-only with no features; leave SPA fallback empty unless separately
+reviewed. Review endpoint, slug, description, output, owner-only access, no
+features, and SPA fallback, then give affirmative go-ahead before the one
+deployment invocation.
+
+Ask `Deploy this owner-only app to <server> now? [y/N]`; only explicit yes
+continues. Success prints `Deployment: <id>`, `State: active`, and `URL:
+<exact-origin>`; the CLI's platform-health and anonymous-denial checks are
+internal preconditions.
+
+If the result is `active_but_unverified`, do not deploy again. Recheck only the
+returned exact URL as a fresh anonymous request:
+
+```sh
+curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>
+```
+
+This evidence-only recheck requires `401`, `Cache-Control: no-store`, JSON
+`not_authorized`, no `Set-Cookie` or `Location`, and no app bytes. It sends no
+authentication and is never a second deployment.
 
 The command prints the protected app URL. Do not use this bounded deployer
 journey to obtain another browser identity. Open it only with a proven reusable
@@ -64,12 +86,12 @@ this journey with fresh anonymous denial evidence instead.
 To publish an update, edit the files and run the same command again:
 
 ```sh
-tinker deploy .
+tinker --server <remembered-server> deploy .
 ```
 
 ## Use your own project
 
-Run `tinker deploy .` from the root of an existing static web project. When
+Run `tinker --server <remembered-server> deploy .` from the root of an existing static web project. When
 `tinker.yaml` is missing, the human wizard inspects the project, asks only for
 required values it cannot infer safely, and writes the manifest as a reusable
 deployment receipt. You do not need to author configuration before the first

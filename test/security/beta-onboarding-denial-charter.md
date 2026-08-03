@@ -15,6 +15,10 @@ persisted state.
   beta release. Do not install or claim release verification.
 - A missing signature/checksum proof, mismatched client/server version, or
   incompatible API version denies before host setup or deployment proceeds.
+- An unavailable exact `v0.1.6` tag or the current role's required installer
+  asset is terminal: no install, deploy, or substitute version. HTTPS readiness
+  checks only the exact tag page and that role's asset; it does not replace the
+  installer's checksum/signature verification.
 - An onboarding document or command that substitutes a template value for a
   required supplied input (domain, email, credential-file boundary, or chosen
   project directory) denies rather than guessing or silently selecting one.
@@ -37,6 +41,19 @@ persisted state.
   the deployer CLI flow. Before a third human request of any kind, stop
   immediately. No account switch, cache clearing, fresh browser profile,
   viewer login, or alternate mailbox may reset or evade this budget.
+- OTP ceilings are nonfungible: one browser OTP maximum belongs to the operator
+  and one CLI OTP maximum belongs to the deployer. A combined total of two never
+  permits two OTPs for one role.
+- A fully fresh successful human onboarding with neither a reusable browser
+  identity nor a saved CLI bearer requires exactly two codes total: exactly one
+  operator browser code and exactly one deployer CLI code. A reusable identity
+  reduces the relevant lane to zero; any other successful human-code count
+  denies the bounded onboarding run.
+- A failed, malformed, timed-out, or denied operator browser OTP attempt
+  terminates operator onboarding. It cannot retry or request another code,
+  switch operator identity or mailbox, clear browser cookies, or create another
+  OTP path. A valid exact browser identity requires zero OTP. This human rule
+  does not alter unattended machine OTP acceptance.
 - Opening the protected app during the bounded operator/deployer run requires a
   proven reusable exact browser identity. Otherwise, defer it to separate later
   viewer work and record anonymous-denial evidence; do not request a
@@ -46,8 +63,15 @@ persisted state.
   account or identity, log out, delete or clear saved credentials, or create an
   alternate OTP path. A valid exact server-scoped saved identity requires zero
   OTP; any eligible OTP is entered directly in the CLI, never chat.
-- After final review, a deploy attempt permits exactly one `tinker deploy .` (or
-  explicit public-confirm variant) invocation. Validation, upload, activation,
+- Login labels other than `Email: ` and `Code: `, a code outside the CLI, or an
+  implicit approval instead of exact affirmative pre-invocation consent deny.
+- `active_but_unverified` permits only a fresh anonymous, no-redirect,
+  no-cookie exact-URL recheck returning `401` JSON `not_authorized`, `no-store`,
+  and no app bytes; it never authorizes another deploy.
+- After final review and affirmative go-ahead (including owner-only), a deploy
+  attempt permits exactly one `tinker --server <remembered-server> deploy .`
+  (or `tinker --server <remembered-server> --confirm-public deploy .`) invocation.
+  Validation, upload, activation,
   verification, transport/TLS/redirect/timeout/error, success, and
   `active_but_unverified` all end that invocation; none permits a second deploy,
   another release upload, or chat-driven retry. Bounded readiness retries remain
@@ -98,6 +122,9 @@ persisted state.
 - Provider API keys/passwords in argv, ordinary config, chat, Git, logs,
   browser state, SDK/app files, artifacts, or reports deny setup. Only the
   declared root-readable protected credential-file boundary is accepted.
+- A safe root-owned non-symlink regular mode-`0600` credential file already on
+  the VPS must be reused after its exact check. Asking for a workstation transfer
+  or SSH target in that case is an unnecessary question and denies readiness.
 - Provider, DNS, ACME, transport, or persistence failure cannot create an OTP
   bypass, remote recovery endpoint, alternate listener, raw storage URL, or
   permissive app activation.

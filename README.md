@@ -14,6 +14,12 @@ and [deployer](https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/s
 
 This page prepares the next exact beta, `v0.1.6`; its install and package
 commands become runnable only after that prerelease is published.
+The exact release is currently unavailable. If the exact `v0.1.6` release or
+the host installer asset is unavailable, stop: do not install, deploy, or
+substitute another version. Minimal HTTPS release readiness is the exact tag
+page plus the host installer asset URL returning HTTPS success; the installer
+remains the checksum/signature authority. The deployer separately checks its
+own client installer asset before client installation.
 
 <!-- beta-operator-readme:start -->
 ### 1. Operator: create the private host
@@ -39,8 +45,8 @@ create a separate `admin` record. Prove nonempty DNS resolution before
 certificates without comparing answers to a public IP:
 
 ```sh
-(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q .
-(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q .
+getent ahosts admin.<DOMAIN> >/dev/null
+getent ahosts onboarding-check.<DOMAIN> >/dev/null
 ```
 
 The operator supplies no extra certificate input. From the VPS root shell:
@@ -49,13 +55,23 @@ The operator supplies no extra certificate input. From the VPS root shell:
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 ```
 
+Before that install, probe only this immutable installer read-only; HTTPS
+success permits installation and failure stops:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
+```
+
 The copy/paste installer verifies checksums and a pinned Ed25519 signature
 before installation. It downloads only its baked exact release and follows
 HTTPS-only asset redirects. [Inspect the exact immutable beta
 release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6)
 after it is published and before running if preferred. Transfer the credential only through verified root SSH to
 `/root/.config/tinkercloud/resend-api-key`; make it a root-owned regular file at
-mode `0600`, then give setup only that path. After the credential is ready, run:
+mode `0600`. This canonical path is only the workstation-transfer destination:
+an already VPS-local credential at any supplied exact safe path is passed
+directly to setup after the same root-owned, non-symlink regular mode-`0600`
+check. After the credential is ready, run:
 
 ```sh
 sudo tinkercloud setup
@@ -63,6 +79,13 @@ sudo tinkercloud setup
 
 Setup asks, in order, for the base
 domain, operator email, verified Resend sender email, and that key-file path.
+The guided path explicitly selects and persists Resend from the verified sender
+and root credential path. If the credential is already on the VPS, reuse it
+after the exact root-only check at its supplied exact path rather than asking for an SSH target; ask for an
+SSH target only when a workstation-local file must be transferred.
+Normalize every email by trimming outer whitespace, preserving local-part case,
+lowercasing only the domain, requiring exactly one `@`, nonempty local/domain,
+a dotted domain, and no whitespace/control characters; never plus/dot rewrite.
 Setup derives `https://admin.<domain>/login`. Sign in there with one human browser
 OTP only when there is no reusable browser identity, then use **Deployers** →
 **Active deployer allowlist** to enter the reviewed normalized emails in
@@ -72,7 +95,13 @@ with exactly the intended normalized deployer email set and no other addresses;
 the operator email alone is sufficient only when that is the exact intended
 set. Operator setup permits at most one human browser OTP, uses zero when a
 reusable browser identity is valid, and uses no CLI deployer OTP. After saving
-the exact deployer set, verify operator completion:
+the exact deployer set, apply the terminal browser-authentication boundary:
+Terminal operator browser authentication rule: immediately after an operator
+browser OTP attempt fails, is malformed, times out, or is denied, stop operator
+onboarding. Do not retry or request another code, switch operator identity or
+mailbox, clear browser cookies, or create another OTP path. A valid exact browser
+identity uses zero OTP. This does not alter unattended machine OTP acceptance.
+Then verify operator completion:
 
 ```sh
 sudo tinkercloud status
@@ -80,10 +109,21 @@ sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
 ```
 
-The final HTTPS request must not follow a redirect; record its included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON and record the no-redirect `https://admin.<domain>/api/v1/version` gateway proof. Protected-app anonymous denial belongs to deployer
+The final HTTPS request must not follow a redirect. Completion requires HTTP
+`200`, an `application/json` media type, and exact bounded body
+`{"api_version":1}` with no extra or error fields; record its included gateway
+headers and record the no-redirect `https://admin.<domain>/api/v1/version` gateway proof. Protected-app anonymous denial belongs to deployer
 deployment completion once an app exists; do not fabricate it during empty
 operator setup. The external mail guide
 is optional troubleshooting—not required for this basic Resend beta path.
+One browser OTP maximum for the operator and one CLI OTP maximum for the
+deployer; the two-role total is at most two and never permits two OTPs for
+either role.
+
+A fully fresh successful human onboarding with neither a reusable browser
+identity nor a saved CLI bearer requests exactly two codes total: exactly one
+operator browser code and exactly one deployer CLI code. A reusable identity
+reduces the relevant lane to zero.
 
 <!-- beta-operator-readme:end -->
 ### 2. Deployer: publish one owner-only app
@@ -95,10 +135,16 @@ install the exact client and deploy:
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 tinker version
-tinker deploy .
+tinker --server <SERVER> deploy .
 ```
 
-The deploy wizard discovers or reuses the verified endpoint and deployer email;
+If the exact `v0.1.6` release or the required installer asset for this role is
+unavailable, stop: do not install, deploy, or substitute another version.
+Minimal HTTPS release readiness is the exact tag page plus this role's exact
+installer asset URL returning HTTPS success; the installer remains the
+checksum/signature authority.
+
+The deploy wizard reuses the verified endpoint and deployer email;
 it requests one human CLI OTP only when the saved bearer is missing,
 unauthorized, or expired. The first deployment stays owner-only by default.
 If that CLI authentication or OTP attempt fails, is malformed, times out, or is
@@ -106,17 +152,25 @@ denied, stop that deploy attempt: do not retry login, use `--force`, switch
 identity, log out, clear credentials, or seek another OTP path. A valid exact
 server-scoped saved identity uses zero OTP, and any eligible OTP is entered only
 in the CLI, never chat.
-After final review, invoke `tinker deploy .` exactly once for that deploy
+`<SERVER>` is the exact remembered verified server. Review endpoint, slug,
+description, output, owner-only access, no features, and SPA fallback; even
+owner-only requires affirmative go-ahead. After final review, invoke `tinker
+--server <SERVER> deploy .` exactly once for that deploy
 attempt. Any outcome ends the invocation: do not rerun deploy, upload another
 release, or retry from chat. The CLI's bounded readiness retries stay inside
 that invocation; `active_but_unverified` permits only its independent exact-URL
-recheck. A later attempt needs an explicit new human request after the cause is
+recheck: fresh anonymous `curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>` with no authentication, requiring `401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or `Location`, and no app bytes. It is evidence only, never a second deploy. A later attempt needs an explicit new human request after the cause is
 addressed.
+Ask `Deploy this owner-only app to <server> now? [y/N]`; only explicit yes
+continues. Success prints `Deployment: <id>`, `State: active`, and `URL:
+<exact-origin>`; internal platform-health and anonymous-denial probes are
+already success preconditions, not extra credential steps.
 Success records the immutable deployment ID, protected exact app origin,
 authenticated platform-health success, and anonymous HTML, asset, and reserved
-API denial with no app bytes. Across both tracks there are at most two human OTP
-requests in total: one human browser OTP and one human CLI OTP. Before issuing,
-relaying, requesting, or suggesting a third human OTP, stop immediately.
+API denial with no app bytes. OTP ceilings are nonfungible: one browser OTP
+maximum for the operator and one CLI OTP maximum for the deployer; the two-role
+total never permits two OTPs for either role. Before issuing, relaying,
+requesting, or suggesting a third human OTP, stop immediately.
 
 Optional: add SDK capabilities only when the app needs current viewer/app
 information, KV, blobs, or realtime:
@@ -246,7 +300,7 @@ From a static app project, deploy the project directory—not only its output
 folder:
 
 ```sh
-tinker deploy .
+tinker --server <SERVER> deploy .
 ```
 
 On its first human run, Tinker asks for the HTTPS platform URL only when it has
