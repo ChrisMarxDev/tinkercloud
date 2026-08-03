@@ -128,13 +128,13 @@ workstation-transfer destination.
 | Supplied inputs | A macOS or Linux workstation used as the deployer, a static project directory, and the operator-authorized deployer email. On a fully fresh workstation, `<SERVER>` comes only from the operator-provided exact normalized HTTPS admin URL. A saved default is reusable only when it was previously directly verified from such an operator handoff; current CLI state cannot invent or derive a server. |
 | Derived values | The saved default server after the deploy command's direct no-redirect version proof; protected per-user credential-file location; inferred safe project output/slug choices; owner-only policy; generated strict `tinker.yaml` receipt when absent; deterministic archive; immutable release manifest; deployment ID; and protected app URL. |
 | Prompts allowed | One bounded platform-URL setup prompt only when no valid default exists; required unresolved project choices; one combined review of optional description, access, capabilities, and SPA fallback; one final access-broadening confirmation; and normal CLI email/OTP prompts only after an unauthorized/expired bearer. |
-| Prompts forbidden | A bearer, OTP, provider credential, app ID, viewer identity, arbitrary build command, manifest rewriting confirmation, repeated known server/email/policy questions, or a prompt in `--json` mode. |
+| Prompts forbidden | A bearer, provider credential, app ID, viewer identity, arbitrary build command, manifest rewriting confirmation, repeated known server/email/policy questions, or a prompt in `--json` mode. The sole OTP exception is the supervised same-CLI handoff below. |
 | Persisted state | Default server record plus a separate mode-`0700` configuration directory and mode-`0600`, regular, non-symlinked bearer file keyed by normalized HTTPS server. The generated manifest is a project receipt, never a secret store. |
 | Required evidence | `tinker version` prints exactly `tinker 0.1.6`; the one deploy command internally proves the server and current authorized deployer; activation returns the immutable deployment ID and protected exact origin; private combined evidence always proves fresh anonymous root and representative reserved-route `401 not_authorized` denial with no app bytes, while the server candidate additionally proves denial of an actual immutable non-index asset only when one exists; a single-file app requires no fabricated asset evidence; authenticated platform health succeeds. |
 
 The conditional CLI login prompts are exactly `Email: ` and `Code: `; their
 position in the combined fresh prompt order is specified below. The code stays
-in the CLI. Before invoking deploy the agent asks `Deploy this owner-only app to
+in the same CLI process, except for the supervised same-process handoff below. Before invoking deploy the agent asks `Deploy this owner-only app to
 <server> now? [y/N]`; only explicit yes proceeds.
 Human success is `Deployment: <id>`, `State: active`, `URL: <exact-origin>`;
 JSON is `valid:true` plus a bounded deployment object. Platform health and
@@ -167,12 +167,28 @@ saved endpoint, including one for another server, is preserved; an unreadable,
 malformed, or failed default-store write stops before app creation or upload.
 JSON/non-interactive deploys do not prompt or cache a server.
 
+Human-supervised coding-agent OTP handoff: When a human-supervised coding
+agent acts as the deployer and holds the CLI, it may, only when no reusable
+server-bound bearer exists and after endpoint, email, and manifest validation
+and after the same CLI process reaches its
+normal `Code: ` prompt, ask the human exactly once for the short-lived emailed
+OTP, accept it in the agent interaction, and immediately submit it only to
+that same CLI process. Use this only with a trusted human-supervised agent; its
+provider may retain the interaction. Do not restate it or copy it into files, source, argv,
+logs, summaries, or final output; never ask for a bearer. A failed, malformed,
+timed-out, or denied OTP is terminal: there is no second code, retry, forced
+login, identity/account/server switch, or alternate collection path. The CLI
+stores the resulting scoped bearer for later exact-server reuse. Fully
+unattended `tinkercloud-deployment-agent` and VPS Resend-reader paths must not
+fall back to an agent interaction OTP.
+
 Immediately after a CLI authentication or OTP attempt fails, is malformed,
 times out, or is denied, that deploy attempt is terminal. It MUST NOT retry
 login, use `--force`, switch account or identity, log out, delete or clear saved
 credentials, or create an alternate OTP path. An exact valid server-scoped saved
-identity consumes zero OTP; an eligible human OTP is entered directly in the
-CLI and never through chat.
+identity consumes zero OTP. The supervised handoff above is the only
+agent-interaction exception; it submits the one accepted OTP only to the same
+CLI process.
 
 The six first-manifest prompts are exactly `App slug (<suggested>, Enter to
 accept):`, `Description (optional):`, `Build output (<default>, Enter to

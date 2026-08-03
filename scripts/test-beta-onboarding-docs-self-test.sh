@@ -5,7 +5,7 @@ repo_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/tinkercloud-beta-onboarding.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT HUP INT TERM
 
-mkdir -p "$fixture/scripts" "$fixture/sdk/typescript/src" "$fixture/skills" "$fixture/specs/agent" "$fixture/specs/control" "$fixture/docs/getting-started"
+mkdir -p "$fixture/scripts" "$fixture/sdk/typescript/src" "$fixture/skills" "$fixture/specs/agent" "$fixture/specs/control" "$fixture/specs/ui" "$fixture/docs/getting-started" "$fixture/docs/product" "$fixture/test/security"
 cp "$repo_root/scripts/test-beta-onboarding-docs.sh" "$fixture/scripts/"
 cp "$repo_root/scripts/extract-sdk-version.mjs" "$fixture/scripts/"
 cp "$repo_root/sdk/typescript/src/index.ts" "$fixture/sdk/typescript/src/"
@@ -13,12 +13,17 @@ cp -R "$repo_root/skills/tinkercloud-platform" "$fixture/skills/"
 cp -R "$repo_root/skills/tinkercloud-operator" "$fixture/skills/"
 cp -R "$repo_root/skills/tinkercloud-deployer" "$fixture/skills/"
 cp -R "$repo_root/skills/tinkercloud-full-stack-test" "$fixture/skills/"
+cp -R "$repo_root/skills/tinkercloud-native-ui" "$fixture/skills/"
 cp "$repo_root/README.md" "$fixture/README.md"
 cp "$repo_root/CHANGELOG.md" "$fixture/CHANGELOG.md"
 cp "$repo_root/specs/agent/beta-onboarding-contract.md" "$fixture/specs/agent/"
 cp "$repo_root/specs/agent/role-skill-contract.md" "$fixture/specs/agent/"
+cp "$repo_root/specs/ui/native-web-system.md" "$fixture/specs/ui/"
 cp "$repo_root/specs/control/deployment-contract.md" "$fixture/specs/control/"
 cp "$repo_root/docs/getting-started/first-app.md" "$fixture/docs/getting-started/"
+cp "$repo_root/docs/product/web-design-system.md" "$fixture/docs/product/"
+cp "$repo_root/test/security/beta-onboarding-denial-charter.md" "$fixture/test/security/"
+cp "$repo_root/test/security/role-skill-denial-charter.md" "$fixture/test/security/"
 
 perl -0pi -e 's/sudo tinkercloud setup\n//; s/Setup derives `https:\/\/admin\.<domain>\/login`//; s/Sign in there with one human browser\nOTP only when there is no reusable browser identity//; s/and record the no-redirect `https:\/\/admin\.<domain>\/api\/v1\/version` gateway proof//;' "$fixture/README.md"
 
@@ -54,6 +59,50 @@ test "$output" = "$expected_output" || {
   printf '%s\n' "$output" >&2
   exit 1
 }
+
+# The supervised handoff must retain its exact bearer and same-process guardrail.
+cp "$repo_root/README.md" "$fixture/README.md"
+perl -0pi -e 's/only when no reusable server-bound bearer exists and\nafter endpoint, email, and manifest validation/only after validation/' "$fixture/README.md"
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected supervised handoff guardrail removal to fail" >&2
+  exit 1
+}
+expected='beta onboarding documentation missing from README.md: only when no reusable server-bound bearer exists
+beta onboarding documentation missing from README.md: after endpoint, email, and manifest validation'
+test "$output" = "$expected" || {
+  echo "beta onboarding documentation self-test expected exact supervised handoff diagnostic" >&2
+  echo "actual:" >&2
+  printf '%s\n' "$output" >&2
+  exit 1
+}
+
+check_supervised_handoff_mutation() {
+  mutation=$1
+  expected=$2
+  cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+  case "$mutation" in
+    validation) perl -0pi -e 's/after endpoint, email, and manifest validation/without validation/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    prompt) perl -0pi -e 's/the same CLI process reaches its normal `Code: ` prompt/a later prompt appears/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    interaction) perl -0pi -e 's/accept it in the\s+agent interaction/collect it elsewhere/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+  esac
+  set +e
+  output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+  result=$?
+  set -e
+  test "$result" -ne 0 || { echo "beta onboarding documentation self-test expected ${mutation} handoff mutation to fail" >&2; exit 1; }
+  test "$output" = "$expected" || { echo "beta onboarding documentation self-test expected exact ${mutation} handoff diagnostic" >&2; printf '%s\n' "$output" >&2; exit 1; }
+}
+
+cp "$repo_root/README.md" "$fixture/README.md"
+check_supervised_handoff_mutation validation 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: after endpoint, email, and manifest validation
+beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: after endpoint, email, and manifest validation'
+check_supervised_handoff_mutation prompt 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: the same CLI process reaches its normal `Code: ` prompt
+beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: the same CLI process reaches its normal `Code: ` prompt'
+check_supervised_handoff_mutation interaction 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: accept it in the agent interaction'
 
 # Exact release/package references may not silently fall back to the prior beta.
 cp "$repo_root/README.md" "$fixture/README.md"
@@ -330,7 +379,7 @@ check_terminal_cli_auth_mutation() {
     clear) perl -0pi -e 's/delete or clear saved credentials/clear credentials elsewhere/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     forcepath) perl -0pi -e 's/alternate OTP path/another OTP path/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     zero) perl -0pi -e 's/valid\s+exact server-scoped saved identity uses zero OTP/valid saved identity may use OTP/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
-    cli) perl -0pi -e 's/directly\s+in the CLI, never chat/through any channel/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    cli) perl -0pi -e 's/after endpoint, email, and manifest validation/without validation/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     ordering) perl -0pi -e 's/^Terminal CLI authentication rule:/Former terminal rule:/m; s/For a known server, run /Terminal CLI authentication rule: misplaced\n\nFor a known server, run /' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
   esac
   set +e
@@ -350,7 +399,7 @@ check_terminal_cli_auth_mutation logout 'beta onboarding documentation missing f
 check_terminal_cli_auth_mutation clear 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: delete or clear saved credentials'
 check_terminal_cli_auth_mutation forcepath 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: alternate OTP path'
 check_terminal_cli_auth_mutation zero 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: valid exact server-scoped saved identity uses zero OTP'
-check_terminal_cli_auth_mutation cli 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: directly in the CLI, never chat'
+check_terminal_cli_auth_mutation cli 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: after endpoint, email, and manifest validation'
 check_terminal_cli_auth_mutation ordering '-'
 
 # A fully fresh deploy must finish the six local manifest prompts before its

@@ -42,7 +42,8 @@ Each role skill MUST:
   static access is default-off, operator-gated, explicitly acknowledged, and
   capability-free;
 - route work through the supported `tinker` or `tinkercloud` command surface;
-- keep secrets out of chat, argv, app code, manifests, logs, and browser state;
+- keep secrets out of chat, argv, app code, manifests, logs, and browser state,
+  except for the bounded supervised OTP interaction specified below;
 - fail closed on missing, malformed, redirected, or ambiguous security state;
 - report completion only after the role's required verification succeeds; and
 - carry marked canonical blocks checked for drift.
@@ -89,7 +90,7 @@ The skill MUST:
 6. generate or validate a strict `tinker.yaml` receipt;
 7. use the existing project-owned build action without making `tinker deploy`
    execute arbitrary builds;
-8. authenticate through the CLI without requesting a bearer or OTP in chat;
+8. authenticate through the CLI without requesting a bearer; and
 9. run `tinker deploy [DIR]`; and
 10. accept success only when the CLI's fresh anonymous gateway-denial proof
     succeeds.
@@ -106,6 +107,21 @@ control target only; Tinkercloud derives the private data scope.
 The skill MAY continue safe local inspection or implementation while waiting
 for a non-secret answer. It MUST stop before a deployment or access broadening
 that still needs the deployer's decision.
+
+Human-supervised coding-agent OTP handoff: When a human-supervised coding
+agent acts as the deployer and holds the CLI, it may, only when no reusable
+server-bound bearer exists and after endpoint, email, and manifest validation
+and after the same CLI process reaches its
+normal `Code: ` prompt, ask the human exactly once for the short-lived emailed
+OTP, accept it in the agent interaction, and immediately submit it only to
+that same CLI process. Use this only with a trusted human-supervised agent; its
+provider may retain the interaction. Do not restate it or copy it into files, source, argv,
+logs, summaries, or final output; never ask for a bearer. A failed, malformed,
+timed-out, or denied OTP is terminal: there is no second code, retry, forced
+login, identity/account/server switch, or alternate collection path. The CLI
+stores the resulting scoped bearer for later exact-server reuse. Fully
+unattended `tinkercloud-deployment-agent` and VPS Resend-reader paths must not
+fall back to an agent interaction OTP.
 
 ## SDK knowledge
 

@@ -65,11 +65,19 @@ persisted state.
   proven reusable exact browser identity. Otherwise, defer it to separate later
   viewer work and record anonymous-denial evidence; do not request a
   viewer/browser OTP or create a viewer session.
-- A failed, malformed, timed-out, or denied CLI authentication or OTP attempt
-  terminates that deploy attempt. It cannot retry login, use `--force`, switch
-  account or identity, log out, delete or clear saved credentials, or create an
-  alternate OTP path. A valid exact server-scoped saved identity requires zero
-  OTP; any eligible OTP is entered directly in the CLI, never chat.
+- Human-supervised coding-agent OTP handoff: only when no reusable server-bound
+  bearer exists and after endpoint, email, and manifest validation and after
+  the same CLI process reaches its normal `Code: `
+  prompt, the agent may ask the human exactly once for the short-lived emailed
+  OTP, accept it in the agent interaction, and immediately submit it only to
+  that same CLI process. Use this only with a trusted human-supervised agent;
+  its provider may retain the interaction. Do not restate it or copy it into files, source, argv,
+  logs, summaries, or final output; never ask for a bearer. A failed, malformed,
+  timed-out, or denied OTP is terminal: there is no second code, retry, forced
+  login, identity/account/server switch, or alternate collection path. The CLI
+  stores the resulting scoped bearer for later exact-server reuse. Fully
+  unattended `tinkercloud-deployment-agent` and VPS Resend-reader paths must
+  not fall back to an agent interaction OTP.
 - A fresh deployment that runs standalone `tinker whoami` or `tinker login`
   before its one deploy command denies this beta path. The deploy command alone
   verifies the exact normalized HTTPS admin URL without redirects, saves it,
@@ -85,8 +93,9 @@ persisted state.
   different server), unreadable/corrupt default state, or failed write must not
   be overwritten and stops before app creation, upload, or activation. JSON
   deploys do not cache server state.
-- Login labels other than `Email: ` and `Code: `, a code outside the CLI, or an
-  implicit approval instead of exact affirmative pre-invocation consent deny.
+- Login labels other than `Email: ` and `Code: `, a code outside the same live
+  CLI process (except the bounded supervised same-CLI handoff), or an implicit
+  approval instead of exact affirmative pre-invocation consent deny.
 - For a fresh no-manifest/no-bearer deploy, any `Email: ` or `Code: ` prompt
   before all six ordered manifest prompts complete denies the bounded path.
   Invalid, ambiguous, or unwritable manifest state must stop before OTP; a
@@ -110,9 +119,10 @@ persisted state.
   internal to the CLI invocation, while `active_but_unverified` permits only the
   independent exact-URL recheck. A later attempt needs an explicit new human
   request after the cause is addressed.
-- Bearers, OTPs, cookies, provider credentials, app IDs, and viewer identities
+- Bearers, cookies, provider credentials, app IDs, and viewer identities
   supplied through chat, argv, ordinary config, output, logs, or browser app
-  state deny the affected step.
+  state deny the affected step. OTPs do too except for the bounded supervised
+  same-CLI handoff above.
 
 ## Deployment and evidence gates
 

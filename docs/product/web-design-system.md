@@ -351,14 +351,23 @@ agent to follow `skills/tinkercloud-deployer/SKILL.md`, ask only for the
 deployer email, and run the normal Tinker CLI and deployer-skill flow. It first
 checks for and reuses the exact server-scoped saved identity for that deployer.
 Only if that identity is missing, unauthorized, or expired may it request at
-most one CLI OTP. The agent still asks the human only for the deployer email.
-If an OTP is needed, the Tinker CLI itself prompts the deployer to enter the
-mailed code directly; the agent never requests, reads, copies, pastes, relays,
-or handles the code in chat. On CLI OTP failure it stops and reports the
-failure. It never retries the OTP, switches deployer identity, clears, logs out,
-or deletes saved CLI authentication, or creates another OTP path. It then
-generates, builds, and deploys with minimal questions, and never asks for bearer
-tokens, tokens, secrets, or operator access.
+most one CLI OTP. The agent initially asks the human only for the deployer
+email; the bounded OTP handoff below is the sole later credential exception.
+Human-supervised coding-agent OTP handoff: only when no reusable server-bound
+bearer exists and after endpoint, email, and manifest validation, when that
+the same CLI process reaches its normal `Code: ` prompt, the agent may ask the
+human exactly once for the short-lived emailed OTP, accept it
+in the agent interaction, and immediately submit it only to that same CLI
+process. Use this only with a trusted human-supervised agent; its provider may
+retain the interaction. Do not restate it or copy it into files, source, argv, logs, summaries,
+or final output; never ask for a bearer. A failed, malformed, timed-out, or
+denied OTP is terminal: there is no second code, retry, forced login,
+identity/account/server switch, or alternate collection path. The CLI stores
+the resulting scoped bearer for later exact-server reuse. Fully unattended
+`tinkercloud-deployment-agent` and VPS Resend-reader paths must not fall back to
+an agent interaction OTP. It then generates, builds, and deploys with minimal
+questions, and never asks for bearer tokens, tokens, secrets, or operator
+access.
 
 Render the prompt as ordinary focusable, selectable code text. A native Copy
 prompt button can appear only after local clipboard initialization and updates
@@ -368,8 +377,8 @@ query overrides, browser-held endpoint state, deployer tokens, cookies,
 one-time-code values, or secrets. “No OTP” forbids exposing a code value, not
 the conditional normal CLI flow: the exact server-scoped saved identity may be
 reused without an OTP, and an OTP may be requested once only when it is
-missing, unauthorized, or expired. Any mailed code is entered directly into the
-CLI rather than shared with the agent. A malformed configured host omits the
+missing, unauthorized, or expired. A trusted supervised agent may use only the
+bounded same-CLI handoff. A malformed configured host omits the
 card. Deployer dashboards omit it entirely.
 
 ## Usage

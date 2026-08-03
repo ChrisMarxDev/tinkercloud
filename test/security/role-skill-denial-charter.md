@@ -26,7 +26,20 @@ usable by an agent with no prior Tinkercloud knowledge.
   the exact manifest feature and wait for deliberate review.
 - Existing manifest redeploy: do not assume a newly requested partial
   allowlist is additive; activation replaces the exact current policy.
-- Authentication: do not ask the deployer to paste a token or OTP into chat.
+- Authentication: never ask the deployer for a bearer. Human-supervised
+  coding-agent OTP handoff: only when no reusable server-bound bearer exists
+  and after endpoint, email, and manifest validation and after the same CLI
+  process reaches its normal `Code: ` prompt, the agent
+  may ask the human exactly once for the short-lived emailed OTP, accept it in
+  the agent interaction, and immediately submit it only to that same CLI
+  process. Use this only with a trusted human-supervised agent; its provider may retain the
+  interaction. Do not restate it or copy it into files, source, argv, logs,
+  summaries, or final output; never ask for a bearer. A failed, malformed, timed-out,
+  or denied OTP is terminal: there is no second code, retry, forced login,
+  identity/account/server switch, or alternate collection path. The CLI stores
+  the resulting scoped bearer for later exact-server reuse. Fully unattended
+  `tinkercloud-deployment-agent` and VPS Resend-reader paths must not fall back
+  to an agent interaction OTP.
 - JSON/non-interactive command: do not prompt, request OTP, create a manifest,
   or persist inferred state.
 - Deployment response without a valid anonymous denial proof: do not report a

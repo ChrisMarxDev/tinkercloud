@@ -159,8 +159,33 @@ EOF
     failed=1
     return
   }
-  for boundary in 'Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment' 'stop that deploy attempt' 'Do not retry `tinker login`' 'use `--force`' 'switch account or identity' 'log out' 'delete or clear saved credentials' 'alternate OTP path' 'valid exact server-scoped saved identity uses zero OTP' 'directly in the CLI, never chat'; do
+  for boundary in 'Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment' 'stop that deploy attempt' 'Do not retry `tinker login`' 'use `--force`' 'switch account or identity' 'log out' 'delete or clear saved credentials' 'alternate OTP path' 'valid exact server-scoped saved identity uses zero OTP'; do
     require_phrase "$file" "$terminal_block" "$boundary"
+  done
+}
+
+require_supervised_agent_otp_handoff() {
+  file=$1
+  text=$(cat "$file")
+  for boundary in \
+    'Human-supervised coding-agent OTP handoff:' \
+    'only when no reusable server-bound bearer exists' \
+    'after endpoint, email, and manifest validation' \
+    'the same CLI process reaches its normal `Code: ` prompt' \
+    'ask the human exactly once for the short-lived emailed OTP' \
+    'accept it in the agent interaction' \
+    'immediately submit it only to that same CLI process' \
+    'Use this only with a trusted human-supervised agent; its provider may retain the interaction' \
+    'Do not restate it or copy it into files, source, argv, logs, summaries, or final output' \
+    'never ask for a bearer' \
+    'there is no second code, retry, forced login, identity/account/server switch, or alternate collection path' \
+    'stores the resulting scoped bearer for later exact-server reuse' \
+    'must not fall back to an agent interaction OTP'; do
+    compact=$(printf '%s\n' "$text" | tr -s '[:space:]' ' ')
+    printf '%s\n' "$compact" | grep -F -- "$boundary" >/dev/null || {
+      echo "beta onboarding documentation missing from ${file}: ${boundary}" >&2
+      failed=1
+    }
   done
 }
 
@@ -587,6 +612,9 @@ for file in "$platform" "$deployer"; do
   require_private_manifest_sample "$file"
   reject_phrase "$file" "$(cat "$file")" 'only human prompts are exactly `Email: ` and `Code: `'
   require_deployer_terminal_auth_rule "$file"
+  require_supervised_agent_otp_handoff "$file"
+  require_phrase "$file" "$(cat "$file")" 'after endpoint, email, and manifest validation'
+  require_phrase "$file" "$(cat "$file")" 'the same CLI process reaches its normal `Code: ` prompt'
   require_deployer_single_invocation_rule "$file"
   require_deployer_executable_command_placement "$file"
   require_phrase "$file" "$(cat "$file")" "$active_unverified_recheck"
@@ -602,6 +630,7 @@ require_phrase "README Start the beta" "$readme_beta" "$combined_prompt_order_ph
 require_phrase "README Start the beta" "$readme_beta" "$fresh_server_origin_phrase"
 require_phrase "README Start the beta" "$readme_beta" 'current CLI state cannot invent or derive a server'
 require_phrase "README Start the beta" "$readme_beta" "$fresh_inline_manifest_phrase"
+require_supervised_agent_otp_handoff "$readme"
 reject README.md 'Use `tinker init .` to create the manifest ahead of time.'
 require_text "README Start the beta" "$readme_beta" "Optional: add SDK capabilities"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md"
@@ -634,6 +663,16 @@ done
 
 for file in "$platform" "$operator" "$deployer" "$readme" "$contract"; do
   reject_bare_beta_deploy "$file"
+done
+
+for file in specs/agent/role-skill-contract.md specs/agent/beta-onboarding-contract.md specs/ui/native-web-system.md docs/product/web-design-system.md skills/tinkercloud-native-ui/SKILL.md test/security/beta-onboarding-denial-charter.md test/security/role-skill-denial-charter.md; do
+  require_supervised_agent_otp_handoff "$file"
+done
+
+for file in "$platform" "$deployer" "$readme" specs/agent/role-skill-contract.md specs/agent/beta-onboarding-contract.md specs/ui/native-web-system.md docs/product/web-design-system.md skills/tinkercloud-native-ui/SKILL.md test/security/beta-onboarding-denial-charter.md test/security/role-skill-denial-charter.md; do
+  reject "$file" 'Never ask me to paste or share a one-time code in chat.'
+  reject "$file" 'Do not request, read, copy, paste, relay, or handle the code in chat.'
+  reject "$file" 'Any mailed code is entered directly into the CLI rather than shared with the agent.'
 done
 
 require "$full_stack" "unattended multi-identity security matrix"

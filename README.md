@@ -205,11 +205,28 @@ collected before the single CLI invocation and is not another CLI prompt.
 Never run `tinker init` before the bounded fresh single-deploy path; that path
 generates the receipt inside its one deploy invocation.
 
+Human-supervised coding-agent OTP handoff: A human-supervised coding agent
+acting as the deployer may, only when no reusable server-bound bearer exists and
+after endpoint, email, and manifest validation
+have succeeded and the same CLI process reaches its normal `Code: ` prompt,
+ask the human exactly once for the short-lived emailed OTP, accept it in the
+agent interaction, and immediately submit it only to that same CLI process. Use
+this only with a trusted human-supervised agent; its provider may retain the
+interaction.
+Do not restate it or copy it into files, source, argv, logs, summaries, or
+final output; never ask for a bearer. A failed, malformed, timed-out, or denied
+OTP is terminal: there is no second code, retry, forced login,
+identity/account/server switch, or alternate collection path. The CLI stores
+the resulting scoped bearer for later exact-server reuse. Fully unattended
+`tinkercloud-deployment-agent` and VPS Resend-reader paths must not fall back
+to an agent interaction OTP.
+
 If that CLI authentication or OTP attempt fails, is malformed, times out, or is
 denied, stop that deploy attempt: do not retry login, use `--force`, switch
 identity, log out, clear credentials, or seek another OTP path. A valid exact
-server-scoped saved identity uses zero OTP, and any eligible OTP is entered only
-in the CLI, never chat.
+server-scoped saved identity uses zero OTP. The supervised handoff above is the
+only agent-interaction exception; it submits the one accepted OTP only to the
+same CLI process.
 Review endpoint, slug,
 description, output, owner-only access, no features, and SPA fallback; even
 owner-only requires affirmative go-ahead. After final review, invoke exactly

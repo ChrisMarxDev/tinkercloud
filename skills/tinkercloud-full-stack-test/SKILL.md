@@ -21,8 +21,10 @@ an opaque app-host session. App code must never select either identity.
 
 Fail closed. Missing, stale, malformed, redirected, incompatible, or ambiguous
 security state is a denial, not a value to guess. Never expose or request a
-deployer token, OTP, provider secret, database credential, app ID, or viewer ID
-in chat, argv, source code, `tinker.yaml`, browser storage, logs, or output.
+deployer token, provider secret, database credential, app ID, or viewer ID in
+chat, argv, source code, `tinker.yaml`, browser storage, logs, or output. The
+only OTP exception is the supervised deployer handoff in the applicable
+deployer workflow.
 
 V1's historical release boundary is private-only, and the app owner is always
 an implicit viewer. In the accepted post-V1 extension, public is never a
