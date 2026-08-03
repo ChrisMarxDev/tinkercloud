@@ -372,7 +372,7 @@ check_single_deploy_invocation_mutation() {
   expected=$2
   cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
   case "$mutation" in
-    command) perl -0pi -e 's/invoke `tinker deploy \.`/invoke the deploy command/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    command) perl -0pi -e 's/invoke `tinker --server\s+<remembered-server> deploy \.`/invoke the deploy command/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     once) perl -0pi -e 's/exactly once for that deploy attempt/as often as needed/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     rerun) perl -0pi -e 's/do not rerun deploy/rerun deploy/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     upload) perl -0pi -e 's/upload another release/upload a replacement release/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
@@ -392,7 +392,7 @@ check_single_deploy_invocation_mutation() {
   printf '%s\n' "$output" | grep -F -- "$expected" >/dev/null || { echo "beta onboarding documentation self-test missed ${mutation} single-invocation diagnostic" >&2; exit 1; }
 }
 
-check_single_deploy_invocation_mutation command 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: invoke `tinker deploy .`'
+check_single_deploy_invocation_mutation command 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: invoke `tinker --server <remembered-server> deploy .`'
 check_single_deploy_invocation_mutation once 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: exactly once for that deploy attempt'
 check_single_deploy_invocation_mutation rerun '-'
 check_single_deploy_invocation_mutation upload 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: upload another release'
