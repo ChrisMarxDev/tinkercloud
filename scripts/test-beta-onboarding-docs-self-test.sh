@@ -56,7 +56,7 @@ test "$output" = "$expected_output" || {
 
 # Exact release/package references may not silently fall back to the prior beta.
 cp "$repo_root/README.md" "$fixture/README.md"
-perl -0pi -e 's/@tinkercloud\/cli\@0\.1\.6/@tinkercloud\/cli\@0.1.5/' "$fixture/README.md"
+perl -0pi -e 's/@tinkercloud\/sdk\@0\.1\.6/@tinkercloud\/sdk\@0.1.5/' "$fixture/README.md"
 
 set +e
 output=$(

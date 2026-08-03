@@ -15,9 +15,9 @@ does not confer another role. The outcome is a private, owner-only app with
 fresh gateway-denial evidence, not a public app, a provider integration, or a
 durability claim.
 
-Release preparation pins the next public beta onboarding run to `v0.1.6` from
-the immutable directory below. It is not a claim that `v0.1.6` is published:
-run its commands only after that exact prerelease has been published.
+The public-beta onboarding run is pinned to `v0.1.6` from the immutable
+directory below. Before any install, the role must prove that exact tag page
+and its exact installer asset are available over HTTPS; otherwise it stops.
 
 ```text
 https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/
@@ -43,9 +43,11 @@ an unpinned redirect target, or an operator/deployer-supplied release origin.
 Before installation, the operator proves from the VPS provider console that the
 target is a clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS and records the
 console-derived SSH host-key fingerprint. DNS control is required for one
-`*.<domain>` wildcard record using A/AAAA or CNAME as the provider supports;
-both derived hostnames must resolve nonempty before ACME without comparison to
-a public IP. The operator supplies no separate certificate input. The initial
+`*.<domain>` wildcard record: point its A record at the confirmed provider-
+console IPv4, add AAAA only for a confirmed reachable IPv6, or use CNAME only
+for the provider's stable hostname. Compare the target in the provider UI and
+confirm both derived hostnames resolve before ACME. The operator supplies no
+separate certificate input. The initial
 active-deployer allowlist equals exactly the intended normalized deployer email
 set and contains no other addresses; the operator email alone is sufficient
 only when that is the exact intended set. Operator setup permits at most one
@@ -55,6 +57,8 @@ CLI deployer OTP.
 The exact first-run command sequence is:
 
 ```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 sudo tinkercloud setup
 ```
@@ -79,11 +83,17 @@ reduces the relevant lane to zero.
 
 For the basic Resend beta path, an already-safe VPS-resident root-owned,
 non-symlink regular mode-`0600` credential file at any supplied exact path is
-reused after an exact check and passed directly to setup.
+reused after this exact check and passed directly to setup:
+
+```sh
+test -f "<VPS_RESEND_KEY_FILE>" && test ! -L "<VPS_RESEND_KEY_FILE>" && test "$(stat -c '%U:%G %a' "<VPS_RESEND_KEY_FILE>")" = 'root:root 600'
+```
+
 Only a workstation-local or ambiguous file requires an SSH target and transfer
 through verified root SSH to
 `/root/.config/tinkercloud/resend-api-key`, then verifies that final destination
-is a root-owned regular file with mode `0600`. The credential contents never
+is a root-owned regular file with mode `0600` using the same check. The
+credential contents never
 enter argv, chat, config, browser state, or logs. The dashboard path is
 **Deployers** → **Active deployer allowlist** → **Allowed deployer emails**;
 an authority addition requires **I confirm that adding any email grants
@@ -113,12 +123,12 @@ workstation-transfer destination.
 
 | Item | Contract |
 | --- | --- |
-| Supplied inputs | A macOS or Linux workstation used as the deployer, a static project directory, and the operator-authorized deployer email. The platform URL is discovered from saved state or supplied once as normalized HTTPS when absent. |
-| Derived values | The default server after direct no-redirect version proof; protected per-user credential-file location; inferred safe project output/slug choices; owner-only policy; generated strict `tinker.yaml` receipt when absent; deterministic archive; immutable release manifest; deployment ID; and protected app URL. |
+| Supplied inputs | A macOS or Linux workstation used as the deployer, a static project directory, and the operator-authorized deployer email. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by the operator when no saved default exists. |
+| Derived values | The saved default server after the deploy command's direct no-redirect version proof; protected per-user credential-file location; inferred safe project output/slug choices; owner-only policy; generated strict `tinker.yaml` receipt when absent; deterministic archive; immutable release manifest; deployment ID; and protected app URL. |
 | Prompts allowed | One bounded platform-URL setup prompt only when no valid default exists; required unresolved project choices; one combined review of optional description, access, capabilities, and SPA fallback; one final access-broadening confirmation; and normal CLI email/OTP prompts only after an unauthorized/expired bearer. |
 | Prompts forbidden | A bearer, OTP, provider credential, app ID, viewer identity, arbitrary build command, manifest rewriting confirmation, repeated known server/email/policy questions, or a prompt in `--json` mode. |
 | Persisted state | Default server record plus a separate mode-`0700` configuration directory and mode-`0600`, regular, non-symlinked bearer file keyed by normalized HTTPS server. The generated manifest is a project receipt, never a secret store. |
-| Required evidence | `tinker version` proves the pinned client; `whoami` proves the current authorized deployer; activation returns the immutable deployment ID and protected exact origin; fresh anonymous HTML, asset, and reserved API denial probes return no app bytes; authenticated platform health succeeds. |
+| Required evidence | `tinker version` prints exactly `tinker 0.1.6`; the one deploy command internally proves the server and current authorized deployer; activation returns the immutable deployment ID and protected exact origin; fresh anonymous HTML, asset, and reserved API denial probes return no app bytes; authenticated platform health succeeds. |
 
 The CLI login prompts are exactly `Email: ` and `Code: ` when `whoami` proves
 login is needed; the code stays in the CLI. Before invoking deploy the agent asks
@@ -130,17 +140,27 @@ anonymous probes are internal success preconditions.
 The exact first-run command sequence is:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 tinker version
-tinker --server <remembered-server> deploy .
 ```
 
 Run the deployer commands from the already-selected local static project root.
-The human deployment flow may collect the first valid HTTPS platform URL,
-deployer email, and OTP within `tinker --server <remembered-server> deploy .`;
-it reuses a valid saved bearer
-after `whoami` and does not request OTP again. The CLI never runs an inferred
-build; missing output stops once with the exact project-owned action needed.
+`tinker version` must print exactly `tinker 0.1.6`; any other output stops the
+attempt. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by
+the operator. The one deploy command verifies that URL directly without
+redirects and saves it, reuses a valid server-bound bearer, or performs exactly
+one CLI email-and-OTP login only when the bearer is absent, unauthorized, or
+expired. Do not run standalone `tinker whoami` or `tinker login` before this
+fresh first deploy. The CLI never runs an inferred build; missing output stops
+once with the exact project-owned action needed.
+
+For a human deploy with explicit `--server`, saving the verified endpoint is
+allowed only when the protected default-server record is exactly absent. A
+saved endpoint, including one for another server, is preserved; an unreadable,
+malformed, or failed default-store write stops before app creation or upload.
+JSON/non-interactive deploys do not prompt or cache a server.
 
 Immediately after a CLI authentication or OTP attempt fails, is malformed,
 times out, or is denied, that deploy attempt is terminal. It MUST NOT retry
@@ -152,17 +172,23 @@ CLI and never through chat.
 The six first-manifest prompts are exactly `App slug (<suggested>, Enter to
 accept):`, `Description (optional):`, `Build output (<default>, Enter to
 accept):`, `Allowed emails or domains, comma-separated (optional):`, `Features
-(kv,blobs,realtime; optional):`, and `SPA fallback (optional):`. Empty allowlist
-means owner-only; empty features means no features; fallback remains empty unless
-reviewed. Root `index.html` selects `.`, exactly one safe conventional output
-with `index.html` selects that directory, and multiple/none blocks for one
-output question. Invalid/ambiguous slugs block for one stable lowercase slug.
+(kv,blobs,realtime; optional):`, and `SPA fallback (optional):`. Empty optional
+answers use their defaults: no description, owner-only access, no features, and
+no fallback. They are not extra questions. Root `index.html` selects `.`,
+exactly one safe conventional output with `index.html` selects that directory,
+and multiple/none blocks for one output question. Invalid/ambiguous slugs block
+for one stable lowercase slug.
 
 After final review of endpoint, slug, description, output, owner-only access,
 no features, and SPA fallback—and affirmative go-ahead even for owner-only—the
-agent invokes `tinker --server <remembered-server> deploy .` (or `tinker
---server <remembered-server> --confirm-public deploy .`) exactly once for that
-deploy attempt. Any CLI deploy
+agent invokes exactly once:
+
+```sh
+tinker --server <SERVER> deploy .
+```
+
+The public-confirmation form is reserved for its explicit later public flow.
+Any CLI deploy
 outcome—validation, upload, activation, verification, transport/TLS/redirect/
 timeout/error, or success—ends that invocation. The agent MUST NOT rerun deploy,
 upload another release, or retry from chat. The CLI's already-bounded transient

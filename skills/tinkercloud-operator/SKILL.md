@@ -128,8 +128,15 @@ only nonempty resolution; compare the intended record target in the provider UI.
 
 ### 4. Install v0.1.6
 
-For a clean host, after `v0.1.6` is published, begin in that VPS's root shell
-with this prepared exact-beta command:
+For a clean host, first probe the exact immutable installer from that VPS's
+root shell. HTTPS success permits installation and any failure stops:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
+```
+
+Then install once:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
@@ -138,20 +145,13 @@ curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/
 The released host installer embeds that immutable release directory; do not add
 an origin, `latest` selector, provider credential, or signing material. The
 copy/paste installer verifies checksums and a pinned Ed25519 signature before
-installation. This is release preparation, not a claim that `v0.1.6` already
-exists; after publication, inspect the [exact immutable beta
-release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6).
+installation. Inspect the [exact immutable beta
+release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6)
+when useful.
 If the exact `v0.1.6` release or the host installer asset is unavailable,
 stop: do not install, deploy, or substitute another version. Minimal HTTPS
 release readiness is the exact tag page plus the host installer asset URL
 returning HTTPS success; the installer remains the checksum/signature authority.
-Probe only this role's immutable installer read-only; HTTPS success permits
-installation and any failure stops:
-
-```sh
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
-```
-
 The installer remains the
 cryptographic authority, and any later exact-version proof failure stops.
 HTTPS release-asset redirects are transport-only. Repository/development

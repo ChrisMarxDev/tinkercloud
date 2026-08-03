@@ -12,19 +12,16 @@ two role skills are independently usable as current standalone skill content:
 [operator](https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md)
 and [deployer](https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md).
 
-This page prepares the next exact beta, `v0.1.6`; its install and package
-commands become runnable only after that prerelease is published.
-The exact release is currently unavailable. If the exact `v0.1.6` release or
-the host installer asset is unavailable, stop: do not install, deploy, or
-substitute another version. Minimal HTTPS release readiness is the exact tag
-page plus the host installer asset URL returning HTTPS success; the installer
-remains the checksum/signature authority. The deployer separately checks its
-own client installer asset before client installation.
+This beta path is pinned to the exact `v0.1.6` prerelease. If the exact release
+or the role's installer asset is unavailable, stop: do not install, deploy, or
+substitute another version. Before installation, prove the exact tag page and
+role asset return HTTPS success; the released installer remains the
+checksum/signature authority.
 
 <!-- beta-operator-readme:start -->
 ### 1. Operator: create the private host
 
-You need a clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS with root SSH, DNS
+You need a clean dedicated Hetzner x86-64 Ubuntu 24.04 or 26.04 VPS with root SSH, DNS
 control for the base domain, an operator email, a verified sender, a
 root-readable protected provider-credential file, and the deployer emails to
 authorize. In the VPS provider console's root shell, first run the read-only
@@ -40,38 +37,66 @@ trust source for the SSH host-key fingerprint: run
 first normal workstation SSH connection, and accept only a match. Never trust
 or accept an `ssh-keyscan` result by itself.
 
-Create one `*.<DOMAIN>` wildcard record using `A`/`AAAA` or `CNAME` as the DNS provider supports. It covers both the derived dashboard and app hosts; do not
-create a separate `admin` record. Prove nonempty DNS resolution before
-certificates without comparing answers to a public IP:
+Create one `*.<DOMAIN>` wildcard record using `A`/`AAAA` or `CNAME` as the DNS
+provider supports. It covers both the derived dashboard and app hosts; do not
+create a separate `admin` record. In the provider console,
+point its A record at the confirmed VPS IPv4; add AAAA only for confirmed
+reachable IPv6, or use CNAME only for the provider's stable hostname. Compare
+the target in the provider UI, then prove nonempty resolution before
+certificates:
 
 ```sh
 getent ahosts admin.<DOMAIN> >/dev/null
 getent ahosts onboarding-check.<DOMAIN> >/dev/null
 ```
 
-The operator supplies no extra certificate input. From the VPS root shell:
+The operator supplies no extra certificate input. From the VPS root shell,
+probe the asset before installation; HTTPS success permits the next command and
+failure stops:
+
+If the exact `v0.1.6` release or the host installer asset is unavailable, stop:
+do not install, deploy, or substitute another version. Minimal HTTPS release
+readiness is the exact tag page plus the host installer asset URL returning HTTPS
+success; the installer remains the checksum/signature authority.
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
+```
+
+Then install:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
-```
-
-Before that install, probe only this immutable installer read-only; HTTPS
-success permits installation and failure stops:
-
-```sh
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
 ```
 
 The copy/paste installer verifies checksums and a pinned Ed25519 signature
 before installation. It downloads only its baked exact release and follows
 HTTPS-only asset redirects. [Inspect the exact immutable beta
 release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6)
-after it is published and before running if preferred. Transfer the credential only through verified root SSH to
+when useful. Transfer the credential only through verified root SSH to
 `/root/.config/tinkercloud/resend-api-key`; make it a root-owned regular file at
 mode `0600`. This canonical path is only the workstation-transfer destination:
 an already VPS-local credential at any supplied exact safe path is passed
 directly to setup after the same root-owned, non-symlink regular mode-`0600`
-check. After the credential is ready, run:
+check. Validate an already VPS-local credential first, without asking for an
+SSH target:
+
+```sh
+test -f "<VPS_RESEND_KEY_FILE>" && test ! -L "<VPS_RESEND_KEY_FILE>" && test "$(stat -c '%U:%G %a' "<VPS_RESEND_KEY_FILE>")" = 'root:root 600'
+```
+
+Only a workstation-local or ambiguous credential needs the verified-SSH
+transfer path. Substitute the supplied values only then; do not ask for an SSH
+target for an already-safe VPS-local file:
+
+```sh
+ssh root@<HOST> 'install -d -o root -g root -m 0700 /root/.config/tinkercloud'
+scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root@<HOST>:/root/.config/tinkercloud/resend-api-key"
+ssh root@<HOST> 'chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key && test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && test "$(stat -c '\''%U:%G %a'\'' /root/.config/tinkercloud/resend-api-key)" = '\''root:root 600'\'''
+```
+
+After the credential is ready, run:
 
 ```sh
 sudo tinkercloud setup
@@ -130,12 +155,13 @@ reduces the relevant lane to zero.
 
 You need a macOS/Linux workstation, the static project directory, and the
 operator-authorized deployer email. From the selected static project root,
-install the exact client and deploy:
+probe the client asset, install the signed exact client, and prove its version:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 tinker version
-tinker --server <SERVER> deploy .
 ```
 
 If the exact `v0.1.6` release or the required installer asset for this role is
@@ -144,19 +170,38 @@ Minimal HTTPS release readiness is the exact tag page plus this role's exact
 installer asset URL returning HTTPS success; the installer remains the
 checksum/signature authority.
 
-The deploy wizard reuses the verified endpoint and deployer email;
-it requests one human CLI OTP only when the saved bearer is missing,
-unauthorized, or expired. The first deployment stays owner-only by default.
+`tinker version` must print exactly `tinker 0.1.6`; any other output stops this
+attempt. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by
+the operator. The one deploy command verifies it without redirects and saves
+it, reuses a valid bearer, or performs exactly one CLI email-and-OTP login only
+when that bearer is absent, unauthorized, or expired. Do not run standalone
+`tinker whoami` or `tinker login` before this fresh deployment. The first
+deployment stays owner-only by default.
+
+When `tinker.yaml` is missing, its one deploy command generates it after these
+six prompts: `App slug (<suggested>, Enter to accept):`, `Description
+(optional):`, `Build output (<default>, Enter to accept):`, `Allowed emails or
+domains, comma-separated (optional):`, `Features (kv,blobs,realtime;
+optional):`, and `SPA fallback (optional):`. Empty optional values mean no
+description, owner-only access, no features, and no fallback; they are defaults,
+not extra questions. Root `index.html` selects `.`, one safe conventional
+output selects itself, while multiple/none outputs or an invalid/ambiguous slug
+block for exactly one required choice.
 If that CLI authentication or OTP attempt fails, is malformed, times out, or is
 denied, stop that deploy attempt: do not retry login, use `--force`, switch
 identity, log out, clear credentials, or seek another OTP path. A valid exact
 server-scoped saved identity uses zero OTP, and any eligible OTP is entered only
 in the CLI, never chat.
-`<SERVER>` is the exact remembered verified server. Review endpoint, slug,
+Review endpoint, slug,
 description, output, owner-only access, no features, and SPA fallback; even
-owner-only requires affirmative go-ahead. After final review, invoke `tinker
---server <SERVER> deploy .` exactly once for that deploy
-attempt. Any outcome ends the invocation: do not rerun deploy, upload another
+owner-only requires affirmative go-ahead. After final review, invoke exactly
+once:
+
+```sh
+tinker --server <SERVER> deploy .
+```
+
+Any outcome ends the invocation: do not rerun deploy, upload another
 release, or retry from chat. The CLI's bounded readiness retries stay inside
 that invocation; `active_but_unverified` permits only its independent exact-URL
 recheck: fresh anonymous `curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>` with no authentication, requiring `401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or `Location`, and no app bytes. It is evidence only, never a second deploy. A later attempt needs an explicit new human request after the cause is
@@ -194,7 +239,9 @@ Tinker is installed directly from an exact GitHub release. Beta installation
 never follows a mutable `latest` channel.
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 ```
 
 The installer is bound to that exact immutable release. It selects the macOS or
@@ -212,12 +259,8 @@ shell-variable collision.
 tinker version
 ```
 
-Package-manager users may install the same reviewed native CLI matrix with one
-command:
-
-```sh
-npm install --global @tinkercloud/cli@0.1.6
-```
+The signed GitHub installer above is the sole canonical fresh-beta CLI route.
+Do not substitute the npm CLI package for it.
 
 ## Operator first: run the platform
 
@@ -297,11 +340,8 @@ and restore the prior version automatically if a gate fails. Read the
 ## Deployer second: publish an app
 
 From a static app project, deploy the project directory—not only its output
-folder:
-
-```sh
-tinker --server <SERVER> deploy .
-```
+folder. For the first beta deployment, use the single reviewed command in
+**Start the beta** above; do not precede it with standalone `whoami` or `login`.
 
 On its first human run, Tinker asks for the HTTPS platform URL only when it has
 no verified default, reuses or establishes the deployer identity, inspects the

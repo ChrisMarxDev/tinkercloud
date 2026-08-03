@@ -422,6 +422,29 @@ func runWith(argv []string, stdout, stderr io.Writer, deps runnerDeps) int {
 			writeTo(stdout, stderr, *jsonOutput, result{Error: &cliError{code, message}})
 			return 1
 		}
+		// An explicit human deploy may establish the first remembered server, but
+		// only after the server and bearer have both passed their direct checks.
+		// Existing or unreadable state is never replaced by an explicit override.
+		if !*jsonOutput {
+			defaults, ok := deps.store.(client.DefaultServerStore)
+			if !ok || defaults == nil {
+				writeTo(stdout, stderr, false, result{Error: &cliError{"configuration_store", "Server could not be saved."}})
+				return 1
+			}
+			_, defaultErr := defaults.DefaultServer()
+			switch {
+			case defaultErr == nil:
+				// A saved default, even for another server, remains authoritative.
+			case errors.Is(defaultErr, client.ErrNoDefaultServer):
+				if defaults.SetDefaultServer(base) != nil {
+					writeTo(stdout, stderr, false, result{Error: &cliError{"configuration_store", "Server could not be saved."}})
+					return 1
+				}
+			default:
+				writeTo(stdout, stderr, false, result{Error: &cliError{"configuration_store", "Saved server could not be read."}})
+				return 1
+			}
+		}
 		deployer := client.New(base, token)
 		if deps.newClient != nil {
 			deployer = deps.newClient(base, token)
