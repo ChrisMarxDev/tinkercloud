@@ -18,8 +18,8 @@ Before a successful test deployment, prove these denials:
   variation of the exact email domain is allowed. This recipient-domain check is
   independent from `TINKERCLOUD_VPS_DOMAIN`: `dev@christopher-marx.de` requires
   `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN=christopher-marx.de`, even when the
-  platform root is `testing.tinkercloud.fun` and its server is
-  `https://admin.testing.tinkercloud.fun`.
+  platform root is `testing.tinkercloud.example` and its server is
+  `https://admin.testing.tinkercloud.example`.
 - A relative, symlinked, non-owned, missing, or non-directory CLI/app path is
   rejected before a CLI or reader invocation.
 - A missing deployer email, app directory, `tinker.yaml`, or HTTPS platform URL

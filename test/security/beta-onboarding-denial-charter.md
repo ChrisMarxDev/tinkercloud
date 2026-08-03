@@ -37,6 +37,10 @@ persisted state.
   the deployer CLI flow. Before a third human request of any kind, stop
   immediately. No account switch, cache clearing, fresh browser profile,
   viewer login, or alternate mailbox may reset or evade this budget.
+- Opening the protected app during the bounded operator/deployer run requires a
+  proven reusable exact browser identity. Otherwise, defer it to separate later
+  viewer work and record anonymous-denial evidence; do not request a
+  viewer/browser OTP or create a viewer session.
 - A failed, malformed, timed-out, or denied CLI authentication or OTP attempt
   terminates that deploy attempt. It cannot retry login, use `--force`, switch
   account or identity, log out, delete or clear saved credentials, or create an
@@ -108,7 +112,7 @@ persisted state.
 - The automation recipient domain remains an exact allowlist separate from the
   platform root domain. A forced login requires both `dev@christopher-marx.de`
   to match recipient domain `christopher-marx.de` and the platform server to
-  derive from root `testing.tinkercloud.fun`; it must not require those domains
+  derive from root `testing.tinkercloud.example`; it must not require those domains
   to be equal. A valid saved exact deployer identity is reused before reader
   configuration is required and consumes zero OTP.
 - A reader failure cannot fall back to a human relay, copied code, chat prompt,

@@ -139,14 +139,20 @@ human mailbox to evade the limit. A valid reusable browser identity or bearer
 uses zero additional OTP budget; malformed, transport, dependency, redirected,
 or ambiguous state fails closed and also does not trigger OTP.
 
+Opening the deployed protected app is outside this bounded operator/deployer
+journey unless the exact browser identity is already proven reusable for that
+app. Otherwise the run records its fresh anonymous-denial evidence and defers
+opening to separate later viewer work; it MUST NOT request a viewer/browser OTP
+or create a viewer session.
+
 Extended security acceptance is unattended. Its local, separately protected
 OTP reader may consume only the normal gateway-issued deployer/viewer OTP for
 the configured exact recipient domain and fixed Resend HTTPS origin. That
 recipient-domain allowlist is independent of the platform root domain: a
 deployer at `dev@christopher-marx.de` requires the recipient domain
 `christopher-marx.de`, while the platform may be
-`https://admin.testing.tinkercloud.fun` derived only from the root domain
-`testing.tinkercloud.fun`. A valid saved exact CLI identity is checked and
+`https://admin.testing.tinkercloud.example` derived only from the root domain
+`testing.tinkercloud.example`. A valid saved exact CLI identity is checked and
 reused before reader configuration is required, using zero OTP. When forced
 login is necessary, both the exact recipient-domain validation and the
 server-derived-from-platform-root validation are required independently. Reader

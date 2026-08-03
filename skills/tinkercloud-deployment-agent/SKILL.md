@@ -68,15 +68,15 @@ differ from the platform root domain: the recipient allowlist is an exact
 email-domain boundary, while the platform root domain names the Tinkercloud
 host. For example, `dev@christopher-marx.de` is allowed only when the recipient
 domain is `christopher-marx.de`, even when its platform server is
-`https://admin.testing.tinkercloud.fun`:
+`https://admin.testing.tinkercloud.example`:
 
 ```sh
 export TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN='christopher-marx.de'
-export TINKERCLOUD_VPS_DOMAIN='testing.tinkercloud.fun'
+export TINKERCLOUD_VPS_DOMAIN='testing.tinkercloud.example'
 
 python3 skills/tinkercloud-deployment-agent/scripts/deploy_once.py \
   --tinker /absolute/path/to/tinker \
-  --server https://admin.testing.tinkercloud.fun \
+  --server https://admin.testing.tinkercloud.example \
   --deployer-email dev@christopher-marx.de \
   --app-dir /absolute/path/to/app
 ```
