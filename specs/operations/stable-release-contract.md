@@ -43,8 +43,9 @@ reading a signing secret.
 
 The protected top-level `release.yml` job builds once, verifies locally, creates a draft stable
 release, downloads the complete draft into a fresh directory, compares the
-asset set, verifies it again, and only then publishes it as `latest`. It smoke
-tests both exact-version and `latest` one-line installers. Published releases,
+asset set, verifies it again, and only then publishes it as `latest`. It creates
+a fresh temporary non-root destination directory before smoke testing each
+exact-version and `latest` one-line installer. Published releases,
 tags, and assets are never edited or replaced.
 
 The production private key is stored only as

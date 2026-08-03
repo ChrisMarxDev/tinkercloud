@@ -108,7 +108,8 @@ Prove all of the following before calling preparation complete:
   mutates a tap.
 - The one-line installer is the signed `install-client.sh` release input. It
   selects locally, verifies checksum plus pinned signature, refuses root, and
-  replaces the CLI atomically.
+  replaces the CLI atomically. The protected release smoke creates its fresh
+  non-root `TINKER_INSTALL_DIR` before each installer selector runs.
 - No JavaScript package manager installs `tinkercloud`.
 
 Run at minimum:
