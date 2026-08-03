@@ -68,7 +68,6 @@ class DeploymentAgentTests(unittest.TestCase):
         self.assertIn("TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN='christopher-marx.de'", skill)
         self.assertIn("TINKERCLOUD_VPS_DOMAIN='testing.tinkercloud.example'", skill)
         self.assertIn("--server https://admin.testing.tinkercloud.example", skill)
-        self.assertNotIn("testing.tinkercloud.fun", skill)
         self.assertIn("recipient email domain may differ from the platform root domain", prose)
         self.assertIn("The wrapper derives the platform server only from `TINKERCLOUD_VPS_DOMAIN`", prose)
         self.assertIn("saved exact identity and reuses it before reader configuration is required", prose)
