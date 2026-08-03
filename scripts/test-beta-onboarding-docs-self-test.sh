@@ -145,6 +145,24 @@ for expected in \
   }
 done
 
+# The workstation transfer must finish with a post-permission ownership/mode proof.
+cp "$repo_root/skills/tinkercloud-operator/SKILL.md" "$fixture/skills/tinkercloud-operator/SKILL.md"
+perl -0pi -e 's/(chown root:root \/root\/\.config\/tinkercloud\/resend-api-key && chmod 0600 \/root\/\.config\/tinkercloud\/resend-api-key) && test -f \/root\/\.config\/tinkercloud\/resend-api-key/$1/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected final credential-transfer proof removal to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing or reordered final credential-transfer proof in skills/tinkercloud-operator/SKILL.md: test -f /root/.config/tinkercloud/resend-api-key' >/dev/null || {
+  echo "beta onboarding documentation self-test missed final credential-transfer proof diagnostic" >&2
+  exit 1
+}
+
 # Retaining every step out of order must fail specifically on flow ordering.
 cp "$repo_root/skills/tinkercloud-operator/SKILL.md" "$fixture/skills/tinkercloud-operator/SKILL.md"
 perl -0pi -e 's/### 2\. Verify the SSH host key/### ORDER-SWAP/; s/### 3\. Configure one wildcard DNS record/### 2. Verify the SSH host key/; s/### ORDER-SWAP/### 3. Configure one wildcard DNS record/' "$fixture/skills/tinkercloud-operator/SKILL.md"
@@ -342,6 +360,31 @@ printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing from
   echo "beta onboarding documentation self-test missed combined prompt-order diagnostic" >&2
   exit 1
 }
+
+check_fresh_parity_mutation() {
+  mutation=$1
+  expected=$2
+  cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+  case "$mutation" in
+    server) perl -0pi -e 's/On a fully fresh workstation, `<SERVER>` comes only from the operator-provided\s+exact normalized HTTPS admin URL\./Current CLI state selects the server./' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    init) perl -0pi -e 's/Never run `tinker init` before the bounded fresh single-deploy path/Run `tinker init` before fresh deploy/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    indexing) perl -0pi -e 's/(access:\n  mode: private)/$1\n  indexing: false/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    exact_codes) perl -0pi -e 's/requests exactly two human codes total/requests at most two human codes total/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    matrix) perl -0pi -e 's/The clean two-code human flow MUST NOT\s+invoke the extended VPS security matrix/The clean flow may invoke the extended matrix/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+  esac
+  set +e
+  output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+  result=$?
+  set -e
+  test "$result" -ne 0 || { echo "beta onboarding documentation self-test expected ${mutation} fresh-parity mutation to fail" >&2; exit 1; }
+  printf '%s\n' "$output" | grep -F -- "$expected" >/dev/null || { echo "beta onboarding documentation self-test missed ${mutation} fresh-parity diagnostic" >&2; exit 1; }
+}
+
+check_fresh_parity_mutation server 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: On a fully fresh workstation, `<SERVER>` comes only from the operator-provided exact normalized HTTPS admin URL.'
+check_fresh_parity_mutation init 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: Never run `tinker init` before the bounded fresh single-deploy path; that path generates the receipt inside its one deploy invocation.'
+check_fresh_parity_mutation indexing 'beta onboarding documentation private manifest sample contains public-only access.indexing in skills/tinkercloud-deployer/SKILL.md'
+check_fresh_parity_mutation exact_codes 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: A completely fresh successful end-to-end onboarding with no reusable identity requests exactly two human codes total: exactly one operator dashboard OTP and exactly one deployer CLI OTP.'
+check_fresh_parity_mutation matrix 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: The clean two-code human flow MUST NOT invoke the extended VPS security matrix. That matrix is separate and unattended; it never authorizes asking the human for more codes.'
 
 # The standalone deployer skill must retain the exact fully-fresh two-code rule.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"

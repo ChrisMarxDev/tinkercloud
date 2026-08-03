@@ -123,7 +123,7 @@ workstation-transfer destination.
 
 | Item | Contract |
 | --- | --- |
-| Supplied inputs | A macOS or Linux workstation used as the deployer, a static project directory, and the operator-authorized deployer email. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by the operator when no saved default exists. |
+| Supplied inputs | A macOS or Linux workstation used as the deployer, a static project directory, and the operator-authorized deployer email. On a fully fresh workstation, `<SERVER>` comes only from the operator-provided exact normalized HTTPS admin URL. A saved default is reusable only when it was previously directly verified from such an operator handoff; current CLI state cannot invent or derive a server. |
 | Derived values | The saved default server after the deploy command's direct no-redirect version proof; protected per-user credential-file location; inferred safe project output/slug choices; owner-only policy; generated strict `tinker.yaml` receipt when absent; deterministic archive; immutable release manifest; deployment ID; and protected app URL. |
 | Prompts allowed | One bounded platform-URL setup prompt only when no valid default exists; required unresolved project choices; one combined review of optional description, access, capabilities, and SPA fallback; one final access-broadening confirmation; and normal CLI email/OTP prompts only after an unauthorized/expired bearer. |
 | Prompts forbidden | A bearer, OTP, provider credential, app ID, viewer identity, arbitrary build command, manifest rewriting confirmation, repeated known server/email/policy questions, or a prompt in `--json` mode. |
@@ -149,9 +149,11 @@ tinker version
 
 Run the deployer commands from the already-selected local static project root.
 `tinker version` must print exactly `tinker 0.1.6`; any other output stops the
-attempt. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by
-the operator. The one deploy command verifies that URL directly without
-redirects and saves it, reuses a valid server-bound bearer, or performs exactly
+attempt. On a fully fresh workstation, `<SERVER>` comes only from the
+operator-provided exact normalized HTTPS admin URL. A reusable saved default
+must have been previously directly verified from such an operator handoff;
+current CLI state cannot invent or derive a server. The one deploy command
+verifies that URL directly without redirects and saves it, reuses a valid server-bound bearer, or performs exactly
 one CLI email-and-OTP login only when the bearer is absent, unauthorized, or
 expired. Do not run standalone `tinker whoami` or `tinker login` before this
 fresh first deploy. The CLI never runs an inferred build; missing output stops
@@ -188,6 +190,12 @@ ambiguous, or unwritable local manifest state stops before requesting an OTP.
 The agent's final `Deploy this owner-only app to <server> now? [y/N]` decision is
 collected before the single CLI invocation; it is not another CLI prompt.
 
+The bounded fresh path never runs standalone `tinker init` first. Its one
+`tinker --server <SERVER> deploy .` invocation generates the reviewed receipt
+inside deploy. A separately requested, non-fresh manifest-preparation workflow
+may use `tinker init`, but it is not part of or preparation for this bounded
+fresh deployment.
+
 After final review of endpoint, slug, description, output, owner-only access,
 no features, and SPA fallback—and affirmative go-ahead even for owner-only—the
 agent invokes exactly once:
@@ -222,6 +230,14 @@ The beta onboarding path permits at most two human OTP requests in total:
    or expired. These ceilings are nonfungible: one browser OTP maximum for the
    operator and one CLI OTP maximum for the deployer; the two-role total never
    permits two OTPs for either role.
+
+A completely fresh successful end-to-end onboarding with no reusable identity
+requests exactly two human codes total: exactly one operator dashboard
+OTP and exactly one deployer CLI OTP. Any additional code, retry, account
+switch, or viewer login is a deployment-flow failure. A failed OTP is terminal;
+there is no automatic human OTP retry. The clean two-code human flow MUST NOT
+invoke the extended VPS security matrix. That matrix is separate and unattended;
+it never authorizes asking the human for more codes.
 
 Before issuing, relaying, requesting, or suggesting a third human OTP, the
 flow MUST stop immediately and report the exceeded budget. It MUST NOT switch

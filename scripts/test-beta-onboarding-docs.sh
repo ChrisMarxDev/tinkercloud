@@ -230,6 +230,39 @@ require_deployer_executable_command_placement() {
   esac
 }
 
+require_operator_transfer_proof() {
+  file=$1
+  block=$(sed -n '/^### 5\. Reuse or transfer the Resend credential$/,/^### 6\. Run setup$/p' "$file")
+  remaining=$block
+  while IFS= read -r step; do
+    case "$remaining" in
+      *"$step"*) remaining=${remaining#*"$step"} ;;
+      *)
+        echo "beta onboarding documentation missing or reordered final credential-transfer proof in ${file}: ${step}" >&2
+        failed=1
+        return
+        ;;
+    esac
+  done <<'EOF'
+chown root:root /root/.config/tinkercloud/resend-api-key
+chmod 0600 /root/.config/tinkercloud/resend-api-key
+test -f /root/.config/tinkercloud/resend-api-key
+test ! -L /root/.config/tinkercloud/resend-api-key
+stat -c
+root:root 600
+EOF
+}
+
+require_private_manifest_sample() {
+  file=$1
+  block=$(sed -n '/Use this V1 shape and omit unused optional sections:/,/^Rules:$/p' "$file")
+  require_text "${file} private manifest sample" "$block" "mode: private"
+  if printf '%s\n' "$block" | grep -F -- "indexing:" >/dev/null; then
+    echo "beta onboarding documentation private manifest sample contains public-only access.indexing in ${file}" >&2
+    failed=1
+  fi
+}
+
 reject() {
   file=$1
   text=$2
@@ -355,6 +388,11 @@ review_phrase='Review endpoint, slug, description, output, owner-only access, no
 deployer_receipt_phrase='Human success prints `Deployment: <id>`, `State: active`, and `URL: <exact-origin>`'
 deployer_approval_phrase='Deploy this owner-only app to <server> now? [y/N]'
 combined_prompt_order_phrase='For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is exactly the six manifest prompts above, then—only after manifest creation succeeds—`Email: ` and `Code: ` when authentication is needed.'
+fresh_server_origin_phrase='On a fully fresh workstation, `<SERVER>` comes only from the operator-provided exact normalized HTTPS admin URL.'
+fresh_inline_manifest_phrase='Never run `tinker init` before the bounded fresh single-deploy path; that path generates the receipt inside its one deploy invocation.'
+exact_fresh_otp_phrase='A completely fresh successful end-to-end onboarding with no reusable identity requests exactly two human codes total: exactly one operator dashboard OTP and exactly one deployer CLI OTP.'
+terminal_fresh_otp_phrase='Any additional code, retry, account switch, or viewer login is a deployment-flow failure. A failed OTP is terminal; there is no automatic human OTP retry.'
+separate_vps_matrix_phrase='The clean two-code human flow MUST NOT invoke the extended VPS security matrix. That matrix is separate and unattended; it never authorizes asking the human for more codes.'
 operator_flow_steps='### 1. Verify the beta host
 uname -m && . /etc/os-release && printf
 ### 2. Verify the SSH host key
@@ -422,11 +460,12 @@ for file in "$platform" "$operator"; do
   require "$file" "https://admin.<domain>/api/v1/version"
   require "$file" "one human browser OTP"
   require "$file" "scp -p -- \"<LOCAL_CREDENTIAL_FILE>\" \"root@<HOST>:/root/.config/tinkercloud/resend-api-key\""
-  require "$file" "test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key"
+  require "$file" "chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key"
   require_block "$file" "$(cat "$file")" "$setup_prompt_block"
   require_block "$file" "$(cat "$file")" "$dashboard_allowlist_block"
   require_phrase "$file" "$(cat "$file")" "external mail guide is optional troubleshooting, not required for the basic Resend beta path"
   require_phrase "$file" "$(cat "$file")" "Substitute <HOST> and <LOCAL_CREDENTIAL_FILE> with the supplied values; do not ask for them again"
+  require_operator_transfer_proof "$file"
   require_phrase "$file" "$(cat "$file")" "clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS"
   require "$file" "$host_preflight"
   require_phrase "$file" "$(cat "$file")" "$host_key_phrase"
@@ -511,6 +550,10 @@ for file in "$platform" "$deployer"; do
   require_phrase "$file" "$(cat "$file")" "$deployer_receipt_phrase"
   require_phrase "$file" "$(cat "$file")" "$deployer_approval_phrase"
   require_phrase "$file" "$(cat "$file")" "$combined_prompt_order_phrase"
+  require_phrase "$file" "$(cat "$file")" "$fresh_server_origin_phrase"
+  require_phrase "$file" "$(cat "$file")" 'current CLI state cannot invent or derive a server'
+  require_phrase "$file" "$(cat "$file")" "$fresh_inline_manifest_phrase"
+  require_private_manifest_sample "$file"
   reject_phrase "$file" "$(cat "$file")" 'only human prompts are exactly `Email: ` and `Code: `'
   require_deployer_terminal_auth_rule "$file"
   require_deployer_single_invocation_rule "$file"
@@ -525,6 +568,10 @@ require_text "README Start the beta" "$readme_beta" "$readme_deployer_command"
 require_phrase "README Start the beta" "$readme_beta" 'tinker version` must print exactly `tinker 0.1.6`'
 require_phrase "README Start the beta" "$readme_beta" 'Do not run standalone `tinker whoami` or `tinker login` before this fresh deployment'
 require_phrase "README Start the beta" "$readme_beta" "$combined_prompt_order_phrase"
+require_phrase "README Start the beta" "$readme_beta" "$fresh_server_origin_phrase"
+require_phrase "README Start the beta" "$readme_beta" 'current CLI state cannot invent or derive a server'
+require_phrase "README Start the beta" "$readme_beta" "$fresh_inline_manifest_phrase"
+reject README.md 'Use `tinker init .` to create the manifest ahead of time.'
 require_text "README Start the beta" "$readme_beta" "Optional: add SDK capabilities"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md"
@@ -538,6 +585,12 @@ require "docs/getting-started/first-app.md" "$active_unverified_recheck"
 require_phrase "docs/getting-started/first-app.md" "$(cat docs/getting-started/first-app.md)" 'no `Set-Cookie` or `Location`, and no app bytes'
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" "$active_unverified_recheck"
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" 'no `Set-Cookie` or `Location`, and zero app bytes'
+
+for file in "$platform" "$operator" "$deployer" README.md specs/agent/beta-onboarding-contract.md; do
+  require_phrase "$file" "$(cat "$file")" "$exact_fresh_otp_phrase"
+  require_phrase "$file" "$(cat "$file")" "$terminal_fresh_otp_phrase"
+  require_phrase "$file" "$(cat "$file")" "$separate_vps_matrix_phrase"
+done
 
 for file in "$platform" "$operator" "$deployer" "$readme"; do
   require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"

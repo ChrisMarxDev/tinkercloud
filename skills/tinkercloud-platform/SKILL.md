@@ -89,15 +89,18 @@ Continue safe local inspection and implementation while waiting for a
 non-secret answer. Stop before an unresolved access broadening or live
 deployment.
 
-Discover the Tinkercloud platform URL from an explicit request, an already
-verified Tinker default, or current CLI state. If it remains missing, ask for the
-operator-provided admin URL, for example `https://admin.example.com`. Accept
-only normalized HTTPS. Never invent it, derive it from an app hostname, follow
+Discover the Tinkercloud platform URL from an explicit operator handoff or an
+already verified Tinker default. Current CLI state alone is not a server source.
+If it remains missing, ask for the operator-provided admin URL, for example
+`https://admin.example.com`. Accept only normalized HTTPS. Never invent it,
+derive it from an app hostname, follow
 a redirect, or accept insecure TLS.
 
-For a fresh deployment, `<SERVER>` is the exact normalized HTTPS admin URL
-supplied once by the operator. Never invent it, derive it from an app hostname,
-follow a redirect, or accept insecure TLS. The one deploy command verifies and
+On a fully fresh workstation, `<SERVER>` comes only from the operator-provided
+exact normalized HTTPS admin URL. A saved default is reusable only when it was
+previously directly verified from such an operator handoff; current CLI state
+cannot invent or derive a server. Never invent it, derive it from an app
+hostname, follow a redirect, or accept insecure TLS. The one deploy command verifies and
 saves that exact URL directly without redirects. It then reuses a valid
 server-bound bearer or performs exactly one CLI email-and-OTP login only when
 the bearer is absent, unauthorized, or expired. Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment.
@@ -183,6 +186,14 @@ A fully fresh successful human onboarding with neither a reusable browser
 identity nor a saved CLI bearer requests exactly two codes total: exactly one
 operator browser code and exactly one deployer CLI code. A reusable identity
 reduces the relevant lane to zero.
+
+A completely fresh successful end-to-end onboarding with no reusable identity
+requests exactly two human codes total: exactly one operator dashboard
+OTP and exactly one deployer CLI OTP. Any additional code, retry, account
+switch, or viewer login is a deployment-flow failure. A failed OTP is terminal;
+there is no automatic human OTP retry. The clean two-code human flow MUST NOT
+invoke the extended VPS security matrix. That matrix is separate and unattended;
+it never authorizes asking the human for more codes.
 
 ### 2. Propose the access policy
 
@@ -459,7 +470,6 @@ build:
 
 access:
   mode: private
-  indexing: false
   allow:
     emails:
       - alice@example.com
@@ -500,8 +510,11 @@ Rules:
 - Never place a URL, app ID, token, email provider secret, or database setting
   in the manifest.
 
-The human shortcut `tinker init [DIR]` creates but never overwrites this receipt.
-`tinker deploy [DIR]` can run the same bounded setup when it is absent. JSON mode
+Never run `tinker init` before the bounded fresh single-deploy path; that path
+generates the receipt inside its one deploy invocation. Only a separately
+requested, explicitly non-fresh manifest-preparation workflow may use
+`tinker init [DIR]`; it creates but never overwrites a receipt and is never preparation
+for the bounded fresh path. `tinker deploy [DIR]` can run the same bounded setup when it is absent. JSON mode
 never prompts, logs in, generates a manifest, or stores inferred state.
 
 Validate and build with the project's own declared commands:
@@ -748,7 +761,7 @@ verify the final destination is a root-owned regular mode-`0600` file:
 ```sh
 ssh root@<HOST> 'install -d -o root -g root -m 0700 /root/.config/tinkercloud'
 scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root@<HOST>:/root/.config/tinkercloud/resend-api-key"
-ssh root@<HOST> 'test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key'
+ssh root@<HOST> 'chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key && test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && test "$(stat -c '\''%U:%G %a'\'' /root/.config/tinkercloud/resend-api-key)" = '\''root:root 600'\'''
 ```
 
 For an alternate VPS-local path, validate that supplied exact path with the
@@ -819,6 +832,14 @@ A fully fresh successful human onboarding with neither a reusable browser
 identity nor a saved CLI bearer requests exactly two codes total: exactly one
 operator browser code and exactly one deployer CLI code. A reusable identity
 reduces the relevant lane to zero.
+
+A completely fresh successful end-to-end onboarding with no reusable identity
+requests exactly two human codes total: exactly one operator dashboard
+OTP and exactly one deployer CLI OTP. Any additional code, retry, account
+switch, or viewer login is a deployment-flow failure. A failed OTP is terminal;
+there is no automatic human OTP retry. The clean two-code human flow MUST NOT
+invoke the extended VPS security matrix. That matrix is separate and unattended;
+it never authorizes asking the human for more codes.
 
 ### 8. Verify operator completion
 

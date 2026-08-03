@@ -74,6 +74,64 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 self.assertIn(phrase, " ".join(self.read(relative_path).split()))
 
+    def test_fresh_server_origin_and_inline_manifest_creation_are_unambiguous(self):
+        server_phrase = (
+            "On a fully fresh workstation, `<SERVER>` comes only from the operator-provided "
+            "exact normalized HTTPS admin URL."
+        )
+        for relative_path in ("README.md", "skills/tinkercloud-deployer/SKILL.md"):
+            with self.subTest(relative_path=relative_path):
+                contents = " ".join(self.read(relative_path).split())
+                self.assertIn(server_phrase, contents)
+                self.assertIn("current CLI state cannot invent or derive a server", contents)
+                self.assertIn("Never run `tinker init` before the bounded fresh single-deploy path", contents)
+        self.assertNotIn("Use `tinker init .` to create the manifest ahead of time.", self.read("README.md"))
+
+    def test_private_v2_skill_sample_omits_public_only_indexing(self):
+        contents = self.read("skills/tinkercloud-deployer/SKILL.md")
+        sample = contents.split("Use this V1 shape and omit unused optional sections:", 1)[1]
+        sample = sample.split("```yaml", 1)[1].split("```", 1)[0]
+        self.assertIn("mode: private", sample)
+        self.assertNotIn("indexing:", sample)
+
+    def test_operator_transfer_finishes_with_exact_destination_proof(self):
+        contents = self.read("skills/tinkercloud-operator/SKILL.md")
+        section = contents.split("### 5. Reuse or transfer the Resend credential", 1)[1]
+        section = section.split("### 6. Run setup", 1)[0]
+        command = next(line for line in section.splitlines() if line.startswith("ssh root@<HOST> 'chown"))
+        for step in (
+            "chown root:root /root/.config/tinkercloud/resend-api-key",
+            "chmod 0600 /root/.config/tinkercloud/resend-api-key",
+            "test -f /root/.config/tinkercloud/resend-api-key",
+            "test ! -L /root/.config/tinkercloud/resend-api-key",
+            "stat -c",
+            "root:root 600",
+        ):
+            self.assertIn(step, command)
+
+    def test_fully_fresh_human_otp_budget_is_exact_and_terminal(self):
+        phrase = (
+            "A completely fresh successful end-to-end onboarding with no reusable identity "
+            "requests exactly two human codes total: exactly one operator dashboard OTP and exactly "
+            "one deployer CLI OTP."
+        )
+        for relative_path in (
+            "README.md",
+            "skills/tinkercloud-operator/SKILL.md",
+            "skills/tinkercloud-deployer/SKILL.md",
+            "specs/agent/beta-onboarding-contract.md",
+        ):
+            with self.subTest(relative_path=relative_path):
+                contents = " ".join(self.read(relative_path).split())
+                self.assertIn(phrase, contents)
+                self.assertIn("Any additional code, retry, account switch, or viewer login is a deployment-flow failure", contents)
+                self.assertIn("A failed OTP is terminal; there is no automatic human OTP retry", contents)
+                self.assertIn(
+                    "The clean two-code human flow MUST NOT invoke the extended VPS security matrix. "
+                    "That matrix is separate and unattended; it never authorizes asking the human for more codes.",
+                    contents,
+                )
+
     def test_first_app_clones_the_exact_prepared_tag_after_publication(self):
         contents = self.read("docs/getting-started/first-app.md")
         self.assertIn(

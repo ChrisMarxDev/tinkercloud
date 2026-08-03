@@ -52,6 +52,10 @@ persisted state.
   operator browser code and exactly one deployer CLI code. A reusable identity
   reduces the relevant lane to zero; any other successful human-code count
   denies the bounded onboarding run.
+- Invoking the extended VPS security matrix from the clean human onboarding
+  denies the two-code flow. That matrix is separate and unattended; its primary
+  deployer, second-owner, viewer, and account-switch OTP exercises never
+  authorize requesting another human code.
 - A failed, malformed, timed-out, or denied operator browser OTP attempt
   terminates operator onboarding. It cannot retry or request another code,
   switch operator identity or mailbox, clear browser cookies, or create another
@@ -71,6 +75,11 @@ persisted state.
   verifies the exact normalized HTTPS admin URL without redirects, saves it,
   reuses a bearer when valid, and otherwise performs the one allowed CLI
   email-and-OTP login.
+- On a fully fresh workstation, a server taken from unverified current CLI
+  state, invented locally, or derived from an app hostname denies the path.
+  `<SERVER>` must come from the operator-provided exact normalized HTTPS admin
+  URL. A saved default is reusable only after a previous direct verification
+  of that operator handoff.
 - An explicit human deploy may save the verified server only when the
   default-server record is exactly absent. An existing default (including a
   different server), unreadable/corrupt default state, or failed write must not
@@ -84,6 +93,10 @@ persisted state.
   saved bearer may omit authentication prompts but cannot reorder the manifest
   prompts. The agent's final confirmation remains before the one CLI invocation
   and is not part of the CLI prompt sequence.
+- Running standalone `tinker init` before the bounded fresh deploy denies that
+  path. The reviewed receipt must be generated inside its one deploy
+  invocation; any separate init workflow is explicitly non-fresh and cannot be
+  promoted as preparation for the bounded path.
 - `active_but_unverified` permits only a fresh anonymous, no-redirect,
   no-cookie exact-URL recheck returning `401` JSON `not_authorized`, `no-store`,
   and no app bytes; it never authorizes another deploy.
@@ -119,6 +132,12 @@ persisted state.
 - Missing/invalid manifest, a path outside the project, symlinked output,
   unclear slug, unreviewed capability, ambiguous SPA fallback, or unresolved
   access policy denies activation rather than creating a permissive receipt.
+- A private v2 example or generated receipt containing `access.indexing`
+  denies documentation/receipt acceptance; indexing belongs only to an
+  explicitly public release.
+- A transferred Resend credential without a final post-`chown`/`chmod` proof
+  that the destination is a regular non-symlink with exact `root:root 600`
+  ownership/mode denies operator credential readiness.
 - A failed, cancelled, redirected, wrong-host, unverified-chain, or exhausted
   certificate readiness check denies activation and retains the prior release.
 - A dashboard, CLI, or reader result cannot substitute for fresh gateway
