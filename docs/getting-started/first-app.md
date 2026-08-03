@@ -14,10 +14,13 @@ You need:
 If you are setting up the server too, follow the
 [Hetzner deployment guide](../operations/hetzner-deployment.md) first.
 
+This journey is prepared for `v0.1.6`, which is currently unpublished. Run its
+commands only after that exact GitHub prerelease has been published; do not
+substitute `v0.1.5`, `latest`, or a mutable branch.
+
 ## 1. Install Tinker
 
-Install the current exact beta as your normal workstation account, without
-`sudo`:
+Install that exact beta as your normal workstation account, without `sudo`:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
@@ -32,7 +35,7 @@ tinker version
 ## 2. Copy and preview the sample
 
 ```sh
-git clone --depth 1 https://github.com/ChrisMarxDev/tinkercloud.git tinkercloud-source
+git clone --depth 1 --branch v0.1.6 https://github.com/ChrisMarxDev/tinkercloud.git tinkercloud-source
 cp -R tinkercloud-source/examples/starter-app my-tinker-ritual
 cd my-tinker-ritual
 tinker dev
@@ -52,8 +55,11 @@ On the first run, Tinker asks for the platform endpoint, your deployer email,
 and the code sent to that email. It reuses those verified values later. Review
 the owner-only access summary and confirm the deployment.
 
-The command prints the protected app URL. Open it in the same browser where you
-use Tinkercloud; the normal email identity flow grants the owner access.
+The command prints the protected app URL. Do not use this bounded deployer
+journey to obtain another browser identity. Open it only with a proven reusable
+exact browser identity for that protected app; otherwise defer opening it as
+separate later viewer work, must not request a viewer/browser OTP, and finish
+this journey with fresh anonymous denial evidence instead.
 
 To publish an update, edit the files and run the same command again:
 

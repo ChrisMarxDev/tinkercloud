@@ -8,11 +8,12 @@ vulnerabilities privately and allow time for a coordinated fix.
 | Version | Security support |
 | --- | --- |
 | Unreleased `main` | Best effort |
-| `0.1.6` beta | Best effort |
-| Earlier prereleases | Unsupported; upgrade to the current beta |
+| `0.1.5` prerelease | Best effort |
+| Earlier published prereleases | Unsupported; upgrade to `0.1.5` |
 
-A version being listed does not turn pre-release software into a durability or
-production-readiness guarantee.
+Prepared but unpublished versions, including `0.1.6`, are unsupported until
+their exact GitHub prerelease is published. A version being listed does not turn
+pre-release software into a durability or production-readiness guarantee.
 
 ## Reporting a vulnerability
 

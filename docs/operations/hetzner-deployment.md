@@ -6,9 +6,12 @@ solo/startup flow and the current VPN-only support gap.
 
 ## Current installation
 
-From the root shell of a clean Hetzner Cloud Ubuntu 24.04 LTS or Ubuntu 26.04
-LTS x86-64 VPS dedicated to Tinkercloud, install the signed server binary and
-systemd unit with the exact published version:
+The following `v0.1.6` command is prepared for the next beta but is
+unpublished. Run it only after that exact GitHub prerelease has been published;
+until then it is not an installation path and must not be replaced with
+`v0.1.5`, `latest`, or another selector. From the root shell of a clean Hetzner
+Cloud Ubuntu 24.04 LTS or Ubuntu 26.04 LTS x86-64 VPS dedicated to Tinkercloud,
+install the signed server binary and systemd unit with that exact version:
 
 ```bash
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
