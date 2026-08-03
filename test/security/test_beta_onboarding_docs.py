@@ -64,6 +64,16 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
                 self.assertIn("Do not run standalone `tinker whoami` or `tinker login`", " ".join(contents.split()))
                 self.assertIn("tinker --server <SERVER> deploy .", contents)
 
+    def test_primary_deployer_flow_orders_manifest_before_authentication(self):
+        phrase = (
+            "For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is "
+            "exactly the six manifest prompts above, then—only after manifest creation succeeds—"
+            "`Email: ` and `Code: ` when authentication is needed."
+        )
+        for relative_path in ("README.md", "skills/tinkercloud-deployer/SKILL.md"):
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(phrase, " ".join(self.read(relative_path).split()))
+
     def test_first_app_clones_the_exact_prepared_tag_after_publication(self):
         contents = self.read("docs/getting-started/first-app.md")
         self.assertIn(

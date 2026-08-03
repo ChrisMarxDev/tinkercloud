@@ -324,10 +324,10 @@ check_terminal_cli_auth_mutation zero 'beta onboarding documentation missing fro
 check_terminal_cli_auth_mutation cli 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: directly in the CLI, never chat'
 check_terminal_cli_auth_mutation ordering '-'
 
-# Authentication owns only Email/Code prompts; the six manifest prompts remain
-# legitimate human prompts later in the same workflow.
+# A fully fresh deploy must finish the six local manifest prompts before its
+# conditional CLI Email/Code authentication prompts.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
-perl -0pi -e 's/only\s+authentication prompts are exactly/only human prompts are exactly/' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's/the six manifest prompts above,\s+then—only after manifest creation\s+succeeds—`Email: ` and `Code: ` when authentication is needed/`Email: ` and `Code: `, then the six manifest prompts/' "$fixture/skills/tinkercloud-deployer/SKILL.md"
 
 set +e
 output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -335,17 +335,13 @@ result=$?
 set -e
 
 test "$result" -ne 0 || {
-  echo "beta onboarding documentation self-test expected authentication-prompt wording regression to fail" >&2
+  echo "beta onboarding documentation self-test expected combined prompt-order mutation to fail" >&2
   exit 1
 }
-for expected in \
-  'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: only authentication prompts are exactly `Email: ` and `Code: `' \
-  'beta onboarding documentation contains forbidden text in skills/tinkercloud-deployer/SKILL.md: only human prompts are exactly `Email: ` and `Code: `'; do
-  printf '%s\n' "$output" | grep -F -- "$expected" >/dev/null || {
-    echo "beta onboarding documentation self-test missed authentication-prompt wording diagnostic: $expected" >&2
-    exit 1
-  }
-done
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is exactly the six manifest prompts above, then—only after manifest creation succeeds—`Email: ` and `Code: ` when authentication is needed.' >/dev/null || {
+  echo "beta onboarding documentation self-test missed combined prompt-order diagnostic" >&2
+  exit 1
+}
 
 # The standalone deployer skill must retain the exact fully-fresh two-code rule.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
@@ -372,7 +368,7 @@ check_single_deploy_invocation_mutation() {
   expected=$2
   cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
   case "$mutation" in
-    command) perl -0pi -e 's/invoke `tinker --server\s+<remembered-server> deploy \.`/invoke the deploy command/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    command) perl -0pi -e 's/invoke `tinker --server\s+<SERVER> deploy \.`/invoke the deploy command/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     once) perl -0pi -e 's/exactly once for that deploy attempt/as often as needed/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     rerun) perl -0pi -e 's/do not rerun deploy/rerun deploy/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     upload) perl -0pi -e 's/upload another release/upload a replacement release/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
@@ -392,7 +388,7 @@ check_single_deploy_invocation_mutation() {
   printf '%s\n' "$output" | grep -F -- "$expected" >/dev/null || { echo "beta onboarding documentation self-test missed ${mutation} single-invocation diagnostic" >&2; exit 1; }
 }
 
-check_single_deploy_invocation_mutation command 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: invoke `tinker --server <remembered-server> deploy .`'
+check_single_deploy_invocation_mutation command 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: invoke `tinker --server <SERVER> deploy .`'
 check_single_deploy_invocation_mutation once 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: exactly once for that deploy attempt'
 check_single_deploy_invocation_mutation rerun '-'
 check_single_deploy_invocation_mutation upload 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: upload another release'
@@ -406,7 +402,7 @@ check_single_deploy_invocation_mutation ordering '-'
 # An executable deploy command before the final review must fail even when the
 # canonical deploy command and one-invocation wording remain intact.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
-perl -0pi -e 's{(### 2\. Propose the access policy)}{```sh\ntinker --server <remembered-server> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{(### 2\. Propose the access policy)}{```sh\ntinker --server <SERVER> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
 
 set +e
 output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -417,14 +413,14 @@ test "$result" -ne 0 || {
   echo "beta onboarding documentation self-test expected early executable deploy command to fail" >&2
   exit 1
 }
-printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <remembered-server> deploy .' >/dev/null || {
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <SERVER> deploy .' >/dev/null || {
   echo "beta onboarding documentation self-test missed early executable deploy diagnostic" >&2
   exit 1
 }
 
 # Moving the canonical command before the final review is equally invalid.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
-perl -0pi -e 's{```sh\ntinker --server <remembered-server> deploy \.\n```}{}; s{(### 5\. Deploy and verify)}{```sh\ntinker --server <remembered-server> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{```sh\ntinker --server <SERVER> deploy \.\n```}{}; s{(### 5\. Deploy and verify)}{```sh\ntinker --server <SERVER> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
 
 set +e
 output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -435,7 +431,7 @@ test "$result" -ne 0 || {
   echo "beta onboarding documentation self-test expected moved executable deploy command to fail" >&2
   exit 1
 }
-printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <remembered-server> deploy .' >/dev/null || {
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <SERVER> deploy .' >/dev/null || {
   echo "beta onboarding documentation self-test missed moved executable deploy diagnostic" >&2
   exit 1
 }

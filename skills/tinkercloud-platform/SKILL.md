@@ -128,8 +128,8 @@ location when it cannot be discovered safely.
 
 Do not ask the deployer for a bearer or OTP. During fresh deployment, let the
 one deploy command manage its internal server verification and authentication;
-when login is needed, the only authentication prompts are exactly `Email: ` and
-`Code: `. Enter the code only in the CLI. For later troubleshooting after this
+authentication starts only after the local manifest setup described below
+succeeds. Enter any code only in the CLI. For later troubleshooting after this
 fresh single-command deployment, `tinker whoami --server <remembered-server>`
 and `tinker login --server <remembered-server>` may diagnose or refresh a
 credential; they are explicitly not part of the fresh first-deploy path.
@@ -535,6 +535,14 @@ multiple or no such directories require one blocking output question. An
 invalid or ambiguous slug requires one blocking stable lowercase slug question,
 never a generic question. Do not invent an output, slug, feature, access grant,
 or fallback.
+
+For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is
+exactly the six manifest prompts above, then—only after manifest creation
+succeeds—`Email: ` and `Code: ` when authentication is needed. A valid saved
+bearer omits those two prompts without reordering manifest setup. Invalid,
+ambiguous, or unwritable local state stops before OTP. The agent collects the
+final `Deploy this owner-only app to <server> now? [y/N]` decision before the
+single CLI invocation; it is not another CLI prompt.
 
 ### 5. Deploy and verify
 
