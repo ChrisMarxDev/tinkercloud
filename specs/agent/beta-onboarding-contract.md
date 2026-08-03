@@ -38,7 +38,7 @@ an unpinned redirect target, or an operator/deployer-supplied release origin.
 | Prompts allowed | `tinkercloud setup` may ask only for the base domain, operator email, provider choice/sender, and root-readable credential-file path when those values are absent. For the basic Resend beta path, its exact prompt order and labels are `Base domain:`, `Operator email:`, `Verified Resend sender email:`, and `Root-readable Resend API key file:`. It may pause for one exact DNS or sender-verification action. It must reuse a previously validated answer on resume. The operator may complete the dashboard OTP and confirm an allowlist edit that broadens authority. |
 | Prompts forbidden | Provider credentials in chat, argv, ordinary config, browser state, or logs; an ACME-contact value; release URL/selector; app ID; viewer identity; a second listener; or questions whose answer is already discovered, derived, or stored. |
 | Persisted state | Root-owned credential material, non-secret typed config, init-state, one control SQLite database, private release/app state, the operator identity, service unit, and the exact active-deployer allowlist revision. Secrets are never persisted in ordinary config. |
-| Required evidence | Signature/checksum verification; local service health; no-redirect TLS `https://admin.<domain>/api/v1/version` proof with bounded API-version JSON and gateway headers; route classification, socket confinement, safe unknown-app-host denial; dashboard authorization of the deployer; and the printed root-only recovery/doctor commands. |
+| Required evidence | Signature/checksum verification; successful `sudo tinkercloud status` output containing exactly one full line `version: 0.1.6`; local service health; no-redirect TLS `https://admin.<domain>/api/v1/version` proof with bounded API-version JSON and gateway headers; route classification, socket confinement, safe unknown-app-host denial; dashboard authorization of the deployer; and the printed root-only recovery/doctor commands. |
 
 Before installation, the operator proves from the VPS provider console that the
 target is a clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS and records the
@@ -99,9 +99,11 @@ enter argv, chat, config, browser state, or logs. The dashboard path is
 an authority addition requires **I confirm that adding any email grants
 deployment authority.** and **Save active deployers**.
 
-Operator completion then requires `sudo tinkercloud status`, `sudo tinkercloud
-doctor`, and
+Operator completion then requires a successful `sudo tinkercloud status` whose
+captured output contains exactly one full line `version: 0.1.6`, while preserving
+the command's unhealthy exit status; `sudo tinkercloud doctor`; and
 `curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version`.
+There is no `tinkercloud version` command and onboarding must not invent one.
 The bounded no-redirect request records included gateway headers and at most
 32768 response-body bytes. Completion accepts only HTTP `200`, an
 `application/json` media type, and exactly `{"api_version":1}` with no error or

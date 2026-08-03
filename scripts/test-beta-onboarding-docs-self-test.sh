@@ -196,6 +196,12 @@ check_completion_mutation() {
     status)
       perl -0pi -e 's/sudo tinkercloud status/status omitted/' "$fixture/skills/tinkercloud-operator/SKILL.md"
       ;;
+    status_version)
+      perl -0pi -e 's/version: 0\.1\.6/version: any/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+      ;;
+    invented_version)
+      perl -0pi -e 's/status_output=\$\(sudo tinkercloud status\) &&/sudo tinkercloud version\nstatus_output=\$\(sudo tinkercloud status\) &&/' "$fixture/skills/tinkercloud-operator/SKILL.md"
+      ;;
     doctor)
       perl -0pi -e 's/sudo tinkercloud doctor/doctor omitted/' "$fixture/skills/tinkercloud-operator/SKILL.md"
       ;;
@@ -232,6 +238,10 @@ check_completion_mutation() {
 
 check_completion_mutation status \
   'beta onboarding documentation missing operator completion status evidence in skills/tinkercloud-operator/SKILL.md: sudo tinkercloud status'
+check_completion_mutation status_version \
+  'beta onboarding documentation missing operator completion exact status version line in skills/tinkercloud-operator/SKILL.md:'
+check_completion_mutation invented_version \
+  'beta onboarding documentation contains forbidden command line in skills/tinkercloud-operator/SKILL.md: sudo tinkercloud version'
 check_completion_mutation doctor \
   'beta onboarding documentation missing operator completion doctor evidence in skills/tinkercloud-operator/SKILL.md: sudo tinkercloud doctor'
 check_completion_mutation version \

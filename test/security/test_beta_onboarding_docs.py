@@ -109,6 +109,18 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
         ):
             self.assertIn(step, command)
 
+    def test_operator_status_proves_exact_build_without_masking_failure(self):
+        for relative_path in ("README.md", "skills/tinkercloud-operator/SKILL.md"):
+            with self.subTest(relative_path=relative_path):
+                contents = self.read(relative_path)
+                self.assertIn("status_output=$(sudo tinkercloud status) &&", contents)
+                self.assertIn(
+                    "test \"$(printf '%s\\n' \"$status_output\" | grep -Fxc 'version: 0.1.6')\" -eq 1 &&",
+                    contents,
+                )
+                self.assertIn("printf '%s\\n' \"$status_output\"", contents)
+                self.assertNotRegex(contents, r"(?m)^(?:sudo )?tinkercloud version$")
+
     def test_fully_fresh_human_otp_budget_is_exact_and_terminal(self):
         phrase = (
             "A completely fresh successful end-to-end onboarding with no reusable identity "
