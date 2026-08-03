@@ -57,6 +57,7 @@
 | [0055](0055-defer-dashboard-token-management.md) | Defer dashboard token management pending a dedicated overhaul | Accepted |
 | [0056](0056-configurable-local-automation-recipient-domain.md) | Configure the local automation recipient domain | Accepted |
 | [0057](0057-resend-and-postmark-email-providers.md) | Support Resend, Postmark, SendGrid, and send-only SMTP | Accepted for V1 |
+| [0059](0059-github-release-asset-redirect-boundary.md) | Narrow GitHub release-asset redirect boundary for updater retrieval | Accepted for V1 |
 
 ## Decision rule
 

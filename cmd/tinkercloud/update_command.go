@@ -23,9 +23,9 @@ var updateServiceRestart = func(ctx context.Context) error {
 	return systemctlRunner("restart", "tinkercloud.service")
 }
 
-// Redirects are a release-origin change, not a convenience.  Do not make this
-// client follow one: Fetcher also checks the final response URL as a second
-// guard for injected clients.
+// Redirects are a release-origin change, not a convenience. Fetcher permits
+// only its exact official GitHub release-asset transport hop and checks the
+// final response URL as a second guard for injected clients.
 var updateHTTPClient update.HTTPDoer = update.NewSecureHTTPClient(30 * time.Second)
 
 var updateFetchValidator = update.ValidatePublicHTTPS

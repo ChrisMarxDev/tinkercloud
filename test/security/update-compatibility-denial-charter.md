@@ -11,6 +11,13 @@
   remain independent.
 - Unsigned or signature-valid-but-incompatible update artifacts never create a
   rollback snapshot, replace the binary, restart the service, or mutate schema.
+- Remote updater retrieval denies every redirect except exactly one HTTPS hop
+  from the canonical immutable official GitHub release path for an allowlisted
+  updater artifact or sidecar to `release-assets.githubusercontent.com`.
+  It denies mutable/latest paths, another repository or host, credentials,
+  fragments, non-default ports, downgrade, private DNS at either hop, a final
+  URL mismatch, and a second redirect. The exception never bypasses artifact
+  digest/signature or signed release-manifest verification.
 - A failed signed candidate that restores and restarts the prior healthy binary
   clears its updater-owned rollback snapshot, so ordinary `doctor` is not left
   degraded. Failed restore, restart, or snapshot cleanup retains recovery state
