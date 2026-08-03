@@ -121,6 +121,12 @@ tinker version
 
 The immutable installer verifies its release evidence. Do not substitute
 `latest`, a package-manager tag, or a caller-supplied release origin.
+If the installed CLI reports anything other than exactly `v0.1.6`, stop; do not
+deploy with it or substitute another version. If the exact `v0.1.6` release or
+the required installer asset for this role is unavailable, stop: do not install,
+deploy, or substitute another version. Minimal HTTPS release readiness is the
+exact tag page plus this role's exact installer asset URL returning HTTPS
+success; the installer remains the checksum/signature authority.
 Never install the privileged `tinkercloud` server binary on a deployer machine,
 download an unsigned executable, or treat an unauthenticated installer URL as
 its own trust root. Ask the operator for the signed client source/release
@@ -138,6 +144,9 @@ tinker login --server <remembered-server>
 unauthorized/expired credential may fall back to OTP. Let the deployer enter
 the OTP into the CLI prompt, not the conversation. An explicit `--server`
 applies only to that command; successful login stores the verified default.
+`whoami` alone decides saved-state reuse. When login is needed, the only
+authentication prompts are exactly `Email: ` and `Code: `; enter the code only
+in the CLI.
 This bounded beta path permits one human CLI OTP only when that saved bearer is
 absent, unauthorized, or expired. Prepare the first deploy **owner-only**, but
 do not invoke it until the final reviewed deployment step. Completion needs
@@ -150,19 +159,24 @@ delete or clear saved credentials, or create an alternate OTP path. A valid
 exact server-scoped saved identity uses zero OTP. Enter an eligible OTP directly
 in the CLI, never chat.
 
-One-invocation deployment rule: after the final review, invoke `tinker deploy .`
-(or its explicit public-confirm variant) exactly once for that deploy attempt.
+One-invocation deployment rule: after the final review, invoke `tinker --server
+<remembered-server> deploy .` (or `tinker --server <remembered-server>
+--confirm-public deploy .`) exactly once for that deploy attempt.
 Any CLI deploy outcome—validation, upload, activation, verification,
 transport/TLS/redirect/timeout/error, or success—ends the agent invocation; do
 not rerun deploy, upload another release, or retry from chat. The CLI may use
 its already-bounded transient readiness retries inside that one invocation.
-`active_but_unverified` permits only the existing independent exact-URL recheck,
-never a second deployment. A later deploy attempt requires an explicit new human
+`active_but_unverified` permits only the existing independent exact-URL recheck:
+fresh anonymous `curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>` with no authentication, requiring `401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or `Location`, and no app bytes. It is evidence only, never a second deployment. A later deploy attempt requires an explicit new human
 request after the cause is addressed, not an automatic retry.
 
 Success records the immutable deployment ID, protected exact app origin,
 authenticated platform-health success, and anonymous HTML, asset, and reserved
 API denial with no app bytes.
+Human success prints `Deployment: <id>`, `State: active`, and `URL:
+<exact-origin>`; JSON returns `valid:true` with a bounded deployment object.
+Platform-health and anonymous probes are internal success preconditions, not
+extra credentials or follow-up actions.
 
 Use the matching browser SDK for a new project:
 
@@ -170,11 +184,17 @@ Use the matching browser SDK for a new project:
 npm install @tinkercloud/sdk@0.1.6
 ```
 
-Across the operator dashboard and deployer CLI, the onboarding flow permits at
-most two human OTP requests in total: one human browser OTP and one human CLI
-OTP. Before issuing, relaying, requesting, or suggesting a third human OTP,
-stop immediately; never switch accounts, clear credentials, create a viewer
-session, or use another mailbox to evade the budget.
+Across the operator dashboard and deployer CLI: One browser OTP maximum for the
+operator and one CLI OTP maximum for the deployer; the two-role total is at
+most two and never permits two OTPs for either role. Before issuing, relaying,
+requesting, or suggesting a third human OTP, stop immediately; never switch
+accounts, clear credentials, create a viewer session, or use another mailbox to
+evade the budget.
+
+A fully fresh successful human onboarding with neither a reusable browser
+identity nor a saved CLI bearer requests exactly two codes total: exactly one
+operator browser code and exactly one deployer CLI code. A reusable identity
+reduces the relevant lane to zero.
 
 ### 2. Propose the access policy
 
@@ -473,7 +493,7 @@ spa:
 
 Rules:
 
-- `name` is a valid stable app slug; do not silently rewrite it.
+- `name` is a valid stable lowercase app slug; do not silently rewrite it.
 - `build.output` and optional fallback stay beneath the project with no
   symlinks or traversal.
 - `access.mode` is private by default. The accepted post-V1 `public` mode can
@@ -506,6 +526,26 @@ tinker inspect-manifest tinker.yaml
 Do not invent a package manager or arbitrary build script. Confirm the declared
 output exists and contains the expected static entry point.
 
+Before this review, lowercase the project basename only when it is a valid
+nonreserved DNS label. Otherwise the CLI suggests `my-app`; ask one blocking
+stable-slug question rather than silently accepting that generic fallback.
+Inspect the actual filesystem to choose output using the existing safe rule.
+
+For a first owner-only deploy, the wizard asks exactly these six prompts in this
+order: `App slug (<suggested>, Enter to accept):`, `Description (optional):`,
+`Build output (<default>, Enter to accept):`, `Allowed emails or domains,
+comma-separated (optional):`, `Features (kv,blobs,realtime; optional):`, and
+`SPA fallback (optional):`. Accept the suggested valid slug or provide one
+stable lowercase ASCII DNS label (1–63 characters; letters, digits, internal
+hyphens; not a reserved label). Enter empty values for description, allowlist,
+features, and SPA fallback unless separately reviewed; an empty allowlist is
+owner-only. For the output, root `index.html` means `.`, exactly one safe
+conventional output directory containing `index.html` means that directory, and
+multiple or no such directories require one blocking output question. An
+invalid or ambiguous slug requires one blocking stable lowercase slug question,
+never a generic question. Do not invent an output, slug, feature, access grant,
+or fallback.
+
 ### 5. Deploy and verify
 
 Show one final summary containing:
@@ -520,16 +560,23 @@ Show one final summary containing:
   current access policy atomically.
 
 Name any access broadening and obtain the deployer's decision if it was not
-already explicit. Then run from the project root:
+already explicit. Review endpoint, slug, description, output, owner-only
+access, no features, and SPA fallback; even owner-only requires affirmative
+go-ahead. Then run exactly once from the project root with the reviewed wizard
+answers:
 
 ```sh
-tinker deploy .
+tinker --server <remembered-server> deploy .
 ```
+
+Ask exactly: `Deploy this owner-only app to <server> now? [y/N]`. Only explicit
+`yes` continues; this is the agent's pre-invocation approval, not a CLI prompt.
 
 For an accepted post-V1 capability-free public-static release, show the
 internet-access consequence plainly and require an explicit deployer decision.
 Set `access.mode: public` and any deliberate `access.indexing` choice in the v2
-manifest. For a new or currently private app, use `tinker deploy --confirm-public .`;
+manifest. For a new or currently private app, use `tinker --server <remembered-server>
+--confirm-public deploy .`;
 the CLI reads the authenticated deployer's current policy before asking or
 sending that acknowledgement. A public-to-public redeploy needs neither a
 prompt nor a fresh acknowledgement. Never add the flag, change a private app to

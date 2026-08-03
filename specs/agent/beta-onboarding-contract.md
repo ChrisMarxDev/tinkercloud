@@ -23,7 +23,10 @@ run its commands only after that exact prerelease has been published.
 https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/
 ```
 
-No command may replace that directory with `latest`, a branch, a tag selector,
+If the exact release or the role's exact installer asset is unavailable, the
+role stops with no install or deploy and no substitute version. Minimal HTTPS
+readiness is the exact tag page and that role's installer asset returning HTTPS
+success; the released installer remains checksum/signature authority. No command may replace that directory with `latest`, a branch, a tag selector,
 an unpinned redirect target, or an operator/deployer-supplied release origin.
 
 ## Operator first run
@@ -62,8 +65,23 @@ allowlist with the reviewed normalized deployer email set, and confirms only
 if that edit broadens deployer authority. A stale revision, audit failure, or
 ambiguous dashboard/session state leaves the allowlist unchanged.
 
-For the basic Resend beta path, the operator transfers the supplied local
-credential file only through their verified root SSH target to
+An operator browser OTP is terminal on failure: immediately after an operator
+browser OTP attempt fails, is malformed, times out, or is denied, operator
+onboarding stops. It does not retry or request another code, switch operator
+identity or mailbox, clear browser cookies, or create another OTP path. A valid
+exact browser identity uses zero OTP. This human boundary does not alter
+unattended machine OTP acceptance.
+
+A fully fresh successful human onboarding with neither a reusable browser
+identity nor a saved CLI bearer requests exactly two codes total: exactly one
+operator browser code and exactly one deployer CLI code. A reusable identity
+reduces the relevant lane to zero.
+
+For the basic Resend beta path, an already-safe VPS-resident root-owned,
+non-symlink regular mode-`0600` credential file at any supplied exact path is
+reused after an exact check and passed directly to setup.
+Only a workstation-local or ambiguous file requires an SSH target and transfer
+through verified root SSH to
 `/root/.config/tinkercloud/resend-api-key`, then verifies that final destination
 is a root-owned regular file with mode `0600`. The credential contents never
 enter argv, chat, config, browser state, or logs. The dashboard path is
@@ -75,11 +93,21 @@ Operator completion then requires `sudo tinkercloud status`, `sudo tinkercloud
 doctor`, and
 `curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version`.
 The bounded no-redirect request records included gateway headers and at most
-32768 response-body bytes containing bounded API-version JSON. These curl flags
+32768 response-body bytes. Completion accepts only HTTP `200`, an
+`application/json` media type, and exactly `{"api_version":1}` with no error or
+extra fields. These curl flags
 are supported by the curl version shipped with the supported Ubuntu hosts. A
 clean operator host has no protected app yet, so its
 completion does not fabricate protected-app anonymous-denial evidence. That
 proof belongs to deployer deployment completion once an app exists.
+
+Normalize email by trimming surrounding whitespace, preserving local-part case,
+lowercasing only the domain, requiring exactly one `@`, nonempty local/domain,
+a dotted domain, and no whitespace/control characters. Do not apply provider
+plus/dot rewriting; setup and the dashboard review the exact normalized set.
+An already VPS-local credential uses its supplied exact path directly after a
+root-owned, non-symlink regular mode-`0600` check; the canonical path is only a
+workstation-transfer destination.
 
 ## Deployer first run
 
@@ -92,17 +120,25 @@ proof belongs to deployer deployment completion once an app exists.
 | Persisted state | Default server record plus a separate mode-`0700` configuration directory and mode-`0600`, regular, non-symlinked bearer file keyed by normalized HTTPS server. The generated manifest is a project receipt, never a secret store. |
 | Required evidence | `tinker version` proves the pinned client; `whoami` proves the current authorized deployer; activation returns the immutable deployment ID and protected exact origin; fresh anonymous HTML, asset, and reserved API denial probes return no app bytes; authenticated platform health succeeds. |
 
+The CLI login prompts are exactly `Email: ` and `Code: ` when `whoami` proves
+login is needed; the code stays in the CLI. Before invoking deploy the agent asks
+`Deploy this owner-only app to <server> now? [y/N]`; only explicit yes proceeds.
+Human success is `Deployment: <id>`, `State: active`, `URL: <exact-origin>`;
+JSON is `valid:true` plus a bounded deployment object. Platform health and
+anonymous probes are internal success preconditions.
+
 The exact first-run command sequence is:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 tinker version
-tinker deploy .
+tinker --server <remembered-server> deploy .
 ```
 
 Run the deployer commands from the already-selected local static project root.
 The human deployment flow may collect the first valid HTTPS platform URL,
-deployer email, and OTP within `tinker deploy .`; it reuses a valid saved bearer
+deployer email, and OTP within `tinker --server <remembered-server> deploy .`;
+it reuses a valid saved bearer
 after `whoami` and does not request OTP again. The CLI never runs an inferred
 build; missing output stops once with the exact project-owned action needed.
 
@@ -113,8 +149,20 @@ credentials, or create an alternate OTP path. An exact valid server-scoped saved
 identity consumes zero OTP; an eligible human OTP is entered directly in the
 CLI and never through chat.
 
-After final review, the agent invokes `tinker deploy .` (or the explicit
-public-confirm variant) exactly once for that deploy attempt. Any CLI deploy
+The six first-manifest prompts are exactly `App slug (<suggested>, Enter to
+accept):`, `Description (optional):`, `Build output (<default>, Enter to
+accept):`, `Allowed emails or domains, comma-separated (optional):`, `Features
+(kv,blobs,realtime; optional):`, and `SPA fallback (optional):`. Empty allowlist
+means owner-only; empty features means no features; fallback remains empty unless
+reviewed. Root `index.html` selects `.`, exactly one safe conventional output
+with `index.html` selects that directory, and multiple/none blocks for one
+output question. Invalid/ambiguous slugs block for one stable lowercase slug.
+
+After final review of endpoint, slug, description, output, owner-only access,
+no features, and SPA fallback—and affirmative go-ahead even for owner-only—the
+agent invokes `tinker --server <remembered-server> deploy .` (or `tinker
+--server <remembered-server> --confirm-public deploy .`) exactly once for that
+deploy attempt. Any CLI deploy
 outcome—validation, upload, activation, verification, transport/TLS/redirect/
 timeout/error, or success—ends that invocation. The agent MUST NOT rerun deploy,
 upload another release, or retry from chat. The CLI's already-bounded transient
@@ -123,6 +171,12 @@ readiness retries remain internal to that one invocation.
 never a second deployment. A later deploy attempt requires an explicit new human
 request after the cause is addressed; it is never an automatic retry.
 
+That recheck is `curl --include --silent --show-error --no-location --cookie ''
+--max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>`
+and is a fresh anonymous exact-URL request with no authentication. It requires
+`401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or
+`Location`, and no app bytes. It is evidence only and never a second deploy.
+
 ## Human OTP budget and unattended acceptance
 
 The beta onboarding path permits at most two human OTP requests in total:
@@ -130,7 +184,9 @@ The beta onboarding path permits at most two human OTP requests in total:
 1. one operator dashboard OTP, if no valid global browser identity exists, to
    authorize the deployer; and
 2. one deployer CLI OTP, if the saved deployer bearer is absent, unauthorized,
-   or expired.
+   or expired. These ceilings are nonfungible: one browser OTP maximum for the
+   operator and one CLI OTP maximum for the deployer; the two-role total never
+   permits two OTPs for either role.
 
 Before issuing, relaying, requesting, or suggesting a third human OTP, the
 flow MUST stop immediately and report the exceeded budget. It MUST NOT switch

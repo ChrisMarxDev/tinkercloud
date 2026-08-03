@@ -114,7 +114,8 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 - The final init public-health proof is derived only from the configured root
   `domain`: `https://admin.{domain}/api/v1/version`. It uses verified
   TLS (with no insecure override), follows no redirect, and accepts only the
-  exact final host, a `200` JSON object containing only `{"api_version":1}`,
+  exact final host, HTTP `200`, an `application/json` media type, and a bounded
+  JSON object containing only `{"api_version":1}` with no error or extra fields,
   and the gateway's `Cache-Control: no-store` and
   `X-Content-Type-Options: nosniff` headers. A 401/404/5xx, arbitrary 2xx or
   HTML response, malformed/oversized JSON, redirect, hostname mismatch, TLS,

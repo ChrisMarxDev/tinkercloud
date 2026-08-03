@@ -145,6 +145,16 @@ EOF
   done
 }
 
+require_operator_terminal_auth_rule() {
+  file=$1
+  text=$(cat "$file")
+  terminal_phrase='Terminal operator browser authentication rule: immediately after an operator browser OTP attempt fails, is malformed, times out, or is denied, stop operator onboarding.'
+  require_phrase "$file" "$text" "$terminal_phrase"
+  for boundary in 'Do not retry or request another code' 'switch operator identity or mailbox' 'clear browser cookies' 'create another OTP path' 'A valid exact browser identity uses zero OTP' 'does not alter unattended machine OTP acceptance'; do
+    require_phrase "$file" "$text" "$boundary"
+  done
+}
+
 require_deployer_single_invocation_rule() {
   file=$1
   block=$(sed -n '/<!-- shared:deployer:start -->/,/<!-- shared:deployer:end -->/p' "$file")
@@ -167,7 +177,7 @@ EOF
     failed=1
     return
   }
-  for boundary in 'invoke `tinker deploy .`' 'exactly once for that deploy attempt' 'Any CLI deploy outcome' 'do not rerun deploy' 'upload another release' 'retry from chat' 'already-bounded transient readiness retries' 'active_but_unverified' 'independent exact-URL recheck' 'never a second deployment' 'explicit new human request'; do
+  for boundary in 'invoke `tinker --server <remembered-server> deploy .`' 'exactly once for that deploy attempt' 'Any CLI deploy outcome' 'do not rerun deploy' 'upload another release' 'retry from chat' 'already-bounded transient readiness retries' 'active_but_unverified' 'independent exact-URL recheck' 'never a second deployment' 'explicit new human request'; do
     require_phrase "$file" "$invocation_block" "$boundary"
   done
 }
@@ -177,7 +187,7 @@ require_deployer_executable_command_placement() {
   result=$(awk '
     /^### 5\. Deploy and verify$/ { final_review = NR }
     /^```/ { fenced = !fenced; next }
-    fenced && ($0 == "tinker deploy ." || $0 == "tinker deploy --confirm-public .") {
+    fenced && ($0 == "tinker --server <remembered-server> deploy ." || $0 == "tinker --server <remembered-server> --confirm-public deploy .") {
       command_count++
       if (!final_review || NR < final_review) early_command = $0
     }
@@ -220,6 +230,25 @@ reject_text() {
   }
 }
 
+reject_phrase() {
+  label=$1
+  text=$2
+  phrase=$3
+  compact=$(printf '%s\n' "$text" | tr '\n' ' ')
+  ! printf '%s\n' "$compact" | grep -F -- "$phrase" >/dev/null || {
+    echo "beta onboarding documentation contains forbidden text in ${label}: ${phrase}" >&2
+    failed=1
+  }
+}
+
+reject_bare_beta_deploy() {
+  file=$1
+  ! grep -F -- 'tinker deploy .' "$file" >/dev/null || {
+    echo "beta onboarding documentation contains a bare deploy command in ${file}" >&2
+    failed=1
+  }
+}
+
 require_only_exact_command_lines() {
   label=$1
   text=$2
@@ -256,6 +285,7 @@ deployer=skills/tinkercloud-deployer/SKILL.md
 full_stack=skills/tinkercloud-full-stack-test/SKILL.md
 readme=README.md
 changelog=CHANGELOG.md
+contract=specs/agent/beta-onboarding-contract.md
 readme_beta=$(sed -n '/^## Start the beta$/, /^## Install the Tinker CLI$/p' "$readme")
 setup_prompt_block='1. `Base domain:`
 2. `Operator email:`
@@ -271,7 +301,9 @@ operator_otp_phrase='Operator setup permits at most one human browser OTP, uses 
 installer_claim='The copy/paste installer verifies checksums and a pinned Ed25519 signature before installation.'
 installer_link='https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6'
 operator_version_proof='curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version'
-operator_version_evidence='included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON'
+operator_version_evidence='Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields'
+email_normalization_phrase='Normalize every email by trimming outer whitespace, preserving local-part case, lowercasing only the domain, requiring exactly one `@`, nonempty local/domain, a dotted domain, and no whitespace/control characters; never plus/dot rewrite.'
+active_unverified_recheck="curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>"
 empty_operator_boundary='Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty operator setup.'
 operator_completion_commands='### 8. Verify operator completion
 
@@ -284,7 +316,7 @@ sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
 ```
 
-The HTTPS request must not follow a redirect and must return included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON. Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty
+The HTTPS request must not follow a redirect. Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields; record included gateway headers. Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty
 operator setup.'
 deployer_terminal_auth_flow_steps='tinker whoami --server <remembered-server>
 tinker login --server <remembered-server>
@@ -292,17 +324,31 @@ tinker login --server <remembered-server>
 Terminal CLI authentication rule:'
 deployer_single_invocation_flow_steps='Terminal CLI authentication rule:
 One-invocation deployment rule:'
+otp_budget_phrase='One browser OTP maximum for the operator and one CLI OTP maximum for the deployer; the two-role total is at most two and never permits two OTPs for either role'
+fresh_human_otp_phrase='A fully fresh successful human onboarding with neither a reusable browser identity nor a saved CLI bearer requests exactly two codes total: exactly one operator browser code and exactly one deployer CLI code. A reusable identity reduces the relevant lane to zero.'
+host_release_terminal_phrase='If the exact `v0.1.6` release or the host installer asset is unavailable, stop: do not install, deploy, or substitute another version.'
+host_release_readiness_phrase='Minimal HTTPS release readiness is the exact tag page plus the host installer asset URL returning HTTPS success; the installer remains the checksum/signature authority.'
+host_release_readiness_command="curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null ${release_url}/install-host.sh"
+client_release_terminal_phrase='If the exact `v0.1.6` release or the required installer asset for this role is unavailable, stop: do not install, deploy, or substitute another version.'
+client_release_readiness_phrase="Minimal HTTPS release readiness is the exact tag page plus this role's exact installer asset URL returning HTTPS success; the installer remains the checksum/signature authority."
+credential_reuse_phrase='credential is already on the VPS, reuse it after the exact root-only check'
+deployer_command='tinker --server <remembered-server> deploy .'
+readme_deployer_command='tinker --server <SERVER> deploy .'
+review_phrase='Review endpoint, slug, description, output, owner-only access, no features, and SPA fallback; even owner-only requires affirmative go-ahead.'
+deployer_receipt_phrase='Human success prints `Deployment: <id>`, `State: active`, and `URL: <exact-origin>`'
+deployer_approval_phrase='Deploy this owner-only app to <server> now? [y/N]'
+deployer_prompts_phrase='only authentication prompts are exactly `Email: ` and `Code: `'
 operator_flow_steps='### 1. Verify the beta host
 uname -m && . /etc/os-release && printf
 ### 2. Verify the SSH host key
 ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
 ### 3. Configure one wildcard DNS record
 Create one `*.<DOMAIN>` wildcard record
-(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q .
-(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q .
+getent ahosts admin.<DOMAIN> >/dev/null
+getent ahosts onboarding-check.<DOMAIN> >/dev/null
 ### 4. Install v0.1.6
 install-host.sh | sh
-### 5. Transfer the Resend credential
+### 5. Reuse or transfer the Resend credential
 scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root@<HOST>:/root/.config/tinkercloud/resend-api-key"
 ### 6. Run setup
 sudo tinkercloud setup
@@ -315,8 +361,10 @@ human browser OTP
 sudo tinkercloud status
 sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
-included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON
-Protected-app anonymous denial belongs to deployer deployment completion once an app exists'
+Completion requires HTTP `200`,
+an `application/json` media type, and exact bounded body `{"api_version":1}`
+with no extra or error fields
+Protected-app'
 readme_operator_flow_steps='uname -m && . /etc/os-release && printf
 ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
 Create one `*.<DOMAIN>` wildcard record
@@ -330,9 +378,9 @@ sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version'
 
 for file in "$platform" "$operator"; do
-  require_only_exact_command_lines "$file" "$(cat "$file")" "install-host.sh" "$host_install"
+  require_only_exact_command_lines "$file" "$(cat "$file")" "install-host.sh | sh" "$host_install"
 done
-require_only_exact_command_lines "README Start the beta" "$readme_beta" "install-host.sh" "$host_install"
+require_only_exact_command_lines "README Start the beta" "$readme_beta" "install-host.sh | sh" "$host_install"
 
 for file in "$platform" "$deployer"; do
   require_only_exact_command_lines "$file" "$(cat "$file")" "install-client.sh" "$client_install"
@@ -368,11 +416,18 @@ for file in "$platform" "$operator"; do
   require "$file" "ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub"
   require_phrase "$file" "$(cat "$file")" "Never trust or accept an ssh-keyscan result by itself"
   require "$file" "$wildcard_record"
-  require "$file" "(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q ."
-  require "$file" "(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q ."
+  require "$file" "getent ahosts admin.<DOMAIN> >/dev/null"
+  require "$file" "getent ahosts onboarding-check.<DOMAIN> >/dev/null"
   require_phrase "$file" "$(cat "$file")" "no extra certificate input"
   require_phrase "$file" "$(cat "$file")" "$allowlist_phrase"
   require_phrase "$file" "$(cat "$file")" "$operator_otp_phrase"
+  require_operator_terminal_auth_rule "$file"
+  require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"
+  require_phrase "$file" "$(cat "$file")" "$fresh_human_otp_phrase"
+  require_phrase "$file" "$(cat "$file")" "$host_release_terminal_phrase"
+  require_phrase "$file" "$(cat "$file")" "$host_release_readiness_phrase"
+  require "$file" "$host_release_readiness_command"
+  require_phrase "$file" "$(cat "$file")" "$credential_reuse_phrase"
   require_phrase "$file" "$(cat "$file")" "$installer_claim"
   require "$file" "$installer_link"
   require "$file" "### 8. Verify operator completion"
@@ -380,6 +435,7 @@ for file in "$platform" "$operator"; do
   require_operator_completion_item "$file" "doctor evidence" "sudo tinkercloud doctor"
   require_operator_completion_item "$file" "version command" "$operator_version_proof"
   require_operator_completion_item "$file" "header/body evidence" "$operator_version_evidence"
+  require_phrase "$file" "$(cat "$file")" "$email_normalization_phrase"
   require_operator_completion_item "$file" "anonymous-denial boundary" "$empty_operator_boundary"
   reject "$file" '`admin.<DOMAIN>`:'
   reject "$file" "resolve to that supplied public IP"
@@ -390,16 +446,24 @@ require_text "README Start the beta" "$readme_beta" "clean dedicated x86-64 Ubun
 require_text "README Start the beta" "$readme_beta" "$host_preflight"
 require_phrase "README Start the beta" "$readme_beta" "$host_key_phrase"
 require_text "README Start the beta" "$readme_beta" "$wildcard_record"
-require_text "README Start the beta" "$readme_beta" "(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q ."
-require_text "README Start the beta" "$readme_beta" "(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q ."
+require_text "README Start the beta" "$readme_beta" "getent ahosts admin.<DOMAIN> >/dev/null"
+require_text "README Start the beta" "$readme_beta" "getent ahosts onboarding-check.<DOMAIN> >/dev/null"
 require_phrase "README Start the beta" "$readme_beta" "$allowlist_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$operator_otp_phrase"
+require_operator_terminal_auth_rule "$readme"
+require_phrase "README Start the beta" "$readme_beta" "$otp_budget_phrase"
+require_phrase "README Start the beta" "$readme_beta" "$fresh_human_otp_phrase"
+require_phrase "README Start the beta" "$readme_beta" "$host_release_terminal_phrase"
+require_phrase "README Start the beta" "$readme_beta" "$host_release_readiness_phrase"
+require_text "README Start the beta" "$readme_beta" "$host_release_readiness_command"
+require_phrase "README Start the beta" "$readme_beta" "$credential_reuse_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$installer_claim"
 require_text "README Start the beta" "$readme_beta" "$installer_link"
 require_text "README Start the beta" "$readme_beta" "sudo tinkercloud status"
 require_text "README Start the beta" "$readme_beta" "sudo tinkercloud doctor"
 require_text "README Start the beta" "$readme_beta" "$operator_version_proof"
 require_phrase "README Start the beta" "$readme_beta" "$operator_version_evidence"
+require_phrase "README Start the beta" "$readme_beta" "$email_normalization_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$empty_operator_boundary"
 reject_text "README Start the beta" "$readme_beta" '`admin.<DOMAIN>`:'
 reject_text "README Start the beta" "$readme_beta" "resolve to that supplied public IP"
@@ -412,20 +476,31 @@ for file in "$platform" "$deployer"; do
   require "$file" "tinker whoami --server <remembered-server>"
   require "$file" "tinker login --server <remembered-server>"
   require "$file" "owner-only"
-  require "$file" "tinker deploy ."
+  require "$file" "$deployer_command"
   require "$file" "one human CLI OTP"
   require "$file" "anonymous HTML, asset, and reserved API"
   require_phrase "$file" "$(cat "$file")" "immutable deployment ID"
   require_phrase "$file" "$(cat "$file")" "protected exact app origin"
   require_phrase "$file" "$(cat "$file")" "authenticated platform-health success"
   require_phrase "$file" "$(cat "$file")" "anonymous HTML, asset, and reserved API denial with no app bytes"
+  require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"
+  require_phrase "$file" "$(cat "$file")" "$fresh_human_otp_phrase"
+  require_phrase "$file" "$(cat "$file")" "$client_release_terminal_phrase"
+  require_phrase "$file" "$(cat "$file")" "$client_release_readiness_phrase"
+  require_phrase "$file" "$(cat "$file")" "$review_phrase"
+  require_phrase "$file" "$(cat "$file")" "$deployer_receipt_phrase"
+  require_phrase "$file" "$(cat "$file")" "$deployer_approval_phrase"
+  require_phrase "$file" "$(cat "$file")" "$deployer_prompts_phrase"
+  reject_phrase "$file" "$(cat "$file")" 'only human prompts are exactly `Email: ` and `Code: `'
   require_deployer_terminal_auth_rule "$file"
   require_deployer_single_invocation_rule "$file"
   require_deployer_executable_command_placement "$file"
+  require_phrase "$file" "$(cat "$file")" "$active_unverified_recheck"
+  require_phrase "$file" "$(cat "$file")" 'no `Set-Cookie` or `Location`, and no app bytes'
 done
 
 require_text "README Start the beta" "$readme_beta" "tinker version"
-require_text "README Start the beta" "$readme_beta" "tinker deploy ."
+require_text "README Start the beta" "$readme_beta" "$readme_deployer_command"
 require_text "README Start the beta" "$readme_beta" "Optional: add SDK capabilities"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md"
@@ -433,13 +508,22 @@ require_phrase "README Start the beta" "$readme_beta" "immutable deployment ID"
 require_phrase "README Start the beta" "$readme_beta" "protected exact app origin"
 require_phrase "README Start the beta" "$readme_beta" "authenticated platform-health success"
 require_phrase "README Start the beta" "$readme_beta" "anonymous HTML, asset, and reserved API denial with no app bytes"
-reject_text "README Start the beta" "$readme_beta" "<remembered-server>"
+require_phrase "README Start the beta" "$readme_beta" "$active_unverified_recheck"
+require_phrase "README Start the beta" "$readme_beta" 'no `Set-Cookie` or `Location`, and no app bytes'
+require "docs/getting-started/first-app.md" "$active_unverified_recheck"
+require_phrase "docs/getting-started/first-app.md" "$(cat docs/getting-started/first-app.md)" 'no `Set-Cookie` or `Location`, and no app bytes'
+require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" "$active_unverified_recheck"
+require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" 'no `Set-Cookie` or `Location`, and zero app bytes'
 reject_text "README Start the beta" "$readme_beta" "tinker login"
 
 for file in "$platform" "$operator" "$deployer" "$readme"; do
-  require_phrase "$file" "$(cat "$file")" "most two human OTP requests in total"
+  require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"
   require "$file" "suggesting a third human OTP"
   reject_other_exact_beta_versions "$file"
+done
+
+for file in "$platform" "$operator" "$deployer" "$readme" "$contract"; do
+  reject_bare_beta_deploy "$file"
 done
 
 require "$full_stack" "unattended multi-identity security matrix"

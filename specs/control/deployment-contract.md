@@ -199,6 +199,10 @@ preserves the previous active pointer.
   response headers, internal path, or policy membership. A failure before a
   successful activation response remains `deploy_failed` and carries no active
   receipt.
+- An `active_but_unverified` recheck is evidence only, never a deployment or
+  authenticated request: a fresh anonymous request to only the server-returned
+  exact `<returned-url>` uses `curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>`. It requires
+  `401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or `Location`, and zero app bytes. Any other result denies the evidence and cannot trigger a second deploy.
 - A later `tinker deploy` invocation is a new immutable deployment attempt even
   when its release hash matches the active release. Hash equality alone never
   proves activation or policy installation. Activating a same-hash candidate
