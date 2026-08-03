@@ -129,11 +129,16 @@ identity uses zero OTP. This does not alter unattended machine OTP acceptance.
 Then verify operator completion:
 
 ```sh
-sudo tinkercloud status
+status_output=$(sudo tinkercloud status) &&
+test "$(printf '%s\n' "$status_output" | grep -Fxc 'version: 0.1.6')" -eq 1 &&
+printf '%s\n' "$status_output"
 sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
 ```
 
+This `&&` chain preserves a failed or unhealthy `status` exit and accepts the
+installed build only when successful output contains exactly one full
+`version: 0.1.6` line. There is no separate server version command.
 The final HTTPS request must not follow a redirect. Completion requires HTTP
 `200`, an `application/json` media type, and exact bounded body
 `{"api_version":1}` with no extra or error fields; record its included gateway

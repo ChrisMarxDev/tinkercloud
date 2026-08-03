@@ -272,6 +272,15 @@ reject() {
   }
 }
 
+reject_exact_line() {
+  file=$1
+  line=$2
+  ! grep -Fx -- "$line" "$file" >/dev/null || {
+    echo "beta onboarding documentation contains forbidden command line in ${file}: ${line}" >&2
+    failed=1
+  }
+}
+
 reject_text() {
   label=$1
   text=$2
@@ -354,22 +363,34 @@ installer_claim='The copy/paste installer verifies checksums and a pinned Ed2551
 installer_link='https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6'
 operator_version_proof='curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version'
 operator_version_evidence='Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields'
+operator_status_version_capture='status_output=$(sudo tinkercloud status) &&'
+operator_status_version_exact='test "$(printf '\''%s\n'\'' "$status_output" | grep -Fxc '\''version: 0.1.6'\'')" -eq 1 &&'
+operator_status_version_print='printf '\''%s\n'\'' "$status_output"'
 email_normalization_phrase='Normalize every email by trimming outer whitespace, preserving local-part case, lowercasing only the domain, requiring exactly one `@`, nonempty local/domain, a dotted domain, and no whitespace/control characters; never plus/dot rewrite.'
 active_unverified_recheck="curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>"
 empty_operator_boundary='Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty operator setup.'
-operator_completion_commands='### 8. Verify operator completion
+operator_completion_commands=$(cat <<'EOF'
+### 8. Verify operator completion
 
 After setup and deployer authorization, run the local checks and record the
 direct public version proof:
 
 ```sh
-sudo tinkercloud status
+status_output=$(sudo tinkercloud status) &&
+test "$(printf '%s\n' "$status_output" | grep -Fxc 'version: 0.1.6')" -eq 1 &&
+printf '%s\n' "$status_output"
 sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
 ```
 
+The `&&` chain preserves a failed or unhealthy `status` exit and accepts the
+installed build only when its successful output contains exactly one full
+`version: 0.1.6` line. There is no `tinkercloud version` command; do not invent
+one.
 The HTTPS request must not follow a redirect. Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields; record included gateway headers. Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty
-operator setup.'
+operator setup.
+EOF
+)
 deployer_terminal_auth_flow_steps='Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment.
 Terminal CLI authentication rule:'
 deployer_single_invocation_flow_steps='Terminal CLI authentication rule:
@@ -489,6 +510,11 @@ for file in "$platform" "$operator"; do
   require "$file" "$installer_link"
   require "$file" "### 8. Verify operator completion"
   require_operator_completion_item "$file" "status evidence" "sudo tinkercloud status"
+  require_operator_completion_item "$file" "status version capture" "$operator_status_version_capture"
+  require_operator_completion_item "$file" "exact status version line" "$operator_status_version_exact"
+  require_operator_completion_item "$file" "status output evidence" "$operator_status_version_print"
+  reject_exact_line "$file" "tinkercloud version"
+  reject_exact_line "$file" "sudo tinkercloud version"
   require_operator_completion_item "$file" "doctor evidence" "sudo tinkercloud doctor"
   require_operator_completion_item "$file" "version command" "$operator_version_proof"
   require_operator_completion_item "$file" "header/body evidence" "$operator_version_evidence"
@@ -518,6 +544,11 @@ require_phrase "README Start the beta" "$readme_beta" "$credential_reuse_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$installer_claim"
 require_text "README Start the beta" "$readme_beta" "$installer_link"
 require_text "README Start the beta" "$readme_beta" "sudo tinkercloud status"
+require_text "README Start the beta" "$readme_beta" "$operator_status_version_capture"
+require_text "README Start the beta" "$readme_beta" "$operator_status_version_exact"
+require_text "README Start the beta" "$readme_beta" "$operator_status_version_print"
+reject_exact_line README.md "tinkercloud version"
+reject_exact_line README.md "sudo tinkercloud version"
 require_text "README Start the beta" "$readme_beta" "sudo tinkercloud doctor"
 require_text "README Start the beta" "$readme_beta" "$operator_version_proof"
 require_phrase "README Start the beta" "$readme_beta" "$operator_version_evidence"

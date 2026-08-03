@@ -847,11 +847,17 @@ After setup and deployer authorization, run the local checks and record the
 direct public version proof:
 
 ```sh
-sudo tinkercloud status
+status_output=$(sudo tinkercloud status) &&
+test "$(printf '%s\n' "$status_output" | grep -Fxc 'version: 0.1.6')" -eq 1 &&
+printf '%s\n' "$status_output"
 sudo tinkercloud doctor
 curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
 ```
 
+The `&&` chain preserves a failed or unhealthy `status` exit and accepts the
+installed build only when its successful output contains exactly one full
+`version: 0.1.6` line. There is no `tinkercloud version` command; do not invent
+one.
 The HTTPS request must not follow a redirect. Completion requires HTTP `200`,
 an `application/json` media type, and exact bounded body `{"api_version":1}`
 with no extra or error fields; record included gateway headers. Protected-app

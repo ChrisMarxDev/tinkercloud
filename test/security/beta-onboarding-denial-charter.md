@@ -119,6 +119,9 @@ persisted state.
 - Missing operator `status`, root `doctor`, or no-redirect admin version
   evidence denies operator completion. A version probe without included headers,
   a finite timeout, or the 32768-byte response bound is not completion evidence.
+  A `status` command whose exit is masked, output with zero or multiple exact
+  `version: 0.1.6` lines, a substring-only match, or an invented
+  `tinkercloud version` command also denies operator completion.
   Claiming protected-app anonymous denial
   before any app exists is fabricated evidence and also denies completion; the
   deployer records that denial after deploying an app.
