@@ -176,8 +176,18 @@ fail-closed dashboard read-model error.
   validated server configuration; no query, form, or browser-controlled value
   selects it. A malformed host omits the prompt. The prompt contains no
   credential, token, one-time-code value, or secret; it names the deployer
-  skill, asks first for the deployer email and then for the sent one-time code,
-  and directs normal deployer OTP plus minimal generate/build/deploy questions.
+  skill, asks only for the deployer email, and directs the normal Tinker CLI
+  and deployer-skill flow. It first checks for and reuses the exact
+  server-scoped saved identity for that deployer. Only when that identity is
+  missing, unauthorized, or expired may it request at most one CLI OTP. The
+  agent still asks the human only for the deployer email: if an OTP is needed,
+  the Tinker CLI itself prompts the deployer to enter the mailed code directly.
+  The agent never requests, reads, copies, pastes, relays, or handles the code
+  in chat. On CLI OTP failure it stops and reports the failure; it never retries
+  the OTP, switches deployer identity, clears, logs out, or deletes saved CLI
+  authentication, or creates another OTP path. It asks only the minimal
+  remaining generate/build/deploy questions and never asks for bearer tokens,
+  tokens, secrets, or operator access.
   The prompt stays selectable without JavaScript; a labelled native copy
   button and polite feedback are optional
   clipboard-only enhancement.
@@ -323,8 +333,17 @@ Before a styled happy path is accepted, tests must prove:
     deployment credential or control path. It uses a fixed repository URL and
     a composition-root-derived admin endpoint, rejects endpoint query overrides
     by having no endpoint input at all, and omits all tokens, cookies,
-    one-time-code values, secrets, and browser identity material. “No OTP” means
-    no one-time-code value, not that the normal OTP flow may be omitted from the prompt. Its
+    one-time-code values, secrets, and browser identity material. It asks only
+    for the deployer email, follows the normal Tinker CLI and deployer-skill
+    flow, first reuses the exact server-scoped saved identity, and requests at
+    most one CLI OTP only when that identity is missing, unauthorized, or
+    expired. The agent asks the human only for the deployer email; the CLI
+    itself prompts the deployer to enter any mailed code directly, and the
+    agent never requests or handles it in chat. On CLI OTP failure the prompt
+    stops and reports failure; it never retries, switches deployer identity,
+    clears, logs out, or deletes saved CLI authentication, or creates another
+    OTP path. “No OTP” means no one-time-code value, not that this conditional
+    normal CLI flow may be omitted from the prompt. Its
     no-JavaScript state remains selectable text; clipboard success or failure
     is presentation-only.
 26. A compact local-insights chart is display-only. It may render only the

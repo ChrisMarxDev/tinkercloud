@@ -494,7 +494,7 @@ func operatorStartPrompt(actor Actor, platformHost string) string {
 	return "Build and deploy a small Tinkercloud app.\n\n" +
 		"Repository: https://github.com/ChrisMarxDev/tinkercloud\n" +
 		"Tinkercloud endpoint: https://" + platformHost + "\n\n" +
-		"Follow skills/tinkercloud-deployer/SKILL.md in the repository. Ask me only for the deployer email, then ask for the one-time code when it is sent. Use the normal email OTP flow to authenticate that deployer. Generate the app, build it, and deploy it with the fewest necessary questions. Do not ask for operator access, tokens, or secrets."
+		"Follow skills/tinkercloud-deployer/SKILL.md in the repository. Ask me only for the deployer email. Never ask me to paste or share a one-time code in chat. Run the normal Tinker CLI and deployer skill flow. First check for and reuse the exact server-scoped saved identity for that deployer. Request at most one CLI OTP only when that saved identity is missing, unauthorized, or expired. If an OTP is needed, let the Tinker CLI itself prompt the deployer to enter the mailed code directly. Do not request, read, copy, paste, relay, or handle the code in chat. If the CLI OTP fails, stop and report the failure. Never retry the OTP, switch deployer identity, clear, log out, or delete saved CLI authentication, or create another OTP path. Generate the app, build it, and deploy it with the fewest necessary questions. Never ask for bearer tokens, tokens, secrets, or operator access."
 }
 
 // validPlatformHost accepts only a canonical DNS hostname already derived from

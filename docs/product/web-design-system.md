@@ -347,9 +347,18 @@ The operator dashboard may offer one compact **Get started with a coding
 agent** card. It is guidance, not a deployment control: it gives a ready-to-copy
 prompt with the fixed Tinkercloud repository URL and the current HTTPS admin
 endpoint derived by the server from validated configuration. The prompt asks an
-agent to follow `skills/tinkercloud-deployer/SKILL.md`, ask first for the
-deployer email and then for the sent one-time code, use the normal email OTP
-flow, and generate, build, and deploy with minimal questions.
+agent to follow `skills/tinkercloud-deployer/SKILL.md`, ask only for the
+deployer email, and run the normal Tinker CLI and deployer-skill flow. It first
+checks for and reuses the exact server-scoped saved identity for that deployer.
+Only if that identity is missing, unauthorized, or expired may it request at
+most one CLI OTP. The agent still asks the human only for the deployer email.
+If an OTP is needed, the Tinker CLI itself prompts the deployer to enter the
+mailed code directly; the agent never requests, reads, copies, pastes, relays,
+or handles the code in chat. On CLI OTP failure it stops and reports the
+failure. It never retries the OTP, switches deployer identity, clears, logs out,
+or deletes saved CLI authentication, or creates another OTP path. It then
+generates, builds, and deploys with minimal questions, and never asks for bearer
+tokens, tokens, secrets, or operator access.
 
 Render the prompt as ordinary focusable, selectable code text. A native Copy
 prompt button can appear only after local clipboard initialization and updates
@@ -357,8 +366,11 @@ a polite status message; no-JavaScript and clipboard-failure states tell the
 operator to select and copy the text manually. Do not render endpoint fields,
 query overrides, browser-held endpoint state, deployer tokens, cookies,
 one-time-code values, or secrets. “No OTP” forbids exposing a code value, not
-mentioning the normal OTP flow. A malformed configured host omits the card.
-Deployer dashboards omit it entirely.
+the conditional normal CLI flow: the exact server-scoped saved identity may be
+reused without an OTP, and an OTP may be requested once only when it is
+missing, unauthorized, or expired. Any mailed code is entered directly into the
+CLI rather than shared with the agent. A malformed configured host omits the
+card. Deployer dashboards omit it entirely.
 
 ## Usage
 

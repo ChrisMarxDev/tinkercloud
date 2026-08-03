@@ -143,10 +143,18 @@ the control-plane mark, stylesheet, or chrome.
   come from validated canonical server configuration, never a query/form/browser
   value; omit it when that host is malformed. The prompt contains no token,
   cookie, one-time-code value, secret, or browser identity data; it names
-  `skills/tinkercloud-deployer/SKILL.md`, asks first for the deployer email and
-  then for the sent one-time code, and directs normal OTP plus minimal
-  generate/build/deploy questions. “No OTP” forbids a code value, not mention
-  of the normal OTP flow. Keep the prompt focusable and selectable
+  `skills/tinkercloud-deployer/SKILL.md`, asks only for the deployer email, and
+  directs the normal Tinker CLI and deployer-skill flow. It first checks for
+  and reuses the exact server-scoped saved identity; only when it is missing,
+  unauthorized, or expired may it request at most one CLI OTP. The agent asks
+  the human only for the deployer email. If an OTP is needed, the Tinker CLI
+  itself prompts the deployer to enter the mailed code directly; never request,
+  read, copy, paste, relay, or handle that code in chat. On CLI OTP failure,
+  stop and report the failure. Never retry the OTP, switch deployer identity,
+  clear, log out, or delete saved CLI authentication, or create another OTP
+  path. Then ask only minimal generate/build/deploy questions; never ask for
+  bearer tokens, tokens, secrets, or operator access.
+  “No OTP” forbids a code value, not this conditional normal CLI flow. Keep the prompt focusable and selectable
   without JavaScript. A labelled native copy button and polite feedback may
   enhance it only through local clipboard behavior; deployer dashboards omit it.
 - Render the dashboard `Sign out of Tinkercloud` action as an ordinary labelled

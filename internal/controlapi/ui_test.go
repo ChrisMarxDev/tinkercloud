@@ -193,9 +193,17 @@ func TestPlatformUIOperatorCodingAgentPromptUsesConfiguredHostOnly(t *testing.T)
 		"Get started with a coding agent",
 		"https://github.com/ChrisMarxDev/tinkercloud",
 		"Tinkercloud endpoint: https://admin.testing.tinkercloud.example",
-		"Ask me only for the deployer email, then ask for the one-time code when it is sent.",
 		"skills/tinkercloud-deployer/SKILL.md",
-		"normal email OTP flow",
+		"Ask me only for the deployer email.",
+		"Never ask me to paste or share a one-time code in chat.",
+		"Run the normal Tinker CLI and deployer skill flow.",
+		"First check for and reuse the exact server-scoped saved identity for that deployer.",
+		"Request at most one CLI OTP only when that saved identity is missing, unauthorized, or expired.",
+		"If an OTP is needed, let the Tinker CLI itself prompt the deployer to enter the mailed code directly.",
+		"Do not request, read, copy, paste, relay, or handle the code in chat.",
+		"If the CLI OTP fails, stop and report the failure.",
+		"Never retry the OTP, switch deployer identity, clear, log out, or delete saved CLI authentication, or create another OTP path.",
+		"Never ask for bearer tokens, tokens, secrets, or operator access.",
 		`id="operator-get-started-prompt"`,
 		"readonly",
 		`data-tinker-copy-target="operator-get-started-prompt"`,
@@ -205,7 +213,7 @@ func TestPlatformUIOperatorCodingAgentPromptUsesConfiguredHostOnly(t *testing.T)
 			t.Fatalf("operator prompt missing %q: %s", want, body)
 		}
 	}
-	for _, forbidden := range []string{"attacker.example", "name=\"endpoint\"", "tinker_only_once"} {
+	for _, forbidden := range []string{"attacker.example", "name=\"endpoint\"", "tinker_only_once", "then ask for the one-time code when it is sent", "ask only when the CLI sends it", "ask only for that code"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("operator prompt rendered unsafe input %q: %s", forbidden, body)
 		}
