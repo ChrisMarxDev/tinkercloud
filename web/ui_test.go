@@ -243,9 +243,16 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 		`https://github.com/chrismarxdev/tinkercloud`,
 		`tinkercloud endpoint: https://admin.example.test`,
 		`ask me only for the deployer email`,
+		`never ask me to paste or share a one-time code in chat`,
 		`skills/tinkercloud-deployer/skill.md`,
-		`ask for the one-time code when it is sent`,
-		`normal email otp flow`,
+		`run the normal tinker cli and deployer skill flow`,
+		`first check for and reuse the exact server-scoped saved identity for that deployer`,
+		`request at most one cli otp only when that saved identity is missing, unauthorized, or expired`,
+		`if an otp is needed, let the tinker cli itself prompt the deployer to enter the mailed code directly`,
+		`do not request, read, copy, paste, relay, or handle the code in chat`,
+		`if the cli otp fails, stop and report the failure`,
+		`never retry the otp, switch deployer identity, clear, log out, or delete saved cli authentication, or create another otp path`,
+		`never ask for bearer tokens, tokens, secrets, or operator access`,
 		`id="showcase-agent-prompt"`,
 		`readonly`,
 		`data-tinker-copy-target="showcase-agent-prompt"`,
@@ -266,7 +273,7 @@ func TestShowcaseUsesCanonicalLocalAssetsAndSemanticStates(t *testing.T) {
 			t.Fatalf("showcase missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`, `provider credential value=`, `display name`, `<summary>tokens</summary>`, `· 1 token`, `· 0 tokens`} {
+	for _, forbidden := range []string{`<script>`, `style=`, `src="http`, `href="http`, `javascript:`, `<option value="deleted">`, `releases and rollback`, `roll back`, `provider credential value=`, `display name`, `<summary>tokens</summary>`, `· 1 token`, `· 0 tokens`, `then ask for the one-time code when it is sent`, `ask only when the cli sends it`, `ask only for that code`} {
 		if strings.Contains(page, forbidden) {
 			t.Fatalf("showcase contains remote or executable dependency %q", forbidden)
 		}
