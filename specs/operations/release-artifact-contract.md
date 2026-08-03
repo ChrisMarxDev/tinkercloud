@@ -61,7 +61,16 @@ The placeholder must not occur in a published artifact. Consequently an
 operator can retrieve the exact-version host installer into a fresh supported
 VPS root shell and run it without passing an origin again. Redirects used to
 serve GitHub assets are permitted only as HTTPS transport redirects; the
-installer verifies the downloaded signed evidence before installation.
+installer verifies the downloaded signed evidence before installation. The
+server updater ordinarily rejects redirects. It permits exactly one only when
+the initial request is the canonical immutable
+`https://github.com/ChrisMarxDev/tinkercloud/releases/download/vMAJOR.MINOR.PATCH/NAME`
+path for an allowlisted updater artifact or sidecar, and its exact HTTPS target
+host is `release-assets.githubusercontent.com`. Both hosts must resolve only to
+public addresses; credentials, fragments, non-default ports, downgrade,
+mutable/latest paths, other repositories, final-URL mismatch, and a second
+redirect deny before release verification. Signature, digest, and signed
+compatibility-manifest verification remain mandatory.
 For a reviewed development or custom distribution, the release builder may
 instead receive one credential-free HTTPS directory through
 `TINKERCLOUD_HOST_INSTALL_RELEASE_BASE`; it rejects whitespace/control bytes,

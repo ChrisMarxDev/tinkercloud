@@ -30,8 +30,10 @@ authority. Tinkercloud accepts only a strictly newer semantic version whose
 server artifact and complete release manifest pass the existing pinned
 Ed25519, digest, origin, compatibility, restart, health, and anonymous-denial
 gates. A beta channel selects prereleases; a stable channel excludes them.
-Downgrades, same-version replacements, redirects, cross-origin assets, and
-malformed or ambiguous discovery state deny before snapshot.
+Downgrades, same-version replacements, cross-origin assets, and malformed or
+ambiguous discovery state deny before snapshot. The only redirect exception is
+the bounded immutable official GitHub release-asset transport hop in ADR 0059;
+it does not apply to discovery or custom origins.
 
 Unattended updates initially require the installed persistence schema version
 to remain unchanged. A schema-changing release stops with an operator-visible

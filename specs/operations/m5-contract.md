@@ -181,9 +181,14 @@ recovery surface. Doctor results are typed, bounded, and redact secrets.
 - Manual updates use either the local air-gapped server artifact triplet plus
   the signed release-manifest triplet, or one operator-configured/explicit
   HTTPS release origin. Remote retrieval accepts
-  only the V1 `tinkercloud-linux-amd64` filename, follows no redirects, rejects
-  credentials, query strings, private/link-local/loopback origins, cross-origin
-  components, and bodies over the per-component limits. The public health URL
+  only the V1 `tinkercloud-linux-amd64` filename and follows no redirects
+  except one canonical immutable official GitHub release-artifact or sidecar
+  HTTPS hop to exact `release-assets.githubusercontent.com`. Both hosts require
+  public DNS; mutable/latest paths, other repositories/hosts, credentials,
+  fragments, non-default ports, downgrade, final-URL mismatch, and a second
+  redirect deny. Custom origins follow no redirects. It rejects private,
+  link-local, loopback origins, cross-origin components, and bodies over the
+  per-component limits. The public health URL
   is derived as `admin.<domain>`; the anonymous-denial URL is derived from
   locally verified installed app state, never caller input. If no active app
   exists, the updater must prove that exact database state, platform health,

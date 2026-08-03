@@ -60,6 +60,37 @@ func TestUpdateArtifactDownloadsAndVerifies(t *testing.T) {
 	}
 }
 
+func TestUpdateArtifactAllowsCanonicalGitHubReleaseAssetRedirect(t *testing.T) {
+	pub, b, m, s := signedUpdate(t)
+	oldKey, oldClient, oldValidate := releasePublicKeyBase64, updateHTTPClient, updateFetchValidator
+	defer func() {
+		releasePublicKeyBase64, updateHTTPClient, updateFetchValidator = oldKey, oldClient, oldValidate
+	}()
+	releasePublicKeyBase64 = base64.StdEncoding.EncodeToString(pub)
+	updateFetchValidator = func(string) error { return nil }
+	base := "https://github.com/ChrisMarxDev/tinkercloud/releases/download/v1.0.0/"
+	assetBase := "https://release-assets.githubusercontent.com/assets/"
+	updateHTTPClient = commandDoer(func(r *http.Request) (*http.Response, error) {
+		if strings.HasPrefix(r.URL.String(), base) {
+			return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": []string{assetBase + strings.TrimPrefix(r.URL.String(), base)}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+		}
+		var body []byte
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".metadata.json"):
+			body = m
+		case strings.HasSuffix(r.URL.Path, ".signature"):
+			body = s
+		default:
+			body = b
+		}
+		return &http.Response{StatusCode: http.StatusOK, Request: r, ContentLength: int64(len(body)), Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+	})
+	a, key, err := updateArtifact(context.Background(), "", "", "", base, "", "", "tinkercloud-linux-amd64")
+	if err != nil || string(a.Bytes) != string(b) || string(key) != string(pub) {
+		t.Fatal(err, a)
+	}
+}
+
 func TestUpdateArtifactTamperNeverVerifies(t *testing.T) {
 	pub, b, m, s := signedUpdate(t)
 	oldKey, oldClient, oldValidate := releasePublicKeyBase64, updateHTTPClient, updateFetchValidator

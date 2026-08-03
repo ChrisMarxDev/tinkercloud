@@ -173,9 +173,12 @@ sudo tinkercloud update \
 For an air-gapped host, copy the server artifact triplet and signed
 `release-manifest.json` triplet onto the VPS. Use `--binary`, `--metadata`,
 `--signature`, `--release-manifest`, `--release-manifest-metadata`, and
-`--release-manifest-signature` together. The command does not
-follow redirects, accepts only the pinned signed `tinkercloud-linux-amd64` release,
-and rejects private or link-local release origins. It derives public health from
+`--release-manifest-signature` together. The command rejects redirects except
+for one HTTPS transport hop from a canonical immutable official GitHub release
+artifact or sidecar path to `release-assets.githubusercontent.com`; custom
+release origins never receive that exception. It accepts only the pinned signed
+`tinkercloud-linux-amd64` release and rejects private or link-local release
+origins. It derives public health from
 installed state and deterministically selects a locally verified active app for
 the anonymous capability-denial probe. If no active app exists, it proves that
 exact state plus platform health and safe unknown-app-host denial; the first

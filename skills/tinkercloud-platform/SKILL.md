@@ -954,6 +954,14 @@ the restarted candidate passes doctor, listener readiness, platform health,
 and anonymous protected-app denial. Any ambiguous or failed gate restores the
 prior healthy state.
 
+Remote update retrieval rejects redirects for every custom or arbitrary origin.
+The sole transport exception is one HTTPS redirect from the canonical immutable
+official GitHub release path for an allowlisted updater artifact or sidecar to
+`release-assets.githubusercontent.com`; both hops require public DNS and a
+second redirect, mutable/latest path, another repository/host, credentials,
+fragment, non-default port, downgrade, or final-URL mismatch denies. This
+exception never replaces signed artifact and release-manifest verification.
+
 The updater derives its probe from installed server state and selects a locally
 verified active app itself. Never ask for or pass an app ID, slug, probe host,
 path, or URL. If a failed update did not complete automatic restoration, use
