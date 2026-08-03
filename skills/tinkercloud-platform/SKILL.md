@@ -110,15 +110,20 @@ with the exact server and email returned by the successful `whoami`.
 
 Change the pair only after an explicit switch, logout, or contradictory verified
 state. Never transfer an email between servers. If `whoami` returns another
-email, stop before mutation and ask whether to adopt it or use
-`tinker login --force` for the intended account.
+email, stop before mutation and ask whether to adopt it; do not use
+`tinker login --force` within the deploy attempt.
 
 Confirm the deployer-only `tinker` CLI is installed with `tinker version`. If it is
-missing, use the operator-provided signed client release and reviewed installer,
-or build `./cmd/tinker` from a trusted checkout of the matching Tinkercloud release.
-An operator-approved npm/pnpm/Yarn/Bun package or Homebrew formula is acceptable
-only when it was derived from that same verified release; a package-manager
-name or `latest` tag alone is not compatibility or provenance evidence.
+missing, install the prepared exact `v0.1.6` beta client only after that
+prerelease is published, then confirm its version:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+tinker version
+```
+
+The immutable installer verifies its release evidence. Do not substitute
+`latest`, a package-manager tag, or a caller-supplied release origin.
 Never install the privileged `tinkercloud` server binary on a deployer machine,
 download an unsigned executable, or treat an unauthenticated installer URL as
 its own trust root. Ask the operator for the signed client source/release
@@ -128,14 +133,51 @@ Do not ask the deployer for a bearer or OTP. Use the interactive CLI credential
 flow when needed:
 
 ```sh
-tinker login --server https://admin.example.com
-tinker whoami
+tinker whoami --server <remembered-server>
+tinker login --server <remembered-server>
 ```
 
 `tinker login` reuses a valid server-bound credential. Only a definite
 unauthorized/expired credential may fall back to OTP. Let the deployer enter
 the OTP into the CLI prompt, not the conversation. An explicit `--server`
 applies only to that command; successful login stores the verified default.
+This bounded beta path permits one human CLI OTP only when that saved bearer is
+absent, unauthorized, or expired. Start the first deploy **owner-only** and run
+`tinker deploy .`; completion needs anonymous HTML, asset, and reserved API
+denial evidence with no app bytes.
+
+Terminal CLI authentication rule: immediately after a CLI authentication or OTP
+attempt fails, is malformed, times out, or is denied, stop that deploy attempt.
+Do not retry `tinker login`, use `--force`, switch account or identity, log out,
+delete or clear saved credentials, or create an alternate OTP path. A valid
+exact server-scoped saved identity uses zero OTP. Enter an eligible OTP directly
+in the CLI, never chat.
+
+One-invocation deployment rule: after the final review, invoke `tinker deploy .`
+(or its explicit public-confirm variant) exactly once for that deploy attempt.
+Any CLI deploy outcome—validation, upload, activation, verification,
+transport/TLS/redirect/timeout/error, or success—ends the agent invocation; do
+not rerun deploy, upload another release, or retry from chat. The CLI may use
+its already-bounded transient readiness retries inside that one invocation.
+`active_but_unverified` permits only the existing independent exact-URL recheck,
+never a second deployment. A later deploy attempt requires an explicit new human
+request after the cause is addressed, not an automatic retry.
+
+Success records the immutable deployment ID, protected exact app origin,
+authenticated platform-health success, and anonymous HTML, asset, and reserved
+API denial with no app bytes.
+
+Use the matching browser SDK for a new project:
+
+```sh
+npm install @tinkercloud/sdk@0.1.6
+```
+
+Across the operator dashboard and deployer CLI, the onboarding flow permits at
+most two human OTP requests in total: one human browser OTP and one human CLI
+OTP. Before issuing, relaying, requesting, or suggesting a third human OTP,
+stop immediately; never switch accounts, clear credentials, create a viewer
+session, or use another mailbox to evade the budget.
 
 ### 2. Propose the access policy
 
@@ -164,13 +206,11 @@ email/domain set; do not describe a partial list as merely additive.
 
 ### 3. Build on the client SDK
 
-Use `@tinkercloud/sdk` for app identity and Tinkercloud capabilities. Install it with
-the project's existing package manager and bundle it into the static build.
-Reuse the compatible version already in the lockfile. For a new app, use the
-operator's version-matched published package or reviewed local SDK artifact;
-never write `latest`, guess a version, vendor an improvised transport client, or
-load the SDK from a CDN. If the compatible package cannot be discovered, ask
-for its signed release/source location and continue with non-SDK work.
+Use `@tinkercloud/sdk` for app identity and Tinkercloud capabilities. Install
+the prepared exact public-beta `0.1.6` package with the project's existing
+package manager only after that prerelease is published, then bundle it into
+the static build. Do not write `latest`, guess a version, vendor an improvised
+transport client, or load the SDK from a CDN.
 
 App code imports the configuration-free, same-origin client:
 
@@ -574,47 +614,139 @@ reviewer-protected top-level release job alone reads the channel signing key and
 creates the GitHub release. Never add `secrets: inherit`, a repository signing
 secret, or a second publication dispatch.
 
-For a clean host, begin in that VPS's root shell with the exact-version signed
-release command:
+<!-- beta-operator-clean:start -->
+### 1. Verify the beta host
+
+For a clean beta host, require a clean dedicated x86-64 Ubuntu 24.04 or 26.04
+VPS. In the VPS provider console's root shell, run this read-only preflight;
+stop unless it reports `x86_64` and Ubuntu `24.04` or `26.04`:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh
+uname -m && . /etc/os-release && printf '%s %s\n' "$ID" "$VERSION_ID"
 ```
 
-Replace `VERSION` only with the intended published exact version. The released
-host installer embeds that immutable release directory; do not add an origin,
-`latest` selector, provider credential, or signing material. HTTPS release-asset
-redirects are transport-only and still require checksum plus pinned Ed25519
-verification before installation. Repository/development verification and the
-optional workstation flow retain explicit `--release-base` support where their
-contracts require it.
+### 2. Verify the SSH host key
 
-For a new server, start with the signed installer and run the implemented
-resumable `sudo tinkercloud setup` path. It asks only for the controlled root
-domain, initial operator email, verified Resend sender, and a root-readable
-Resend credential source that cannot be derived. It generates private HMAC
-material and delegates to the strict initialization state machine. Keep
-`init --non-interactive` for deterministic automation and explicit Resend,
-Postmark, SendGrid, or SMTP selection.
-Mail adapter selection is environment-presence based in fixed order:
+The VPS provider console is the trust source for the SSH host-key fingerprint.
+In that console, record the fingerprint:
+
+```sh
+ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+On the workstation, compare the fingerprint offered on the first normal SSH
+connection with that console value, and accept it only when it matches. Never
+trust or accept an ssh-keyscan result by itself, disable host-key checking, or
+auto-accept an unknown key.
+
+### 3. Configure one wildcard DNS record
+
+Create one `*.<DOMAIN>` wildcard record using `A`/`AAAA` or `CNAME` as the DNS provider supports. It covers the derived `admin.<DOMAIN>` dashboard and every
+synthetic one-label app host. Do not ask for or require a separate `admin`
+record. Before certificates, require nonempty resolution for both derived hosts:
+
+```sh
+(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q .
+(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q .
+```
+
+The operator needs DNS control but supplies no extra certificate input: setup
+derives the ACME contact from the normalized operator email. Do not compare the
+answers to a public IP; the proof is only that both derived names resolve.
+
+### 4. Install v0.1.6
+
+For a clean host, after `v0.1.6` is published, begin in that VPS's root shell
+with this prepared exact-beta command:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
+```
+
+The released host installer embeds that immutable release directory; do not add
+an origin, `latest` selector, provider credential, or signing material. The
+copy/paste installer verifies checksums and a pinned Ed25519 signature before
+installation. This is release preparation, not a claim that `v0.1.6` already
+exists; after publication, inspect the [exact immutable beta
+release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6).
+HTTPS release-asset redirects are transport-only. Repository/development
+verification and the optional workstation flow retain explicit `--release-base`
+support where their contracts require it.
+
+### 5. Transfer the Resend credential
+
+Keep the provider credential out of chat, argv, and ordinary config. From the
+workstation, use the already verified SSH host key for the supplied target; do
+not weaken SSH verification. Substitute <HOST> and <LOCAL_CREDENTIAL_FILE>
+with the supplied values; do not ask for them again. On the VPS, create the
+credential directory, transfer only the file, then verify the final destination
+is a root-owned regular mode-`0600` file:
+
+```sh
+ssh root@<HOST> 'install -d -o root -g root -m 0700 /root/.config/tinkercloud'
+scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root@<HOST>:/root/.config/tinkercloud/resend-api-key"
+ssh root@<HOST> 'test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key'
+```
+
+### 6. Run setup
+
+Run the implemented resumable setup path after the credential boundary is
+ready:
+
+```sh
+sudo tinkercloud setup
+```
+
+It asks only for the controlled base domain, initial operator email, verified
+Resend sender, and root-readable Resend credential path when they cannot be
+derived. It generates private HMAC material and delegates to the strict
+initialization state machine. Keep `init --non-interactive` for deterministic
+automation and explicit Resend, Postmark, SendGrid, or SMTP selection. Mail
+adapter selection is environment-presence based in fixed order:
 `RESEND_API_KEY`, `POSTMARK_SERVER_TOKEN`, `SENDGRID_API_KEY`, then the complete
 `TINKERCLOUD_SMTP_*` set. The first present provider wins; do not invent a
 selector variable or failure-based failover. SMTP is send-only, authenticated,
-and requires certificate-verified `starttls` or implicit `tls`. Follow
-`docs/operations/mail-setup.md` for preparation, switching, and diagnostics.
-Derive `admin.<domain>` and `<slug>.<domain>`, and persist the normalized
-operator email as the internal ACME contact; never ask for, accept, or override
-it through a separate ACME-contact flag, question, or environment input.
-Reserve `admin`, `api`, `auth`, `status`, `www`, `docs`, and `install`, and ask
-for one wildcard DNS record.
-Do not reserve `tinker` or `tinkercloud`. Pause with one exact DNS or selected
-email-provider action
-when external state is incomplete; resume without re-asking verified answers.
-Before the ACME-capable service starts, require both `admin.<domain>` and a
-synthetic one-label app hostname to resolve. This proves the exact platform and
-wildcard DNS setup without guessing or comparing a public VPS IP; a failure
-must stop before ACME and report the affected non-secret hostname or wildcard
-action.
+and requires certificate-verified `starttls` or implicit `tls`. The external
+mail guide is optional troubleshooting, not required for the basic Resend beta
+path; use `docs/operations/mail-setup.md` only for preparation, switching, or
+diagnostics beyond that path. Pause for one exact DNS or selected email-provider
+action when external state is incomplete; resume without re-asking verified
+answers.
+
+Give only `/root/.config/tinkercloud/resend-api-key` to setup. When values are
+missing, setup prompts in this exact order and with these exact labels:
+
+1. `Base domain:`
+2. `Operator email:`
+3. `Verified Resend sender email:`
+4. `Root-readable Resend API key file:`
+
+### 7. Authorize the exact deployer set
+
+Setup derives `https://admin.<domain>/login`; use that exact dashboard URL. A
+valid browser identity is reused. Otherwise, this bounded beta path permits one human browser OTP. In the dashboard select **Deployers**, then **Active deployer allowlist**; enter the reviewed normalized set in **Allowed deployer emails**.
+When adding an email, check **I confirm that adding any email grants deployment authority.**, then select **Save active deployers**. Replace the reviewed
+allowlist rather than applying a partial edit. Replace the initial active
+deployer allowlist with exactly the intended normalized deployer email set and
+no other addresses; the operator email alone is sufficient only when that is
+the exact intended set. Operator setup permits at most one human browser OTP,
+uses zero when a reusable browser identity is valid, and uses no CLI deployer
+OTP.
+
+### 8. Verify operator completion
+
+After setup and deployer authorization, run the local checks and record the
+direct public version proof:
+
+```sh
+sudo tinkercloud status
+sudo tinkercloud doctor
+curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
+```
+
+The HTTPS request must not follow a redirect and must return included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON. Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty
+operator setup.
+<!-- beta-operator-clean:end -->
 
 The workstation `tinker host install|status|doctor|update|uninstall` commands may perform
 the same root-local flow over an explicit `root@HOST` using normal OpenSSH
@@ -666,6 +798,13 @@ platform HTTPS version proof, route classification, socket confinement, safe
 unknown-app denial, database, permissions, DNS, TLS, and email checks succeed.
 Do not replace public evidence with localhost, a browser page, a redirect, or
 insecure TLS.
+
+Record both local commands and this no-redirect public proof before claiming
+setup success: `https://admin.<domain>/api/v1/version` must return bounded
+API-version JSON with gateway headers. The operator/deployer path permits at
+most two human OTP requests in total. Before issuing, relaying, requesting, or
+suggesting a third human OTP, stop immediately; do not switch accounts, clear
+credentials, create a viewer session, or use another mailbox to evade it.
 
 Manage deployer authority as one revision-protected exact normalized email
 allowlist. Show the complete resulting list. Require explicit confirmation only

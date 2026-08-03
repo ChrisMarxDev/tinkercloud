@@ -7,18 +7,22 @@ versions are released.
 
 ## [Unreleased]
 
-## [0.1.6] - 2026-08-03
+### Planned for 0.1.6
 
 ### Fixed
 
 - Clear completed failed-update recovery snapshots after the prior healthy
   server has been restored and restarted, while retaining degraded recovery
   state when restore, restart, or cleanup fails.
+- Preserve the selected safe client install directory when `$HOME/.local/bin`
+  is already on `PATH`, avoiding the installer shell-variable collision.
 
 ### Changed
 
 - Make the public beta install and first-deployment documentation directly
   copyable without version placeholders or prerequisite manifest editing.
+- Prepare exact `v0.1.6` onboarding to reuse saved identities before OTP and
+  keep the bounded flow to at most two human OTP requests.
 
 ## [0.1.5] - 2026-08-03
 
@@ -31,5 +35,4 @@ versions are released.
 - One protected release workflow publishing the signed GitHub prerelease,
   `@tinkercloud/sdk` under `beta`, and `@tinkercloud/cli` under `next`.
 
-[0.1.6]: https://github.com/ChrisMarxDev/tinkercloud/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.5

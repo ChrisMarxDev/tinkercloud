@@ -4,33 +4,126 @@
 
 ![Tinkercloud turns a folder into a protected team app](docs/assets/readme-deploy-flow.webp)
 
-## Overview
+## Start the beta
 
 Tinkercloud is a self-hosted private micro-app platform: one operator runs one
-gateway, deployers publish small apps, and viewers authenticate by email.
+gateway, deployers publish small apps, and viewers authenticate by email. The
+two role skills are independently usable as current standalone skill content:
+[operator](https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md)
+and [deployer](https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md).
 
-For an operator on a fresh supported VPS root shell, installation is one exact
-versioned command:
+This page prepares the next exact beta, `v0.1.6`; its install and package
+commands become runnable only after that prerelease is published.
+
+<!-- beta-operator-readme:start -->
+### 1. Operator: create the private host
+
+You need a clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS with root SSH, DNS
+control for the base domain, an operator email, a verified sender, a
+root-readable protected provider-credential file, and the deployer emails to
+authorize. In the VPS provider console's root shell, first run the read-only
+preflight:
+
+```sh
+uname -m && . /etc/os-release && printf '%s %s\n' "$ID" "$VERSION_ID"
+```
+
+Continue only for `x86_64` Ubuntu 24.04/26.04. The VPS provider console is the
+trust source for the SSH host-key fingerprint: run
+`ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub` there, compare it with the
+first normal workstation SSH connection, and accept only a match. Never trust
+or accept an `ssh-keyscan` result by itself.
+
+Create one `*.<DOMAIN>` wildcard record using `A`/`AAAA` or `CNAME` as the DNS provider supports. It covers both the derived dashboard and app hosts; do not
+create a separate `admin` record. Prove nonempty DNS resolution before
+certificates without comparing answers to a public IP:
+
+```sh
+(dig +short A admin.<DOMAIN>; dig +short AAAA admin.<DOMAIN>) | grep -q .
+(dig +short A onboarding-check.<DOMAIN>; dig +short AAAA onboarding-check.<DOMAIN>) | grep -q .
+```
+
+The operator supplies no extra certificate input. From the VPS root shell:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 ```
 
-The installer downloads only its baked exact release, follows HTTPS-only asset
-redirects, and verifies checksums plus Ed25519 signatures before it changes the
-host. Run it only as root on a clean Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
-
-For a deployer, the shortest useful path is preview, then publish the current
-project directory:
+The copy/paste installer verifies checksums and a pinned Ed25519 signature
+before installation. It downloads only its baked exact release and follows
+HTTPS-only asset redirects. [Inspect the exact immutable beta
+release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6)
+after it is published and before running if preferred. Transfer the credential only through verified root SSH to
+`/root/.config/tinkercloud/resend-api-key`; make it a root-owned regular file at
+mode `0600`, then give setup only that path. After the credential is ready, run:
 
 ```sh
-tinker dev
+sudo tinkercloud setup
+```
+
+Setup asks, in order, for the base
+domain, operator email, verified Resend sender email, and that key-file path.
+Setup derives `https://admin.<domain>/login`. Sign in there with one human browser
+OTP only when there is no reusable browser identity, then use **Deployers** →
+**Active deployer allowlist** to enter the reviewed normalized emails in
+**Allowed deployer emails**. Check **I confirm that adding any email grants
+deployment authority.**, then select **Save active deployers**. Replace the initial active deployer allowlist
+with exactly the intended normalized deployer email set and no other addresses;
+the operator email alone is sufficient only when that is the exact intended
+set. Operator setup permits at most one human browser OTP, uses zero when a
+reusable browser identity is valid, and uses no CLI deployer OTP. After saving
+the exact deployer set, verify operator completion:
+
+```sh
+sudo tinkercloud status
+sudo tinkercloud doctor
+curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768 https://admin.<domain>/api/v1/version
+```
+
+The final HTTPS request must not follow a redirect; record its included gateway headers and a response body bounded to 32768 bytes containing bounded API-version JSON and record the no-redirect `https://admin.<domain>/api/v1/version` gateway proof. Protected-app anonymous denial belongs to deployer
+deployment completion once an app exists; do not fabricate it during empty
+operator setup. The external mail guide
+is optional troubleshooting—not required for this basic Resend beta path.
+
+<!-- beta-operator-readme:end -->
+### 2. Deployer: publish one owner-only app
+
+You need a macOS/Linux workstation, the static project directory, and the
+operator-authorized deployer email. From the selected static project root,
+install the exact client and deploy:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+tinker version
 tinker deploy .
 ```
 
-The first `tinker deploy .` asks only for required information it cannot safely
-derive, including optional viewer emails or domains. With no viewer rule, the
-app remains private to its owner.
+The deploy wizard discovers or reuses the verified endpoint and deployer email;
+it requests one human CLI OTP only when the saved bearer is missing,
+unauthorized, or expired. The first deployment stays owner-only by default.
+If that CLI authentication or OTP attempt fails, is malformed, times out, or is
+denied, stop that deploy attempt: do not retry login, use `--force`, switch
+identity, log out, clear credentials, or seek another OTP path. A valid exact
+server-scoped saved identity uses zero OTP, and any eligible OTP is entered only
+in the CLI, never chat.
+After final review, invoke `tinker deploy .` exactly once for that deploy
+attempt. Any outcome ends the invocation: do not rerun deploy, upload another
+release, or retry from chat. The CLI's bounded readiness retries stay inside
+that invocation; `active_but_unverified` permits only its independent exact-URL
+recheck. A later attempt needs an explicit new human request after the cause is
+addressed.
+Success records the immutable deployment ID, protected exact app origin,
+authenticated platform-health success, and anonymous HTML, asset, and reserved
+API denial with no app bytes. Across both tracks there are at most two human OTP
+requests in total: one human browser OTP and one human CLI OTP. Before issuing,
+relaying, requesting, or suggesting a third human OTP, stop immediately.
+
+Optional: add SDK capabilities only when the app needs current viewer/app
+information, KV, blobs, or realtime:
+
+```sh
+npm install @tinkercloud/sdk@0.1.6
+```
 
 The defining guarantee is stronger than “apps include authentication”:
 
@@ -57,6 +150,10 @@ directory to a supported shell profile only when needed. Run it as the current
 user, never with `sudo`, then open a new terminal. If it reports an unsupported
 shell profile, add the printed directory to `PATH` yourself:
 
+When `$HOME/.local/bin` is already on `PATH`, the `v0.1.6` installer preserves
+the selected safe client install directory rather than replacing it through a
+shell-variable collision.
+
 ```sh
 tinker version
 ```
@@ -65,7 +162,7 @@ Package-manager users may install the same reviewed native CLI matrix with one
 command:
 
 ```sh
-npm install --global @tinkercloud/cli@next
+npm install --global @tinkercloud/cli@0.1.6
 ```
 
 ## Operator first: run the platform
@@ -170,19 +267,19 @@ collections, snapshot recovery, and live change hints. It deliberately excludes
 production login, policy, deployment, blobs, TLS/protection proof, and
 LLM/provider capabilities. Local success is development evidence only.
 
-### Install the TypeScript SDK beta
+### Install the TypeScript SDK
 
 Apps served by Tinkercloud use one browser-first ESM package for viewer and app
 identity, capability discovery, KV, collections, private blobs, and ephemeral
-realtime. During prerelease, opt in explicitly with the `beta` tag using the
-package manager already used by the app:
+realtime. Use the fixed public beta version with the package manager already
+used by the app after `v0.1.6` is published:
 
 ```sh
-npm install @tinkercloud/sdk@beta
-pnpm add @tinkercloud/sdk@beta
-yarn add @tinkercloud/sdk@beta
-bun add @tinkercloud/sdk@beta
-deno add npm:@tinkercloud/sdk@beta
+npm install @tinkercloud/sdk@0.1.6
+pnpm add @tinkercloud/sdk@0.1.6
+yarn add @tinkercloud/sdk@0.1.6
+bun add @tinkercloud/sdk@0.1.6
+deno add npm:@tinkercloud/sdk@0.1.6
 ```
 
 All five commands consume the same reviewed npm artifact; there is no separate
@@ -208,8 +305,7 @@ console.log(capabilities);
 
 The SDK uses the current app's same-origin browser session. It accepts no app
 ID, deployer token, database credential, provider key, or endpoint secret. Pin
-an exact numeric version instead of `beta` when a build must remain
-reproducible. See the [client SDK guide](docs/architecture/client-sdk.md) for
+the exact numeric version when a build must remain reproducible. See the [client SDK guide](docs/architecture/client-sdk.md) for
 the complete API and compatibility model.
 
 ## What Tinkercloud protects

@@ -107,15 +107,20 @@ with the exact server and email returned by the successful `whoami`.
 
 Change the pair only after an explicit switch, logout, or contradictory verified
 state. Never transfer an email between servers. If `whoami` returns another
-email, stop before mutation and ask whether to adopt it or use
-`tinker login --force` for the intended account.
+email, stop before mutation and ask whether to adopt it; do not use
+`tinker login --force` within the deploy attempt.
 
 Confirm the deployer-only `tinker` CLI is installed with `tinker version`. If it is
-missing, use the operator-provided signed client release and reviewed installer,
-or build `./cmd/tinker` from a trusted checkout of the matching Tinkercloud release.
-An operator-approved npm/pnpm/Yarn/Bun package or Homebrew formula is acceptable
-only when it was derived from that same verified release; a package-manager
-name or `latest` tag alone is not compatibility or provenance evidence.
+missing, install the prepared exact `v0.1.6` beta client only after that
+prerelease is published, then confirm its version:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+tinker version
+```
+
+The immutable installer verifies its release evidence. Do not substitute
+`latest`, a package-manager tag, or a caller-supplied release origin.
 Never install the privileged `tinkercloud` server binary on a deployer machine,
 download an unsigned executable, or treat an unauthenticated installer URL as
 its own trust root. Ask the operator for the signed client source/release
@@ -125,14 +130,51 @@ Do not ask the deployer for a bearer or OTP. Use the interactive CLI credential
 flow when needed:
 
 ```sh
-tinker login --server https://admin.example.com
-tinker whoami
+tinker whoami --server <remembered-server>
+tinker login --server <remembered-server>
 ```
 
 `tinker login` reuses a valid server-bound credential. Only a definite
 unauthorized/expired credential may fall back to OTP. Let the deployer enter
 the OTP into the CLI prompt, not the conversation. An explicit `--server`
 applies only to that command; successful login stores the verified default.
+This bounded beta path permits one human CLI OTP only when that saved bearer is
+absent, unauthorized, or expired. Start the first deploy **owner-only** and run
+`tinker deploy .`; completion needs anonymous HTML, asset, and reserved API
+denial evidence with no app bytes.
+
+Terminal CLI authentication rule: immediately after a CLI authentication or OTP
+attempt fails, is malformed, times out, or is denied, stop that deploy attempt.
+Do not retry `tinker login`, use `--force`, switch account or identity, log out,
+delete or clear saved credentials, or create an alternate OTP path. A valid
+exact server-scoped saved identity uses zero OTP. Enter an eligible OTP directly
+in the CLI, never chat.
+
+One-invocation deployment rule: after the final review, invoke `tinker deploy .`
+(or its explicit public-confirm variant) exactly once for that deploy attempt.
+Any CLI deploy outcome—validation, upload, activation, verification,
+transport/TLS/redirect/timeout/error, or success—ends the agent invocation; do
+not rerun deploy, upload another release, or retry from chat. The CLI may use
+its already-bounded transient readiness retries inside that one invocation.
+`active_but_unverified` permits only the existing independent exact-URL recheck,
+never a second deployment. A later deploy attempt requires an explicit new human
+request after the cause is addressed, not an automatic retry.
+
+Success records the immutable deployment ID, protected exact app origin,
+authenticated platform-health success, and anonymous HTML, asset, and reserved
+API denial with no app bytes.
+
+Use the matching browser SDK for a new project:
+
+```sh
+npm install @tinkercloud/sdk@0.1.6
+```
+
+Across the operator dashboard and deployer CLI, the onboarding flow permits at
+most two human OTP requests in total: one human browser OTP and one human CLI
+OTP. Before issuing, relaying, requesting, or suggesting a third human OTP,
+stop immediately; never switch accounts, clear credentials, create a viewer
+session, or use another mailbox to evade the budget.
 
 ### 2. Propose the access policy
 
@@ -161,13 +203,11 @@ email/domain set; do not describe a partial list as merely additive.
 
 ### 3. Build on the client SDK
 
-Use `@tinkercloud/sdk` for app identity and Tinkercloud capabilities. Install it with
-the project's existing package manager and bundle it into the static build.
-Reuse the compatible version already in the lockfile. For a new app, use the
-operator's version-matched published package or reviewed local SDK artifact;
-never write `latest`, guess a version, vendor an improvised transport client, or
-load the SDK from a CDN. If the compatible package cannot be discovered, ask
-for its signed release/source location and continue with non-SDK work.
+Use `@tinkercloud/sdk` for app identity and Tinkercloud capabilities. Install
+the prepared exact public-beta `0.1.6` package with the project's existing
+package manager only after that prerelease is published, then bundle it into
+the static build. Do not write `latest`, guess a version, vendor an improvised
+transport client, or load the SDK from a CDN.
 
 App code imports the configuration-free, same-origin client:
 
