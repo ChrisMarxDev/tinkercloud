@@ -406,7 +406,7 @@ check_single_deploy_invocation_mutation ordering '-'
 # An executable deploy command before the final review must fail even when the
 # canonical deploy command and one-invocation wording remain intact.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
-perl -0pi -e 's{(### 2\. Propose the access policy)}{```sh\ntinker deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{(### 2\. Propose the access policy)}{```sh\ntinker --server <remembered-server> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
 
 set +e
 output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -417,14 +417,14 @@ test "$result" -ne 0 || {
   echo "beta onboarding documentation self-test expected early executable deploy command to fail" >&2
   exit 1
 }
-printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker deploy .' >/dev/null || {
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <remembered-server> deploy .' >/dev/null || {
   echo "beta onboarding documentation self-test missed early executable deploy diagnostic" >&2
   exit 1
 }
 
 # Moving the canonical command before the final review is equally invalid.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
-perl -0pi -e 's{```sh\ntinker deploy \.\n```}{}; s{(### 5\. Deploy and verify)}{```sh\ntinker deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{```sh\ntinker --server <remembered-server> deploy \.\n```}{}; s{(### 5\. Deploy and verify)}{```sh\ntinker --server <remembered-server> deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
 
 set +e
 output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -435,7 +435,7 @@ test "$result" -ne 0 || {
   echo "beta onboarding documentation self-test expected moved executable deploy command to fail" >&2
   exit 1
 }
-printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker deploy .' >/dev/null || {
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker --server <remembered-server> deploy .' >/dev/null || {
   echo "beta onboarding documentation self-test missed moved executable deploy diagnostic" >&2
   exit 1
 }
