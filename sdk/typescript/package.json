@@ -47,7 +47,7 @@
     "test:llm": "node test/llm.test.mjs",
     "test:examples": "node test/examples-compile.mjs && node ../../examples/sdk-apps/llm-chat/test/history.test.mjs && node ../../examples/sdk-apps/build.mjs --check",
     "test:bundle": "node test/bundle-size.mjs",
-    "test:package": "node test/package-contents.mjs",
+    "test:package": "node test/npm-pack-json.test.mjs && node test/package-contents.mjs",
     "test:version": "node test/version-sync.mjs",
     "test:distribution": "node test/distribution.mjs",
     "test": "npm run build && npm run test:live && npm run test:collections && npm run test:blobs && npm run test:llm && npm run test:examples && npm run test:bundle && npm run test:package && npm run test:version && npm run test:distribution",

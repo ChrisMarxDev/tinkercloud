@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseNpmPackJson } from "./npm-pack-json.mjs";
 
 const cache = mkdtempSync(join(tmpdir(), "tinkercloud-sdk-pack-"));
 
@@ -10,8 +11,8 @@ try {
     encoding: "utf8",
     env: { ...process.env, npm_config_cache: cache },
   });
-  const result = JSON.parse(output);
-  const paths = result[0].files.map((file) => file.path).sort();
+  const result = parseNpmPackJson(output, "@tinkercloud/sdk");
+  const paths = result.files.map((file) => file.path).sort();
   const expected = [
     "LICENSE",
     "README.md",
