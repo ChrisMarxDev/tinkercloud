@@ -172,6 +172,35 @@ EOF
   done
 }
 
+require_deployer_executable_command_placement() {
+  file=$1
+  result=$(awk '
+    /^### 5\. Deploy and verify$/ { final_review = NR }
+    /^```/ { fenced = !fenced; next }
+    fenced && ($0 == "tinker deploy ." || $0 == "tinker deploy --confirm-public .") {
+      command_count++
+      if (!final_review || NR < final_review) early_command = $0
+    }
+    END {
+      if (early_command != "") {
+        printf "early:%s\\n", early_command
+      } else if (command_count != 1) {
+        printf "count:%d\\n", command_count
+      }
+    }
+  ' "$file")
+  case "$result" in
+    early:*)
+      echo "beta onboarding documentation has executable deploy command before final review in ${file}: ${result#early:}" >&2
+      failed=1
+      ;;
+    count:*)
+      echo "beta onboarding documentation must contain exactly one executable deploy command in ${file}; found ${result#count:}" >&2
+      failed=1
+      ;;
+  esac
+}
+
 reject() {
   file=$1
   text=$2
@@ -392,6 +421,7 @@ for file in "$platform" "$deployer"; do
   require_phrase "$file" "$(cat "$file")" "anonymous HTML, asset, and reserved API denial with no app bytes"
   require_deployer_terminal_auth_rule "$file"
   require_deployer_single_invocation_rule "$file"
+  require_deployer_executable_command_placement "$file"
 done
 
 require_text "README Start the beta" "$readme_beta" "tinker version"
