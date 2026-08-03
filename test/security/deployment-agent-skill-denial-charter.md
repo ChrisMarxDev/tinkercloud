@@ -15,13 +15,22 @@ Before a successful test deployment, prove these denials:
   the configured automation recipient domain. A subdomain, suffix lookalike,
   hyphenless domain, or unrelated domain denies at the same early boundary—even
   if a saved credential for that wrong-domain identity is otherwise exact. Case
-  variation of the exact email domain is allowed.
+  variation of the exact email domain is allowed. This recipient-domain check is
+  independent from `TINKERCLOUD_VPS_DOMAIN`: `dev@christopher-marx.de` requires
+  `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN=christopher-marx.de`, even when the
+  platform root is `testing.tinkercloud.fun` and its server is
+  `https://admin.testing.tinkercloud.fun`.
 - A relative, symlinked, non-owned, missing, or non-directory CLI/app path is
   rejected before a CLI or reader invocation.
 - A missing deployer email, app directory, `tinker.yaml`, or HTTPS platform URL
   denies before any CLI action. Reader sender, root domain, key path, and local
   consumed-message ledger are required only when the saved exact identity cannot
-  be reused and one forced login is necessary. HTTP, redirects, URL
+  be reused and one forced login is necessary; reuse is checked before reader
+  configuration is required and uses zero OTP. On forced login, the reader
+  independently requires an exact recipient-domain match and derives the only
+  accepted platform server as `https://admin.<TINKERCLOUD_VPS_DOMAIN>`; matching
+  the recipient domain to the platform root is neither required nor accepted as
+  a substitute for either check. HTTP, redirects, URL
   paths/query/fragment, unsafe ports, and malformed root domains deny.
 - `tinker whoami --json` must contain exactly the expected valid identity before
   a saved credential can be reused. Malformed JSON, compatibility/transport
@@ -41,7 +50,12 @@ Before a successful test deployment, prove these denials:
   no retry uploads another release.
 
 The deterministic fake-CLI/fake-reader test must cover exact-identity reuse
-without OTP, wrong-identity forced login, missing and malformed automation-domain
-configuration, wrong-domain saved-identity denial before all CLI actions,
-redacted OTP output, login failure blocking deploy, deployment failure, and
-unsafe/missing inputs. It runs without network access or live mutation.
+without OTP and without reader configuration, wrong-identity forced login,
+independent recipient and platform-domain validation (including a recipient
+domain that differs from the platform root), missing and malformed
+automation-domain configuration, wrong-domain saved-identity denial before all
+CLI actions, redacted OTP output, login failure blocking deploy, deployment
+failure, and unsafe/missing inputs. Its skill/documentation assertion must fail
+if the two domains are again described as one same-domain requirement or the
+saved-identity-before-reader ordering disappears. It runs without network access
+or live mutation.

@@ -36,7 +36,10 @@ Ask only for these non-secret values when they cannot be discovered safely:
 - exact HTTPS platform server URL;
 - exact deployer email; and
 - exact absolute app directory containing `tinker.yaml`;
-- exact normalized domain controlled for local test-email automation.
+- exact normalized recipient domain controlled for local test-email automation,
+  when it is not already set as `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN`; and
+- the platform root domain, only if a forced login needs the local OTP reader
+  and it is not already set as `TINKERCLOUD_VPS_DOMAIN`.
 
 Private is the default: the wrapper sends a bare `tinker deploy` and never
 derives public reach from `tinker.yaml`. If, and only if, the caller has
@@ -60,27 +63,43 @@ capabilities. The CLI and gateway perform those independent checks. Omit it
 for every private deployment. A duplicated or value-bearing form such as
 `--confirm-public=true` is invalid and the wrapper does not invoke the CLI.
 
-Use the checked-in deterministic wrapper once:
+Use the checked-in deterministic wrapper once. The recipient email domain may
+differ from the platform root domain: the recipient allowlist is an exact
+email-domain boundary, while the platform root domain names the Tinkercloud
+host. For example, `dev@christopher-marx.de` is allowed only when the recipient
+domain is `christopher-marx.de`, even when its platform server is
+`https://admin.testing.tinkercloud.fun`:
 
 ```sh
+export TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN='christopher-marx.de'
+export TINKERCLOUD_VPS_DOMAIN='testing.tinkercloud.fun'
+
 python3 skills/tinkercloud-deployment-agent/scripts/deploy_once.py \
   --tinker /absolute/path/to/tinker \
-  --server https://admin.example.com \
-  --deployer-email deployer@example.com \
+  --server https://admin.testing.tinkercloud.fun \
+  --deployer-email dev@christopher-marx.de \
   --app-dir /absolute/path/to/app
 ```
 
 Before invoking the wrapper, export
 `TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN` as the exact normalized domain of the
 requested deployer. It is non-secret, has no default, and must not contain
-uppercase, whitespace, a subdomain wildcard, or a URL. Before a forced login,
-export only the sibling reader's existing local settings:
+uppercase, whitespace, a subdomain wildcard, or a URL. This is the only value
+used to authorize the requested email domain; it is not a platform-host setting.
+The wrapper checks a saved exact identity and reuses it before reader
+configuration is required, so that valid path performs zero OTP requests and
+does not need any reader settings. Only before a forced login, export the
+sibling reader's existing local settings:
 `TINKERCLOUD_RESEND_READER_API_KEY_FILE`, `TINKERCLOUD_RESEND_OTP_LEDGER_FILE`,
-`TINKERCLOUD_VPS_EMAIL_FROM`, and `TINKERCLOUD_VPS_DOMAIN`. The exact server must be
-`https://admin.<domain>`; the wrapper derives that admin host from the one root
-domain and never accepts a separately supplied platform host. If the domain is
-missing, invalid, or does not match `--server`, stop rather than weakening the
-sibling reader's hostname validation.
+`TINKERCLOUD_VPS_EMAIL_FROM`, and `TINKERCLOUD_VPS_DOMAIN`. The wrapper derives
+the platform server only from `TINKERCLOUD_VPS_DOMAIN`: the exact server must
+be `https://admin.<platform-root-domain>`, and it never accepts a separately
+supplied platform host. Forced login is allowed only when both independent
+checks hold: the deployer email exactly matches
+`TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN`, and `--server` exactly matches the
+admin host derived from `TINKERCLOUD_VPS_DOMAIN`. If either domain is missing,
+invalid, or fails its own check, stop rather than weakening the recipient
+allowlist or the sibling reader's hostname validation.
 
 Before the one permitted wrapper invocation, check whether the execution
 environment restricts outbound network access (for example, a Codex sandbox).
@@ -93,15 +112,17 @@ permission cannot be obtained, stop and report the environment limitation
 without invoking the wrapper.
 
 Before checking any CLI/app path, reading reader configuration, or calling the
-CLI, the wrapper validates the mandatory automation domain, lowercases the
+CLI, the wrapper validates the mandatory recipient domain, lowercases the
 requested email, and requires its domain to equal that configuration exactly.
 It rejects missing or malformed configuration, subdomains, suffix lookalikes,
 the hyphenless domain, and all unrelated domains. The wrapper then runs `tinker
-whoami --json` against the explicit server. It reuses a saved credential only
-when the response is exact valid JSON and its identity exactly matches the
-requested deployer email. A missing/invalid saved login or a different exact
-identity triggers one `tinker login --force`; the wrapper sends the email to the
-normal CLI prompt and obtains the OTP only through
+whoami --json` against the explicit server. It checks and reuses a saved
+credential only when the response is exact valid JSON and its identity exactly
+matches the requested deployer email; that path uses zero OTP. A missing/invalid
+saved login or a different exact identity triggers one `tinker login --force`.
+Only then does it validate the local reader settings and both independent
+recipient/platform-domain boundaries; it sends the email to the normal CLI
+prompt and obtains the OTP only through
 `skills/tinkercloud-full-stack-test/scripts/read-resend-otp.py`. It then proves the
 exact identity again with `whoami --json`. This local-wrapper restriction does
 not affect a saved CLI credential used directly or Tinkercloud's normal
