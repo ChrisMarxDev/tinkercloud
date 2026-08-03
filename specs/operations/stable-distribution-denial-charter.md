@@ -23,6 +23,9 @@ No denial may be bypassed to repair a partial publication.
   existing version. A failure after publication is reconciled forward.
 - Reject a `latest` installer smoke test whose installed `tinker version` does
   not equal the exact source version.
+- Reject a publisher whose public installer smoke passes a nonexistent
+  `TINKER_INSTALL_DIR`; each selector must create its fresh non-root directory
+  before invoking the installer.
 
 ## npm SDK and CLI publication
 

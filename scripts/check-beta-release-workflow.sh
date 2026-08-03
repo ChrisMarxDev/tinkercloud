@@ -30,6 +30,7 @@ require './scripts/release-build.sh "$VERSION" "$release_dir"' "$publisher" 'can
 test "$(grep -c -F -- './scripts/release-verify.sh' "$publisher")" -ge 2 || { echo 'local and remote verification required' >&2; exit 1; }
 require '--draft' "$publisher" 'draft-first release missing'; require '--prerelease' "$publisher" 'prerelease classification missing'; require 'gh release download "$tag"' "$publisher" 'remote draft download missing'; require 'cmp "$RUNNER_TEMP/local-assets.txt" "$RUNNER_TEMP/remote-assets.txt"' "$publisher" 'remote asset comparison missing'; require '--latest=false' "$publisher" 'beta latest denial missing'
 require 'TINKER_INSTALL_DIR="$install_dir" sh' "$publisher" 'beta public installer smoke is missing'
+"$root/scripts/check-release-installer-smoke.sh"
 reject 'npm[[:space:]]+(publish|unpublish)' "$release" 'GitHub signing stage must not publish npm'
 require 'workflow_call:' "$reusable" 'beta validation must remain reusable only'
 reject '^  workflow_dispatch:' "$reusable" 'beta validation must not be dispatched directly'

@@ -18,6 +18,7 @@ require 'publish-stable-$tag' "$reusable" 'stable confirmation is required'
 require 'git merge-base --is-ancestor "$source_commit" origin/main' "$reusable" 'stable ancestry gate is missing'
 require './scripts/release-test.sh' "$reusable" 'stable release tamper gate is missing'
 require 'latest/download' "$publisher" 'stable latest installer smoke is missing'
+"$root/scripts/check-release-installer-smoke.sh"
 reject 'npm[[:space:]]+(publish|unpublish)' "$release" 'GitHub signing stage must not publish npm'
 require 'workflow_call:' "$reusable" 'stable validation must remain reusable only'
 reject 'TINKERCLOUD_RELEASE_SIGNING_KEY_B64|SIGNING_KEY_B64|environment:[[:space:]]+stable-release|contents:[[:space:]]+write' "$reusable" 'stable reusable workflow must not receive signing authority'

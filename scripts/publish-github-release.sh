@@ -109,6 +109,7 @@ state=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrer
 if [[ "$channel" == beta ]]; then selectors=("download/v$VERSION"); else selectors=("download/v$VERSION" "latest/download"); fi
 for selector in "${selectors[@]}"; do
   install_dir="$RUNNER_TEMP/tinkercloud-${selector//\//-}-bin"
+  mkdir -p "$install_dir"
   curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 5 --retry-all-errors \
     "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/$selector/install-client.sh" | TINKER_INSTALL_DIR="$install_dir" sh
   [[ "$("$install_dir/tinker" version)" == "tinker $VERSION" ]] || { echo "public installer version mismatch" >&2; exit 1; }

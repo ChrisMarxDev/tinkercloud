@@ -70,8 +70,9 @@ retires the beta authority. Beta trust never silently becomes stable trust.
 5. Create a new draft GitHub prerelease and attach every verified release file.
 6. Download the draft assets into a fresh directory and verify them again.
 7. Publish the verified draft as a prerelease without promoting it to latest.
-8. Exercise the public client installer into a temporary non-root directory and
-   prove `tinker version` equals the release version. The release notes then
+8. For every public installer selector, create a fresh temporary non-root
+   destination directory before invoking the client installer, then prove
+   `tinker version` equals the release version. The release notes then
    document `tinker host install root@HOST`: the released CLI derives the same
    immutable versioned release base from that embedded build version. The
    explicit `--release-base URL` form remains available for development and
