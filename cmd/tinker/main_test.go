@@ -22,8 +22,9 @@ type tokenRoundTrip func(*http.Request) (*http.Response, error)
 func (f tokenRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 type loginPrompt struct {
-	values []string
-	asked  int
+	values    []string
+	questions []string
+	asked     int
 }
 
 type spyStore struct {
@@ -85,8 +86,9 @@ func (s *spyStore) SetDefaultServer(server string) error {
 	return nil
 }
 
-func (p *loginPrompt) Ask(string) (string, error) {
+func (p *loginPrompt) Ask(question string) (string, error) {
 	p.asked++
+	p.questions = append(p.questions, question)
 	if len(p.values) == 0 {
 		return "", io.EOF
 	}
@@ -888,6 +890,67 @@ func TestDeployCreatesMissingManifestVerifiesSavedBearerAndArchivesOnlyOutput(t 
 	}
 	if strings.Join(calls[:2], ",") != "GET /api/v1/version,GET /api/v1/whoami" {
 		t.Fatalf("credential was not proven first: %v", calls)
+	}
+}
+
+func TestFreshDeployPromptsForManifestBeforeEmailAndCode(t *testing.T) {
+	project := filepath.Join(t.TempDir(), "demo-project")
+	if err := os.MkdirAll(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	stored := &spyStore{values: map[string]string{}}
+	prompt := &loginPrompt{values: []string{"demo", "", "dist", "", "", "", "dev@example.test", "123456"}}
+	var archiveNames, calls []string
+	transport := tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/api/v1/version":
+			return jsonResponse(r, http.StatusOK, `{"api_version":1}`), nil
+		case "/api/v1/auth/otp":
+			return jsonResponse(r, http.StatusAccepted, `{"transaction":"tx"}`), nil
+		case "/api/v1/auth/verify":
+			return jsonResponse(r, http.StatusOK, `{"token":"new-token","email":"dev@example.test","api_version":1}`), nil
+		case "/api/v1/whoami":
+			return jsonResponse(r, http.StatusOK, `{"email":"dev@example.test"}`), nil
+		default:
+			return successfulDeployTransport(t, "new-token", &archiveNames, &calls).RoundTrip(r)
+		}
+	})
+	var out, stderr bytes.Buffer
+	deps := runnerDeps{store: stored, prompt: prompt, newClient: tokenClient(transport)}
+	if code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps); code != 0 {
+		t.Fatalf("code=%d out=%q err=%q questions=%v", code, out.String(), stderr.String(), prompt.questions)
+	}
+	wantQuestions := []string{
+		"App slug (demo-project, Enter to accept): ",
+		"Description (optional): ",
+		"Build output (dist, Enter to accept): ",
+		"Allowed emails or domains, comma-separated (optional): ",
+		"Features (kv,blobs,realtime; optional): ",
+		"SPA fallback (optional): ",
+		"Email: ",
+		"Code: ",
+	}
+	if got, want := strings.Join(prompt.questions, "\n"), strings.Join(wantQuestions, "\n"); got != want {
+		t.Fatalf("questions:\n%s\nwant:\n%s", got, want)
+	}
+	manifest, err := releases.ParseManifest([]byte(stringMustRead(t, filepath.Join(project, "tinker.yaml"))))
+	if err != nil || manifest.Name != "demo" {
+		t.Fatalf("manifest=%+v err=%v", manifest, err)
+	}
+	if stored.values["https://tinker.example"] != "new-token" || stored.putCalls != 1 || stored.defaultURL != "https://tinker.example" || stored.setDefaultCalls != 1 {
+		t.Fatalf("stored=%q puts=%d default=%q defaultWrites=%d", stored.values["https://tinker.example"], stored.putCalls, stored.defaultURL, stored.setDefaultCalls)
+	}
+	deployments := 0
+	for _, call := range calls {
+		if call == "POST /api/v1/apps/demo/deployments" {
+			deployments++
+		}
+	}
+	if deployments != 1 {
+		t.Fatalf("deployment calls=%d all calls=%v", deployments, calls)
 	}
 }
 

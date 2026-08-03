@@ -354,7 +354,7 @@ readme_deployer_command='tinker --server <SERVER> deploy .'
 review_phrase='Review endpoint, slug, description, output, owner-only access, no features, and SPA fallback; even owner-only requires affirmative go-ahead.'
 deployer_receipt_phrase='Human success prints `Deployment: <id>`, `State: active`, and `URL: <exact-origin>`'
 deployer_approval_phrase='Deploy this owner-only app to <server> now? [y/N]'
-deployer_prompts_phrase='only authentication prompts are exactly `Email: ` and `Code: `'
+combined_prompt_order_phrase='For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is exactly the six manifest prompts above, then—only after manifest creation succeeds—`Email: ` and `Code: ` when authentication is needed.'
 operator_flow_steps='### 1. Verify the beta host
 uname -m && . /etc/os-release && printf
 ### 2. Verify the SSH host key
@@ -510,7 +510,7 @@ for file in "$platform" "$deployer"; do
   require_phrase "$file" "$(cat "$file")" "$review_phrase"
   require_phrase "$file" "$(cat "$file")" "$deployer_receipt_phrase"
   require_phrase "$file" "$(cat "$file")" "$deployer_approval_phrase"
-  require_phrase "$file" "$(cat "$file")" "$deployer_prompts_phrase"
+  require_phrase "$file" "$(cat "$file")" "$combined_prompt_order_phrase"
   reject_phrase "$file" "$(cat "$file")" 'only human prompts are exactly `Email: ` and `Code: `'
   require_deployer_terminal_auth_rule "$file"
   require_deployer_single_invocation_rule "$file"
@@ -524,6 +524,7 @@ require_release_probe_order "$readme" "curl --proto '=https' --proto-redir '=htt
 require_text "README Start the beta" "$readme_beta" "$readme_deployer_command"
 require_phrase "README Start the beta" "$readme_beta" 'tinker version` must print exactly `tinker 0.1.6`'
 require_phrase "README Start the beta" "$readme_beta" 'Do not run standalone `tinker whoami` or `tinker login` before this fresh deployment'
+require_phrase "README Start the beta" "$readme_beta" "$combined_prompt_order_phrase"
 require_text "README Start the beta" "$readme_beta" "Optional: add SDK capabilities"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md"

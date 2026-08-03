@@ -78,6 +78,12 @@ persisted state.
   deploys do not cache server state.
 - Login labels other than `Email: ` and `Code: `, a code outside the CLI, or an
   implicit approval instead of exact affirmative pre-invocation consent deny.
+- For a fresh no-manifest/no-bearer deploy, any `Email: ` or `Code: ` prompt
+  before all six ordered manifest prompts complete denies the bounded path.
+  Invalid, ambiguous, or unwritable manifest state must stop before OTP; a
+  saved bearer may omit authentication prompts but cannot reorder the manifest
+  prompts. The agent's final confirmation remains before the one CLI invocation
+  and is not part of the CLI prompt sequence.
 - `active_but_unverified` permits only a fresh anonymous, no-redirect,
   no-cookie exact-URL recheck returning `401` JSON `not_authorized`, `no-store`,
   and no app bytes; it never authorizes another deploy.

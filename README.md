@@ -174,7 +174,8 @@ checksum/signature authority.
 attempt. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by
 the operator. The one deploy command verifies it without redirects and saves
 it, reuses a valid bearer, or performs exactly one CLI email-and-OTP login only
-when that bearer is absent, unauthorized, or expired. Do not run standalone
+when that bearer is absent, unauthorized, or expired, after successful local
+manifest setup. Do not run standalone
 `tinker whoami` or `tinker login` before this fresh deployment. The first
 deployment stays owner-only by default.
 
@@ -187,6 +188,14 @@ description, owner-only access, no features, and no fallback; they are defaults,
 not extra questions. Root `index.html` selects `.`, one safe conventional
 output selects itself, while multiple/none outputs or an invalid/ambiguous slug
 block for exactly one required choice.
+
+For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is
+exactly the six manifest prompts above, then—only after manifest creation
+succeeds—`Email: ` and `Code: ` when authentication is needed. Invalid,
+ambiguous, or unwritable local state stops before OTP; a valid saved bearer
+omits the two authentication prompts. The agent's final confirmation below is
+collected before the single CLI invocation and is not another CLI prompt.
+
 If that CLI authentication or OTP attempt fails, is malformed, times out, or is
 denied, stop that deploy attempt: do not retry login, use `--force`, switch
 identity, log out, clear credentials, or seek another OTP path. A valid exact

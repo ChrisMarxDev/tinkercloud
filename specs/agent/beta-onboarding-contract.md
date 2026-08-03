@@ -130,9 +130,10 @@ workstation-transfer destination.
 | Persisted state | Default server record plus a separate mode-`0700` configuration directory and mode-`0600`, regular, non-symlinked bearer file keyed by normalized HTTPS server. The generated manifest is a project receipt, never a secret store. |
 | Required evidence | `tinker version` prints exactly `tinker 0.1.6`; the one deploy command internally proves the server and current authorized deployer; activation returns the immutable deployment ID and protected exact origin; fresh anonymous HTML, asset, and reserved API denial probes return no app bytes; authenticated platform health succeeds. |
 
-The CLI login prompts are exactly `Email: ` and `Code: ` when `whoami` proves
-login is needed; the code stays in the CLI. Before invoking deploy the agent asks
-`Deploy this owner-only app to <server> now? [y/N]`; only explicit yes proceeds.
+The conditional CLI login prompts are exactly `Email: ` and `Code: `; their
+position in the combined fresh prompt order is specified below. The code stays
+in the CLI. Before invoking deploy the agent asks `Deploy this owner-only app to
+<server> now? [y/N]`; only explicit yes proceeds.
 Human success is `Deployment: <id>`, `State: active`, `URL: <exact-origin>`;
 JSON is `valid:true` plus a bounded deployment object. Platform health and
 anonymous probes are internal success preconditions.
@@ -178,6 +179,14 @@ no fallback. They are not extra questions. Root `index.html` selects `.`,
 exactly one safe conventional output with `index.html` selects that directory,
 and multiple/none blocks for one output question. Invalid/ambiguous slugs block
 for one stable lowercase slug.
+
+For a fully fresh no-manifest/no-bearer deploy, the combined CLI prompt order is
+exactly the six manifest prompts above, then—only after manifest creation
+succeeds—`Email: ` and `Code: ` when authentication is needed. A valid saved bearer omits both
+authentication prompts without changing manifest-prompt order. Invalid,
+ambiguous, or unwritable local manifest state stops before requesting an OTP.
+The agent's final `Deploy this owner-only app to <server> now? [y/N]` decision is
+collected before the single CLI invocation; it is not another CLI prompt.
 
 After final review of endpoint, slug, description, output, owner-only access,
 no features, and SPA fallback—and affirmative go-ahead even for owner-only—the
