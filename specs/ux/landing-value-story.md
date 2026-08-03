@@ -29,7 +29,7 @@ marketing copy owns the outcome; the terminal does not simulate CLI output.
 - State the one-VPS operator-ownership boundary.
 - Give deployers a direct path to the deploy explanation and people setting up
   the host a plain-language `Setup on VPS` path to setup documentation.
-- Render `tinker deploy . --allow '*@acme.com'` with the wildcard quoted so
+- Render `tinker deploy . --allow '*@example.com'` with the wildcard quoted so
   a shell cannot expand it.
 - Frame the command as a terminal with a compact title bar and three inert
   window controls. Do not add simulated status output, a generated URL,
@@ -45,7 +45,7 @@ marketing copy owns the outcome; the terminal does not simulate CLI output.
 - The landing page must not contain a form, credential input, executable
   deployment request, long-lived secret, app ID, or an untyped authorization
   claim.
-- The example must not render the unsafe unquoted `--allow *@acme.com` command.
+- The example must not render the unsafe unquoted `--allow *@example.com` command.
 - The terminal must not claim public access, anonymous capabilities, a backend
   runtime, durable realtime history, deployment status, or any planned
   reach-and-insights feature as available.

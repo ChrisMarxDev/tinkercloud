@@ -101,12 +101,12 @@ curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkerclou
 For an exact immutable version, use
 `releases/download/vVERSION/` in both URLs.
 
-## Bootstrap the npm package once before unified publication
+## Completed npm bootstrap
 
-npm trusted publishing cannot be configured until the package exists. The
-first `@tinkercloud/cli` version is therefore one deliberate interactive 2FA
-publish from an exact verified release that predates the unified flow; it is
-not rebuilt locally. The existing `v0.1.2` beta is suitable and uses `next`.
+npm trusted publishing could not be configured until the package existed. The
+one-time `@tinkercloud/cli` bootstrap completed with the exact verified
+`v0.1.2` release under `next`; the steps below are retained as historical
+recovery evidence and must not be repeated for later versions.
 
 Download every release asset, verify it, and derive the package:
 

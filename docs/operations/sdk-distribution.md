@@ -1,6 +1,6 @@
 # SDK Distribution
 
-**Status:** unified release workflow prepared; first package bootstrap still manual
+**Status:** beta channel active through protected trusted publishing
 
 `@tinkercloud/sdk` is published under `beta` by the same release invocation that
 publishes the signed GitHub prerelease and `@tinkercloud/cli` under `next`.
@@ -18,9 +18,9 @@ bun add @tinkercloud/sdk@beta
 deno add npm:@tinkercloud/sdk@beta
 ```
 
-These commands work after the one-time npm bootstrap below. An exact beta can
-also be pinned as `@tinkercloud/sdk@VERSION`. Do not document the untagged
-package until a stable release is separately authorized and verified.
+These commands use the active beta channel. An exact beta can also be pinned as
+`@tinkercloud/sdk@VERSION`. Do not document the untagged package until a stable
+release is separately authorized and verified.
 
 ## Prepare a candidate
 
@@ -44,11 +44,11 @@ The following values must be identical for a release:
 - `SDK_VERSION` in `src/index.ts`; and
 - the version passed to `scripts/release-build.sh`.
 
-## One-time npm bootstrap
+## Completed one-time npm bootstrap
 
-The normal workflow uses npm trusted publishing, but npm cannot attach a trusted
-publisher before `@tinkercloud/sdk` exists. Bootstrap exactly one beta version
-interactively after its GitHub prerelease is public.
+The normal workflow uses npm trusted publishing. The one-time interactive
+bootstrap completed with `0.1.2`; the steps below are retained as historical
+recovery evidence and must not be repeated for later versions.
 
 Prerequisites:
 
