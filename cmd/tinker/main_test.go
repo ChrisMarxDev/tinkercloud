@@ -954,6 +954,27 @@ func TestFreshDeployPromptsForManifestBeforeEmailAndCode(t *testing.T) {
 	}
 }
 
+func TestDeployerSkillPrivateManifestSampleParsesWithoutPublicIndexing(t *testing.T) {
+	contents := stringMustRead(t, filepath.Join("..", "..", "skills", "tinkercloud-deployer", "SKILL.md"))
+	const marker = "Use this V1 shape and omit unused optional sections:"
+	parts := strings.SplitN(contents, marker, 2)
+	if len(parts) != 2 {
+		t.Fatal("deployer skill manifest sample marker missing")
+	}
+	parts = strings.SplitN(parts[1], "```yaml\n", 2)
+	if len(parts) != 2 {
+		t.Fatal("deployer skill YAML fence missing")
+	}
+	sample := strings.SplitN(parts[1], "```", 2)[0]
+	manifest, err := releases.ParseManifest([]byte(sample))
+	if err != nil || manifest.AccessMode != "private" {
+		t.Fatalf("manifest=%+v err=%v", manifest, err)
+	}
+	if strings.Contains(sample, "indexing:") {
+		t.Fatal("private manifest sample contains public-only access.indexing")
+	}
+}
+
 func TestDeploySuccessWritesBoundedHumanReceipt(t *testing.T) {
 	project := t.TempDir()
 	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {

@@ -171,9 +171,11 @@ installer asset URL returning HTTPS success; the installer remains the
 checksum/signature authority.
 
 `tinker version` must print exactly `tinker 0.1.6`; any other output stops this
-attempt. `<SERVER>` is the exact normalized HTTPS admin URL supplied once by
-the operator. The one deploy command verifies it without redirects and saves
-it, reuses a valid bearer, or performs exactly one CLI email-and-OTP login only
+attempt. On a fully fresh workstation, `<SERVER>` comes only from the
+operator-provided exact normalized HTTPS admin URL. A saved default is reusable
+only when it was previously directly verified from such an operator handoff;
+current CLI state cannot invent or derive a server. The one deploy command
+verifies it without redirects and saves it, reuses a valid bearer, or performs exactly one CLI email-and-OTP login only
 when that bearer is absent, unauthorized, or expired, after successful local
 manifest setup. Do not run standalone
 `tinker whoami` or `tinker login` before this fresh deployment. The first
@@ -195,6 +197,8 @@ succeeds—`Email: ` and `Code: ` when authentication is needed. Invalid,
 ambiguous, or unwritable local state stops before OTP; a valid saved bearer
 omits the two authentication prompts. The agent's final confirmation below is
 collected before the single CLI invocation and is not another CLI prompt.
+Never run `tinker init` before the bounded fresh single-deploy path; that path
+generates the receipt inside its one deploy invocation.
 
 If that CLI authentication or OTP attempt fails, is malformed, times out, or is
 denied, stop that deploy attempt: do not retry login, use `--force`, switch
@@ -225,6 +229,13 @@ API denial with no app bytes. OTP ceilings are nonfungible: one browser OTP
 maximum for the operator and one CLI OTP maximum for the deployer; the two-role
 total never permits two OTPs for either role. Before issuing, relaying,
 requesting, or suggesting a third human OTP, stop immediately.
+A completely fresh successful end-to-end onboarding with no reusable identity
+requests exactly two human codes total: exactly one operator dashboard
+OTP and exactly one deployer CLI OTP. Any additional code, retry, account
+switch, or viewer login is a deployment-flow failure. A failed OTP is terminal;
+there is no automatic human OTP retry. The clean two-code human flow MUST NOT
+invoke the extended VPS security matrix. That matrix is separate and unattended;
+it never authorizes asking the human for more codes.
 
 Optional: add SDK capabilities only when the app needs current viewer/app
 information, KV, blobs, or realtime:
@@ -355,8 +366,11 @@ folder. For the first beta deployment, use the single reviewed command in
 On its first human run, Tinker asks for the HTTPS platform URL only when it has
 no verified default, reuses or establishes the deployer identity, inspects the
 project, asks only about ambiguous required state, and creates a missing
-`tinker.yaml` as a reviewed receipt. Use `tinker init .` to create the manifest
-ahead of time. Later commands reuse the saved default server and verified CLI
+`tinker.yaml` as a reviewed receipt inside deploy. The bounded fresh workflow
+must not be preceded by standalone init. A separately requested non-fresh
+manifest-preparation workflow may use `tinker init .`, but it is never
+preparation for the bounded fresh single-deploy path. Later commands reuse the
+saved default server and verified CLI
 bearer; `tinker logout` revokes and removes that local bearer.
 
 For local app development:

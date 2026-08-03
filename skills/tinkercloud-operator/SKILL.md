@@ -174,7 +174,7 @@ verify the final destination is a root-owned regular mode-`0600` file:
 ```sh
 ssh root@<HOST> 'install -d -o root -g root -m 0700 /root/.config/tinkercloud'
 scp -p -- "<LOCAL_CREDENTIAL_FILE>" "root@<HOST>:/root/.config/tinkercloud/resend-api-key"
-ssh root@<HOST> 'test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key'
+ssh root@<HOST> 'chown root:root /root/.config/tinkercloud/resend-api-key && chmod 0600 /root/.config/tinkercloud/resend-api-key && test -f /root/.config/tinkercloud/resend-api-key && test ! -L /root/.config/tinkercloud/resend-api-key && test "$(stat -c '\''%U:%G %a'\'' /root/.config/tinkercloud/resend-api-key)" = '\''root:root 600'\'''
 ```
 
 For an alternate VPS-local path, validate that supplied exact path with the
@@ -245,6 +245,14 @@ A fully fresh successful human onboarding with neither a reusable browser
 identity nor a saved CLI bearer requests exactly two codes total: exactly one
 operator browser code and exactly one deployer CLI code. A reusable identity
 reduces the relevant lane to zero.
+
+A completely fresh successful end-to-end onboarding with no reusable identity
+requests exactly two human codes total: exactly one operator dashboard
+OTP and exactly one deployer CLI OTP. Any additional code, retry, account
+switch, or viewer login is a deployment-flow failure. A failed OTP is terminal;
+there is no automatic human OTP retry. The clean two-code human flow MUST NOT
+invoke the extended VPS security matrix. That matrix is separate and unattended;
+it never authorizes asking the human for more codes.
 
 ### 8. Verify operator completion
 
