@@ -47,6 +47,25 @@ Each role skill MUST:
 - report completion only after the role's required verification succeeds; and
 - carry marked canonical blocks checked for drift.
 
+For the bounded public-beta onboarding run, both skills MUST begin from a clean
+or positively verified session and reuse valid identities rather than ask
+again. Across the combined operator dashboard and deployer CLI path, there are
+at most two human OTP requests in total: one operator browser OTP when no valid
+global identity exists and one deployer CLI OTP when the server-bound bearer is
+absent, unauthorized, or expired. Before issuing, relaying, requesting, or
+suggesting a third human OTP, the flow stops immediately. It must not switch
+accounts, clear credentials, create a viewer session, or use another mailbox to
+evade that ceiling. Malformed, redirected, transport, dependency, or ambiguous
+state fails closed without an OTP. Extended unattended acceptance is separate:
+its protected local reader is test infrastructure only, and reader/provider
+failure stops the run without a human fallback, chat-pasted code, browser code
+collection, or another provider path.
+
+The beta deployer journey reports success only after it records the immutable
+deployment ID, protected exact app origin, authenticated platform-health
+success, and fresh anonymous HTML, asset, and reserved API denial with no app
+bytes. These are gateway facts, not CLI, browser, or local-build substitutes.
+
 ## Deployer interaction
 
 The deployer skill MUST start from the requested app outcome and inspect the

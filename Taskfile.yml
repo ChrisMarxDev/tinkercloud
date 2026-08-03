@@ -133,6 +133,12 @@ tasks:
     cmds:
       - npm run check
 
+  test:beta-onboarding-docs:
+    desc: Verify public beta onboarding instructions retain their exact security contract
+    cmds:
+      - ./scripts/test-beta-onboarding-docs.sh
+      - ./scripts/test-beta-onboarding-docs-self-test.sh
+
   lint:
     desc: Run static analysis for Go and production SDK dependencies
     cmds:

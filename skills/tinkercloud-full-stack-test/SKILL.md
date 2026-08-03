@@ -60,6 +60,13 @@ and indexing proof plus denial of every reserved route through that gateway.
 
 ## Unattended VPS workflow
 
+This is an unattended multi-identity security matrix, not the two-OTP human
+beta smoke path. Its protected local reader may use only the normal
+gateway-issued deployer/viewer OTP for the configured exact recipient domain
+and fixed Resend HTTPS origin. Reader failure stops without human fallback:
+never relay a code through chat, collect one in a browser, switch mailboxes, or
+use another provider path.
+
 1. Read `specs/operations/vps-e2e-contract.md` and
    `test/security/unattended-vps-otp-reader-denial-charter.md` first.
 2. Run offline gates before connecting anywhere:
