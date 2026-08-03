@@ -208,6 +208,7 @@ tasks:
 
   skills:check:
     desc: Verify shared Tinkercloud platform security guidance has not drifted
+    deps: [test:beta-onboarding-docs]
     cmds:
       - ./scripts/check-skill-drift
 

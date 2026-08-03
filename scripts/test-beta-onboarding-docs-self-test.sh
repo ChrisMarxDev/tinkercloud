@@ -320,3 +320,51 @@ check_single_deploy_invocation_mutation recheck 'beta onboarding documentation m
 check_single_deploy_invocation_mutation second 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: never a second deployment'
 check_single_deploy_invocation_mutation human 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: explicit new human request'
 check_single_deploy_invocation_mutation ordering '-'
+
+# An executable deploy command before the final review must fail even when the
+# canonical deploy command and one-invocation wording remain intact.
+cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{(### 2\. Propose the access policy)}{```sh\ntinker deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected early executable deploy command to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker deploy .' >/dev/null || {
+  echo "beta onboarding documentation self-test missed early executable deploy diagnostic" >&2
+  exit 1
+}
+
+# Moving the canonical command before the final review is equally invalid.
+cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"
+perl -0pi -e 's{```sh\ntinker deploy \.\n```}{}; s{(### 5\. Deploy and verify)}{```sh\ntinker deploy .\n```\n\n$1}' "$fixture/skills/tinkercloud-deployer/SKILL.md"
+
+set +e
+output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
+result=$?
+set -e
+
+test "$result" -ne 0 || {
+  echo "beta onboarding documentation self-test expected moved executable deploy command to fail" >&2
+  exit 1
+}
+printf '%s\n' "$output" | grep -F -- 'beta onboarding documentation has executable deploy command before final review in skills/tinkercloud-deployer/SKILL.md: tinker deploy .' >/dev/null || {
+  echo "beta onboarding documentation self-test missed moved executable deploy diagnostic" >&2
+  exit 1
+}
+
+# `check` reaches the docs mutation self-test through `skills:check` exactly
+# once, without independently running the happy docs checker a second time.
+dry_check=$(cd "$repo_root" && task --dry check 2>&1)
+for command in ./scripts/test-beta-onboarding-docs.sh ./scripts/test-beta-onboarding-docs-self-test.sh ./scripts/check-skill-drift; do
+  count=$(printf '%s\n' "$dry_check" | grep -F -c -- "$command" || true)
+  test "$count" -eq 1 || {
+    echo "beta onboarding documentation self-test expected check graph to run ${command} exactly once; found ${count}" >&2
+    exit 1
+  }
+done

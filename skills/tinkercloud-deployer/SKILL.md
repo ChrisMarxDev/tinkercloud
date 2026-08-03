@@ -139,9 +139,9 @@ unauthorized/expired credential may fall back to OTP. Let the deployer enter
 the OTP into the CLI prompt, not the conversation. An explicit `--server`
 applies only to that command; successful login stores the verified default.
 This bounded beta path permits one human CLI OTP only when that saved bearer is
-absent, unauthorized, or expired. Start the first deploy **owner-only** and run
-`tinker deploy .`; completion needs anonymous HTML, asset, and reserved API
-denial evidence with no app bytes.
+absent, unauthorized, or expired. Prepare the first deploy **owner-only**, but
+do not invoke it until the final reviewed deployment step. Completion needs
+anonymous HTML, asset, and reserved API denial evidence with no app bytes.
 
 Terminal CLI authentication rule: immediately after a CLI authentication or OTP
 attempt fails, is malformed, times out, or is denied, stop that deploy attempt.
