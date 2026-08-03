@@ -245,7 +245,11 @@ unambiguous `ID` plus `VERSION_ID` fields in `/etc/os-release`.
   incomplete rollback snapshot remains unhealthy even in candidate health.
 - Any database, disk, clock, service, listener, DNS, TLS, provider, public
   health, or anonymous-denial failure remains unhealthy in candidate health
-  and restores the old binary.
+  and restores the old binary. When restoring and restarting that previously
+  healthy binary succeeds, the updater clears its bounded rollback snapshot;
+  normal `doctor` must then report `update_rollback` clear. A restore,
+  restarted-service, or snapshot-cleanup failure retains the snapshot and is
+  degraded for operator recovery.
 - Listener readiness retries only failed local TCP connection establishment for
   the configured HTTP and HTTPS addresses after restart. It is capped at ten
   seconds, observes cancellation, and precedes the one-shot doctor, public,

@@ -11,6 +11,10 @@
   remain independent.
 - Unsigned or signature-valid-but-incompatible update artifacts never create a
   rollback snapshot, replace the binary, restart the service, or mutate schema.
+- A failed signed candidate that restores and restarts the prior healthy binary
+  clears its updater-owned rollback snapshot, so ordinary `doctor` is not left
+  degraded. Failed restore, restart, or snapshot cleanup retains recovery state
+  and remains degraded.
 - Missing compatibility headers remain a temporary V1 migration allowance, not
   evidence that an unknown client is compatible with a future API generation.
 - A supported update, migration, or restart must not delete or recreate an

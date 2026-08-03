@@ -49,6 +49,11 @@ type Installer interface {
 	Apply(context.Context, Artifact) error
 	Restore(context.Context) error
 }
+
+// Committer removes the bounded rollback snapshot after a terminal recovery
+// state. Installers that retain no durable snapshot need not implement it.
+type Committer interface{ Commit(context.Context) error }
+
 type Health interface{ Check(context.Context) error }
 
 // Restarter changes the running service to the just-installed binary. It is
@@ -108,6 +113,15 @@ func restoreAndRestart(ctx context.Context, i Installer, r Restarter, cause erro
 	}
 	if err := r.Restart(ctx); err != nil {
 		return RollbackFailed, err
+	}
+	// The previous binary was healthy before replacement. Once it has been
+	// restored and restarted, the snapshot no longer represents pending
+	// operator recovery. Clear it so ordinary doctor remains an accurate
+	// fail-closed signal; retain it if either recovery or cleanup fails.
+	if committer, ok := i.(Committer); ok {
+		if err := committer.Commit(ctx); err != nil {
+			return RollbackFailed, err
+		}
 	}
 	return RolledBack, cause
 }
