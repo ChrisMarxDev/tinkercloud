@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -103,6 +104,34 @@ func safeReservedDenial(w *httptest.ResponseRecorder) bool {
 	return denial["code"] == "not_found" && denial["message"] == "This request is not authorized." && probeRequestID.MatchString(denial["request_id"]) && denial["request_id"] == w.Header().Get("X-Request-ID")
 }
 
+func safePrivateDenial(w *httptest.ResponseRecorder, releaseBytes []byte) bool {
+	if w.Code != http.StatusUnauthorized || w.Header().Get("Content-Type") != "application/json; charset=utf-8" ||
+		w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Set-Cookie") != "" || w.Header().Get("Location") != "" ||
+		w.Header().Get("X-Content-Type-Options") != "nosniff" || !probeRequestID.MatchString(w.Header().Get("X-Request-ID")) || w.Body.Len() > 32<<10 ||
+		(len(releaseBytes) != 0 && bytes.Contains(w.Body.Bytes(), releaseBytes)) {
+		return false
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(w.Body.Bytes(), &envelope) != nil || len(envelope) != 1 || envelope["error"] == nil {
+		return false
+	}
+	var denial map[string]string
+	if json.Unmarshal(envelope["error"], &denial) != nil || len(denial) != 3 {
+		return false
+	}
+	return denial["code"] == "not_authorized" && denial["message"] == "This request is not authorized." &&
+		probeRequestID.MatchString(denial["request_id"]) && denial["request_id"] == w.Header().Get("X-Request-ID")
+}
+
+func firstServableAsset(files []releases.File) (string, string, int64) {
+	for _, file := range files {
+		if file.Path != "index.html" && file.Path != "tinker.yaml" && releases.ServableStaticAssetPath(file.Path) {
+			return file.Path, file.Hash, file.Size
+		}
+	}
+	return "", "", 0
+}
+
 func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r deployments.Record) (Probe, error) {
 	root, e := CandidateFilesystem(dataRoot, r)
 	if e != nil {
@@ -183,7 +212,38 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 		}
 		return Probe{URL: "https://" + host, PublicReachable: true, ReservedDenied: true, Posture: "public_static", RootSHA256: fmt.Sprintf("%x", sha256.Sum256(index)), RootBytes: rootBytes, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes, Indexing: r.Manifest.Indexing}, nil
 	}
-	if aw.Code != http.StatusUnauthorized || bytes.Contains(aw.Body.Bytes(), index) {
+	if !safePrivateDenial(aw, index) {
+		return Probe{}, candidateProbeFailed(CandidateProbeAnonymousDenial)
+	}
+	assetPath, assetHash, assetBytes := firstServableAsset(r.Files)
+	if assetPath != "" {
+		asset, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(assetPath)))
+		if err != nil || int64(len(asset)) != assetBytes || fmt.Sprintf("%x", sha256.Sum256(asset)) != assetHash {
+			return Probe{}, candidateProbeFailed(CandidateProbeReleaseEvidence)
+		}
+		q := httptest.NewRequest(http.MethodGet, "https://"+host+"/"+assetPath, nil)
+		q.Host = host
+		w := httptest.NewRecorder()
+		g.ServeHTTP(w, q)
+		if !safePrivateDenial(w, asset) {
+			return Probe{}, candidateProbeFailed(CandidateProbeAnonymousDenial)
+		}
+	}
+	for _, route := range representativeReservedProbeRoutes {
+		// Private auth routes remain pre-auth entrypoints. The authorization
+		// boundary must deny every representative protected reserved route.
+		if strings.HasPrefix(route.path, "/_tinker/auth/") {
+			continue
+		}
+		q := httptest.NewRequest(route.method, "https://"+host+route.path, nil)
+		q.Host = host
+		w := httptest.NewRecorder()
+		g.ServeHTTP(w, q)
+		if !safePrivateDenial(w, nil) {
+			return Probe{}, candidateProbeFailed(CandidateProbeAnonymousDenial)
+		}
+	}
+	if protected.calls != 0 || preauth.calls != 0 {
 		return Probe{}, candidateProbeFailed(CandidateProbeAnonymousDenial)
 	}
 	auth := httptest.NewRequestWithContext(ctx, "GET", "https://"+host+"/", nil)
@@ -194,5 +254,5 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	if rw.Code != http.StatusOK || !bytes.Equal(rw.Body.Bytes(), index) {
 		return Probe{}, candidateProbeFailed(CandidateProbeAuthenticatedHealth)
 	}
-	return Probe{URL: "https://" + host, AnonymousDenied: true, AuthenticatedHealthy: true}, nil
+	return Probe{URL: "https://" + host, AnonymousDenied: true, AuthenticatedHealthy: true, ReservedDenied: true, AssetPath: assetPath, AssetSHA256: assetHash, AssetBytes: assetBytes}, nil
 }

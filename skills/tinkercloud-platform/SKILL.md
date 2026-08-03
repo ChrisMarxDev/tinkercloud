@@ -138,8 +138,14 @@ and `tinker login --server <remembered-server>` may diagnose or refresh a
 credential; they are explicitly not part of the fresh first-deploy path.
 This bounded beta path permits one human CLI OTP only when that saved bearer is
 absent, unauthorized, or expired. Prepare the first deploy **owner-only**, but
-do not invoke it until the final reviewed deployment step. Completion needs
-anonymous HTML, asset, and reserved API denial evidence with no app bytes.
+do not invoke it until the final reviewed deployment step. Private combined
+success evidence always proves anonymous root and a representative reserved
+route return exact safe `401 not_authorized` denials with no app bytes. When the
+immutable release contains a servable non-index asset, the server candidate
+additionally proves denial of that actual asset; a single-file app requires no
+asset evidence and must not fabricate it. The independent live client probe
+covers root plus the representative reserved route; the private activation
+receipt does not expose an asset path.
 
 Terminal CLI authentication rule: immediately after a CLI authentication or OTP
 attempt fails, is malformed, times out, or is denied, stop that deploy attempt.
@@ -161,9 +167,9 @@ its already-bounded transient readiness retries inside that one invocation.
 fresh anonymous `curl --include --silent --show-error --no-location --cookie '' --max-time 15 --max-filesize 32768 -H 'Accept: application/json' <returned-url>` with no authentication, requiring `401`, `Cache-Control: no-store`, JSON `not_authorized`, no `Set-Cookie` or `Location`, and no app bytes. It is evidence only, never a second deployment. A later deploy attempt requires an explicit new human
 request after the cause is addressed, not an automatic retry.
 
-Success records the immutable deployment ID, protected exact app origin,
-authenticated platform-health success, and anonymous HTML, asset, and reserved
-API denial with no app bytes.
+Success records the immutable deployment ID, protected exact app origin, and
+authenticated platform-health success together with the combined private denial
+evidence above.
 Human success prints `Deployment: <id>`, `State: active`, and `URL:
 <exact-origin>`; JSON returns `valid:true` with a bounded deployment object.
 Platform-health and anonymous probes are internal success preconditions, not

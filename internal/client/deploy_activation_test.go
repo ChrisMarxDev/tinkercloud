@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestDeployActivatesVerified(t *testing.T) {
 		if n == 2 {
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
 		}
-		if n != 3 || r.URL.String() != "https://demo.tinker.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+		if (n != 3 && n != 4) || (n == 3 && r.URL.String() != "https://demo.tinker.test/") || (n == 4 && r.URL.String() != "https://demo.tinker.test/_tinker/api/v1/me") || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 			t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
 		}
 		return anonymousDenied(r), nil
@@ -40,6 +41,57 @@ func TestDeployActivatesVerified(t *testing.T) {
 	o, e := c.Deploy(context.Background(), "demo", bytes.NewReader([]byte("x")), 1, "upload")
 	if e != nil || o.DeploymentID != "d" {
 		t.Fatal(o, e)
+	}
+	if n != 4 {
+		t.Fatalf("request count = %d, want 4", n)
+	}
+}
+
+func TestPrivateLiveProbeChecksRootAndRepresentativeReservedRoute(t *testing.T) {
+	root, _ := url.Parse("https://demo.tinker.test/")
+	var requests []string
+	c := New("https://tinker.test", "secret-token")
+	c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			t.Fatalf("private live probe carried credentials: %v", r.Header)
+		}
+		return anonymousDenied(r), nil
+	})}
+	if err := c.probePublicDeploymentOnce(context.Background(), root); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(requests, ","), "GET /,GET /_tinker/api/v1/me"; got != want {
+		t.Fatalf("private live probe requests=%q want=%q", got, want)
+	}
+}
+
+func TestPrivateLiveProbeRejectsUnsafeReservedRouteEvidence(t *testing.T) {
+	root, _ := url.Parse("https://demo.tinker.test/")
+	for _, test := range []struct {
+		name   string
+		mutate func(*http.Response)
+	}{
+		{name: "redirect", mutate: func(r *http.Response) { r.Header.Set("Location", "https://evil.example/") }},
+		{name: "cookie", mutate: func(r *http.Response) { r.Header.Set("Set-Cookie", "leak=1") }},
+		{name: "app bytes", mutate: func(r *http.Response) { r.Body = io.NopCloser(strings.NewReader("private candidate marker")) }},
+		{name: "wrong envelope", mutate: func(r *http.Response) {
+			r.Body = io.NopCloser(strings.NewReader(`{"error":{"code":"not_found","message":"This request is not authorized.","request_id":"req_0123456789abcdef01234567"}}`))
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			c := New("https://tinker.test", "secret-token")
+			c.HTTP = &http.Client{Transport: rt(func(r *http.Request) (*http.Response, error) {
+				response := anonymousDenied(r)
+				if r.URL.Path == "/_tinker/api/v1/me" {
+					test.mutate(response)
+				}
+				return response, nil
+			})}
+			if err := c.probePublicDeploymentOnce(context.Background(), root); err == nil {
+				t.Fatal("unsafe reserved-route evidence accepted")
+			}
+		})
 	}
 }
 
@@ -154,8 +206,8 @@ func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 				t.Fatalf("unexpected activation request: %s %s headers=%v", r.Method, r.URL, r.Header)
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"deployment_id":"d","url":"https://demo.tinker.test/","domain":"tinker.test","policy_ready":true,"tls_ready":true,"anonymous_denied":true,"authenticated_healthy":true}`)), Header: make(http.Header), Request: r}, nil
-		case 4:
-			if r.URL.String() != "https://demo.tinker.test/" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+		case 4, 5:
+			if (n == 4 && r.URL.String() != "https://demo.tinker.test/") || (n == 5 && r.URL.String() != "https://demo.tinker.test/_tinker/api/v1/me") || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 				t.Fatalf("anonymous probe request=%s headers=%v", r.URL, r.Header)
 			}
 			return anonymousDenied(r), nil
@@ -169,8 +221,8 @@ func TestDeployActivatesWhenPollingReachesVerified(t *testing.T) {
 	if err != nil || result.DeploymentID != "d" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
-	if n != 4 {
-		t.Fatalf("request count = %d, want 4", n)
+	if n != 5 {
+		t.Fatalf("request count = %d, want 5", n)
 	}
 }
 
@@ -268,8 +320,8 @@ func TestDeployRetriesOnlyTransientPublicReadiness(t *testing.T) {
 	if err != nil || result.DeploymentID != "d" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
-	if probes != 3 {
-		t.Fatalf("public probes = %d, want 3", probes)
+	if probes != 4 {
+		t.Fatalf("public probes = %d, want 4", probes)
 	}
 }
 

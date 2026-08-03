@@ -178,8 +178,15 @@ preserves the previous active pointer.
   >=1.26.5; the vulnerable Go 1.24 `os.Root` implementation is not used.
 - A CLI result is successful only after both server candidate evidence and a
   fresh deployer-side anonymous posture probe to the exact server-derived URL
-  pass. A private candidate retains the bounded gateway `401 not_authorized`
-  zero-release-byte proof. A public candidate requires the bounded expected
+  pass. A private server candidate always proves bounded gateway `401
+  not_authorized` denial for anonymous root and representative reserved routes
+  before their dispatchers. When its immutable release contains a servable
+  non-index asset, it also probes that actual asset and proves the same denial
+  without release bytes; a single-file app with no such asset remains valid and must not fabricate asset evidence. The deployer-side live probe independently
+  proves exact safe private `401 not_authorized` envelopes for root and a
+  representative reserved route, with no redirect, cookie, or app bytes. The
+  server candidate owns optional real-asset evidence because the private
+  activation receipt does not expose an asset path. A public candidate requires the bounded expected
   root-document hash/bytes and indexing header plus denial of representative
   reserved capability routes before their dispatchers. Every probe uses real
   TLS, no bearer or cookie jar, and no redirect. A response inconsistent with

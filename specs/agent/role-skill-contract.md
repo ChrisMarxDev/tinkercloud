@@ -63,8 +63,12 @@ collection, or another provider path.
 
 The beta deployer journey reports success only after it records the immutable
 deployment ID, protected exact app origin, authenticated platform-health
-success, and fresh anonymous HTML, asset, and reserved API denial with no app
-bytes. These are gateway facts, not CLI, browser, or local-build substitutes.
+success, and combined private gateway evidence: anonymous root and a
+representative reserved route always return exact safe `401 not_authorized`
+denials with no app bytes, and the server candidate proves the same for an
+actual immutable non-index asset when the release contains one. A single-file
+app with no such asset remains valid and must not fabricate asset evidence.
+These are gateway facts, not CLI, browser, or local-build substitutes.
 
 ## Deployer interaction
 

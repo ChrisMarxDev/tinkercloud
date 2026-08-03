@@ -414,6 +414,7 @@ fresh_inline_manifest_phrase='Never run `tinker init` before the bounded fresh s
 exact_fresh_otp_phrase='A completely fresh successful end-to-end onboarding with no reusable identity requests exactly two human codes total: exactly one operator dashboard OTP and exactly one deployer CLI OTP.'
 terminal_fresh_otp_phrase='Any additional code, retry, account switch, or viewer login is a deployment-flow failure. A failed OTP is terminal; there is no automatic human OTP retry.'
 separate_vps_matrix_phrase='The clean two-code human flow MUST NOT invoke the extended VPS security matrix. That matrix is separate and unattended; it never authorizes asking the human for more codes.'
+private_combined_evidence_phrase='Private combined success evidence always proves anonymous root and a representative reserved route return exact safe `401 not_authorized` denials with no app bytes. When the immutable release contains a servable non-index asset, the server candidate additionally proves denial of that actual asset; a single-file app requires no asset evidence and must not fabricate it. The independent live client probe covers root plus the representative reserved route; the private activation receipt does not expose an asset path.'
 operator_flow_steps='### 1. Verify the beta host
 uname -m && . /etc/os-release && printf
 ### 2. Verify the SSH host key
@@ -568,11 +569,10 @@ for file in "$platform" "$deployer"; do
   require "$file" "owner-only"
   require "$file" "$deployer_command"
   require "$file" "one human CLI OTP"
-  require "$file" "anonymous HTML, asset, and reserved API"
   require_phrase "$file" "$(cat "$file")" "immutable deployment ID"
   require_phrase "$file" "$(cat "$file")" "protected exact app origin"
   require_phrase "$file" "$(cat "$file")" "authenticated platform-health success"
-  require_phrase "$file" "$(cat "$file")" "anonymous HTML, asset, and reserved API denial with no app bytes"
+  require_phrase "$file" "$(cat "$file")" "$private_combined_evidence_phrase"
   require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"
   require_phrase "$file" "$(cat "$file")" "$fresh_human_otp_phrase"
   require_phrase "$file" "$(cat "$file")" "$client_release_terminal_phrase"
@@ -609,13 +609,16 @@ require_text "README Start the beta" "$readme_beta" "https://raw.githubuserconte
 require_phrase "README Start the beta" "$readme_beta" "immutable deployment ID"
 require_phrase "README Start the beta" "$readme_beta" "protected exact app origin"
 require_phrase "README Start the beta" "$readme_beta" "authenticated platform-health success"
-require_phrase "README Start the beta" "$readme_beta" "anonymous HTML, asset, and reserved API denial with no app bytes"
+require_phrase "README Start the beta" "$readme_beta" "$private_combined_evidence_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$active_unverified_recheck"
 require_phrase "README Start the beta" "$readme_beta" 'no `Set-Cookie` or `Location`, and no app bytes'
 require "docs/getting-started/first-app.md" "$active_unverified_recheck"
 require_phrase "docs/getting-started/first-app.md" "$(cat docs/getting-started/first-app.md)" 'no `Set-Cookie` or `Location`, and no app bytes'
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" "$active_unverified_recheck"
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" 'no `Set-Cookie` or `Location`, and zero app bytes'
+require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" 'a single-file app with no such asset remains valid and must not fabricate asset evidence'
+require_phrase "specs/agent/role-skill-contract.md" "$(cat specs/agent/role-skill-contract.md)" 'single-file app with no such asset remains valid'
+require_phrase "specs/agent/role-skill-contract.md" "$(cat specs/agent/role-skill-contract.md)" 'must not fabricate asset evidence.'
 
 for file in "$platform" "$operator" "$deployer" README.md specs/agent/beta-onboarding-contract.md; do
   require_phrase "$file" "$(cat "$file")" "$exact_fresh_otp_phrase"
