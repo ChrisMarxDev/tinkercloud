@@ -188,6 +188,50 @@
     });
   }
 
+  // Management remains server-rendered and usable as native fallback details.
+  // Enhancement moves each existing body into its matching dialog only after
+  // every option has been paired, then reveals the presentation-only menu.
+  function initializeAppMoreMenus() {
+    var menus = document.querySelectorAll("[data-tinker-app-more]");
+    menus.forEach(function (menu) {
+      var card = menu.closest("[data-tinker-app-card]");
+      var options = menu.querySelectorAll("[data-tinker-app-more-option]");
+      var mappings = [];
+      var ready = Boolean(card && options.length);
+
+      options.forEach(function (option) {
+        if (!ready) {
+          return;
+        }
+        var targetID = option.getAttribute("data-tinker-dialog-open") || "";
+        var dialog = document.getElementById(targetID);
+        var slot = dialog && dialog.querySelector("[data-tinker-app-dialog-slot]");
+        var sources = card.querySelectorAll("[data-tinker-app-dialog-source]");
+        var source = null;
+        sources.forEach(function (candidate) {
+          if (candidate.getAttribute("data-tinker-app-dialog-source") === targetID) {
+            source = candidate;
+          }
+        });
+        var content = source && source.querySelector(":scope > .tinker-details__body");
+        if (!dialog || dialog.closest("[data-tinker-app-card]") !== card || !slot || !source || !content) {
+          ready = false;
+          return;
+        }
+        mappings.push({ content: content, slot: slot, source: source });
+      });
+
+      if (!ready || mappings.length !== options.length) {
+        return;
+      }
+      mappings.forEach(function (mapping) {
+        mapping.slot.appendChild(mapping.content);
+        mapping.source.hidden = true;
+      });
+      menu.hidden = false;
+    });
+  }
+
   function removeToast(toast) {
     if (!toast || toast.dataset.leaving === "true") {
       return;
@@ -391,6 +435,13 @@
   }
 
   document.addEventListener("click", function (event) {
+    var currentMore = event.target.closest("[data-tinker-app-more]");
+    document.querySelectorAll("[data-tinker-app-more][open]").forEach(function (menu) {
+      if (menu !== currentMore) {
+        menu.open = false;
+      }
+    });
+
     var summary = event.target.closest("summary");
     var details = summary && summary.parentElement;
     if (
@@ -405,6 +456,10 @@
 
     var dialogTrigger = event.target.closest("[data-tinker-dialog-open]");
     if (dialogTrigger) {
+      var appMore = dialogTrigger.closest("[data-tinker-app-more]");
+      if (appMore) {
+        appMore.open = false;
+      }
       openDialog(dialogTrigger.getAttribute("data-tinker-dialog-open"));
     }
 
@@ -439,10 +494,26 @@
     }
   }, true);
 
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape") {
+      return;
+    }
+    var menu = document.querySelector("[data-tinker-app-more][open]");
+    if (!menu) {
+      return;
+    }
+    menu.open = false;
+    var summary = menu.querySelector(":scope > summary");
+    if (summary) {
+      summary.focus();
+    }
+  });
+
   initializeQRCodes();
   initializeAppFilters();
   initializeCatalogFilters();
   initializeCopyControls();
+  initializeAppMoreMenus();
 
   window.TinkerUI = Object.freeze({
     closeDialog: closeDialog,

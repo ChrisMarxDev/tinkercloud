@@ -203,7 +203,7 @@ dashboard and say plainly that deletion did not complete; do not imply that
 revocation, removal, or cleanup succeeded.
 
 An active app with a configured stable gateway origin may show one compact
-external-launch icon. It is a native link with an accessible label and title,
+external-launch icon beside its title. It is a native link with an accessible label and title,
 opens only `https://{slug}.{domain}/` in a new tab with `noopener noreferrer`,
 and does not imply that it bypasses the app's ordinary authentication policy.
 Beside it, a compact QR action may open a small native dialog for moving the
@@ -222,6 +222,16 @@ operational history can also show `uploading`, `uploaded`, `validating`,
 `staged`, `rejected`, and `failed` candidates, but renders their descriptions
 blank without parsing candidate bytes. An unknown state or malformed immutable
 manifest makes the dashboard unavailable rather than inventing a summary.
+
+Keep the resting app row about recognition and current state. Place the app
+title, stable launch action, and QR action in one compact identity cluster;
+keep the durable status and one operator-only More disclosure opposite it.
+More lists Access policy, Releases, the optional LLM chat grant, and App
+controls, and opens each surface in its own focused native dialog. These are
+the existing server-rendered forms and read models, not client-side copies.
+Before enhancement, or whenever pairing a dialog fails, leave their native
+fallback details visible and keep More hidden. A deployer overview has no
+operator More menu or empty management dialogs.
 
 The operator-only deployer section uses one native multiline active allowlist
 form, prefilled from a server-rendered revisioned snapshot. It makes authority
@@ -324,8 +334,10 @@ its own state and next step. The global tracking switch remains a root-local
 server-derived read state.
 
 On the compact full-width app row, analytics stays secondary. Pair 7-day and
-30-day totals with a small 30-day two-series bar chart and visible page-view
-and **Approximate visitors** swatches. Use bounded `data-*` CSS bars rather
+30-day totals and last activity in the left half with a miniature 30-day
+two-series bar chart and visible page-view and **Approximate visitors**
+swatches in the right half. Stack the halves only when the row becomes too
+narrow. Use bounded `data-*` CSS bars rather
 than inline chart geometry or a chart package. Each paired bar is
 keyboard-focusable as well as hoverable and reveals its exact UTC day, page
 views, and approximate visitors; retain the complete daily series as a
