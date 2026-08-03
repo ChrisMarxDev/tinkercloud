@@ -85,13 +85,13 @@ PY
 }
 safe_owned_directory() {
   case "$1" in /*) ;; *) return 1 ;; esac
-  candidate=$1
-  while test "$candidate" != /; do
+  directory_candidate=$1
+  while test "$directory_candidate" != /; do
     # macOS commonly presents /var as a compatibility symlink to /private/var.
     # It is an OS-owned namespace root, not a caller-selected install ancestor.
-    test "$candidate" = /var || test ! -L "$candidate" || return 1
-    candidate=${candidate%/*}
-    test -n "$candidate" || candidate=/
+    test "$directory_candidate" = /var || test ! -L "$directory_candidate" || return 1
+    directory_candidate=${directory_candidate%/*}
+    test -n "$directory_candidate" || directory_candidate=/
   done
   test -d "$1" && test -w "$1" && test "$(owner_uid "$1")" = "$uid"
 }
