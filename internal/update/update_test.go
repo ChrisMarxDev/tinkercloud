@@ -47,6 +47,23 @@ func (r *restarter) Restart(context.Context) error {
 	}
 	return nil
 }
+
+type commitFailInstaller struct {
+	fake
+	commitCalled     bool
+	commitErr        error
+	rollbackSnapshot bool
+}
+
+func (f *commitFailInstaller) Snapshot(ctx context.Context) error {
+	f.rollbackSnapshot = true
+	return f.fake.Snapshot(ctx)
+}
+
+func (f *commitFailInstaller) Commit(context.Context) error {
+	f.commitCalled = true
+	return f.commitErr
+}
 func TestHealthFailureRollsBack(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	a := Artifact{Bytes: []byte("next")}
@@ -115,5 +132,22 @@ func TestFailedCandidateRollbackClearsRecoveredSnapshot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "update-rollback")); !os.IsNotExist(err) {
 		t.Fatalf("recovered rollback snapshot remains: %v", err)
+	}
+}
+
+func TestFailedCandidateRollbackRetainsRecoveryStateWhenCleanupFails(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	a := Artifact{Bytes: []byte("failed candidate")}
+	a.Digest = sha256.Sum256(a.Bytes)
+	a.Signature = ed25519.Sign(priv, a.signed())
+	cleanupErr := errors.New("cleanup failed")
+	installer := &commitFailInstaller{commitErr: cleanupErr}
+
+	state, err := ApplyAfterRestart(context.Background(), pub, a, installer, &restarter{}, health(false))
+	if state != RollbackFailed || !errors.Is(err, cleanupErr) {
+		t.Fatalf("state=%q err=%v", state, err)
+	}
+	if !installer.restore || !installer.commitCalled || !installer.rollbackSnapshot {
+		t.Fatalf("restore=%t commit=%t snapshot=%t", installer.restore, installer.commitCalled, installer.rollbackSnapshot)
 	}
 }
