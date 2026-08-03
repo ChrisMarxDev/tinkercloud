@@ -47,6 +47,13 @@ The release version must exactly match the semantic version inside the SDK
 tarball and the SDK's npm, JSR, and exported runtime version declarations.
 Version drift is a release-build failure rather than a filename rewrite.
 
+The release builder copies the SDK package inputs into a task-local workspace
+before running `npm ci`, the SDK build, and `npm pack`. Those npm commands and
+their cache and tarball outputs MUST NOT write to the tracked
+`sdk/typescript` source directory; in particular they must not create or alter
+its `dist`, `node_modules`, lockfile, or package tarballs. The signed SDK
+artifact is the package produced from that isolated workspace.
+
 Before signing `install-host.sh`, the release build replaces its sole
 `__TINKERCLOUD_RELEASE_BASE__` development placeholder with
 `https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/`.

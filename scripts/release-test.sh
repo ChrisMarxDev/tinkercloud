@@ -14,6 +14,11 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 openssl genpkey -algorithm ED25519 -out "$tmp/private.pem" >/dev/null 2>&1
 openssl pkey -in "$tmp/private.pem" -pubout -out "$tmp/public.pem" >/dev/null 2>&1
 
+# The SDK build must never share npm state with the tracked checkout. The
+# dedicated self-test uses a controlled npm boundary and still signs/verifies
+# a complete release candidate.
+"$root/scripts/release-sdk-workspace-self-test.sh"
+
 # A release label that disagrees with the package's semantic version must fail
 # before the expensive platform build or any artifact creation.
 if TINKERCLOUD_RELEASE_SIGNING_KEY="$tmp/private.pem" \

@@ -114,19 +114,30 @@ chmod 0644 "$stage/tinkercloud.service"
 chmod 0755 "$stage/install-host.sh"
 chmod 0755 "$stage/install-client.sh"
 
-# The SDK package is built from the same checkout and copied into the release
-# directory. A task-local cache makes the release independent of user cache
-# ownership and keeps release tooling from mutating an operator's npm cache.
-# npm pack creates only a tarball; it does not publish anything.
+# The SDK package inputs are copied into the task-local release workspace
+# before npm runs. This keeps npm's install/build/pack side effects out of the
+# tracked checkout even when other SDK jobs share it. Generated source outputs
+# are excluded so the package is built only from its versioned inputs.
+# A task-local cache also keeps release tooling from mutating an operator's npm
+# cache. npm pack creates only a tarball; it does not publish anything.
 npm_cache="$work/npm-cache"
-sdk_tarball=$(
+sdk_workspace="$work/sdk-typescript"
+mkdir -p "$sdk_workspace"
+(
   cd "$root/sdk/typescript"
+  tar --exclude='./node_modules' --exclude='./dist' --exclude='./*.tgz' -cf - .
+) | (
+  cd "$sdk_workspace"
+  tar -xf -
+)
+sdk_tarball=$(
+  cd "$sdk_workspace"
   npm_config_cache="$npm_cache" npm ci --ignore-scripts >/dev/null
   npm_config_cache="$npm_cache" npm run build >/dev/null
-  npm_config_cache="$npm_cache" npm pack --silent
+  npm_config_cache="$npm_cache" npm pack --silent --pack-destination "$sdk_workspace"
 )
-test -f "$root/sdk/typescript/$sdk_tarball" || { echo "SDK package build failed" >&2; exit 1; }
-mv "$root/sdk/typescript/$sdk_tarball" "$stage/tinkercloud-sdk-$version.tgz"
+test -f "$sdk_workspace/$sdk_tarball" || { echo "SDK package build failed" >&2; exit 1; }
+mv "$sdk_workspace/$sdk_tarball" "$stage/tinkercloud-sdk-$version.tgz"
 
 sha256() { sha256sum "$1" | awk '{print $1}'; }
 sign_artifact() {
