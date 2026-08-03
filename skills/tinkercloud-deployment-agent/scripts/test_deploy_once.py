@@ -62,6 +62,18 @@ class DeploymentAgentTests(unittest.TestCase):
         self.assertEqual([call[-1] for call in calls], ["whoami", str(self.app)])
         self.assertNotIn("--confirm-public", calls[-1])
 
+    def test_skill_keeps_recipient_and_platform_domains_independent(self):
+        skill = (HERE.parent / "SKILL.md").read_text()
+        prose = " ".join(skill.split())
+        self.assertIn("TINKERCLOUD_AUTOMATION_RECIPIENT_DOMAIN='christopher-marx.de'", skill)
+        self.assertIn("TINKERCLOUD_VPS_DOMAIN='testing.tinkercloud.fun'", skill)
+        self.assertIn("--server https://admin.testing.tinkercloud.fun", skill)
+        self.assertIn("recipient email domain may differ from the platform root domain", prose)
+        self.assertIn("The wrapper derives the platform server only from `TINKERCLOUD_VPS_DOMAIN`", prose)
+        self.assertIn("saved exact identity and reuses it before reader configuration is required", prose)
+        self.assertNotIn("same-domain", prose)
+        self.assertNotIn("same domain", prose)
+
     def test_public_confirmation_is_explicit_and_forwarded_once(self):
         (self.app / "tinker.yaml").write_text(
             "version: 2\nname: demo\naccess:\n  mode: public\n"
