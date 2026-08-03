@@ -138,6 +138,7 @@ tasks:
     cmds:
       - ./scripts/test-beta-onboarding-docs.sh
       - ./scripts/test-beta-onboarding-docs-self-test.sh
+      - python3 test/security/test_beta_onboarding_docs.py
 
   lint:
     desc: Run static analysis for Go and production SDK dependencies
