@@ -1,4 +1,4 @@
-const command = "tinker deploy . --allow '*@acme.com'";
+const command = "tinker deploy . --allow '*@example.com'";
 
 export function DeployCommand() {
   return (
@@ -16,7 +16,7 @@ export function DeployCommand() {
         </span>
         <code aria-label={command}>
           <span>tinker deploy .</span>
-          <span>--allow &apos;*@acme.com&apos;</span>
+          <span>--allow &apos;*@example.com&apos;</span>
         </code>
       </div>
     </div>

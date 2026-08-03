@@ -1,95 +1,87 @@
 # Host Your First Tinkercloud App
 
-This guide deploys **Tinker Ritual**, a small dependency-free sample app. It has
-no build step and is private by default.
+This guide deploys **Tinker Ritual**, a small dependency-free sample app. It is
+private to its deployer by default.
 
 ## Before you start
 
 You need:
 
-- macOS or Linux with Go 1.25.12 and Python 3
-- a clone of this repository
-- the URL of a running Tinkercloud server
-- an email address authorized to deploy
+- macOS or Linux;
+- the HTTPS endpoint of a running Tinkercloud server; and
+- an email address the operator authorized as a deployer.
 
 If you are setting up the server too, follow the
 [Hetzner deployment guide](../operations/hetzner-deployment.md) first.
 
-## 1. Build the CLI
+## 1. Install Tinker
 
-From the Tinkercloud repository:
+Install the current exact beta as your normal workstation account, without
+`sudo`:
 
 ```sh
-mkdir -p "$HOME/.local/bin"
-go build -o "$HOME/.local/bin/tinker" ./cmd/tinker
-export PATH="$HOME/.local/bin:$PATH"
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+```
+
+Open a new terminal, then verify the installed command:
+
+```sh
+tinker version
 ```
 
 ## 2. Copy and preview the sample
 
 ```sh
-cp -R examples/starter-app "$HOME/tinker-ritual"
-cd "$HOME/tinker-ritual"
-python3 -m http.server 4173
+git clone --depth 1 https://github.com/ChrisMarxDev/tinkercloud.git tinkercloud-source
+cp -R tinkercloud-source/examples/starter-app my-tinker-ritual
+cd my-tinker-ritual
+tinker dev
 ```
 
-Open [http://localhost:4173](http://localhost:4173). Press `Ctrl+C` when you
-are done previewing it.
+Open the local URL printed by Tinker. Press `Ctrl+C` when you are done. The
+local preview is only a development convenience; it does not reproduce hosted
+authentication, TLS, blobs, deployment policy, or provider capabilities.
 
-## 3. Choose an app name
-
-Open `tinker.yaml` and replace `tinker-ritual` with a unique name:
-
-```yaml
-version: 2
-name: my-tinker-ritual
-description: A private daily ritual tracker.
-
-build:
-  output: .
-
-access:
-  mode: private
-  indexing: false
-  allow:
-    emails: []
-    domains: []
-```
-
-An empty allowlist means only the app owner can open it. To invite someone,
-add their email address under `emails`.
-
-## 4. Check the manifest
+## 3. Deploy
 
 ```sh
-tinker inspect-manifest tinker.yaml
+tinker deploy .
 ```
 
-The full format is documented in the
+On the first run, Tinker asks for the platform endpoint, your deployer email,
+and the code sent to that email. It reuses those verified values later. Review
+the owner-only access summary and confirm the deployment.
+
+The command prints the protected app URL. Open it in the same browser where you
+use Tinkercloud; the normal email identity flow grants the owner access.
+
+To publish an update, edit the files and run the same command again:
+
+```sh
+tinker deploy .
+```
+
+## Use your own project
+
+Run `tinker deploy .` from the root of an existing static web project. When
+`tinker.yaml` is missing, the human wizard inspects the project, asks only for
+required values it cannot infer safely, and writes the manifest as a reusable
+deployment receipt. You do not need to author configuration before the first
+deployment.
+
+Use `tinker init .` only when you deliberately want to create and review that
+receipt before deploying. The full format is documented in the
 [manifest contract](../../specs/manifest/tinker-yaml.md).
 
-## 5. Sign in and deploy
+## Safety notes
 
-Replace the example URL with your Tinkercloud server:
-
-```sh
-tinker --server https://admin.example.com login
-tinker --server https://admin.example.com deploy .
-```
-
-The deploy command prints the private app URL. Open it and sign in with the
-one-time code sent to your email.
-
-To publish an update, edit the files and run the same deploy command again.
-
-## Notes
-
-- This is a private-first guide. For the separately reviewed, capability-free
-  public-static flow, use the [public product-story example](../../examples/public-static-product-story/README.md)
-  and follow the [public-static access contract](../../specs/api/public-static-access.md).
-- Tinker Ritual stores its checklist in that browser only.
+- With no viewer rule, only the active deployer who owns the app may open it.
 - Do not put passwords, API keys, or other secrets in app files.
-- A local preview does not test Tinkercloud authentication or access rules.
+- Tinkercloud beta is for replaceable toy, prototype, and utility apps—not
+  business-critical data.
+- For the separately reviewed capability-free public-static flow, follow the
+  [public-static access contract](../../specs/api/public-static-access.md).
 
-If login or deployment fails, confirm the server URL, your deployer
-authorization, and that `tinker inspect-manifest tinker.yaml` succeeds.
+If deployment fails, run `tinker version`, confirm the displayed endpoint, and
+share only redacted diagnostics with the operator. Never paste an OTP, bearer,
+cookie, provider key, or private configuration into a public issue.
