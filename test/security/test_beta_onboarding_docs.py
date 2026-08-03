@@ -30,18 +30,39 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
                 self.assertTrue(platform_domains)
                 self.assertTrue(all(domain == EXAMPLE_STAGING_DOMAIN for domain in platform_domains))
 
-    def test_prepared_v016_commands_are_explicitly_unpublished(self):
+    def test_primary_v016_onboarding_is_timeless_and_requires_the_exact_asset(self):
         files = (
-            "docs/operations/hetzner-deployment.md",
-            "docs/getting-started/first-app.md",
+            "README.md",
+            "skills/tinkercloud-operator/SKILL.md",
+            "skills/tinkercloud-deployer/SKILL.md",
             "specs/agent/beta-onboarding-contract.md",
         )
         for relative_path in files:
             with self.subTest(relative_path=relative_path):
                 contents = self.read(relative_path)
                 self.assertIn(PREPARED_RELEASE, contents)
-                self.assertIn("only after", contents)
-                self.assertIn("published", contents)
+                self.assertIn("installer asset", contents)
+                self.assertNotIn("currently unavailable", contents)
+
+    def test_primary_role_flows_probe_exact_tag_before_role_asset(self):
+        tag_probe = "https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6"
+        for relative_path, asset in (
+            ("README.md", "install-client.sh"),
+            ("skills/tinkercloud-operator/SKILL.md", "install-host.sh"),
+            ("skills/tinkercloud-deployer/SKILL.md", "install-client.sh"),
+        ):
+            with self.subTest(relative_path=relative_path):
+                contents = self.read(relative_path)
+                self.assertLess(contents.index(tag_probe), contents.index(asset))
+
+    def test_primary_deployer_flow_requires_release_build_version_and_one_command(self):
+        files = ("README.md", "skills/tinkercloud-deployer/SKILL.md")
+        for relative_path in files:
+            with self.subTest(relative_path=relative_path):
+                contents = self.read(relative_path)
+                self.assertIn("tinker version` must print exactly `tinker 0.1.6`", contents)
+                self.assertIn("Do not run standalone `tinker whoami` or `tinker login`", " ".join(contents.split()))
+                self.assertIn("tinker --server <SERVER> deploy .", contents)
 
     def test_first_app_clones_the_exact_prepared_tag_after_publication(self):
         contents = self.read("docs/getting-started/first-app.md")

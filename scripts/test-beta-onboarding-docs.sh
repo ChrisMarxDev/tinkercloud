@@ -6,7 +6,8 @@ set -eu
 version=0.1.6
 release_url="https://github.com/ChrisMarxDev/tinkercloud/releases/download/v${version}"
 host_install="curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL ${release_url}/install-host.sh | sh"
-client_install="curl --proto '=https' --tlsv1.2 -fsSL ${release_url}/install-client.sh | sh"
+tag_probe="curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v${version}"
+client_install="curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL ${release_url}/install-client.sh | sh"
 sdk_install="npm install @tinkercloud/sdk@${version}"
 failed=0
 
@@ -51,6 +52,24 @@ require_block() {
       failed=1
       ;;
   esac
+}
+
+require_release_probe_order() {
+  file=$1
+  asset_probe=$2
+  install=$3
+  contents=$(cat "$file")
+  case "$contents" in
+    *"$tag_probe"*"$asset_probe"*"$install"*) ;;
+    *)
+      echo "beta onboarding documentation must probe the exact tag, then asset, before installation in ${file}" >&2
+      failed=1
+      ;;
+  esac
+  ! printf '%s\n' "$contents" | grep -F -- "--max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v${version}" >/dev/null || {
+    echo "beta onboarding documentation must use the bounded header-only tag probe in ${file}" >&2
+    failed=1
+  }
 }
 
 require_ordered_operator_flow() {
@@ -140,7 +159,7 @@ EOF
     failed=1
     return
   }
-  for boundary in 'stop that deploy attempt' 'Do not retry `tinker login`' 'use `--force`' 'switch account or identity' 'log out' 'delete or clear saved credentials' 'alternate OTP path' 'valid exact server-scoped saved identity uses zero OTP' 'directly in the CLI, never chat'; do
+  for boundary in 'Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment' 'stop that deploy attempt' 'Do not retry `tinker login`' 'use `--force`' 'switch account or identity' 'log out' 'delete or clear saved credentials' 'alternate OTP path' 'valid exact server-scoped saved identity uses zero OTP' 'directly in the CLI, never chat'; do
     require_phrase "$file" "$terminal_block" "$boundary"
   done
 }
@@ -177,7 +196,7 @@ EOF
     failed=1
     return
   }
-  for boundary in 'invoke `tinker --server <remembered-server> deploy .`' 'exactly once for that deploy attempt' 'Any CLI deploy outcome' 'do not rerun deploy' 'upload another release' 'retry from chat' 'already-bounded transient readiness retries' 'active_but_unverified' 'independent exact-URL recheck' 'never a second deployment' 'explicit new human request'; do
+  for boundary in 'invoke `tinker --server <SERVER> deploy .`' 'exactly once for that deploy attempt' 'Any CLI deploy outcome' 'do not rerun deploy' 'upload another release' 'retry from chat' 'already-bounded transient readiness retries' 'active_but_unverified' 'independent exact-URL recheck' 'never a second deployment' 'explicit new human request'; do
     require_phrase "$file" "$invocation_block" "$boundary"
   done
 }
@@ -187,7 +206,7 @@ require_deployer_executable_command_placement() {
   result=$(awk '
     /^### 5\. Deploy and verify$/ { final_review = NR }
     /^```/ { fenced = !fenced; next }
-    fenced && ($0 == "tinker --server <remembered-server> deploy ." || $0 == "tinker --server <remembered-server> --confirm-public deploy .") {
+    fenced && ($0 == "tinker --server <SERVER> deploy .") {
       command_count++
       if (!final_review || NR < final_review) early_command = $0
     }
@@ -318,9 +337,7 @@ curl --no-location --fail-with-body --include --max-time 15 --max-filesize 32768
 
 The HTTPS request must not follow a redirect. Completion requires HTTP `200`, an `application/json` media type, and exact bounded body `{"api_version":1}` with no extra or error fields; record included gateway headers. Protected-app anonymous denial belongs to deployer deployment completion once an app exists; do not fabricate it during empty
 operator setup.'
-deployer_terminal_auth_flow_steps='tinker whoami --server <remembered-server>
-tinker login --server <remembered-server>
-`tinker login` reuses a valid server-bound credential.
+deployer_terminal_auth_flow_steps='Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment.
 Terminal CLI authentication rule:'
 deployer_single_invocation_flow_steps='Terminal CLI authentication rule:
 One-invocation deployment rule:'
@@ -332,7 +349,7 @@ host_release_readiness_command="curl --proto '=https' --proto-redir '=https' --t
 client_release_terminal_phrase='If the exact `v0.1.6` release or the required installer asset for this role is unavailable, stop: do not install, deploy, or substitute another version.'
 client_release_readiness_phrase="Minimal HTTPS release readiness is the exact tag page plus this role's exact installer asset URL returning HTTPS success; the installer remains the checksum/signature authority."
 credential_reuse_phrase='credential is already on the VPS, reuse it after the exact root-only check'
-deployer_command='tinker --server <remembered-server> deploy .'
+deployer_command='tinker --server <SERVER> deploy .'
 readme_deployer_command='tinker --server <SERVER> deploy .'
 review_phrase='Review endpoint, slug, description, output, owner-only access, no features, and SPA fallback; even owner-only requires affirmative go-ahead.'
 deployer_receipt_phrase='Human success prints `Deployment: <id>`, `State: active`, and `URL: <exact-origin>`'
@@ -383,10 +400,10 @@ done
 require_only_exact_command_lines "README Start the beta" "$readme_beta" "install-host.sh | sh" "$host_install"
 
 for file in "$platform" "$deployer"; do
-  require_only_exact_command_lines "$file" "$(cat "$file")" "install-client.sh" "$client_install"
+  require_only_exact_command_lines "$file" "$(cat "$file")" "install-client.sh | sh" "$client_install"
   require_only_exact_command_lines "$file" "$(cat "$file")" "@tinkercloud/sdk@" "$sdk_install"
 done
-require_only_exact_command_lines "README Start the beta" "$readme_beta" "install-client.sh" "$client_install"
+require_only_exact_command_lines "README Start the beta" "$readme_beta" "install-client.sh | sh" "$client_install"
 require_only_exact_command_lines "README Start the beta" "$readme_beta" "@tinkercloud/sdk@" "$sdk_install"
 
 require_text "README Start the beta" "$readme_beta" "sudo tinkercloud setup"
@@ -427,6 +444,7 @@ for file in "$platform" "$operator"; do
   require_phrase "$file" "$(cat "$file")" "$host_release_terminal_phrase"
   require_phrase "$file" "$(cat "$file")" "$host_release_readiness_phrase"
   require "$file" "$host_release_readiness_command"
+  require_release_probe_order "$file" "$host_release_readiness_command" "$host_install"
   require_phrase "$file" "$(cat "$file")" "$credential_reuse_phrase"
   require_phrase "$file" "$(cat "$file")" "$installer_claim"
   require "$file" "$installer_link"
@@ -442,10 +460,10 @@ for file in "$platform" "$operator"; do
   require_ordered_operator_flow "$file"
 done
 
-require_text "README Start the beta" "$readme_beta" "clean dedicated x86-64 Ubuntu 24.04 or 26.04 VPS"
+require_text "README Start the beta" "$readme_beta" "clean dedicated Hetzner x86-64 Ubuntu 24.04 or 26.04 VPS"
 require_text "README Start the beta" "$readme_beta" "$host_preflight"
 require_phrase "README Start the beta" "$readme_beta" "$host_key_phrase"
-require_text "README Start the beta" "$readme_beta" "$wildcard_record"
+require_phrase "README Start the beta" "$readme_beta" "$wildcard_record"
 require_text "README Start the beta" "$readme_beta" "getent ahosts admin.<DOMAIN> >/dev/null"
 require_text "README Start the beta" "$readme_beta" "getent ahosts onboarding-check.<DOMAIN> >/dev/null"
 require_phrase "README Start the beta" "$readme_beta" "$allowlist_phrase"
@@ -456,6 +474,7 @@ require_phrase "README Start the beta" "$readme_beta" "$fresh_human_otp_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$host_release_terminal_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$host_release_readiness_phrase"
 require_text "README Start the beta" "$readme_beta" "$host_release_readiness_command"
+require_release_probe_order "$readme" "$host_release_readiness_command" "$host_install"
 require_phrase "README Start the beta" "$readme_beta" "$credential_reuse_phrase"
 require_phrase "README Start the beta" "$readme_beta" "$installer_claim"
 require_text "README Start the beta" "$readme_beta" "$installer_link"
@@ -471,10 +490,11 @@ require_ordered_readme_operator_flow
 
 for file in "$platform" "$deployer"; do
   require "$file" "$client_install"
+  require_release_probe_order "$file" "curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null ${release_url}/install-client.sh" "$client_install"
   require "$file" "$sdk_install"
   require "$file" "tinker version"
-  require "$file" "tinker whoami --server <remembered-server>"
-  require "$file" "tinker login --server <remembered-server>"
+  require_phrase "$file" "$(cat "$file")" 'tinker version` must print exactly `tinker 0.1.6`'
+  require_phrase "$file" "$(cat "$file")" 'Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment'
   require "$file" "owner-only"
   require "$file" "$deployer_command"
   require "$file" "one human CLI OTP"
@@ -500,7 +520,10 @@ for file in "$platform" "$deployer"; do
 done
 
 require_text "README Start the beta" "$readme_beta" "tinker version"
+require_release_probe_order "$readme" "curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null ${release_url}/install-client.sh" "$client_install"
 require_text "README Start the beta" "$readme_beta" "$readme_deployer_command"
+require_phrase "README Start the beta" "$readme_beta" 'tinker version` must print exactly `tinker 0.1.6`'
+require_phrase "README Start the beta" "$readme_beta" 'Do not run standalone `tinker whoami` or `tinker login` before this fresh deployment'
 require_text "README Start the beta" "$readme_beta" "Optional: add SDK capabilities"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-operator/SKILL.md"
 require_text "README Start the beta" "$readme_beta" "https://raw.githubusercontent.com/ChrisMarxDev/tinkercloud/main/skills/tinkercloud-deployer/SKILL.md"
@@ -514,7 +537,6 @@ require "docs/getting-started/first-app.md" "$active_unverified_recheck"
 require_phrase "docs/getting-started/first-app.md" "$(cat docs/getting-started/first-app.md)" 'no `Set-Cookie` or `Location`, and no app bytes'
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" "$active_unverified_recheck"
 require_phrase "specs/control/deployment-contract.md" "$(cat specs/control/deployment-contract.md)" 'no `Set-Cookie` or `Location`, and zero app bytes'
-reject_text "README Start the beta" "$readme_beta" "tinker login"
 
 for file in "$platform" "$operator" "$deployer" "$readme"; do
   require_phrase "$file" "$(cat "$file")" "$otp_budget_phrase"

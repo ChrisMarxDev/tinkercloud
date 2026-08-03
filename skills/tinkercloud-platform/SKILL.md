@@ -95,36 +95,27 @@ operator-provided admin URL, for example `https://admin.example.com`. Accept
 only normalized HTTPS. Never invent it, derive it from an app hostname, follow
 a redirect, or accept insecure TLS.
 
-Remember the exact normalized `{server URL, deployer email}` pair after
-`tinker whoami` verifies both. Reuse this non-secret context in the current task
-and later follow-ups instead of asking again. Treat conversation context only
-as a candidate and reverify before mutation. Keep the pair only in conversation
-context and Tinker's protected per-server records, never in app or project files.
+For a fresh deployment, `<SERVER>` is the exact normalized HTTPS admin URL
+supplied once by the operator. Never invent it, derive it from an app hostname,
+follow a redirect, or accept insecure TLS. The one deploy command verifies and
+saves that exact URL directly without redirects. It then reuses a valid
+server-bound bearer or performs exactly one CLI email-and-OTP login only when
+the bearer is absent, unauthorized, or expired. Do not run standalone `tinker whoami` or `tinker login` before this fresh first deployment.
 
-For a known server, run `tinker whoami --server <remembered-server>` before
-concluding login is missing; a bare `tinker whoami` may inspect another default.
-If valid, continue without login or an email question. If definitely expired,
-run `tinker login --server <remembered-server>`, reuse the remembered email at
-the CLI prompt, and let the deployer enter only the OTP there. Replace the pair
-with the exact server and email returned by the successful `whoami`.
-
-Change the pair only after an explicit switch, logout, or contradictory verified
-state. Never transfer an email between servers. If `whoami` returns another
-email, stop before mutation and ask whether to adopt it; do not use
-`tinker login --force` within the deploy attempt.
-
-Confirm the deployer-only `tinker` CLI is installed with `tinker version`. If it is
-missing, install the prepared exact `v0.1.6` beta client only after that
-prerelease is published, then confirm its version:
+Confirm the deployer-only `tinker` CLI is installed with `tinker version`. If it
+is missing, first probe the prepared exact `v0.1.6` client asset, then install
+and confirm the exact version:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 tinker version
 ```
 
 The immutable installer verifies its release evidence. Do not substitute
 `latest`, a package-manager tag, or a caller-supplied release origin.
-If the installed CLI reports anything other than exactly `v0.1.6`, stop; do not
+`tinker version` must print exactly `tinker 0.1.6`; if it prints anything else, stop; do not
 deploy with it or substitute another version. If the exact `v0.1.6` release or
 the required installer asset for this role is unavailable, stop: do not install,
 deploy, or substitute another version. Minimal HTTPS release readiness is the
@@ -135,21 +126,13 @@ download an unsigned executable, or treat an unauthenticated installer URL as
 its own trust root. Ask the operator for the signed client source/release
 location when it cannot be discovered safely.
 
-Do not ask the deployer for a bearer or OTP. Use the interactive CLI credential
-flow when needed:
-
-```sh
-tinker whoami --server <remembered-server>
-tinker login --server <remembered-server>
-```
-
-`tinker login` reuses a valid server-bound credential. Only a definite
-unauthorized/expired credential may fall back to OTP. Let the deployer enter
-the OTP into the CLI prompt, not the conversation. An explicit `--server`
-applies only to that command; successful login stores the verified default.
-`whoami` alone decides saved-state reuse. When login is needed, the only
-authentication prompts are exactly `Email: ` and `Code: `; enter the code only
-in the CLI.
+Do not ask the deployer for a bearer or OTP. During fresh deployment, let the
+one deploy command manage its internal server verification and authentication;
+when login is needed, the only authentication prompts are exactly `Email: ` and
+`Code: `. Enter the code only in the CLI. For later troubleshooting after this
+fresh single-command deployment, `tinker whoami --server <remembered-server>`
+and `tinker login --server <remembered-server>` may diagnose or refresh a
+credential; they are explicitly not part of the fresh first-deploy path.
 This bounded beta path permits one human CLI OTP only when that saved bearer is
 absent, unauthorized, or expired. Prepare the first deploy **owner-only**, but
 do not invoke it until the final reviewed deployment step. Completion needs
@@ -157,14 +140,16 @@ anonymous HTML, asset, and reserved API denial evidence with no app bytes.
 
 Terminal CLI authentication rule: immediately after a CLI authentication or OTP
 attempt fails, is malformed, times out, or is denied, stop that deploy attempt.
+Do not run standalone `tinker whoami` or `tinker login` before this fresh first
+deployment; those later troubleshooting commands are not a retry path.
 Do not retry `tinker login`, use `--force`, switch account or identity, log out,
 delete or clear saved credentials, or create an alternate OTP path. A valid
 exact server-scoped saved identity uses zero OTP. Enter an eligible OTP directly
 in the CLI, never chat.
 
 One-invocation deployment rule: after the final review, invoke `tinker --server
-<remembered-server> deploy .` (or `tinker --server <remembered-server>
---confirm-public deploy .`) exactly once for that deploy attempt.
+<SERVER> deploy .` (or the equivalent explicit public-confirmation form)
+exactly once for that deploy attempt.
 Any CLI deploy outcome—validation, upload, activation, verification,
 transport/TLS/redirect/timeout/error, or success—ends the agent invocation; do
 not rerun deploy, upload another release, or retry from chat. The CLI may use
@@ -538,7 +523,9 @@ For a first owner-only deploy, the wizard asks exactly these six prompts in this
 order: `App slug (<suggested>, Enter to accept):`, `Description (optional):`,
 `Build output (<default>, Enter to accept):`, `Allowed emails or domains,
 comma-separated (optional):`, `Features (kv,blobs,realtime; optional):`, and
-`SPA fallback (optional):`. Accept the suggested valid slug or provide one
+`SPA fallback (optional):`. Empty optional answers keep their defaults: no
+description, owner-only access, no features, and no fallback; they do not
+create follow-up questions. Accept the suggested valid slug or provide one
 stable lowercase ASCII DNS label (1–63 characters; letters, digits, internal
 hyphens; not a reserved label). Enter empty values for description, allowlist,
 features, and SPA fallback unless separately reviewed; an empty allowlist is
@@ -569,7 +556,7 @@ go-ahead. Then run exactly once from the project root with the reviewed wizard
 answers:
 
 ```sh
-tinker --server <remembered-server> deploy .
+tinker --server <SERVER> deploy .
 ```
 
 Ask exactly: `Deploy this owner-only app to <server> now? [y/N]`. Only explicit
@@ -707,8 +694,15 @@ only nonempty resolution; compare the intended record target in the provider UI.
 
 ### 4. Install v0.1.6
 
-For a clean host, after `v0.1.6` is published, begin in that VPS's root shell
-with this prepared exact-beta command:
+For a clean host, first probe the exact immutable installer from that VPS's
+root shell. HTTPS success permits installation and any failure stops:
+
+```sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --head --location --fail --silent --show-error --max-time 15 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
+```
+
+Then install once:
 
 ```sh
 curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
@@ -717,20 +711,13 @@ curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/
 The released host installer embeds that immutable release directory; do not add
 an origin, `latest` selector, provider credential, or signing material. The
 copy/paste installer verifies checksums and a pinned Ed25519 signature before
-installation. This is release preparation, not a claim that `v0.1.6` already
-exists; after publication, inspect the [exact immutable beta
-release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6).
+installation. Inspect the [exact immutable beta
+release](https://github.com/ChrisMarxDev/tinkercloud/releases/tag/v0.1.6)
+when useful.
 If the exact `v0.1.6` release or the host installer asset is unavailable,
 stop: do not install, deploy, or substitute another version. Minimal HTTPS
 release readiness is the exact tag page plus the host installer asset URL
 returning HTTPS success; the installer remains the checksum/signature authority.
-Probe only this role's immutable installer read-only; HTTPS success permits
-installation and any failure stops:
-
-```sh
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 --location --fail --silent --show-error --max-time 15 --max-filesize 32768 -o /dev/null https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh
-```
-
 The installer remains the
 cryptographic authority, and any later exact-version proof failure stops.
 HTTPS release-asset redirects are transport-only. Repository/development

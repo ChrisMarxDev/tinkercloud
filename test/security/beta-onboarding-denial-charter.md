@@ -15,6 +15,9 @@ persisted state.
   beta release. Do not install or claim release verification.
 - A missing signature/checksum proof, mismatched client/server version, or
   incompatible API version denies before host setup or deployment proceeds.
+- A client version result other than exactly `tinker 0.1.6` denies before the
+  first deploy. `tinker v0.1.6`, a version inferred from a filename, or a
+  compatible-but-different version is not sufficient evidence.
 - An unavailable exact `v0.1.6` tag or the current role's required installer
   asset is terminal: no install, deploy, or substitute version. HTTPS readiness
   checks only the exact tag page and that role's asset; it does not replace the
@@ -63,6 +66,16 @@ persisted state.
   account or identity, log out, delete or clear saved credentials, or create an
   alternate OTP path. A valid exact server-scoped saved identity requires zero
   OTP; any eligible OTP is entered directly in the CLI, never chat.
+- A fresh deployment that runs standalone `tinker whoami` or `tinker login`
+  before its one deploy command denies this beta path. The deploy command alone
+  verifies the exact normalized HTTPS admin URL without redirects, saves it,
+  reuses a bearer when valid, and otherwise performs the one allowed CLI
+  email-and-OTP login.
+- An explicit human deploy may save the verified server only when the
+  default-server record is exactly absent. An existing default (including a
+  different server), unreadable/corrupt default state, or failed write must not
+  be overwritten and stops before app creation, upload, or activation. JSON
+  deploys do not cache server state.
 - Login labels other than `Email: ` and `Code: `, a code outside the CLI, or an
   implicit approval instead of exact affirmative pre-invocation consent deny.
 - `active_but_unverified` permits only a fresh anonymous, no-redirect,
@@ -125,6 +138,10 @@ persisted state.
 - A safe root-owned non-symlink regular mode-`0600` credential file already on
   the VPS must be reused after its exact check. Asking for a workstation transfer
   or SSH target in that case is an unnecessary question and denies readiness.
+- A wildcard A record that is not compared with the confirmed provider-console
+  IPv4, an AAAA record without confirmed reachable IPv6, a CNAME without the
+  provider's stable target, or a missing provider-UI target comparison denies
+  DNS readiness. A certificate input remains forbidden.
 - Provider, DNS, ACME, transport, or persistence failure cannot create an OTP
   bypass, remote recovery endpoint, alternate listener, raw storage URL, or
   permissive app activation.

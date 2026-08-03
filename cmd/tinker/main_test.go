@@ -27,16 +27,17 @@ type loginPrompt struct {
 }
 
 type spyStore struct {
-	values       map[string]string
-	defaultURL   string
-	getErr       error
-	defaultErr   error
-	setErr       error
-	putErr       error
-	deleteErr    error
-	defaultReads int
-	putCalls     int
-	deleteCalls  int
+	values          map[string]string
+	defaultURL      string
+	getErr          error
+	defaultErr      error
+	setErr          error
+	putErr          error
+	deleteErr       error
+	defaultReads    int
+	setDefaultCalls int
+	putCalls        int
+	deleteCalls     int
 }
 
 func (s *spyStore) Get(server string) (string, error) {
@@ -76,6 +77,7 @@ func (s *spyStore) DefaultServer() (string, error) {
 	return s.defaultURL, nil
 }
 func (s *spyStore) SetDefaultServer(server string) error {
+	s.setDefaultCalls++
 	if s.setErr != nil {
 		return s.setErr
 	}
@@ -1078,8 +1080,8 @@ func TestDeployUnauthorizedBearerUsesOTPAndStoresOnlyVerifiedReplacement(t *test
 	})
 	var out, stderr bytes.Buffer
 	deps := runnerDeps{store: stored, prompt: prompt, newClient: tokenClient(transport)}
-	if code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps); code != 0 || !verifiedNew || stored.values["https://tinker.example"] != "new-token" || stored.putCalls != 1 || prompt.asked != 2 {
-		t.Fatalf("code=%d verified=%v stored=%q puts=%d asked=%d out=%q err=%q calls=%v", code, verifiedNew, stored.values["https://tinker.example"], stored.putCalls, prompt.asked, out.String(), stderr.String(), calls)
+	if code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps); code != 0 || !verifiedNew || stored.values["https://tinker.example"] != "new-token" || stored.putCalls != 1 || stored.defaultURL != "https://tinker.example" || stored.setDefaultCalls != 1 || prompt.asked != 2 {
+		t.Fatalf("code=%d verified=%v stored=%q puts=%d default=%q defaultWrites=%d asked=%d out=%q err=%q calls=%v", code, verifiedNew, stored.values["https://tinker.example"], stored.putCalls, stored.defaultURL, stored.setDefaultCalls, prompt.asked, out.String(), stderr.String(), calls)
 	}
 }
 
@@ -1196,6 +1198,80 @@ func TestDeployExistingManifestSkipsManifestWizard(t *testing.T) {
 	code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, runnerDeps{store: stored, prompt: prompt, newClient: tokenClient(successfulDeployTransport(t, "saved-token", &archiveNames, &calls))})
 	if code != 0 || prompt.asked != 0 || len(archiveNames) == 0 {
 		t.Fatalf("code=%d asked=%d archive=%v out=%q err=%q", code, prompt.asked, archiveNames, out.String(), stderr.String())
+	}
+}
+
+func TestHumanDeployPersistsVerifiedExplicitServerWithoutOverwritingExistingDefault(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name              string
+		defaultURL        string
+		wantDefault       string
+		wantDefaultWrites int
+	}{
+		{name: "missing default is saved", wantDefault: "https://tinker.example", wantDefaultWrites: 1},
+		{name: "existing other default is preserved", defaultURL: "https://other.example", wantDefault: "https://other.example", wantDefaultWrites: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stored := &spyStore{values: map[string]string{"https://tinker.example": "saved-token"}, defaultURL: test.defaultURL}
+			var archiveNames, calls []string
+			var out, stderr bytes.Buffer
+			code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, runnerDeps{store: stored, newClient: tokenClient(successfulDeployTransport(t, "saved-token", &archiveNames, &calls))})
+			if code != 0 || stored.defaultURL != test.wantDefault || stored.setDefaultCalls != test.wantDefaultWrites || len(archiveNames) == 0 {
+				t.Fatalf("code=%d default=%q setCalls=%d archive=%v out=%q err=%q", code, stored.defaultURL, stored.setDefaultCalls, archiveNames, out.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func TestHumanDeployDefaultStoreFailuresStopBeforeAppMutation(t *testing.T) {
+	project := t.TempDir()
+	if err := os.Mkdir(filepath.Join(project, "dist"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dist", "index.html"), []byte("ok"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "tinker.yaml"), []byte("version: 1\nname: demo\nbuild:\n  output: dist\naccess:\n  mode: private\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name     string
+		stored   *spyStore
+		message  string
+		setCalls int
+	}{
+		{name: "write failure", stored: &spyStore{values: map[string]string{"https://tinker.example": "saved-token"}, setErr: client.ErrStore}, message: "Server could not be saved.", setCalls: 1},
+		{name: "corrupt read", stored: &spyStore{values: map[string]string{"https://tinker.example": "saved-token"}, defaultErr: client.ErrStore}, message: "Saved server could not be read.", setCalls: 0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mutated := false
+			deps := runnerDeps{store: test.stored, newClient: tokenClient(tokenRoundTrip(func(r *http.Request) (*http.Response, error) {
+				switch r.URL.Path {
+				case "/api/v1/version":
+					return jsonResponse(r, http.StatusOK, `{"api_version":1}`), nil
+				case "/api/v1/whoami":
+					return jsonResponse(r, http.StatusOK, `{"email":"dev@example.test"}`), nil
+				default:
+					mutated = true
+					return nil, context.Canceled
+				}
+			}))}
+			var out, stderr bytes.Buffer
+			if code := runWith([]string{"--server", "https://tinker.example", "deploy", project}, &out, &stderr, deps); code != 1 || !strings.Contains(stderr.String(), test.message) || mutated || test.stored.setDefaultCalls != test.setCalls {
+				t.Fatalf("code=%d mutated=%v setCalls=%d out=%q err=%q", code, mutated, test.stored.setDefaultCalls, out.String(), stderr.String())
+			}
+		})
 	}
 }
 
