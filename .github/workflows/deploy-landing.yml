@@ -75,7 +75,7 @@ jobs:
               --output "${response_path}" \
               https://tinkercloud.fun/ \
               && grep -F '<title>Tinkercloud — Turn small apps into trusted team tools</title>' "${response_path}" >/dev/null \
-              && grep -F 'aria-label="tinker deploy . --allow &#x27;*@acme.com&#x27;"' "${response_path}" >/dev/null \
+              && grep -F 'aria-label="tinker deploy . --allow &#x27;*@example.com&#x27;"' "${response_path}" >/dev/null \
               && grep -F 'Open source. Your VPS. Your Tinkercloud.' "${response_path}" >/dev/null; then
               exit 0
             fi

@@ -11,13 +11,13 @@ LTS x86-64 VPS dedicated to Tinkercloud, install the signed server binary and
 systemd unit with the exact published version:
 
 ```bash
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 ```
 
 The released installer embeds that exact immutable GitHub release directory,
 permits only HTTPS asset redirects, and verifies checksums plus pinned Ed25519
-evidence before installation. Replace `VERSION` with the intended published
-version. Do not pass an origin or secret to this root-shell command.
+evidence before installation. Do not pass an origin or secret to this
+root-shell command.
 
 An operator who already uses the workstation CLI may instead run `tinker host
 install root@HOST`; that optional SSH flow derives the exact release directory

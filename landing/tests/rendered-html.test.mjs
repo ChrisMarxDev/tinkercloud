@@ -44,7 +44,7 @@ test("server-renders the complete Tinkercloud landing page", async () => {
   assert.match(html, /tinker\.live\.onKvChange/);
   assert.match(
     html,
-    /aria-label="tinker deploy \. --allow &#x27;\*@acme\.com&#x27;"/,
+    /aria-label="tinker deploy \. --allow &#x27;\*@example\.com&#x27;"/,
   );
   assert.match(html, /one VPS you control/i);
   assert.match(html, /See one deploy/);

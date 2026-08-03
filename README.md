@@ -13,13 +13,12 @@ For an operator on a fresh supported VPS root shell, installation is one exact
 versioned command:
 
 ```sh
-curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-host.sh | sh
+curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-host.sh | sh
 ```
 
 The installer downloads only its baked exact release, follows HTTPS-only asset
 redirects, and verifies checksums plus Ed25519 signatures before it changes the
-host. Replace `VERSION` with a published version. Run it only as root on a
-clean Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
+host. Run it only as root on a clean Ubuntu 24.04 LTS or 26.04 LTS x86-64 VPS.
 
 For a deployer, the shortest useful path is preview, then publish the current
 project directory:
@@ -44,12 +43,11 @@ for replaceable toy, prototype, and utility apps—not business-critical data.
 
 ## Install the Tinker CLI
 
-Tinker is installed directly from an exact GitHub release. Replace `VERSION`
-with a published beta version; beta installation never follows a mutable
-`latest` channel.
+Tinker is installed directly from an exact GitHub release. Beta installation
+never follows a mutable `latest` channel.
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/install-client.sh | sh
+curl --proto '=https' --tlsv1.2 -fsSL https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/install-client.sh | sh
 ```
 
 The installer is bound to that exact immutable release. It selects the macOS or
@@ -63,8 +61,8 @@ shell profile, add the printed directory to `PATH` yourself:
 tinker version
 ```
 
-After the npm beta channel is published, package-manager users may install the
-same reviewed native CLI matrix with one command:
+Package-manager users may install the same reviewed native CLI matrix with one
+command:
 
 ```sh
 npm install --global @tinkercloud/cli@next
@@ -103,7 +101,7 @@ installed on a workstation:
 tinker host install root@HOST
 tinker host status root@HOST
 tinker host doctor root@HOST
-tinker host update root@HOST --release-base https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/
+tinker host update root@HOST
 tinker host uninstall root@HOST
 ```
 
@@ -188,12 +186,11 @@ deno add npm:@tinkercloud/sdk@beta
 ```
 
 All five commands consume the same reviewed npm artifact; there is no separate
-package-manager build. If npm reports that the package is unavailable, the
-first registry beta has not been published yet. Install an exact SDK from its
-signed GitHub prerelease instead, replacing both `VERSION` values:
+package-manager build. Install the current exact SDK from its signed GitHub
+prerelease with:
 
 ```sh
-npm install https://github.com/ChrisMarxDev/tinkercloud/releases/download/vVERSION/tinkercloud-sdk-VERSION.tgz
+npm install https://github.com/ChrisMarxDev/tinkercloud/releases/download/v0.1.6/tinkercloud-sdk-0.1.6.tgz
 ```
 
 Use the SDK only inside an app served by Tinkercloud:
