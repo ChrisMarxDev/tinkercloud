@@ -202,6 +202,19 @@ PATH="$tmp/bin:$PATH" HOME="$tmp/client-home" SHELL=/bin/sh TINKER_TEST_UID="$te
   "$tmp/install-client-valid.sh" >/dev/null
 test -f "$tmp/client-home/.local/bin/tinker" || { echo "client installer rejected canonical trailing newline" >&2; exit 1; }
 grep -Fqx '# Added by Tinker client installer' "$tmp/client-home/.profile" || { echo "client installer did not add a safe PATH profile entry" >&2; exit 1; }
+# A conventional, safe local bin directory already on PATH is the preferred
+# destination. Exercise the macOS selector without TINKER_INSTALL_DIR: its
+# directory validation must not overwrite the outer PATH candidate.
+cp "$tmp/client-release/tinker-linux-amd64" "$tmp/client-release/tinker-darwin-amd64"
+cp "$tmp/client-release/tinker-linux-amd64.metadata.json" "$tmp/client-release/tinker-darwin-amd64.metadata.json"
+cp "$tmp/client-release/tinker-linux-amd64.signature" "$tmp/client-release/tinker-darwin-amd64.signature"
+(cd "$tmp/client-release" && sha256sum tinker-linux-amd64 tinker-linux-amd64.metadata.json tinker-linux-amd64.signature tinker-darwin-amd64 tinker-darwin-amd64.metadata.json tinker-darwin-amd64.signature >SHA256SUMS)
+printf '#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo x86_64;; esac\n' >"$tmp/bin/uname"
+chmod +x "$tmp/bin/uname"
+rm "$tmp/client-home/.local/bin/tinker"
+PATH="$tmp/client-home/.local/bin:$tmp/bin:/usr/bin:/bin" HOME="$tmp/client-home" SHELL=/bin/unsupported TINKER_TEST_UID="$test_uid" TINKER_TEST_RELEASE="$tmp/client-release" \
+  "$tmp/install-client-valid.sh" >/dev/null
+test -f "$tmp/client-home/.local/bin/tinker" || { echo "client installer did not use the safe PATH local bin directory" >&2; exit 1; }
 mkdir "$tmp/unsafe-path"
 PATH="$tmp/unsafe-path:$tmp/bin:/usr/bin:/bin" HOME="$tmp/client-home" SHELL=/bin/unsupported TINKER_TEST_UID="$test_uid" TINKER_TEST_RELEASE="$tmp/client-release" \
   "$tmp/install-client-valid.sh" >/dev/null
