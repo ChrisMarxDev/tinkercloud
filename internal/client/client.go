@@ -781,7 +781,17 @@ func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL
 	}
 	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, probeURL.String(), nil)
+	if err := c.probePrivateDenialOnce(attemptCtx, probeURL, true); err != nil {
+		return err
+	}
+	reserved := *probeURL
+	reserved.Path = "/_tinker/api/v1/me"
+	reserved.RawPath = ""
+	return c.probePrivateDenialOnce(attemptCtx, &reserved, false)
+}
+
+func (c Client) probePrivateDenialOnce(ctx context.Context, probeURL *url.URL, allowNotReady bool) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL.String(), nil)
 	if err != nil {
 		return publicEvidenceError(EvidencePublicProbeURL, false)
 	}
@@ -806,7 +816,7 @@ func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL
 	if resp.Request.URL.String() != req.URL.String() {
 		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
-	if resp != nil && (resp.StatusCode == http.StatusNotFound ||
+	if allowNotReady && resp != nil && (resp.StatusCode == http.StatusNotFound ||
 		resp.StatusCode == http.StatusBadGateway ||
 		resp.StatusCode == http.StatusServiceUnavailable ||
 		resp.StatusCode == http.StatusGatewayTimeout) {
@@ -814,7 +824,9 @@ func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL
 	}
 	if resp.StatusCode != http.StatusUnauthorized ||
 		resp.Header.Get("Cache-Control") != "no-store" ||
-		resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+		resp.Header.Get("X-Content-Type-Options") != "nosniff" ||
+		resp.Header.Get("Set-Cookie") != "" ||
+		resp.Header.Get("Location") != "" {
 		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	contentType, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
@@ -829,19 +841,15 @@ func (c Client) probePublicDeploymentOnce(ctx context.Context, probeURL *url.URL
 	if err = json.Unmarshal(body, &envelope); err != nil || len(envelope) != 1 {
 		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
-	var denial struct {
-		Code      string `json:"code"`
-		Message   string `json:"message"`
-		RequestID string `json:"request_id"`
-	}
+	var denial map[string]string
 	raw, ok := envelope["error"]
-	if !ok || json.Unmarshal(raw, &denial) != nil {
+	if !ok || json.Unmarshal(raw, &denial) != nil || len(denial) != 3 {
 		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
-	if denial.Code != "not_authorized" ||
-		denial.Message != "This request is not authorized." ||
-		!gatewayRequestID.MatchString(denial.RequestID) ||
-		denial.RequestID != resp.Header.Get("X-Request-ID") {
+	if denial["code"] != "not_authorized" ||
+		denial["message"] != "This request is not authorized." ||
+		!gatewayRequestID.MatchString(denial["request_id"]) ||
+		denial["request_id"] != resp.Header.Get("X-Request-ID") {
 		return publicEvidenceError(EvidencePublicProbeInvalid, false)
 	}
 	return nil

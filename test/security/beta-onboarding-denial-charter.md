@@ -129,6 +129,15 @@ persisted state.
   receipt, protected exact app origin, anonymous HTML/asset/reserved-route
   denial proof, or authenticated platform-health proof denies deployment
   success.
+- Private combined evidence always requires anonymous root plus representative
+  reserved-route exact `401 not_authorized` denial before dispatch, with
+  `no-store`, no redirect/cookie, and no release bytes. When the server
+  candidate contains a servable non-index asset, that actual asset requires the
+  same denial. A release containing only index content must remain valid without
+  an asset probe and must not invent an asset path or claim fabricated evidence.
+  The independent live client probe covers root plus a representative reserved
+  route; optional real-asset proof remains server-owned unless a typed private
+  activation receipt later exposes that path.
 - Missing project output does not authorize deployment of source files or an
   inferred build. `tinker deploy` must stop once with the exact project-owned
   build action required.

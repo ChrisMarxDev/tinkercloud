@@ -16,6 +16,7 @@ cp -R "$repo_root/skills/tinkercloud-full-stack-test" "$fixture/skills/"
 cp "$repo_root/README.md" "$fixture/README.md"
 cp "$repo_root/CHANGELOG.md" "$fixture/CHANGELOG.md"
 cp "$repo_root/specs/agent/beta-onboarding-contract.md" "$fixture/specs/agent/"
+cp "$repo_root/specs/agent/role-skill-contract.md" "$fixture/specs/agent/"
 cp "$repo_root/specs/control/deployment-contract.md" "$fixture/specs/control/"
 cp "$repo_root/docs/getting-started/first-app.md" "$fixture/docs/getting-started/"
 
@@ -381,6 +382,7 @@ check_fresh_parity_mutation() {
     indexing) perl -0pi -e 's/(access:\n  mode: private)/$1\n  indexing: false/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     exact_codes) perl -0pi -e 's/requests exactly two human codes total/requests at most two human codes total/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
     matrix) perl -0pi -e 's/The clean two-code human flow MUST NOT\s+invoke the extended VPS security matrix/The clean flow may invoke the extended matrix/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
+    evidence) perl -0pi -e 's/denial of that actual asset/denial of an invented asset/' "$fixture/skills/tinkercloud-deployer/SKILL.md" ;;
   esac
   set +e
   output=$(cd "$fixture" && ./scripts/test-beta-onboarding-docs.sh 2>&1)
@@ -395,6 +397,7 @@ check_fresh_parity_mutation init 'beta onboarding documentation missing from ski
 check_fresh_parity_mutation indexing 'beta onboarding documentation private manifest sample contains public-only access.indexing in skills/tinkercloud-deployer/SKILL.md'
 check_fresh_parity_mutation exact_codes 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: A completely fresh successful end-to-end onboarding with no reusable identity requests exactly two human codes total: exactly one operator dashboard OTP and exactly one deployer CLI OTP.'
 check_fresh_parity_mutation matrix 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: The clean two-code human flow MUST NOT invoke the extended VPS security matrix. That matrix is separate and unattended; it never authorizes asking the human for more codes.'
+check_fresh_parity_mutation evidence 'beta onboarding documentation missing from skills/tinkercloud-deployer/SKILL.md: Private combined success evidence always proves anonymous root and a representative reserved route return exact safe `401 not_authorized` denials with no app bytes.'
 
 # The standalone deployer skill must retain the exact fully-fresh two-code rule.
 cp "$repo_root/skills/tinkercloud-deployer/SKILL.md" "$fixture/skills/tinkercloud-deployer/SKILL.md"

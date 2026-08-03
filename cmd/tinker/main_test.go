@@ -122,7 +122,7 @@ func successfulDeployTransport(t *testing.T, bearer string, archiveNames *[]stri
 				t.Fatalf("whoami bearer = %q", r.Header.Get("Authorization"))
 			}
 			return jsonResponse(r, http.StatusOK, `{"email":"dev@example.test"}`), nil
-		case r.URL.Host == "demo.tinker.example" && r.URL.Path == "/":
+		case r.URL.Host == "demo.tinker.example" && (r.URL.Path == "/" || r.URL.Path == "/_tinker/api/v1/me"):
 			h := make(http.Header)
 			h.Set("Content-Type", "application/json; charset=utf-8")
 			h.Set("Cache-Control", "no-store")
@@ -1800,7 +1800,7 @@ func TestDeployUsesFreshIdempotencyKeyForEachInvocationAndStagesArchive(t *testi
 				}
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"email":"dev@example.test","api_version":1}`)), Header: make(http.Header), Request: r}, nil
 			}
-			if r.URL.Host == "demo.tinker.example" && r.URL.Path == "/" {
+			if r.URL.Host == "demo.tinker.example" && (r.URL.Path == "/" || r.URL.Path == "/_tinker/api/v1/me") {
 				if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 					t.Fatalf("credential leaked to public probe: %v", r.Header)
 				}

@@ -31,9 +31,9 @@ type Probe struct {
 	Indexing             bool
 }
 
-// Passed is posture-aware. Private probes retain their historical anonymous
-// denial plus authenticated-health evidence; a public static candidate instead
-// needs exact immutable bytes that were anonymously reachable.
+// Passed is posture-aware. Private probes require root and reserved-route
+// denials, optional real-asset denial evidence, and authenticated health. A
+// public static candidate instead needs exact anonymously reachable bytes.
 func (p Probe) Passed() bool {
 	if p.URL == "" {
 		return false
@@ -44,7 +44,13 @@ func (p Probe) Passed() bool {
 		}
 		return (p.AssetPath == "" && p.AssetBytes == 0) || (canonicalAssetPath(p.AssetPath) && lowercaseSHA256.MatchString(p.AssetSHA256) && p.AssetBytes >= 0)
 	}
-	return (p.Posture == "" || p.Posture == "private") && p.AnonymousDenied && p.AuthenticatedHealthy
+	if (p.Posture != "" && p.Posture != "private") || !p.AnonymousDenied || !p.AuthenticatedHealthy || !p.ReservedDenied {
+		return false
+	}
+	if p.AssetPath == "" {
+		return p.AssetSHA256 == "" && p.AssetBytes == 0
+	}
+	return canonicalAssetPath(p.AssetPath) && lowercaseSHA256.MatchString(p.AssetSHA256) && p.AssetBytes >= 0
 }
 
 func canonicalAssetPath(v string) bool {

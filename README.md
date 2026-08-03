@@ -228,9 +228,15 @@ Ask `Deploy this owner-only app to <server> now? [y/N]`; only explicit yes
 continues. Success prints `Deployment: <id>`, `State: active`, and `URL:
 <exact-origin>`; internal platform-health and anonymous-denial probes are
 already success preconditions, not extra credential steps.
-Success records the immutable deployment ID, protected exact app origin,
-authenticated platform-health success, and anonymous HTML, asset, and reserved
-API denial with no app bytes. OTP ceilings are nonfungible: one browser OTP
+Success records the immutable deployment ID, protected exact app origin, and
+authenticated platform-health success. Private combined success evidence always
+proves anonymous root and a representative reserved route return exact safe
+`401 not_authorized` denials with no app bytes. When the immutable release contains a
+servable non-index asset, the server candidate additionally proves denial of that
+actual asset; a single-file app requires no asset evidence and must not fabricate
+it. The independent live client probe covers root plus the representative reserved
+route; the private activation receipt does not expose an asset path. OTP ceilings
+are nonfungible: one browser OTP
 maximum for the operator and one CLI OTP maximum for the deployer; the two-role
 total never permits two OTPs for either role. Before issuing, relaying,
 requesting, or suggesting a third human OTP, stop immediately.

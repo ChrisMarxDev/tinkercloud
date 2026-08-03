@@ -37,6 +37,39 @@ func TestProbeCandidatePrivateLLMChatRelease(t *testing.T) {
 	}
 }
 
+func TestProbeCandidatePrivateReleaseProvesAssetAndReservedDenials(t *testing.T) {
+	root := t.TempDir()
+	record := realisticPrivateCandidate(t, root, false)
+	probe, err := ProbeCandidate(context.Background(), config.Config{
+		Domain:        "tinker.test",
+		SessionCookie: "__Host-tinker_app",
+	}, root, record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !probe.Passed() || !probe.AnonymousDenied || !probe.ReservedDenied || probe.AssetPath != "app.js" || probe.AssetBytes == 0 {
+		t.Fatalf("private asset/reserved denial evidence incomplete: %+v", probe)
+	}
+	if probe.Detail != "" {
+		t.Fatalf("private probe reflected release bytes: %q", probe.Detail)
+	}
+}
+
+func TestProbeCandidatePrivateSingleFileReleaseDoesNotRequireAssetEvidence(t *testing.T) {
+	root := t.TempDir()
+	record := realisticPrivateCandidateFiles(t, root, false, false)
+	probe, err := ProbeCandidate(context.Background(), config.Config{
+		Domain:        "tinker.test",
+		SessionCookie: "__Host-tinker_app",
+	}, root, record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !probe.Passed() || !probe.AnonymousDenied || !probe.ReservedDenied || !probe.AuthenticatedHealthy || probe.AssetPath != "" || probe.AssetBytes != 0 {
+		t.Fatalf("single-file private evidence was fabricated or incomplete: %+v", probe)
+	}
+}
+
 func TestProbeCandidatePrivateLLMChatRejectsAlteredReleaseEvidence(t *testing.T) {
 	root := t.TempDir()
 	record := realisticPrivateCandidate(t, root, true)
@@ -64,6 +97,10 @@ func TestProbeCandidatePrivateLLMChatRejectsCapabilityMismatch(t *testing.T) {
 }
 
 func realisticPrivateCandidate(t *testing.T, dataRoot string, llmChat bool) deployments.Record {
+	return realisticPrivateCandidateFiles(t, dataRoot, llmChat, true)
+}
+
+func realisticPrivateCandidateFiles(t *testing.T, dataRoot string, llmChat, withAssets bool) deployments.Record {
 	t.Helper()
 	staging := t.TempDir()
 	manifest := "version: 2\nname: llm-chat\nbuild:\n  output: dist\naccess:\n  mode: private\ncapabilities:\n  llm:\n    chat: true\n"
@@ -71,13 +108,15 @@ func realisticPrivateCandidate(t *testing.T, dataRoot string, llmChat bool) depl
 		manifest = "version: 2\nname: llm-chat\nbuild:\n  output: dist\naccess:\n  mode: private\n"
 	}
 	files := map[string][]byte{
-		"app.js":        []byte("import { Tinker } from './tinker-sdk.js';\nexport const app = new Tinker();\n"),
-		"errors.js":     []byte("export const safeMessage = () => 'Chat is temporarily unavailable.';\n"),
-		"history.js":    []byte("export const history = [];\n"),
-		"index.html":    []byte("<!doctype html><title>LLM chat</title><main>private candidate marker</main>"),
-		"styles.css":    []byte("main { max-width: 42rem; margin: auto; }\n"),
-		"tinker-sdk.js": []byte("export class Tinker {}\n"),
-		"tinker.yaml":   []byte(manifest),
+		"index.html":  []byte("<!doctype html><title>LLM chat</title><main>private candidate marker</main>"),
+		"tinker.yaml": []byte(manifest),
+	}
+	if withAssets {
+		files["app.js"] = []byte("import { Tinker } from './tinker-sdk.js';\nexport const app = new Tinker();\n")
+		files["errors.js"] = []byte("export const safeMessage = () => 'Chat is temporarily unavailable.';\n")
+		files["history.js"] = []byte("export const history = [];\n")
+		files["styles.css"] = []byte("main { max-width: 42rem; margin: auto; }\n")
+		files["tinker-sdk.js"] = []byte("export class Tinker {}\n")
 	}
 	for name, contents := range files {
 		if err := os.WriteFile(filepath.Join(staging, name), contents, 0600); err != nil {

@@ -7,8 +7,11 @@ import (
 
 func TestProbePassedIsPostureAware(t *testing.T) {
 	hash := strings.Repeat("a", 64)
-	if !(Probe{URL: "https://app.test", AnonymousDenied: true, AuthenticatedHealthy: true}).Passed() {
+	if !(Probe{URL: "https://app.test", AnonymousDenied: true, AuthenticatedHealthy: true, ReservedDenied: true}).Passed() {
 		t.Fatal("private compatibility probe rejected")
+	}
+	if (Probe{URL: "https://app.test", AnonymousDenied: true, AuthenticatedHealthy: true}).Passed() {
+		t.Fatal("private probe accepted without reserved-route denial")
 	}
 	if (Probe{URL: "https://app.test", Posture: "public_static", AnonymousDenied: true, AuthenticatedHealthy: true}).Passed() {
 		t.Fatal("public probe accepted anonymous denial without immutable evidence")

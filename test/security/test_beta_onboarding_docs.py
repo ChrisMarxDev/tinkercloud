@@ -74,6 +74,19 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
             with self.subTest(relative_path=relative_path):
                 self.assertIn(phrase, " ".join(self.read(relative_path).split()))
 
+    def test_private_success_evidence_is_combined_and_asset_optional(self):
+        phrase = (
+            "Private combined success evidence always proves anonymous root and a representative "
+            "reserved route return exact safe `401 not_authorized` denials with no app bytes. When "
+            "the immutable release contains a servable non-index asset, the server candidate "
+            "additionally proves denial of that actual asset; a single-file app requires no asset "
+            "evidence and must not fabricate it. The independent live client probe covers root plus "
+            "the representative reserved route; the private activation receipt does not expose an asset path."
+        )
+        for relative_path in ("README.md", "skills/tinkercloud-deployer/SKILL.md"):
+            with self.subTest(relative_path=relative_path):
+                self.assertIn(phrase, " ".join(self.read(relative_path).split()))
+
     def test_fresh_server_origin_and_inline_manifest_creation_are_unambiguous(self):
         server_phrase = (
             "On a fully fresh workstation, `<SERVER>` comes only from the operator-provided "
