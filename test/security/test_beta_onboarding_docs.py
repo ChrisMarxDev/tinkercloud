@@ -2,12 +2,12 @@
 """Regression checks for public-beta onboarding documentation truth."""
 
 from pathlib import Path
+import re
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[2]
 PREPARED_RELEASE = "v0.1.6"
-REAL_STAGING_DOMAIN = "testing.tinkercloud.fun"
 EXAMPLE_STAGING_DOMAIN = "testing.tinkercloud.example"
 
 
@@ -25,8 +25,10 @@ class BetaOnboardingDocumentationTest(unittest.TestCase):
         for relative_path in files:
             with self.subTest(relative_path=relative_path):
                 contents = self.read(relative_path)
-                self.assertNotIn(REAL_STAGING_DOMAIN, contents)
                 self.assertIn(EXAMPLE_STAGING_DOMAIN, contents)
+                platform_domains = re.findall(r"testing\.tinkercloud\.[a-z]+", contents)
+                self.assertTrue(platform_domains)
+                self.assertTrue(all(domain == EXAMPLE_STAGING_DOMAIN for domain in platform_domains))
 
     def test_prepared_v016_commands_are_explicitly_unpublished(self):
         files = (
