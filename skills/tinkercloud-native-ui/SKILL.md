@@ -99,7 +99,7 @@ the control-plane mark, stylesheet, or chrome.
   and never renders as zero.
 - Keep operator app management out of the resting row. Use one compact native
   More disclosure whose options open separate focused native dialogs for the
-  existing Access policy, Releases, optional LLM chat grant, and App controls
+  existing Access policy, Releases, operator-only LLM chat policy, and App controls
   content. Enhancement may move the existing server-rendered body but must not
   clone or rewrite forms. Keep More hidden and the original native fallback
   details usable until every dialog pairing initializes; deployer rows omit

@@ -174,7 +174,7 @@
                         <div class="tinker-app-more__menu">
                           <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="access-{{.Slug}}">Access policy</button>
                           <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="releases-{{.Slug}}">Releases</button>
-                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="llm-{{.Slug}}">LLM chat grant</button>
+                          <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="llm-{{.Slug}}">LLM chat</button>
                           <button class="tinker-app-more__option" type="button" data-tinker-app-more-option data-tinker-dialog-open="controls-{{.Slug}}">App controls</button>
                         </div>
                       </details>
@@ -246,8 +246,8 @@
               </dialog>
               <dialog class="tinker-dialog" id="llm-{{.Slug}}" data-tinker-app-dialog="llm-{{.Slug}}" aria-labelledby="llm-title-{{.Slug}}">
                 <div class="tinker-dialog__header">
-                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="llm-title-{{.Slug}}">LLM chat grant</h2></div>
-                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close LLM chat grant for {{.Slug}}">×</button></form>
+                  <div><p class="tinker-eyebrow">{{.Slug}}</p><h2 id="llm-title-{{.Slug}}">LLM chat</h2></div>
+                  <form method="dialog"><button class="tinker-dialog__close" type="submit" value="close" aria-label="Close LLM chat policy for {{.Slug}}">×</button></form>
                 </div>
                 <div class="tinker-dialog__body tinker-app-dialog__body" data-tinker-app-dialog-slot></div>
               </dialog>

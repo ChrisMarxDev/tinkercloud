@@ -240,7 +240,7 @@ manifest makes the dashboard unavailable rather than inventing a summary.
 Keep the resting app row about recognition and current state. Place the app
 title, stable launch action, and QR action in one compact identity cluster;
 keep the durable status and one operator-only More disclosure opposite it.
-More lists Access policy, Releases, the optional LLM chat grant, and App
+More lists Access policy, Releases, the operator-only LLM chat policy, and App
 controls, and opens each surface in its own focused native dialog. These are
 the existing server-rendered forms and read models, not client-side copies.
 Before enhancement, or whenever pairing a dialog fails, leave their native
