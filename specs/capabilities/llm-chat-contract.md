@@ -92,6 +92,31 @@ opaque connection ID, and derives the display label exactly as `Anthropic API
 key` or `Gemini API key` before persistence. Existing connection names remain
 unchanged and multiple connections for one provider remain valid.
 
+The operator-only LLM chat section may offer a live model catalog as an
+advisory profile-creation aid. A catalog option exists only when its connection
+is active, its encrypted key decrypts through the root-owned credential
+boundary, and the fixed provider's official model-list endpoint succeeds with
+a bounded valid response. Gemini entries are limited to models that advertise
+`generateContent`. The server omits a connection's entries on decrypt,
+transport, timeout, provider, or response-validation failure; one failure does
+not make the dashboard unavailable and no stale or inferred model entry is
+substituted.
+
+Catalog entries contain only the safe connection ID and label, fixed provider,
+and provider model identifier needed by the operator form. They never enter
+app-facing capability discovery, the SDK, a deployed app, or a viewer response.
+The catalog is not an authorization decision: profile persistence still
+requires a currently active connection, and invocation still re-verifies the
+active profile, grant, and connection.
+
+Every profile form also provides an explicit custom model-identifier path.
+This path accepts the same bounded single-line string as persisted profiles and
+lets an operator select a newly released provider model without upgrading
+Tinkercloud. It cannot select a provider URL, add request options, bypass the
+fixed adapter, or use an inactive or missing connection. Tinkercloud never
+changes an existing profile's model automatically when a provider catalog
+changes.
+
 The server alone derives whether key management is ready. If its LLM repository,
 envelope root, or credential validator is unavailable, the dashboard shows an
 unavailable state with the root-only `tinkercloud llm enable` and restart next
@@ -114,3 +139,8 @@ Tests must prove anonymous/malformed authorization, cross-app scope, disabled
 or revoked grant/connection, invalid input, exhausted quota/rate/concurrency,
 provider failure, cancellation, audit failure, malformed provider response,
 redirects, and secret/prompt leakage all fail closed before a usable response.
+Catalog tests must additionally prove that missing, disabled, undecryptable, or
+provider-rejected keys contribute no options; malformed and oversized provider
+catalogs contribute no options; deployers, viewers, apps, and SDK discovery see
+no catalog metadata; malformed catalog selections are denied; and a bounded
+custom identifier still requires an active connection.

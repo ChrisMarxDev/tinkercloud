@@ -308,8 +308,15 @@ Before a styled happy path is accepted, tests must prove:
     provider selector: the server resolves the existing connection's provider
     before validating the replacement. A server-derived unavailable key state
     gives only the root-only `tinkercloud llm enable` plus restart next step and
-    renders no credential mutation form or encryption-root detail. Profile/grant
-    writes carry the current revision; disabling a connection or
+    renders no credential mutation form or encryption-root detail. A model
+    catalog option renders only after the server decrypts an active connection's
+    key and that fixed provider returns the model in a bounded valid list; failed
+    connections contribute no option and no error detail. Catalog selection is
+    a convenience, not authorization. Beside it, a native disclosure provides
+    an explicit custom model-identifier form so a new provider model does not
+    require a Tinkercloud upgrade; it still selects an active connection and
+    cannot select a provider URL or provider options. Profile/grant writes carry
+    the current revision; disabling a connection or
     disabling/revoking a grant requires a visible exact-target confirmation
     plus the normal operator, same-origin, and CSRF checks. Deployer dashboards
     omit both sections.

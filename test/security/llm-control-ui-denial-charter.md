@@ -22,3 +22,15 @@ path is accepted:
   operator sees only a safe unavailable state with root-only `tinkercloud llm
   enable` plus restart guidance; no create, rotate, or disable form renders.
 - Deployer dashboards omit API keys and LLM chat capability controls entirely.
+- The operator model catalog contains entries only for active connections whose
+  encrypted key decrypts and whose fixed provider returns a bounded valid model
+  list. Disabled, missing-key, undecryptable, timed-out, provider-rejected,
+  malformed, and oversized responses contribute no options and disclose no
+  failure detail; one failed connection does not suppress successful entries.
+- Catalog metadata never appears in deployer/viewer pages, app capability
+  discovery, the SDK, redirects, notices, audit, or errors. The browser cannot
+  supply a provider URL or use a malformed catalog selection to choose a
+  connection or model.
+- The explicit custom-model path accepts only the existing bounded single-line
+  model identifier, still requires a current active connection, and never
+  weakens provider, endpoint, profile, grant, quota, or invocation checks.
