@@ -220,18 +220,24 @@ type DashboardView struct {
 	Audit                  []DashboardAudit
 	Health                 []DashboardHealth
 	LLMConnections         []LLMConnection
+	LLMProfileConnections  []LLMConnection
 	// LLMKeyManagementReady is derived exclusively by the control service. It
 	// means the server has both its root-owned envelope boundary and a validator
 	// available for write-only provider credential mutations. The dashboard must
 	// never infer this from browser input or expose the root itself.
 	LLMKeyManagementReady bool
 	LLMProfiles           []LLMProfile
+	LLMModelCatalog       []LLMModelOption
 	LLMGrants             []LLMGrant
 	// PublicGate is operator-only current state. The dashboard deliberately
 	// displays it without offering a browser mutation path.
 	PublicGate DashboardPublicGate
 }
 type LLMConnection struct{ ID, DisplayName, Provider, Status string }
+
+// LLMModelOption is operator-only safe metadata from a current provider list.
+// Choice is an opaque form encoding; apps and capability discovery never see it.
+type LLMModelOption struct{ Choice, ConnectionID, ConnectionName, Provider, Model string }
 type LLMProfile struct {
 	ID, ConnectionID, Model, Status string
 	Revision                        uint64

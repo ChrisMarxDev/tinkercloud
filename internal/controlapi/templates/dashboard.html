@@ -1,5 +1,4 @@
 {{define "llm-profile-limits-new"}}
-  <label class="tinker-field"><span class="tinker-label">Model</span><input class="tinker-input tinker-mono" name="model" maxlength="128" required placeholder="claude-sonnet-4-20250514"></label>
   <div class="tinker-grid tinker-grid--2">
     <label class="tinker-field"><span class="tinker-label">Messages per request</span><input class="tinker-input tinker-mono" name="max_messages" inputmode="numeric" value="16" required></label>
     <label class="tinker-field"><span class="tinker-label">Bytes per message</span><input class="tinker-input tinker-mono" name="max_message_bytes" inputmode="numeric" value="16384" required></label>
@@ -12,6 +11,18 @@
     <label class="tinker-field"><span class="tinker-label">Concurrent calls</span><input class="tinker-input tinker-mono" name="concurrency_limit" inputmode="numeric" value="4" required></label>
     <label class="tinker-field"><span class="tinker-label">Monthly token limit</span><input class="tinker-input tinker-mono" name="monthly_token_limit" inputmode="numeric" value="100000" required></label>
   </div>
+{{end}}
+{{define "llm-profile-limits-hidden-existing"}}
+  <input type="hidden" name="max_messages" value="{{.MaxMessages}}">
+  <input type="hidden" name="max_message_bytes" value="{{.MaxMessageBytes}}">
+  <input type="hidden" name="max_input_bytes" value="{{.MaxInputBytes}}">
+  <input type="hidden" name="max_output_tokens" value="{{.MaxOutputTokens}}">
+  <input type="hidden" name="timeout_ms" value="{{.TimeoutMS}}">
+  <input type="hidden" name="viewer_requests" value="{{.ViewerRequests}}">
+  <input type="hidden" name="app_requests" value="{{.AppRequests}}">
+  <input type="hidden" name="rate_window_ms" value="{{.RateWindowMS}}">
+  <input type="hidden" name="concurrency_limit" value="{{.ConcurrencyLimit}}">
+  <input type="hidden" name="monthly_token_limit" value="{{.MonthlyTokenLimit}}">
 {{end}}
 {{define "llm-profile-limits-existing"}}
   <label class="tinker-field"><span class="tinker-label">Model</span><input class="tinker-input tinker-mono" name="model" maxlength="128" value="{{.Model}}" required></label>
@@ -439,20 +450,41 @@
         <div class="tinker-grid tinker-grid--2">
           <article class="tinker-card tinker-stack">
             <div><h3>Create chat profile</h3><p class="tinker-card__meta">A profile fixes one model and every per-call, rate, concurrency, and monthly-token bound.</p></div>
-            {{if .View.LLMConnections}}
-            <form class="tinker-stack" method="post" action="/dashboard/llm/profiles">
-              <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="0">
-              <label class="tinker-field" for="llm-profile-connection"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" id="llm-profile-connection" name="connection_id">{{range .View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}">{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>
-              {{template "llm-profile-limits-new"}}
-              <button class="tinker-button tinker-button--primary" type="submit">Create profile</button>
-            </form>
+            {{if .View.LLMProfileConnections}}
+              {{if .View.LLMModelCatalog}}
+              <form class="tinker-stack" method="post" action="/dashboard/llm/profiles">
+                <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="0">
+                <label class="tinker-field" for="llm-profile-catalog-model"><span class="tinker-label">Available model</span><select class="tinker-select tinker-mono" id="llm-profile-catalog-model" name="catalog_model" required>{{range .View.LLMModelCatalog}}<option value="{{.Choice}}">{{.Model}} · {{.ConnectionName}} · {{.Provider}}</option>{{end}}</select><span class="tinker-help">Listed live using the active API key for that connection.</span></label>
+                {{template "llm-profile-limits-new"}}
+                <button class="tinker-button tinker-button--primary" type="submit">Create catalog profile</button>
+              </form>
+              {{else}}
+              <div class="tinker-state tinker-state--unavailable" role="status"><h3>No models listed</h3><p>No active API key returned a usable model list. You can still enter a custom model identifier below.</p></div>
+              {{end}}
+              <details class="tinker-details"><summary>Use a custom model identifier</summary><div class="tinker-details__body">
+                <form class="tinker-stack" method="post" action="/dashboard/llm/profiles">
+                  <input type="hidden" name="csrf" value="{{.CSRF}}"><input type="hidden" name="expected_revision" value="0">
+                  <label class="tinker-field" for="llm-profile-connection"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" id="llm-profile-connection" name="connection_id" required>{{range .View.LLMProfileConnections}}<option value="{{.ID}}">{{.DisplayName}} · {{.Provider}}</option>{{end}}</select></label>
+                  <label class="tinker-field" for="llm-profile-custom-model"><span class="tinker-label">Custom model identifier</span><input class="tinker-input tinker-mono" id="llm-profile-custom-model" name="model" maxlength="128" required placeholder="provider-model-id"><span class="tinker-help">Use this for a newly released model that is not listed yet. The fixed provider endpoint and all profile limits still apply.</span></label>
+                  {{template "llm-profile-limits-new"}}
+                  <button class="tinker-button tinker-button--primary" type="submit">Create custom profile</button>
+                </form>
+              </div></details>
             {{else}}<p class="tinker-card__meta">Add an active provider connection before creating a profile.</p>{{end}}
           </article>
         </div>
 
         {{if .View.LLMProfiles}}
           <div class="tinker-section-header tinker-section__spaced"><div><p class="tinker-eyebrow">Fixed bounds</p><h3>Chat profiles</h3></div></div>
-          <div class="tinker-grid tinker-grid--2">{{range .View.LLMProfiles}}{{$profile := .}}<article class="tinker-card tinker-stack"><div class="tinker-card__header"><div><h3>{{.Model}}</h3><p class="tinker-card__meta">Profile <code>{{.ID}}</code> · connection <code>{{.ConnectionID}}</code></p></div><span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span></div><details class="tinker-details"><summary>Edit profile limits</summary><div class="tinker-details__body"><form class="tinker-stack" method="post" action="/dashboard/llm/profiles/{{.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.Revision}}"><label class="tinker-field"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" name="connection_id">{{range $.View.LLMConnections}}{{if eq .Status "active"}}<option value="{{.ID}}" {{if eq $profile.ConnectionID .ID}}selected{{end}}>{{.DisplayName}} · {{.Provider}}</option>{{end}}{{end}}</select></label>{{template "llm-profile-limits-existing" .}}<button class="tinker-button tinker-button--primary" type="submit">Save profile limits</button></form></div></details></article>{{end}}</div>
+          <div class="tinker-grid tinker-grid--2">
+            {{range .View.LLMProfiles}}{{$profile := .}}
+            <article class="tinker-card tinker-stack">
+              <div class="tinker-card__header"><div><h3>{{.Model}}</h3><p class="tinker-card__meta">Profile <code>{{.ID}}</code> · connection <code>{{.ConnectionID}}</code></p></div><span class="tinker-status" data-state="{{.Status}}">{{.Status}}</span></div>
+              {{if $.View.LLMModelCatalog}}<details class="tinker-details"><summary>Switch to an available model</summary><div class="tinker-details__body"><form class="tinker-stack" method="post" action="/dashboard/llm/profiles/{{.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.Revision}}">{{template "llm-profile-limits-hidden-existing" .}}<label class="tinker-field"><span class="tinker-label">Available model</span><select class="tinker-select tinker-mono" name="catalog_model" required>{{range $.View.LLMModelCatalog}}<option value="{{.Choice}}">{{.Model}} · {{.ConnectionName}} · {{.Provider}}</option>{{end}}</select></label><button class="tinker-button tinker-button--primary" type="submit">Switch model</button></form></div></details>{{end}}
+              <details class="tinker-details"><summary>Edit limits or use a custom model</summary><div class="tinker-details__body"><form class="tinker-stack" method="post" action="/dashboard/llm/profiles/{{.ID}}"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="expected_revision" value="{{.Revision}}"><label class="tinker-field"><span class="tinker-label">Active connection</span><select class="tinker-select tinker-mono" name="connection_id" required>{{range $.View.LLMProfileConnections}}<option value="{{.ID}}" {{if eq $profile.ConnectionID .ID}}selected{{end}}>{{.DisplayName}} · {{.Provider}}</option>{{end}}</select></label>{{template "llm-profile-limits-existing" .}}<button class="tinker-button tinker-button--primary" type="submit">Save profile</button></form></div></details>
+            </article>
+            {{end}}
+          </div>
         {{end}}
       </section>
 

@@ -136,9 +136,10 @@ type uiViews struct {
 }
 
 type uiActions struct {
-	calls  []string
-	err    error
-	access AccessPolicyInput
+	calls         []string
+	err           error
+	access        AccessPolicyInput
+	profileInputs []LLMProfileInput
 }
 
 func (a *uiActions) ReplaceActiveDeployers(_ context.Context, actor Actor, emails []string, revision string, confirmed bool, _ string) error {
@@ -178,12 +179,14 @@ func (a *uiActions) DisableLLMConnection(_ context.Context, _ Actor, id string) 
 	a.calls = append(a.calls, "llm-disable:"+id)
 	return a.err
 }
-func (a *uiActions) CreateLLMProfile(_ context.Context, _ Actor, _ LLMProfileInput) error {
+func (a *uiActions) CreateLLMProfile(_ context.Context, _ Actor, input LLMProfileInput) error {
 	a.calls = append(a.calls, "llm-profile-create")
+	a.profileInputs = append(a.profileInputs, input)
 	return a.err
 }
-func (a *uiActions) UpdateLLMProfile(_ context.Context, _ Actor, id string, _ LLMProfileInput) error {
+func (a *uiActions) UpdateLLMProfile(_ context.Context, _ Actor, id string, input LLMProfileInput) error {
 	a.calls = append(a.calls, "llm-profile-update:"+id)
+	a.profileInputs = append(a.profileInputs, input)
 	return a.err
 }
 func (a *uiActions) ApproveLLMGrant(_ context.Context, _ Actor, slug, profile string, revision uint64) error {
@@ -225,6 +228,14 @@ func uiSameOriginRequest(t *testing.T, p Platform, method, path, body string, co
 	w := httptest.NewRecorder()
 	p.ServeHTTP(w, r)
 	return w
+}
+
+func cloneForm(values url.Values) url.Values {
+	cloned := make(url.Values, len(values))
+	for key, items := range values {
+		cloned[key] = append([]string(nil), items...)
+	}
+	return cloned
 }
 
 func TestPlatformUIAnonymousAndCrossRoleDenials(t *testing.T) {
@@ -841,10 +852,12 @@ func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T
 		Apps:                  []DashboardApp{{Slug: "alpha", LLMGrant: &LLMGrant{AppSlug: "alpha", ProfileID: profileID, Status: "approved", Revision: 7}}},
 		LLMKeyManagementReady: true,
 		LLMConnections:        []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
+		LLMProfileConnections: []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
+		LLMModelCatalog:       []LLMModelOption{{Choice: connectionID + ":claude-current", ConnectionID: connectionID, ConnectionName: "Team provider", Provider: "anthropic", Model: "claude-current"}},
 		LLMProfiles:           []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 10}},
 	}}}
 	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
-	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "API keys") || !strings.Contains(page.Body.String(), "LLM chat") || strings.Contains(page.Body.String(), `name="display_name"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
+	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "API keys") || !strings.Contains(page.Body.String(), "LLM chat") || !strings.Contains(page.Body.String(), "claude-current") || !strings.Contains(page.Body.String(), "Use a custom model identifier") || strings.Contains(page.Body.String(), `name="display_name"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
 		t.Fatalf("llm UI missing/write-only: %d %s", page.Code, page.Body.String())
 	}
 	var csrf *http.Cookie
@@ -918,6 +931,56 @@ func TestPlatformUILLMProfileRejectsBrowserChosenIDsAndMalformedBounds(t *testin
 	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", form.Encode(), csrf)
 	if w.Code != http.StatusBadRequest || len(actions.calls) != 0 {
 		t.Fatalf("untrusted connection id = %d %#v", w.Code, actions.calls)
+	}
+}
+
+func TestPlatformUILLMProfileAcceptsCatalogOrCustomModelWithoutAmbiguousFields(t *testing.T) {
+	connectionID := "0123456789abcdef0123456789abcdef"
+	actions := &uiActions{}
+	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions}
+	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
+	var csrf *http.Cookie
+	for _, c := range page.Result().Cookies() {
+		if c.Name == browseridentity.CSRFCookieName {
+			csrf = c
+		}
+	}
+	if csrf == nil {
+		t.Fatal("csrf missing")
+	}
+	base := url.Values{"csrf": {csrf.Value}, "expected_revision": {"0"}, "max_messages": {"2"}, "max_message_bytes": {"10"}, "max_input_bytes": {"20"}, "max_output_tokens": {"4"}, "timeout_ms": {"1000"}, "viewer_requests": {"1"}, "app_requests": {"1"}, "rate_window_ms": {"1000"}, "concurrency_limit": {"1"}, "monthly_token_limit": {"10"}}
+	catalog := cloneForm(base)
+	catalog.Set("catalog_model", connectionID+":provider-new-model")
+	w := uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", catalog.Encode(), csrf)
+	if w.Code != http.StatusSeeOther || len(actions.profileInputs) != 1 || actions.profileInputs[0].ConnectionID != connectionID || actions.profileInputs[0].Model != "provider-new-model" {
+		t.Fatalf("catalog profile = %d %#v", w.Code, actions.profileInputs)
+	}
+	custom := cloneForm(base)
+	custom.Set("connection_id", connectionID)
+	custom.Set("model", "operator-custom-model")
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", custom.Encode(), csrf)
+	if w.Code != http.StatusSeeOther || len(actions.profileInputs) != 2 || actions.profileInputs[1].Model != "operator-custom-model" {
+		t.Fatalf("custom profile = %d %#v", w.Code, actions.profileInputs)
+	}
+	ambiguous := cloneForm(catalog)
+	ambiguous.Set("connection_id", connectionID)
+	ambiguous.Set("model", "browser-override")
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", ambiguous.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.profileInputs) != 2 {
+		t.Fatalf("ambiguous catalog selection = %d %#v", w.Code, actions.profileInputs)
+	}
+	malformed := cloneForm(base)
+	malformed.Set("catalog_model", "not-a-catalog-choice")
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", malformed.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.profileInputs) != 2 {
+		t.Fatalf("malformed catalog selection = %d %#v", w.Code, actions.profileInputs)
+	}
+	oversized := cloneForm(base)
+	oversized.Set("connection_id", connectionID)
+	oversized.Set("model", strings.Repeat("m", 129))
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles", oversized.Encode(), csrf)
+	if w.Code != http.StatusBadRequest || len(actions.profileInputs) != 2 {
+		t.Fatalf("oversized custom model = %d %#v", w.Code, actions.profileInputs)
 	}
 }
 

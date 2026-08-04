@@ -3,6 +3,8 @@ package persistence
 import (
 	"context"
 	"database/sql"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
@@ -24,6 +26,13 @@ type LLMGrantView struct {
 	AppID, AppSlug, ProfileID, Status, UpdatedAt string
 	Revision                                     uint64
 	UsedTokens, ReservedTokens, InFlight         int
+}
+type LLMModelCatalogView struct {
+	ConnectionID, ConnectionName, Provider, Model string
+}
+
+type llmModelCataloger interface {
+	ListModels(context.Context, llm.Provider, []byte) ([]string, error)
 }
 
 func (r LLMRepository) OperatorViews(ctx context.Context) ([]LLMConnectionView, []LLMProfileView, []LLMGrantView, error) {
@@ -86,6 +95,86 @@ func (r LLMRepository) OperatorViews(ctx context.Context) ([]LLMConnectionView, 
 		return nil, nil, nil, err
 	}
 	return connections, profiles, grants, nil
+}
+
+// OperatorModelCatalog decrypts only active connection credentials and clears
+// each plaintext immediately after its fixed provider lookup. Provider,
+// decrypt, timeout, and response failures omit that connection; only database
+// failures prevent the operator dashboard itself from rendering.
+func (r LLMRepository) OperatorModelCatalog(ctx context.Context, cataloger llmModelCataloger) ([]LLMModelCatalogView, error) {
+	if r.Store == nil || r.Envelope == nil || cataloger == nil {
+		return nil, nil
+	}
+	rows, err := r.Store.DB.QueryContext(ctx, `SELECT id,display_name,provider_kind,credential_envelope FROM provider_connections WHERE status='active' ORDER BY display_name,id LIMIT 100`)
+	if err != nil {
+		return nil, err
+	}
+	type connection struct {
+		id, name, provider string
+		box                []byte
+	}
+	connections := make([]connection, 0)
+	for rows.Next() {
+		var c connection
+		if err := rows.Scan(&c.id, &c.name, &c.provider, &c.box); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		connections = append(connections, c)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	type catalogResult struct {
+		connection int
+		models     []LLMModelCatalogView
+	}
+	results := make(chan catalogResult, len(connections))
+	var lookups sync.WaitGroup
+	for index, c := range connections {
+		lookups.Add(1)
+		go func() {
+			defer lookups.Done()
+			provider := llm.Provider(c.provider)
+			if provider != llm.ProviderAnthropic && provider != llm.ProviderGemini {
+				return
+			}
+			secret, err := r.Envelope.Open(lookupCtx, c.box)
+			if err != nil {
+				return
+			}
+			models, listErr := cataloger.ListModels(lookupCtx, provider, secret)
+			clear(secret)
+			if listErr != nil || len(models) > 1000 {
+				return
+			}
+			listed := make([]LLMModelCatalogView, 0, len(models))
+			for _, model := range models {
+				if !llm.ValidModelIdentifier(model) {
+					return
+				}
+				listed = append(listed, LLMModelCatalogView{ConnectionID: c.id, ConnectionName: c.name, Provider: c.provider, Model: model})
+			}
+			results <- catalogResult{connection: index, models: listed}
+		}()
+	}
+	lookups.Wait()
+	close(results)
+	listed := make([]catalogResult, 0, len(connections))
+	for item := range results {
+		listed = append(listed, item)
+	}
+	sort.Slice(listed, func(i, j int) bool { return listed[i].connection < listed[j].connection })
+	result := make([]LLMModelCatalogView, 0)
+	for _, item := range listed {
+		result = append(result, item.models...)
+	}
+	return result, nil
 }
 
 func (r LLMRepository) RotateConnection(ctx context.Context, id string, secret []byte, keyVersion int, actor string) error {

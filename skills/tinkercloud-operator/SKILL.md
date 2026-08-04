@@ -317,7 +317,11 @@ never ask for a name, ID, URL, or arbitrary secret. If the dashboard says key
 management is unavailable, run the root-only `tinkercloud llm enable` and restart
 before entering a key; never expose or copy the encryption root. Define a fixed
 approved model/profile and bounded quotas in **LLM chat**, then grant that
-profile explicitly to selected apps. The browser receives only Tinkercloud's
+profile explicitly to selected apps. Prefer the live model catalog: an option
+appears only when an active stored key successfully lists it through the fixed
+provider adapter. If a newly released model is absent, use the explicit custom
+model identifier with an active connection; this does not permit a custom URL,
+provider option, or weaker limit. The browser receives only Tinkercloud's
 same-origin response; it never receives the provider key, connection ID,
 provider endpoint, raw provider error, arbitrary model choice, or an outbound
 proxy. Removing a grant or connection must deny the next request. The local

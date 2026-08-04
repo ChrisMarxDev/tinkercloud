@@ -76,3 +76,31 @@ func TestCredentialValidationRejectsOversizeAndTrailingResponses(t *testing.T) {
 		})
 	}
 }
+
+func TestListModelsUsesCredentialAndReturnsBoundedIdentifiers(t *testing.T) {
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-api-key") != "catalog-key" || r.Header.Get("anthropic-version") == "" || r.URL.Query().Get("limit") != "1000" {
+			t.Error("catalog request did not use the fixed authenticated model endpoint contract")
+		}
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-z"},{"id":"claude-a"},{"id":"claude-a"}]}`))
+	}))
+	defer h.Close()
+	models, err := NewForTest(h.URL, http.DefaultClient).ListModels(context.Background(), []byte("catalog-key"))
+	if err != nil || len(models) != 2 || models[0] != "claude-a" || models[1] != "claude-z" {
+		t.Fatalf("unexpected catalog: %#v, %v", models, err)
+	}
+}
+
+func TestListModelsRejectsMalformedIdentifier(t *testing.T) {
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-safe"},{"id":"bad\nmodel"}]}`))
+	}))
+	defer h.Close()
+	adapter := NewForTest(h.URL, http.DefaultClient)
+	if err := adapter.ValidateCredential(context.Background(), []byte("key")); err != nil {
+		t.Fatalf("usable key was rejected only because its catalog cannot render: %v", err)
+	}
+	if models, err := adapter.ListModels(context.Background(), []byte("key")); err == nil || models != nil {
+		t.Fatalf("malformed catalog accepted: %#v", models)
+	}
+}

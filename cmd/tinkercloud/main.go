@@ -160,6 +160,18 @@ func (v llmCredentialValidator) Validate(ctx context.Context, provider llm.Provi
 	return validator.ValidateCredential(ctx, credential)
 }
 
+func (v llmCredentialValidator) ListModels(ctx context.Context, provider llm.Provider, credential []byte) ([]string, error) {
+	validator, ok := v.providers[provider]
+	if !ok || validator == nil {
+		return nil, errors.New("llm provider unavailable")
+	}
+	catalog, ok := validator.(llm.ModelCatalog)
+	if !ok || catalog == nil {
+		return nil, errors.New("llm provider unavailable")
+	}
+	return catalog.ListModels(ctx, credential)
+}
+
 func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQLiteStore, gates deployments.Gates, onOTPIssuanceFailure func(controlapi.OTPIssuanceFailureCategory)) (http.Handler, *live.Hub, *analytics.Recorder, error) {
 	hub := live.New(live.DefaultLimits())
 	insights := analytics.NewRecorder(store, analytics.DefaultQueueSize)
