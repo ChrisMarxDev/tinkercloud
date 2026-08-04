@@ -34,6 +34,21 @@ root-owned credential boundary is unavailable, the API-key section shows only
 the root-only enable-and-restart next step and exposes neither a mutation form
 nor root configuration detail.
 
+The LLM chat section may build an operator-only live model catalog by
+decrypting each active connection key, calling only that adapter's fixed
+official model-list endpoint, and clearing the plaintext after the lookup. A
+connection contributes options only when that authenticated lookup returns a
+bounded valid response; failures are omitted without exposing detail or making
+the whole dashboard unavailable. Catalog metadata never enters app capability
+discovery. It is advisory rather than an authorization source: profile writes
+and invocations still re-check active persisted state.
+
+The operator may instead enter a bounded custom model identifier against an
+active connection. This avoids coupling support for a newly released model to
+a Tinkercloud binary update while preserving the fixed provider adapter,
+destination, limits, grant, and quota boundaries. Tinkercloud does not infer or
+automatically migrate existing profile models when provider catalogs change.
+
 The initial host setup generates the capability root in the root-owned service
 credential file. An existing host enables the same boundary with root-only
 `tinkercloud llm enable`; it generates the root locally, records only its
