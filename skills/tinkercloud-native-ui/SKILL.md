@@ -183,7 +183,7 @@ the control-plane mark, stylesheet, or chrome.
   App hosts separately label their local action `Sign out of this app`.
 - Operator-managed external-capability credentials live in a distinct
   operator-only **API keys** section, before capability-specific profiles and
-  grants. Initial fixed-provider creation asks only for provider and one native
+  policies. Initial fixed-provider creation asks only for provider and one native
   write-only password field; do not add a display-name, ID, URL, arbitrary-key,
   reveal, value echo, recovery, or provider-URL display. The service derives
   labels and connection/profile IDs server-side. If the server has no ready
@@ -196,9 +196,14 @@ the control-plane mark, stylesheet, or chrome.
   exposing provider detail. Keep a native **Use a custom model identifier**
   disclosure with an active-connection select and bounded text input so new
   models do not require a server upgrade; it must not permit a provider URL or
-  weaker limits. App capability grant forms are nested under the server-rendered
-  app target; revision fields protect profile/grant changes, and disable/revoke
-  actions show an exact-target confirmation field.
+  weaker limits. The first active profile becomes default; later profiles offer
+  **Use as default**, and failure never falls back to another profile. Put
+  global availability and the unlimited-or-monthly host allowance beside profiles. Nest each app's
+  enabled/disabled and inherit/unlimited/specific policy plus current-month
+  usage under the server-rendered app target. Unlimited use is still metered.
+  There is no manifest request or grant form. Revision fields protect profile,
+  default, quota, and app-policy changes; key disable retains exact-target
+  confirmation.
 - Escape user-controlled text through `html/template`. Never introduce unsafe
   HTML injection to make a component convenient.
 - Keep the server self-contained and the dependency surface narrow.
