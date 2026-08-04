@@ -69,8 +69,8 @@ trusted in V1.
 | Direct origin bypass | alternate Tinkercloud process/port | process-level TCP 80/443 bind confinement plus operator-owned firewall | Tinkercloud-owned socket inventory check |
 | Supply-chain compromise | unsafe dependency/update | pin, scan, sign, reproduce | release provenance |
 | Secret disclosure | provider key reaches app bundle/browser/log | server-only connection store; no read-secret API | secret scanning and audited rotations |
-| Confused deputy | app uses shared Jira/LLM credential too broadly | explicit app grant and operation/resource scopes | per-connection/app audit |
-| Provider cost abuse | compromised app loops LLM calls | app/viewer/global budgets and rate limits | cost alerts and immediate grant disable |
+| Confused deputy | app uses shared provider credential too broadly | gateway-derived app/viewer plus fixed operation/destination policy | per-connection/app audit |
+| Provider cost abuse | compromised app loops LLM calls | mandatory app/viewer rate/concurrency bounds plus optional host/app token allowances | usage evidence and immediate app disable |
 | Outbound request abuse | adapter becomes an SSRF proxy | fixed adapter destinations and schemas | denied-destination telemetry |
 | Socket resource abuse | connection/subscription flood or slow consumer | hard quotas, rate limits, bounded queues | disconnect and realtime load tests |
 | Public-context privilege escalation | public page calls KV/blob/live/LLM or login route | sealed public-static context accepted only by static runtime; all `/_tinker/*` denied | route registry and dispatcher-call counters |
@@ -116,8 +116,8 @@ as private attachment responses with MIME sniffing disabled.
 ### Future operator-managed capabilities
 
 Provider credentials never cross into browser code. Tinkercloud resolves an
-operator connection only after app/viewer authorization, effective grant,
-operation/resource scope, quota, and destination checks. Early capability
+operator connection only after app/viewer authorization, current operator/app
+policy, operation/resource scope, optional quota, and destination checks. Early capability
 adapters are narrow and typed; a generic secret-injecting HTTP proxy is outside
 the security model.
 

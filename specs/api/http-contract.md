@@ -243,7 +243,7 @@ Capability discovery:
 }
 ```
 
-The response describes the current app's effective grants. It contains no
+The response describes the current app's effective capabilities. It contains no
 provider connection IDs or secret-bearing configuration.
 
 ### WebSocket protocol

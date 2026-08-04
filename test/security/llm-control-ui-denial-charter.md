@@ -33,4 +33,15 @@ path is accepted:
   connection or model.
 - The explicit custom-model path accepts only the existing bounded single-line
   model identifier, still requires a current active connection, and never
-  weakens provider, endpoint, profile, grant, quota, or invocation checks.
+  weakens provider, endpoint, profile, app-policy, quota, or invocation checks.
+- The first active profile becomes default exactly once. Stale or malformed
+  default-selection writes, inactive profiles, and browser attempts to select a
+  provider/model indirectly are denied. An unavailable default never falls back.
+- Host quota and app-policy forms are operator-only, same-origin, CSRF-bound,
+  bounded, and revision checked. Invalid modes, inconsistent nullable limits,
+  stale writes, cross-app slugs, and deployer submissions make no change.
+- An app is enabled and inherits host policy without a row. Explicit disable,
+  inherit, unlimited, and specific allowance changes affect the next call.
+  Unlimited state still reports metered current-month usage.
+- The dashboard contains no grant/request controls and deployers cannot see or
+  mutate provider, model, default, quota, usage, or app policy metadata.

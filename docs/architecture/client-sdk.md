@@ -161,8 +161,8 @@ const issue = await tinker.jira.createIssue({
 });
 ```
 
-These calls go to Tinkercloud. Tinkercloud resolves the app grant and operator-managed
-connection, injects credentials server-side, calls the provider, applies quotas
+These calls go to Tinkercloud. Tinkercloud resolves the current operator-managed
+default connection and reactive app policy, injects credentials server-side, calls the provider, applies quotas
 and redaction, and returns a bounded result.
 
 ## SDK design constraints

@@ -171,21 +171,29 @@ Realtime subscriptions and events are intentionally absent from the durable
 model. The V1 hub is in memory; a committed KV write emits a best-effort change
 event only after the transaction succeeds.
 
-Future capability broker records are deliberately separate from V1 KV state:
+LLM capability records are deliberately separate from V1 KV state:
 
 ```text
 provider_connections
   id, adapter_kind, operator_id, encrypted_credential, status, key_version,
   created_at, rotated_at
 
-app_capability_grants
-  id, app_id, connection_id, adapter_version, operations, resource_scope,
-  budget_policy, status, approved_by, created_at
+llm_chat_profiles
+  id, connection_id, model, technical_limits, is_default, status, revision
+
+llm_host_policy
+  monthly_token_limit?, revision
+
+app_llm_policies
+  app_id, status, quota_mode, monthly_token_limit?, revision, updated_by
+
+llm_usage
+  app_id, utc_month, used_tokens, reserved_tokens, in_flight
 ```
 
 Connection reads never return `encrypted_credential`. Only the registered
-server-side adapter may request a short-lived decrypted credential after an
-effective app grant has been established.
+server-side adapter may request a short-lived decrypted credential after the
+gateway-derived app, current default, app policy, and optional quota pass.
 
 ## Audit and jobs
 

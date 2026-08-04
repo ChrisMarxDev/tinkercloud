@@ -274,14 +274,15 @@ history, replay, or cross-node delivery.
 ### `capabilities`
 
 Returns the app's server-derived enabled capability descriptors and versions.
-Future adapters register operations here only after operator grants and server
-policy are applied.
+External adapters appear only after current operator policy and server safety
+bounds are applied.
 
 ### `connections` (future)
 
 Owns operator-managed provider connections and encrypted credentials. A
-connection can be invoked only through a narrow registered adapter with an app
-grant, operation scope, quotas, destination restrictions, redaction, and audit.
+connection can be invoked only through a narrow registered adapter with a
+gateway-derived app, current policy, operation scope, quotas, destination
+restrictions, redaction, and audit.
 It has no read-secret API.
 
 ## Control plane and operations

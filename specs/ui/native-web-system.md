@@ -297,8 +297,8 @@ Before a styled happy path is accepted, tests must prove:
    never renders credential/provider detail; server-side role, CSRF, origin,
    revision, collision, audit, and idempotency denials prevent mutation.
 21. Operator controls split provider credentials into a top-level **API keys**
-    section and place profiles, grants, limits, and aggregate usage in **LLM
-    chat**. Provider credentials and their encrypted envelopes are write-only:
+    section and place profiles, current default, optional quota, per-app policy,
+    limits, and aggregate usage in **LLM chat**. Provider credentials and their encrypted envelopes are write-only:
     no dashboard, form value, notice, audit row, error, source, or reveal path
     may render them. The fixed-provider API-key create form asks only for
     provider and one password field; it has no display-name, identifier,
@@ -315,11 +315,16 @@ Before a styled happy path is accepted, tests must prove:
     a convenience, not authorization. Beside it, a native disclosure provides
     an explicit custom model-identifier form so a new provider model does not
     require a Tinkercloud upgrade; it still selects an active connection and
-    cannot select a provider URL or provider options. Profile/grant writes carry
-    the current revision; disabling a connection or
-    disabling/revoking a grant requires a visible exact-target confirmation
-    plus the normal operator, same-origin, and CSRF checks. Deployer dashboards
-    omit both sections.
+    cannot select a provider URL or provider options. The first active profile
+    becomes default, later profile cards offer **Use as default**, and an
+    unavailable default never silently falls back. Revisioned native forms set
+    global availability plus the unlimited-or-monthly host allowance and each server-rendered app's
+    enabled/disabled plus inherit/unlimited/specific policy. Usage remains
+    visible even when unlimited. There is no request or grant control. Profile,
+    default, host-policy, and app-policy writes carry the current revision;
+    disabling a connection retains its visible exact-target confirmation plus
+    the normal operator, same-origin, and CSRF checks. Deployer dashboards omit
+    both sections.
 22. An app quick-navigation QR code is derived only from the same
     server-rendered stable gateway URL admitted for the adjacent launch link.
     It is generated locally with no remote image, request, analytics, release

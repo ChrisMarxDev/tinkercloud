@@ -1674,10 +1674,12 @@ or reconciliation work Tinkercloud must perform itself.
 
 The first operator-governed LLM capability is implemented as an explicitly
 post-V1 extension. It provides encrypted write-only Anthropic/Gemini
-connections, fixed operator profiles, app grants, bounded non-streaming
-`llm.chat`, quota/rate/concurrency enforcement, safe capability discovery, and
-provider-neutral SDK support. It does not expand the locked V1 release claim;
-streaming and broader provider capabilities remain future work.
+connections, a current host-default profile, reactive access for every active
+authenticated app, bounded non-streaming `llm.chat`, optional monthly app
+allowances, mandatory rate/concurrency limits, safe capability discovery, and
+provider-neutral SDK support. Deployment manifests and app grants do not select
+availability. It does not expand the locked V1 release claim; streaming and
+broader provider capabilities remain future work.
 
 ### 21.3 Accepted post-V1 public reach and local insights extension
 
@@ -1717,7 +1719,7 @@ Future provider access follows:
 ```text
 SDK invocation
 → current app/viewer authorization
-→ effective operator-approved grant
+→ current operator policy and app override
 → operation/resource/budget policy
 → server-held encrypted credential
 → narrow allowlisted adapter

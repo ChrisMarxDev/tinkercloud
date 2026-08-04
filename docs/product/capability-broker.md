@@ -32,7 +32,7 @@ The safe model is invocation, not secret delivery:
 deployed app
   → Tinkercloud SDK
   → authenticated app capability endpoint
-  → app grant + viewer/policy + quota check
+  → viewer/app policy + quota check
   → server-side adapter
   → operator-managed secret
   → external provider
@@ -51,10 +51,9 @@ Operator:
 
 Deployer:
 
-1. Requests a capability binding by alias in `tinker.yaml`.
-2. Sees permissions and external data implications.
-3. Uses the typed SDK module.
-4. Cannot read, export, replace, or arbitrarily forward the credential.
+1. Sees permissions and external data implications.
+2. Uses the typed SDK module.
+3. Cannot read, export, replace, or arbitrarily forward the credential.
 
 Example direction:
 
@@ -72,7 +71,8 @@ capabilities:
     projects: [OPS]
 ```
 
-The manifest names a grant request, not a secret.
+This generic direction does not govern the implemented `llm.chat` capability:
+LLM availability is reactive and has no manifest request or per-app grant.
 
 ## Adapter model
 

@@ -289,8 +289,9 @@ result never claims to reverse the durable mutation.
    Prove an anonymous request denies with no document bytes, a second allowed
    app cannot read a guessed document ID, and the updated document survives the
    service restart before deletion. Capability discovery must include `db` and
-   omit ungranted `llm.chat`; an attempted chat call without a manifest request
-   or operator grant denies without provider detail.
+   omit `llm.chat` when the host has no usable default; an attempted chat call
+   then denies without provider detail. When a default is configured, every
+   authenticated active app discovers chat unless explicitly disabled.
 9. In reuse mode, after a newly active probe app exists, copy only the signed
    release evidence (including its signed release manifest), invoke
    `tinkercloud verify-artifact` followed by the supported local signed
