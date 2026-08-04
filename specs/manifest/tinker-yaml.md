@@ -23,10 +23,6 @@ features:
   blobs: true
   realtime: true
 
-capabilities:
-  llm:
-    chat: true
-
 spa:
   fallback: index.html
 ```
@@ -68,15 +64,13 @@ spa:
   that exact private allowlist current atomically with the release pointer.
 - Unknown keys are errors in every supported manifest version to catch typos.
 - `spa.fallback` must name a normal file in the uploaded release.
-- Enabling a capability that the server/operator disabled is an error.
 - `features.blobs` opts the app into the V1 lightweight app-shared blob
   capability. It does not name a bucket, path, provider, endpoint, or
   credential. Missing or `false` means blob routes deny before storage access.
-- `capabilities.llm.chat: true` requests only the logical provider-neutral chat
-  capability. It cannot name a connection, provider, model, endpoint, header,
-  key, or grant. Deployment and invocation remain unavailable until the
-  operator has approved a current app/profile binding; disabling either side
-  denies the next request.
+- LLM chat is not a manifest capability. Every active authenticated app may use
+  the provider-neutral SDK operation when the server has a usable default
+  profile and the app is not disabled. Provider availability never blocks
+  upload or activation.
 
 ## Version 2 reach metadata
 
@@ -103,10 +97,6 @@ features:
   blobs: false
   realtime: false
 
-capabilities:
-  llm:
-    chat: false
-
 spa:
   fallback: index.html
 ```
@@ -120,7 +110,7 @@ spa:
   Indexing changes no authorization and is effective only while both the
   public policy and operator gate are current.
 - A version 2 public manifest is invalid when `features.kv`,
-  `features.blobs`, `features.realtime`, `capabilities.llm.chat`, or any future
+  `features.blobs`, `features.realtime`, or any future
   browser capability is enabled. One central capability-free validation must
   cover future fields rather than relying on scattered checks.
 - Owner/email/domain rules remain canonical in a public manifest. They govern
@@ -139,7 +129,7 @@ conventional built output without asking. Multiple valid outputs require a
 choice; no valid output stops with an exact build action instead of suggesting
 the project root.
 
-Description, allowlist, capabilities, and SPA fallback are optional behind one
+Description, allowlist, features, and SPA fallback are optional behind one
 review/edit step. Capability detection may produce a warning but never enables
 authority; only an existing manifest or deliberate edit does. A combined
 allowlist accepts comma-separated email addresses and domains; values are
@@ -169,15 +159,8 @@ fallback files are rejected.
 - Empty optional fields are valid; every interactive input is bounded and each
   prompt exists only for required ambiguity or explicit edit intent.
 
-`features` remains the spelling for local built-in primitives. `capabilities`
-requests operator-governed external operations without selecting their
-credential or implementation:
-
-```yaml
-capabilities:
-  llm:
-    chat: true
-```
+`features` remains the spelling for local built-in primitives. LLM chat needs
+no manifest declaration because availability is resolved reactively per call.
 
 ## Precedence
 

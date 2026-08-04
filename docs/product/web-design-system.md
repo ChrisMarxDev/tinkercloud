@@ -175,8 +175,9 @@ server-ready, show a quiet unavailable card with root-only `tinkercloud llm enab
 and restart guidance instead of any credential mutation control; never show the
 root or configuration reason. Rotation has no provider select: Tinkercloud resolves
 the connection’s stored provider before validating the replacement credential.
-Keep profiles, grants, limits, and usage in **LLM chat**. A profile is a labeled
-form for a fixed model and every limit. Prefer a native select populated by the
+Keep profiles, default selection, optional quota, app policy, limits, and usage
+in **LLM chat**. A profile is a labeled form for a fixed model and every
+technical limit. Prefer a native select populated by the
 server from bounded live model lists fetched with active stored API keys. Group
 each option by its safe connection label and provider; omit a connection on
 decrypt, timeout, provider, or response failure instead of showing a stale or
@@ -184,11 +185,16 @@ unverified choice. Keep an adjacent native disclosure named **Use a custom model
 identifier** with an active-connection select and bounded text input. Explain
 that it supports newly released models while the fixed provider endpoint and
 all limits remain in force. The custom path must remain usable when no catalog
-option is available. Grant controls live on the
-server-rendered target app, not in a free-form app-ID field. Use revision fields
-for profile/grant updates, and native exact-target confirmation fields for key
-disable and grant disable/revoke. Never place credentials, envelopes, provider
-URLs, or raw provider errors in a notice, table, source, or reveal view.
+option is available. The first profile becomes default; later profile cards use
+a clear **Use as default** action. Put global availability and the
+unlimited-or-monthly host allowance
+beside profile creation, and nest enabled/disabled plus
+inherit/unlimited/specific policy and current-month usage under each
+server-rendered target app. Usage remains visible while unlimited. There is no
+request or grant control. Use revision fields for every profile/default/quota/
+app-policy update and native exact-target confirmation for key disable. Never
+place credentials, envelopes, provider URLs, or raw provider errors in a
+notice, table, source, or reveal view.
 
 When a dashboard has multiple authorized app cards, a local search plus status
 filter may help scan that already-rendered list. It is deliberately a
