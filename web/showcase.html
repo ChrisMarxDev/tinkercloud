@@ -179,17 +179,18 @@
               <span class="tinker-brand__mark" aria-hidden="true"><img src="assets/tinkercloud-mark.svg" alt=""></span>
               <span>protected by tinkercloud</span>
             </a>
-            <p class="tinker-eyebrow">Private app</p>
-            <h1 id="auth-example-title">Sign in to continue.</h1>
-            <p class="tinker-auth-card__intro">Use an email address the app owner has allowed.</p>
-            <form class="tinker-stack">
+            <p class="tinker-eyebrow">One small step</p>
+            <h1 id="auth-example-title">Check your email.</h1>
+            <p class="tinker-auth-card__intro">If that address is authorized, a one-time code has been sent.</p>
+            <p class="tinker-auth-card__destination"><span>Code requested for</span><strong>viewer@example.com</strong></p>
+            <form class="tinker-stack" method="post" action="/_tinker/identity/verify">
               <label class="tinker-field">
-                <span class="tinker-label">Email address</span>
-                <input class="tinker-input" type="email" autocomplete="email">
+                <span class="tinker-label">One-time code</span>
+                <input class="tinker-input tinker-input--code" inputmode="numeric" autocomplete="one-time-code">
               </label>
-              <button class="tinker-button tinker-button--primary tinker-button--full" type="button">Send one-time code</button>
+              <button class="tinker-button tinker-button--primary tinker-button--full" type="button">Verify and continue</button>
             </form>
-            <p class="tinker-auth-card__footer">This app is on the open internet, securely gated by Tinkercloud.</p>
+            <form class="tinker-auth-card__back" method="post" action="/_tinker/identity/use-another"><button class="tinker-button tinker-button--secondary tinker-button--full" type="button"><span aria-hidden="true">←</span> Back to email address</button></form>
           </article>
         </div>
       </section>
