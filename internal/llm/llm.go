@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -103,6 +104,20 @@ type Adapter interface {
 // before an encrypted credential becomes active.
 type CredentialValidator interface {
 	ValidateCredential(context.Context, []byte) error
+}
+
+// ModelCatalog lists only model identifiers usable with the supplied
+// credential and the adapter's fixed completion operation. It is an internal
+// operator-control aid, never an app-facing discovery surface.
+type ModelCatalog interface {
+	ListModels(context.Context, []byte) ([]string, error)
+}
+
+// ValidModelIdentifier is the shared persistence/provider boundary for both
+// live catalog entries and the operator's explicit custom-model escape hatch.
+func ValidModelIdentifier(model string) bool {
+	return model != "" && len(model) <= 128 && utf8.ValidString(model) &&
+		!strings.ContainsAny(model, "\x00\r\n")
 }
 
 type Service struct {

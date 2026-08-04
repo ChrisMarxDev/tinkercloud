@@ -244,6 +244,7 @@ type ControlService struct {
 	LLM             *LLMRepository
 	LLMValidator    interface {
 		Validate(context.Context, llm.Provider, []byte) error
+		ListModels(context.Context, llm.Provider, []byte) ([]string, error)
 	}
 	// Deployer data repositories remain private app-local persistence adapters.
 	// Control routes receive no filesystem/database selector; dataScope resolves
@@ -999,8 +1000,21 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		}
 		activeConnections := make(map[string]bool, len(connections))
 		for _, x := range connections {
-			v.LLMConnections = append(v.LLMConnections, controlapi.LLMConnection{ID: x.ID, DisplayName: x.DisplayName, Provider: x.Provider, Status: x.Status})
+			connection := controlapi.LLMConnection{ID: x.ID, DisplayName: x.DisplayName, Provider: x.Provider, Status: x.Status}
+			v.LLMConnections = append(v.LLMConnections, connection)
 			activeConnections[x.ID] = x.Status == "active"
+			if x.Status == "active" {
+				v.LLMProfileConnections = append(v.LLMProfileConnections, connection)
+			}
+		}
+		if v.LLMKeyManagementReady {
+			catalog, catalogErr := s.LLM.OperatorModelCatalog(ctx, s.LLMValidator)
+			if catalogErr != nil {
+				return v, catalogErr
+			}
+			for _, x := range catalog {
+				v.LLMModelCatalog = append(v.LLMModelCatalog, controlapi.LLMModelOption{Choice: x.ConnectionID + ":" + x.Model, ConnectionID: x.ConnectionID, ConnectionName: x.ConnectionName, Provider: x.Provider, Model: x.Model})
+			}
 		}
 		for _, x := range profiles {
 			// The dashboard read model, not template filtering, determines which

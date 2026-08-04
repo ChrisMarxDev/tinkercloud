@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
@@ -12,13 +13,29 @@ import (
 )
 
 type controlLLMValidator struct {
+	mu        sync.Mutex
 	providers []llm.Provider
 	err       error
+	models    map[llm.Provider][]string
+	listErr   map[llm.Provider]error
+	keys      []string
 }
 
 func (v *controlLLMValidator) Validate(_ context.Context, provider llm.Provider, _ []byte) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
 	v.providers = append(v.providers, provider)
 	return v.err
+}
+
+func (v *controlLLMValidator) ListModels(_ context.Context, provider llm.Provider, key []byte) ([]string, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.keys = append(v.keys, string(key))
+	if err := v.listErr[provider]; err != nil {
+		return nil, err
+	}
+	return append([]string(nil), v.models[provider]...), nil
 }
 
 func llmProfileForm(connection string, revision uint64) controlapi.LLMProfileInput {
@@ -163,6 +180,58 @@ func TestLLMGrantRejectsDisabledConnectionAndDashboardOmitsUnselectableProfile(t
 	v, err = (ControlService{Store: store, LLM: &repo, LLMValidator: &controlLLMValidator{}}).Dashboard(context.Background(), controlapi.Actor{ID: "op", Role: "operator", Active: true})
 	if err != nil || !v.LLMKeyManagementReady {
 		t.Fatalf("dashboard readiness=%v err=%v", v.LLMKeyManagementReady, err)
+	}
+}
+
+func TestOperatorModelCatalogUsesOnlyActiveDecryptableSuccessfulConnections(t *testing.T) {
+	repo, store := llmRepo(t)
+	defer store.Close()
+	setupLLM(t, repo)
+	if err := repo.CreateConnection(context.Background(), LLMConnectionInput{ID: "gemini", DisplayName: "Gemini API key", Provider: llm.ProviderGemini, Secret: []byte("gemini-secret"), KeyVersion: 1, ActorID: "u"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.CreateConnection(context.Background(), LLMConnectionInput{ID: "disabled", DisplayName: "Disabled API key", Provider: llm.ProviderAnthropic, Secret: []byte("disabled-secret"), KeyVersion: 1, ActorID: "u"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.Exec("UPDATE provider_connections SET status='disabled' WHERE id='disabled'"); err != nil {
+		t.Fatal(err)
+	}
+	validator := &controlLLMValidator{
+		models:  map[llm.Provider][]string{llm.ProviderAnthropic: {"claude-current"}, llm.ProviderGemini: {"gemini-current"}},
+		listErr: map[llm.Provider]error{llm.ProviderGemini: errors.New("provider unavailable")},
+	}
+	catalog, err := repo.OperatorModelCatalog(context.Background(), validator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) != 1 || catalog[0].ConnectionID != "conn" || catalog[0].Model != "claude-current" || catalog[0].Provider != "anthropic" {
+		t.Fatalf("unsafe or incomplete catalog: %#v", catalog)
+	}
+	keys := map[string]bool{}
+	for _, key := range validator.keys {
+		keys[key] = true
+	}
+	if len(validator.keys) != 2 || !keys["super-secret"] || !keys["gemini-secret"] || keys["disabled-secret"] {
+		t.Fatalf("catalog did not use exactly the active stored keys: %#v", validator.keys)
+	}
+}
+
+func TestOperatorModelCatalogOmitsUndecryptableAndInvalidProviderResults(t *testing.T) {
+	repo, store := llmRepo(t)
+	defer store.Close()
+	setupLLM(t, repo)
+	validator := &controlLLMValidator{models: map[llm.Provider][]string{llm.ProviderAnthropic: {"bad\nmodel"}}}
+	catalog, err := repo.OperatorModelCatalog(context.Background(), validator)
+	if err != nil || len(catalog) != 0 {
+		t.Fatalf("invalid provider catalog survived: %#v, %v", catalog, err)
+	}
+	if _, err := store.DB.Exec("UPDATE provider_connections SET credential_envelope=X'01' WHERE id='conn'"); err != nil {
+		t.Fatal(err)
+	}
+	validator = &controlLLMValidator{models: map[llm.Provider][]string{llm.ProviderAnthropic: {"claude-current"}}}
+	catalog, err = repo.OperatorModelCatalog(context.Background(), validator)
+	if err != nil || len(catalog) != 0 || len(validator.keys) != 0 {
+		t.Fatalf("undecryptable connection reached provider or catalog: %#v keys=%#v err=%v", catalog, validator.keys, err)
 	}
 }
 

@@ -190,7 +190,13 @@ the control-plane mark, stylesheet, or chrome.
   credential boundary, render the root-only enable-and-restart next step and no
   credential mutation forms or root detail. For credential rotation, omit a
   provider select and derive the provider server-side from the existing
-  connection. App capability grant forms are nested under the server-rendered
+  connection. In the LLM profile form, render live catalog options only for
+  active connections whose stored key decrypts and successfully returns that
+  model through the fixed provider adapter. Omit failed connections without
+  exposing provider detail. Keep a native **Use a custom model identifier**
+  disclosure with an active-connection select and bounded text input so new
+  models do not require a server upgrade; it must not permit a provider URL or
+  weaker limits. App capability grant forms are nested under the server-rendered
   app target; revision fields protect profile/grant changes, and disable/revoke
   actions show an exact-target confirmation field.
 - Escape user-controlled text through `html/template`. Never introduce unsafe

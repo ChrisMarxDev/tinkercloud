@@ -19,6 +19,7 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/browseridentity"
 	"github.com/ChrisMarxDev/tinkercloud/internal/gateway"
 	"github.com/ChrisMarxDev/tinkercloud/internal/identity"
+	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 	webui "github.com/ChrisMarxDev/tinkercloud/web"
 )
@@ -403,8 +404,24 @@ func parsePositiveOrZero(value string) (uint64, bool) {
 }
 
 func parseLLMProfile(r *http.Request) (LLMProfileInput, bool) {
-	input := LLMProfileInput{ConnectionID: r.FormValue("connection_id"), Model: strings.TrimSpace(r.FormValue("model"))}
-	if !safeLLMID(input.ConnectionID) || input.Model == "" || len(input.Model) > 128 || strings.ContainsAny(input.Model, "\x00\r\n") {
+	input := LLMProfileInput{}
+	catalogChoice := r.FormValue("catalog_model")
+	if catalogChoice != "" {
+		if _, supplied := r.PostForm["connection_id"]; supplied {
+			return LLMProfileInput{}, false
+		}
+		if _, supplied := r.PostForm["model"]; supplied {
+			return LLMProfileInput{}, false
+		}
+		parts := strings.SplitN(catalogChoice, ":", 2)
+		if len(parts) != 2 {
+			return LLMProfileInput{}, false
+		}
+		input.ConnectionID, input.Model = parts[0], strings.TrimSpace(parts[1])
+	} else {
+		input.ConnectionID, input.Model = r.FormValue("connection_id"), strings.TrimSpace(r.FormValue("model"))
+	}
+	if !safeLLMID(input.ConnectionID) || !llm.ValidModelIdentifier(input.Model) {
 		return LLMProfileInput{}, false
 	}
 	intField := func(name string, destination *int) bool {

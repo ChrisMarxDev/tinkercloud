@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,8 +123,52 @@ func (a *Adapter) Complete(ctx context.Context, b llm.Binding, in llm.Request) (
 	return llm.Response{Message: llm.MessageResponse{Role: "assistant", Content: txt}, Usage: llm.Usage{InputTokens: raw.Usage.Input, OutputTokens: raw.Usage.Output}, FinishReason: finish}, nil
 }
 func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
+	_, err := a.fetchModels(ctx, key)
+	return err
+}
+
+func (a *Adapter) ListModels(ctx context.Context, key []byte) ([]string, error) {
+	raw, err := a.fetchModels(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	var entries []struct {
+		Name                       string   `json:"name"`
+		SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+	}
+	if json.Unmarshal(raw, &entries) != nil || len(entries) > 1000 {
+		return nil, errProvider
+	}
+	seen := make(map[string]struct{}, len(entries))
+	models := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		supported := false
+		for _, method := range entry.SupportedGenerationMethods {
+			if method == "generateContent" {
+				supported = true
+				break
+			}
+		}
+		if !supported {
+			continue
+		}
+		model := strings.TrimPrefix(entry.Name, "models/")
+		if model == entry.Name || !llm.ValidModelIdentifier(model) || strings.ContainsAny(model, "/?#&") {
+			return nil, errProvider
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func (a *Adapter) fetchModels(ctx context.Context, key []byte) (json.RawMessage, error) {
 	if a == nil || a.client == nil || len(key) == 0 {
-		return errProvider
+		return nil, errProvider
 	}
 	endpoint := strings.TrimRight(a.base, "/")
 	if endpoint == strings.TrimRight(officialBase, "/") {
@@ -131,16 +176,19 @@ func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
 	}
 	u, e := url.Parse(endpoint)
 	if e != nil || (u.Scheme != "https" && u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
-		return errProvider
+		return nil, errProvider
 	}
+	q := u.Query()
+	q.Set("pageSize", "1000")
+	u.RawQuery = q.Encode()
 	r, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if e != nil {
-		return errProvider
+		return nil, errProvider
 	}
 	r.Header.Set("x-goog-api-key", string(key))
 	resp, e := a.client.Do(r)
 	if e != nil {
-		return errProvider
+		return nil, errProvider
 	}
 	defer resp.Body.Close()
 	var validation struct {
@@ -149,9 +197,9 @@ func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 ||
 		readStrictJSON(resp.Body, &validation) != nil ||
 		len(validation.Models) == 0 || bytes.Equal(validation.Models, []byte("null")) {
-		return errProvider
+		return nil, errProvider
 	}
-	return nil
+	return validation.Models, nil
 }
 
 func readStrictJSON(body io.Reader, dst any) error {

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
@@ -282,7 +281,7 @@ func monthStart(t time.Time) string {
 	return time.Date(u.Year(), u.Month(), 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
 }
 func validModel(s string) bool {
-	return s != "" && len(s) <= 128 && !strings.ContainsAny(s, "\x00\r\n")
+	return llm.ValidModelIdentifier(s)
 }
 func validLLMLimits(l llm.Limits) bool {
 	return l.MaxMessages >= 1 && l.MaxMessages <= 128 && l.MaxMessageBytes >= 1 && l.MaxMessageBytes <= 262144 && l.MaxInputBytes >= 1 && l.MaxInputBytes <= 1048576 && l.MaxOutputTokens >= 1 && l.MaxOutputTokens <= 16384 && l.Timeout >= time.Second && l.Timeout <= 120*time.Second && l.ViewerRequests >= 1 && l.ViewerRequests <= 10000 && l.AppRequests >= 1 && l.AppRequests <= 100000 && l.RateWindow >= time.Second && l.RateWindow <= time.Hour

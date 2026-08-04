@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
@@ -26,8 +27,40 @@ type Adapter struct {
 }
 
 func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
+	_, err := a.fetchModels(ctx, key)
+	return err
+}
+
+func (a *Adapter) ListModels(ctx context.Context, key []byte) ([]string, error) {
+	raw, err := a.fetchModels(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	var entries []struct {
+		ID string `json:"id"`
+	}
+	if json.Unmarshal(raw, &entries) != nil || len(entries) > 1000 {
+		return nil, errProvider
+	}
+	seen := make(map[string]struct{}, len(entries))
+	models := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if !llm.ValidModelIdentifier(entry.ID) {
+			return nil, errProvider
+		}
+		if _, ok := seen[entry.ID]; ok {
+			continue
+		}
+		seen[entry.ID] = struct{}{}
+		models = append(models, entry.ID)
+	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func (a *Adapter) fetchModels(ctx context.Context, key []byte) (json.RawMessage, error) {
 	if a == nil || a.client == nil || len(key) == 0 {
-		return errProvider
+		return nil, errProvider
 	}
 	endpoint := a.endpoint
 	if endpoint == officialEndpoint {
@@ -35,17 +68,20 @@ func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
 	}
 	u, e := url.Parse(endpoint)
 	if e != nil || (u.Scheme != "https" && u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
-		return errProvider
+		return nil, errProvider
 	}
+	q := u.Query()
+	q.Set("limit", "1000")
+	u.RawQuery = q.Encode()
 	r, e := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if e != nil {
-		return errProvider
+		return nil, errProvider
 	}
 	r.Header.Set("x-api-key", string(key))
 	r.Header.Set("anthropic-version", "2023-06-01")
 	resp, e := a.client.Do(r)
 	if e != nil {
-		return errProvider
+		return nil, errProvider
 	}
 	defer resp.Body.Close()
 	var validation struct {
@@ -54,9 +90,9 @@ func (a *Adapter) ValidateCredential(ctx context.Context, key []byte) error {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 ||
 		readStrictJSON(resp.Body, &validation) != nil ||
 		len(validation.Data) == 0 || bytes.Equal(validation.Data, []byte("null")) {
-		return errProvider
+		return nil, errProvider
 	}
-	return nil
+	return validation.Data, nil
 }
 
 func New(client *http.Client) *Adapter { return newAdapter(officialEndpoint, client) }
