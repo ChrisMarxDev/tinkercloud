@@ -1553,6 +1553,33 @@ summary:focus-visible {
   color: var(--tinker-muted);
 }
 
+.tinker-auth-card__destination {
+  display: grid;
+  gap: var(--tinker-space-1);
+  margin: calc(-1 * var(--tinker-space-2)) 0 var(--tinker-space-5);
+  padding: var(--tinker-space-3) var(--tinker-space-4);
+  border: 1px solid var(--tinker-line-strong);
+  border-radius: var(--tinker-radius-control);
+  background: var(--tinker-primary-soft);
+}
+
+.tinker-auth-card__destination span {
+  color: var(--tinker-muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tinker-auth-card__destination strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tinker-auth-card__back {
+  margin-top: var(--tinker-space-3);
+}
+
 .tinker-auth-card__footer {
   margin: var(--tinker-space-5) 0 0;
   color: var(--tinker-muted);

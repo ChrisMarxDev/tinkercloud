@@ -82,6 +82,15 @@ Use a single centered auth card with:
 Never reveal whether an entered email is authorized. Code inputs use
 `autocomplete="one-time-code"` and numeric input mode.
 
+On the generic code-sent step, show the exact escaped address the person just
+submitted in a compact labelled destination block. This helps catch a typo but
+does not confirm eligibility, account existence, or successful provider
+delivery; keep the surrounding response generic. Follow the verification form
+with a secondary **Back to email address** control. It returns to the existing
+email-entry state without sending another code or introducing client-side
+state. An app flow uses the existing server-owned reset path and carries only
+the same opaque handoff; the browser cannot select an app or return target.
+
 Global viewer identity and app handoff deliberately introduce no new visual
 component. Use the existing centered auth card for “Continue as your verified
 email” and the existing text-bearing notice for generic denied/unavailable

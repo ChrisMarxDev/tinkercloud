@@ -36,6 +36,12 @@ runtime, or build step.
   interaction helper may enhance toast dismissal and native dialogs, but
   JavaScript must never be required for authentication, authorization,
   confirmation, or mutation.
+- The generic OTP code-sent state labels and displays the exact escaped email
+  address submitted in that request, without claiming that the address is
+  authorized or that delivery succeeded. It provides an ordinary Back control
+  to return to email entry without requesting another code or granting any
+  authority. App-bound flows retain only their existing opaque handoff;
+  platform flows return to the ordinary platform login form.
 - No remote fonts, images, styles, scripts, analytics, or CDN resources.
 - The base font stack uses local system rounded/sans faces. Monospace content
   uses the local system monospace stack.
@@ -397,6 +403,13 @@ Before a styled happy path is accepted, tests must prove:
     a form, request data, persist state, select an app, change a target, or
     suppress server validation. Deployer rows render neither operator options
     nor empty operator dialogs.
+29. A code-sent page may echo only the escaped email submitted by that browser
+    request. The address is not proof of authorization, account existence, or
+    provider delivery, so the eligibility and delivery copy remains generic.
+    Its Back control performs no verification, requests no additional OTP, and
+    exposes no transaction, policy, provider, rate-limit, or app detail; an
+    app-bound Back action may carry only the existing opaque handoff needed to
+    render its email form again.
 
 ## Accessibility contract
 
@@ -406,6 +419,9 @@ Before a styled happy path is accepted, tests must prove:
 - Touch targets are at least 44 CSS pixels tall where practical.
 - Every field has a programmatic label; help and error text can be associated
   with `aria-describedby`.
+- The code-sent destination has a visible text label, wraps long submitted
+  addresses without horizontal page scrolling, and is followed by a native
+  keyboard-operable Back control.
 - Busy controls include visible busy copy, `aria-busy="true"` where applicable,
   and a disabled submitted control. Server-rendered validation and the final
   mutation outcome remain visible without JavaScript.

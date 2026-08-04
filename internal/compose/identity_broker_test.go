@@ -232,6 +232,87 @@ func TestIdentityBrokerPlatformLoginIssuesTheSameIdentityUsedForAppHandoffs(t *t
 	}
 }
 
+func TestIdentityBrokerCodeSentPagesShowSubmittedEmailAndBackAction(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	store := newBrokerStore(now)
+	b := IdentityBroker{Store: store, PlatformHost: "admin.apps.tinker.test", AppSuffix: "apps.tinker.test", HMACKey: []byte("test"), Now: func() time.Time { return now }}
+	h := b.PlatformHandler(http.NotFoundHandler())
+
+	appHandoff, _, err := store.CreateIdentityHandoff(context.Background(), "app-alpha", "/", false, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/_tinker/identity?handoff="+url.QueryEscape(appHandoff.ID), nil)
+	r.Host = "admin.apps.tinker.test"
+	h.ServeHTTP(page, r)
+	binding := browserBindingCookieFrom(t, page.Result().Cookies())
+
+	appCode := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/_tinker/identity/otp", strings.NewReader("email=viewer%40example.test&handoff="+url.QueryEscape(appHandoff.ID)))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(binding)
+	h.ServeHTTP(appCode, r)
+	appBody := appCode.Body.String()
+	for _, required := range []string{
+		`class="tinker-auth-card__destination"`,
+		`<span>Code requested for</span><strong>viewer@example.test</strong>`,
+		`If that address is authorized, a one-time code has been sent.`,
+		`method="post" action="/_tinker/identity/use-another"`,
+		`name="handoff" value="` + appHandoff.ID + `"`,
+		`Back to email address`,
+	} {
+		if !strings.Contains(appBody, required) {
+			t.Fatalf("app code-sent page missing %q: %s", required, appBody)
+		}
+	}
+	appBack := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/_tinker/identity/use-another", strings.NewReader("handoff="+url.QueryEscape(appHandoff.ID)))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(binding)
+	h.ServeHTTP(appBack, r)
+	if appBack.Code != http.StatusOK || !strings.Contains(appBack.Body.String(), `name="email"`) || strings.Contains(appBack.Body.String(), `name="code"`) {
+		t.Fatalf("app Back control did not restore email entry: status=%d body=%q", appBack.Code, appBack.Body.String())
+	}
+
+	platformPage := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
+	r.Host = "admin.apps.tinker.test"
+	h.ServeHTTP(platformPage, r)
+	platformBinding := browserBindingCookieFrom(t, platformPage.Result().Cookies())
+	platformCode := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "https://admin.apps.tinker.test/login", strings.NewReader("email=operator%40example.test"))
+	r.Host = "admin.apps.tinker.test"
+	r.Header.Set("Origin", "https://admin.apps.tinker.test")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.AddCookie(platformBinding)
+	h.ServeHTTP(platformCode, r)
+	platformBody := platformCode.Body.String()
+	for _, required := range []string{
+		`class="tinker-auth-card__destination"`,
+		`<span>Code requested for</span><strong>operator@example.test</strong>`,
+		`If that address can sign in, a one-time code has been sent.`,
+		`method="get" action="/login"`,
+		`Back to email address`,
+	} {
+		if !strings.Contains(platformBody, required) {
+			t.Fatalf("platform code-sent page missing %q: %s", required, platformBody)
+		}
+	}
+	platformBack := httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodGet, "https://admin.apps.tinker.test/login", nil)
+	r.Host = "admin.apps.tinker.test"
+	r.AddCookie(platformBinding)
+	h.ServeHTTP(platformBack, r)
+	if platformBack.Code != http.StatusOK || !strings.Contains(platformBack.Body.String(), `name="email"`) || strings.Contains(platformBack.Body.String(), `name="code"`) {
+		t.Fatalf("platform Back control did not restore email entry: status=%d body=%q", platformBack.Code, platformBack.Body.String())
+	}
+}
+
 func TestIdentityBrokerDashboardLogoutRequiresOriginAndCSRFThenRevokesGlobalIdentity(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	store := newBrokerStore(now)

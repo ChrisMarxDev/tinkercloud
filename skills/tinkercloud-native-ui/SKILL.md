@@ -60,6 +60,11 @@ the control-plane mark, stylesheet, or chrome.
   out. Keep it visibly distinct from app-host “Sign out of this app”; generic
   denied and handoff states reveal no policy membership, callback state, or app
   bytes.
+- Generic OTP code-sent pages show the exact escaped email submitted in that
+  request in a labelled, overflow-safe destination block, while continuing to
+  make no eligibility or delivery claim. Provide an ordinary secondary Back to
+  email address control that requests no second code and grants no authority;
+  app-bound flows may retain only their existing opaque handoff.
 - The platform's browser-profile binding is an HTTP-only non-authorizing OTP
   race-grouping detail. Never render, label, serialize, or expose it in a
   template, form, URL, JavaScript, notice, or app UI; retaining it through
