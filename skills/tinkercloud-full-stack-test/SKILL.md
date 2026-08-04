@@ -40,9 +40,10 @@ guarantee. Live collection events are freshness hints: recover current state
 with a snapshot after first connect, reconnect, visibility recovery, and every
 hint.
 
-`llm.chat`, when an operator grants it, is a narrow server-side capability.
-Capability discovery is absent until the app requests it and the operator grant
-is active. If present, treat its disclosure as a notice that prompt content is
+`llm.chat` is a narrow reactive server-side capability for every active app.
+Capability discovery is present only while the current host-default profile and
+connection can supply it and the app is not disabled; no manifest request or
+grant is involved. If present, treat its disclosure as a notice that prompt content is
 sent to an operator-selected external AI provider; discovery limits are safe
 current bounds, not a promise that a later request will be admitted.
 Provider credentials, connection IDs, model names, and upstream URLs never
@@ -147,9 +148,10 @@ use another provider path.
    `/_tinker/api/v1/db/{collection}`. The request must contain no app, database,
    or viewer selector. Prove anonymous denial with no document bytes, guessed
    cross-app ID denial, and the updated document after the bounded service
-   restart readiness proof. A fixture with no LLM manifest request/grant must
-   omit `llm.chat` from discovery and deny direct chat invocation without
-   provider details. Do not substitute a VPS database/filesystem inspection.
+   restart readiness proof. A fixture with no usable host default must omit
+   `llm.chat` from discovery and deny direct invocation without provider detail;
+   once configured, every authenticated active-app fixture receives it unless
+   that app is explicitly disabled. Do not substitute a VPS database/filesystem inspection.
 8. Reuse never re-initializes or wipes the VPS. The supported signed update
    preserves the configured deployer, owned apps, and current private
    access-policy revision/rules; verify the post-update deployer can still

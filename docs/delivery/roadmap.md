@@ -407,7 +407,7 @@ Live release evidence:
 - the same pass proved one dashboard OTP identity across allowed app hosts,
   distinct host-only app sessions, replay/wrong-app denial, app-local logout,
   global child-session revocation, account switching, blob isolation, and
-  omitted ungranted LLM capability state. The redacted owner-only result is
+  omitted LLM capability state on a host with no configured default. The redacted owner-only result is
   `.tinker/vps/unattended-reports/vps-e2e-20260731T145714Z-74715.status`.
 
 ### Implemented M4 slice — lightweight app-scoped blobs
@@ -748,7 +748,7 @@ utility-data disclaimer as M4.
 ## Implemented post-V1 extension — operator-governed LLM chat
 
 Outcome: an operator can keep an Anthropic or Gemini key behind Tinkercloud,
-approve one bounded profile for an app, and let an authorized viewer use
+select one bounded host-default profile, and let an authorized viewer in every active app use
 provider-neutral non-streaming chat without exposing a secret, provider URL,
 connection, model selector, or app identifier.
 
@@ -756,13 +756,13 @@ Implemented L1/L2 evidence:
 
 - ADR [`0047`](../decisions/0047-operator-governed-llm-chat.md) and the
   [`llm.chat` contract](../../specs/capabilities/llm-chat-contract.md) define the
-  post-V1 secret, grant, quota, destination, audit, and denial boundaries;
+  post-V1 secret, reactive policy, optional quota, destination, audit, and denial boundaries;
 - the control database stores authenticated encrypted connection envelopes,
-  profiles, grants, conservative token reservations, usage, and redacted audit
+  profiles, the host default, app policies, conservative token reservations, usage, and redacted audit
   evidence while the encryption root remains in the root-owned service
   credential boundary;
 - root-local enablement, write-only operator connection/rotation controls,
-  profile/grant controls, activation gating, safe discovery, fixed Anthropic
+  profile/default/quota controls, deployment-independent safe discovery, fixed Anthropic
   and Gemini adapters, the protected app route, SDK
   `tinker.llm.chat.complete`, and a deployable example are implemented;
 - local unit, persistence, provider-conformance, UI, SDK, and composed
@@ -770,15 +770,15 @@ Implemented L1/L2 evidence:
   rate/quota/concurrency admission, conservative ambiguous outcomes, redirects,
   cancellation, and secret/prompt/completion leakage; and
 - `tinker dev` deliberately reports no LLM capability and performs no provider
-  call, because emulating grants, spend, and secret handling would misrepresent
+  call, because emulating provider spend and secret handling would misrepresent
   production authorization.
 
 This implementation does not expand the locked V1 release. L3 streaming,
 tools, embeddings, files, arbitrary provider options, generic authenticated
 HTTP, and provider-owned conversation history remain deferred. The exact signed
 build passed the root-run disposable-VPS suite on 2026-07-29, including
-root-local LLM enablement, restart/doctor checks, capability omission, anonymous
-401, and authenticated ungranted 403 behavior without contacting a provider.
+root-local LLM enablement, restart/doctor checks, capability omission when no
+default exists, and anonymous 401 behavior without contacting a provider.
 Dedicated low-value real-provider smoke tests remain pending; local
 fake-provider, real-listener, and no-provider VPS evidence must not be reported
 as real-provider evidence.

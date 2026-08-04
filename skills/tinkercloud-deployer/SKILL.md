@@ -48,9 +48,10 @@ guarantee. Live collection events are freshness hints: recover current state
 with a snapshot after first connect, reconnect, visibility recovery, and every
 hint.
 
-`llm.chat`, when an operator grants it, is a narrow server-side capability.
-Capability discovery is absent until the app requests it and the operator grant
-is active. If present, treat its disclosure as a notice that prompt content is
+`llm.chat` is a narrow reactive server-side capability for every active app.
+Capability discovery is present only while the current host-default profile and
+connection can supply it and the app is not disabled; no manifest request or
+grant is involved. If present, treat its disclosure as a notice that prompt content is
 sent to an operator-selected external AI provider; discovery limits are safe
 current bounds, not a promise that a later request will be admitted.
 Provider credentials, connection IDs, model names, and upstream URLs never
@@ -339,11 +340,11 @@ application channel. Do not treat a socket event as a database row, expect
 replay/history/ordering, or use the collection API as arbitrary SQL, joins,
 server functions, or a high-volume event log.
 
-#### Operator-governed LLM chat
+#### Reactive operator-governed LLM chat
 
-An app can request chat only when its reviewed manifest enables
-`capabilities.llm.chat: true` **and** the operator grants a fixed approved
-profile to that app. The app sends only its bounded chat request:
+Every active app can send a bounded chat request through the current server
+default. The call works or returns a stable unavailable/quota/rate error from
+current server state; deployments never request or wait for LLM access:
 
 ```ts
 const answer = await tinker.llm.chat.complete({
@@ -503,10 +504,6 @@ features:
   kv: true
   blobs: false
   realtime: true
-
-capabilities:
-  llm:
-    chat: false
 
 spa:
   fallback: index.html
