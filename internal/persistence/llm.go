@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 )
 
 // LLMRepository owns encrypted connection records, operator-selected profiles,
-// app grants, and exact usage reservations. It deliberately has no method that
+// reactive app policy, and exact usage reservations. It deliberately has no method that
 // returns an operator credential or its ciphertext to a public caller.
 type LLMRepository struct {
 	Store    *SQLiteStore
@@ -27,13 +26,9 @@ type LLMConnectionInput struct {
 	KeyVersion               int
 }
 type LLMProfileInput struct {
-	ID, ConnectionID, Model, ActorID    string
-	Limits                              llm.Limits
-	ConcurrencyLimit, MonthlyTokenLimit int
-}
-type LLMGrantInput struct {
-	AppID, ProfileID, OperatorID, Status string
-	Revision                             uint64
+	ID, ConnectionID, Model, ActorID string
+	Limits                           llm.Limits
+	ConcurrencyLimit                 int
 }
 
 func (r LLMRepository) CreateConnectionValidated(ctx context.Context, in LLMConnectionInput, validator llm.CredentialValidator) error {
@@ -81,13 +76,13 @@ func (r LLMRepository) CreateConnection(ctx context.Context, in LLMConnectionInp
 	})
 }
 func (r LLMRepository) CreateProfile(ctx context.Context, in LLMProfileInput) error {
-	if r.Store == nil || in.ID == "" || in.ConnectionID == "" || !validModel(in.Model) || in.ConcurrencyLimit < 1 || in.MonthlyTokenLimit < 1 || !validLLMLimits(in.Limits) {
+	if r.Store == nil || in.ID == "" || in.ConnectionID == "" || !validModel(in.Model) || in.ConcurrencyLimit < 1 || !validLLMLimits(in.Limits) {
 		return llm.ErrInvalidRequest
 	}
 	n := r.now().Format(time.RFC3339Nano)
 	l := in.Limits
 	return r.Store.Write(ctx, func(tx *sql.Tx) error {
-		res, e := tx.ExecContext(ctx, `INSERT INTO llm_chat_profiles(id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,monthly_token_limit,status,revision,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?, 'active',1,?,? WHERE EXISTS(SELECT 1 FROM provider_connections WHERE id=? AND status='active')`, in.ID, in.ConnectionID, in.Model, l.MaxMessages, l.MaxMessageBytes, l.MaxInputBytes, l.MaxOutputTokens, l.Timeout.Milliseconds(), l.ViewerRequests, l.AppRequests, l.RateWindow.Milliseconds(), in.ConcurrencyLimit, in.MonthlyTokenLimit, n, n, in.ConnectionID)
+		res, e := tx.ExecContext(ctx, `INSERT INTO llm_chat_profiles(id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,is_default,status,revision,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,CASE WHEN EXISTS(SELECT 1 FROM llm_chat_profiles WHERE is_default=1) THEN 0 ELSE 1 END,'active',1,?,? WHERE EXISTS(SELECT 1 FROM provider_connections WHERE id=? AND status='active')`, in.ID, in.ConnectionID, in.Model, l.MaxMessages, l.MaxMessageBytes, l.MaxInputBytes, l.MaxOutputTokens, l.Timeout.Milliseconds(), l.ViewerRequests, l.AppRequests, l.RateWindow.Milliseconds(), in.ConcurrencyLimit, n, n, in.ConnectionID)
 		if e != nil {
 			return e
 		}
@@ -102,31 +97,6 @@ func (r LLMRepository) CreateProfile(ctx context.Context, in LLMProfileInput) er
 			return llm.ErrInvalidRequest
 		}
 		return r.operatorAudit(ctx, tx, in.ActorID, "llm.profile.created", "llm_profile", in.ID)
-	})
-}
-func (r LLMRepository) SetGrant(ctx context.Context, in LLMGrantInput) error {
-	if r.Store == nil || in.AppID == "" || in.ProfileID == "" || (in.Status != "requested" && in.Status != "approved" && in.Status != "disabled" && in.Status != "revoked") || in.Revision == 0 {
-		return llm.ErrInvalidRequest
-	}
-	now := r.now().Format(time.RFC3339Nano)
-	return r.Store.Write(ctx, func(tx *sql.Tx) error {
-		var current string
-		e := tx.QueryRowContext(ctx, `SELECT status FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1`, in.AppID).Scan(&current)
-		if e != nil && !errors.Is(e, sql.ErrNoRows) {
-			return e
-		}
-		if current == "revoked" {
-			return llm.ErrCapabilityUnavailable
-		}
-		result, e := tx.ExecContext(ctx, `INSERT INTO app_capability_grants(app_id,capability,version,profile_id,status,revision,approved_by,created_at,updated_at) VALUES(?,'llm.chat',1,?,?,?,?,?,?) ON CONFLICT(app_id,capability,version) DO UPDATE SET profile_id=excluded.profile_id,status=excluded.status,revision=excluded.revision,approved_by=excluded.approved_by,updated_at=excluded.updated_at`, in.AppID, in.ProfileID, in.Status, in.Revision, nullIfEmpty(in.OperatorID), now, now)
-		if e != nil {
-			return e
-		}
-		changed, e := result.RowsAffected()
-		if e != nil || changed != 1 {
-			return llm.ErrCapabilityUnavailable
-		}
-		return nil
 	})
 }
 func (r LLMRepository) DisableConnection(ctx context.Context, id string) error {
@@ -145,16 +115,24 @@ func (r LLMRepository) Available(ctx context.Context, appID string) bool {
 
 // AdmissionLimits exposes only the effective active profile limits needed for
 // safe browser discovery and pre-admission rate limiting. Provider identity,
-// model, grant metadata, and credentials never leave this repository method.
+// model, policy metadata, and credentials never leave this repository method.
 func (r LLMRepository) AdmissionLimits(ctx context.Context, appID string) (llm.Limits, error) {
 	if r.Store == nil || appID == "" {
 		return llm.Limits{}, llm.ErrCapabilityUnavailable
 	}
 	var limits llm.Limits
 	var timeoutMS, windowMS int64
-	err := r.Store.DB.QueryRowContext(ctx, `SELECT p.max_messages,p.max_message_bytes,p.max_input_bytes,p.max_output_tokens,p.timeout_ms,p.viewer_requests,p.app_requests,p.rate_window_ms FROM app_capability_grants g JOIN llm_chat_profiles p ON p.id=g.profile_id JOIN provider_connections c ON c.id=p.connection_id JOIN applications a ON a.id=g.app_id WHERE g.app_id=? AND g.capability='llm.chat' AND g.version=1 AND g.status='approved' AND p.status='active' AND c.status='active' AND a.status='active'`, appID).Scan(&limits.MaxMessages, &limits.MaxMessageBytes, &limits.MaxInputBytes, &limits.MaxOutputTokens, &timeoutMS, &limits.ViewerRequests, &limits.AppRequests, &windowMS)
+	var mode string
+	var appQuota, hostQuota sql.NullInt64
+	var committed int
+	err := r.Store.DB.QueryRowContext(ctx, `SELECT p.max_messages,p.max_message_bytes,p.max_input_bytes,p.max_output_tokens,p.timeout_ms,p.viewer_requests,p.app_requests,p.rate_window_ms,COALESCE(ap.quota_mode,'inherit'),ap.monthly_token_limit,h.monthly_token_limit,COALESCE(u.used_tokens+u.reserved_tokens,0) FROM applications a JOIN llm_chat_profiles p ON p.is_default=1 JOIN provider_connections c ON c.id=p.connection_id CROSS JOIN llm_host_policy h LEFT JOIN app_llm_policies ap ON ap.app_id=a.id LEFT JOIN llm_usage u ON u.app_id=a.id AND u.period_start=? WHERE a.id=? AND a.status='active' AND h.status='enabled' AND p.status='active' AND c.status='active' AND COALESCE(ap.status,'enabled')='enabled'`, monthStart(r.now()), appID).Scan(&limits.MaxMessages, &limits.MaxMessageBytes, &limits.MaxInputBytes, &limits.MaxOutputTokens, &timeoutMS, &limits.ViewerRequests, &limits.AppRequests, &windowMS, &mode, &appQuota, &hostQuota, &committed)
 	if err != nil {
 		return llm.Limits{}, llm.ErrCapabilityUnavailable
+	}
+	if quota, limited, quotaErr := effectiveQuota(mode, appQuota, hostQuota); quotaErr != nil {
+		return llm.Limits{}, llm.ErrCapabilityUnavailable
+	} else if limited && committed >= quota {
+		return llm.Limits{}, llm.ErrQuotaExhausted
 	}
 	limits.Timeout = time.Duration(timeoutMS) * time.Millisecond
 	limits.RateWindow = time.Duration(windowMS) * time.Millisecond
@@ -173,7 +151,7 @@ func (r LLMRepository) Admit(ctx context.Context, appID, identityID string, inpu
 	}
 	var b llm.Binding
 	var box []byte
-	var concurrency, budget int
+	var concurrency int
 	period := monthStart(now)
 	rid, e := newLLMID()
 	if e != nil {
@@ -181,13 +159,19 @@ func (r LLMRepository) Admit(ctx context.Context, appID, identityID string, inpu
 	}
 	e = r.Store.Write(ctx, func(tx *sql.Tx) error {
 		var timeoutMS, windowMS int64
-		err := tx.QueryRowContext(ctx, `SELECT g.app_id,g.profile_id,p.connection_id,p.model,c.provider_kind,c.credential_envelope,p.max_messages,p.max_message_bytes,p.max_input_bytes,p.max_output_tokens,p.timeout_ms,p.viewer_requests,p.app_requests,p.rate_window_ms,p.concurrency_limit,p.monthly_token_limit FROM app_capability_grants g JOIN llm_chat_profiles p ON p.id=g.profile_id JOIN provider_connections c ON c.id=p.connection_id JOIN applications a ON a.id=g.app_id WHERE g.app_id=? AND g.capability='llm.chat' AND g.version=1 AND g.status='approved' AND p.status='active' AND c.status='active' AND a.status='active'`, appID).Scan(&b.AppID, &b.ProfileID, &b.ConnectionID, &b.Model, &b.Provider, &box, &b.Limits.MaxMessages, &b.Limits.MaxMessageBytes, &b.Limits.MaxInputBytes, &b.Limits.MaxOutputTokens, &timeoutMS, &b.Limits.ViewerRequests, &b.Limits.AppRequests, &windowMS, &concurrency, &budget)
+		var mode string
+		var appQuota, hostQuota sql.NullInt64
+		err := tx.QueryRowContext(ctx, `SELECT a.id,p.id,p.connection_id,p.model,c.provider_kind,c.credential_envelope,p.max_messages,p.max_message_bytes,p.max_input_bytes,p.max_output_tokens,p.timeout_ms,p.viewer_requests,p.app_requests,p.rate_window_ms,p.concurrency_limit,COALESCE(ap.quota_mode,'inherit'),ap.monthly_token_limit,h.monthly_token_limit FROM applications a JOIN llm_chat_profiles p ON p.is_default=1 JOIN provider_connections c ON c.id=p.connection_id CROSS JOIN llm_host_policy h LEFT JOIN app_llm_policies ap ON ap.app_id=a.id WHERE a.id=? AND a.status='active' AND h.status='enabled' AND p.status='active' AND c.status='active' AND COALESCE(ap.status,'enabled')='enabled'`, appID).Scan(&b.AppID, &b.ProfileID, &b.ConnectionID, &b.Model, &b.Provider, &box, &b.Limits.MaxMessages, &b.Limits.MaxMessageBytes, &b.Limits.MaxInputBytes, &b.Limits.MaxOutputTokens, &timeoutMS, &b.Limits.ViewerRequests, &b.Limits.AppRequests, &windowMS, &concurrency, &mode, &appQuota, &hostQuota)
 		if err != nil {
 			return llm.ErrCapabilityUnavailable
 		}
 		b.Limits.Timeout = time.Duration(timeoutMS) * time.Millisecond
 		b.Limits.RateWindow = time.Duration(windowMS) * time.Millisecond
-		if !validLLMLimits(b.Limits) || concurrency < 1 || budget < 1 || !validModel(b.Model) {
+		if !validLLMLimits(b.Limits) || concurrency < 1 || !validModel(b.Model) {
+			return llm.ErrCapabilityUnavailable
+		}
+		budget, limited, quotaErr := effectiveQuota(mode, appQuota, hostQuota)
+		if quotaErr != nil {
 			return llm.ErrCapabilityUnavailable
 		}
 		output := b.Limits.MaxOutputTokens
@@ -196,20 +180,20 @@ func (r LLMRepository) Admit(ctx context.Context, appID, identityID string, inpu
 		}
 		reserve := inputTokens + output
 		n := now.UTC().Format(time.RFC3339Nano)
-		if _, err = tx.ExecContext(ctx, "INSERT INTO llm_usage(app_id,profile_id,period_start,used_tokens,reserved_tokens,in_flight,updated_at) VALUES(?,?,?,0,0,0,?) ON CONFLICT(app_id,profile_id,period_start) DO NOTHING", appID, b.ProfileID, period, n); err != nil {
+		if _, err = tx.ExecContext(ctx, "INSERT INTO llm_usage(app_id,period_start,used_tokens,reserved_tokens,in_flight,updated_at) VALUES(?,?,0,0,0,?) ON CONFLICT(app_id,period_start) DO NOTHING", appID, period, n); err != nil {
 			return err
 		}
 		var used, reserved, inflight int
-		if err = tx.QueryRowContext(ctx, "SELECT used_tokens,reserved_tokens,in_flight FROM llm_usage WHERE app_id=? AND profile_id=? AND period_start=?", appID, b.ProfileID, period).Scan(&used, &reserved, &inflight); err != nil {
+		if err = tx.QueryRowContext(ctx, "SELECT used_tokens,reserved_tokens,in_flight FROM llm_usage WHERE app_id=? AND period_start=?", appID, period).Scan(&used, &reserved, &inflight); err != nil {
 			return err
 		}
-		if used+reserved+reserve > budget {
+		if limited && used+reserved+reserve > budget {
 			return llm.ErrQuotaExhausted
 		}
 		if inflight >= concurrency {
 			return llm.ErrRateLimited
 		}
-		if _, err = tx.ExecContext(ctx, "UPDATE llm_usage SET reserved_tokens=reserved_tokens+?,in_flight=in_flight+1,updated_at=? WHERE app_id=? AND profile_id=? AND period_start=?", reserve, n, appID, b.ProfileID, period); err != nil {
+		if _, err = tx.ExecContext(ctx, "UPDATE llm_usage SET reserved_tokens=reserved_tokens+?,in_flight=in_flight+1,updated_at=? WHERE app_id=? AND period_start=?", reserve, n, appID, period); err != nil {
 			return err
 		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO llm_reservations(id,app_id,profile_id,identity_id,period_start,reserved_tokens,status,created_at) VALUES(?,?,?,?,?,?, 'calling',?)", rid, appID, b.ProfileID, identityID, period, reserve, n); err != nil {
@@ -250,14 +234,14 @@ func (r LLMRepository) Reconcile(ctx context.Context, b llm.Binding, usage llm.U
 		var e error
 		switch outcome {
 		case llm.OutcomeSucceeded:
-			q = "UPDATE llm_usage SET used_tokens=used_tokens+?,reserved_tokens=reserved_tokens-?,in_flight=in_flight-1,updated_at=? WHERE app_id=? AND profile_id=? AND period_start=?"
-			result, e = tx.ExecContext(ctx, q, used, reserve, n, b.AppID, b.ProfileID, period)
+			q = "UPDATE llm_usage SET used_tokens=used_tokens+?,reserved_tokens=reserved_tokens-?,in_flight=in_flight-1,updated_at=? WHERE app_id=? AND period_start=?"
+			result, e = tx.ExecContext(ctx, q, used, reserve, n, b.AppID, period)
 		case llm.OutcomeFailed, llm.OutcomeCancelled:
-			q = "UPDATE llm_usage SET reserved_tokens=reserved_tokens-?,in_flight=in_flight-1,updated_at=? WHERE app_id=? AND profile_id=? AND period_start=?"
-			result, e = tx.ExecContext(ctx, q, reserve, n, b.AppID, b.ProfileID, period)
+			q = "UPDATE llm_usage SET reserved_tokens=reserved_tokens-?,in_flight=in_flight-1,updated_at=? WHERE app_id=? AND period_start=?"
+			result, e = tx.ExecContext(ctx, q, reserve, n, b.AppID, period)
 		case llm.OutcomeAmbiguous:
-			q = "UPDATE llm_usage SET in_flight=in_flight-1,updated_at=? WHERE app_id=? AND profile_id=? AND period_start=?"
-			result, e = tx.ExecContext(ctx, q, n, b.AppID, b.ProfileID, period)
+			q = "UPDATE llm_usage SET in_flight=in_flight-1,updated_at=? WHERE app_id=? AND period_start=?"
+			result, e = tx.ExecContext(ctx, q, n, b.AppID, period)
 		default:
 			return llm.ErrTemporarilyUnavailable
 		}
@@ -279,6 +263,27 @@ func (r LLMRepository) Reconcile(ctx context.Context, b llm.Binding, usage llm.U
 func monthStart(t time.Time) string {
 	u := t.UTC()
 	return time.Date(u.Year(), u.Month(), 1, 0, 0, 0, 0, time.UTC).Format(time.RFC3339Nano)
+}
+func effectiveQuota(mode string, appQuota, hostQuota sql.NullInt64) (int, bool, error) {
+	switch mode {
+	case "inherit":
+		if !hostQuota.Valid {
+			return 0, false, nil
+		}
+		if hostQuota.Int64 < 1 || hostQuota.Int64 > int64(^uint(0)>>1) {
+			return 0, false, llm.ErrCapabilityUnavailable
+		}
+		return int(hostQuota.Int64), true, nil
+	case "unlimited":
+		return 0, false, nil
+	case "specific":
+		if !appQuota.Valid || appQuota.Int64 < 1 || appQuota.Int64 > int64(^uint(0)>>1) {
+			return 0, false, llm.ErrCapabilityUnavailable
+		}
+		return int(appQuota.Int64), true, nil
+	default:
+		return 0, false, llm.ErrCapabilityUnavailable
+	}
 }
 func validModel(s string) bool {
 	return llm.ValidModelIdentifier(s)

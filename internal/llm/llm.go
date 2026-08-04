@@ -16,7 +16,7 @@ import (
 )
 
 // Stable errors are intentionally detail-free: provider bodies, URLs, models,
-// grants, and credentials are never suitable browser error material.
+// policies, and credentials are never suitable browser error material.
 var (
 	ErrUnauthorized           = errors.New("llm request is not authorized")
 	ErrCapabilityUnavailable  = errors.New("llm capability unavailable")
@@ -71,12 +71,12 @@ type Binding struct {
 	ReservedTokens                                       int
 }
 
-// Repository is the persistence and grant boundary. Admit must atomically
-// verify the active app grant/connection/profile and reserve usage/concurrency.
+// Repository is the persistence and policy boundary. Admit must atomically
+// verify the active app/default profile/connection/policy and reserve usage/concurrency.
 // It is never called with client supplied tenancy identifiers.
 type Repository interface {
 	// AdmissionLimits returns only the effective, non-secret profile limits for
-	// an active grant. Complete uses it to reject rate-limit excess before it
+	// current reactive policy. Complete uses it to reject rate-limit excess before it
 	// creates a durable usage reservation. Admit repeats every active-state
 	// check inside its transaction, so a concurrent revoke or profile change
 	// still fails closed.
@@ -130,7 +130,7 @@ type Service struct {
 }
 
 // Discovery is the browser-safe subset of the active LLM capability. It never
-// includes the selected model, provider, connection, grant, or credential.
+// includes the selected model, provider, connection, policy, or credential.
 type Discovery struct {
 	Limits     map[string]int
 	Disclosure string
@@ -152,11 +152,11 @@ func (s *Service) Available(ctx context.Context, auth appauth.AuthorizationConte
 	return ok
 }
 
-// Discovery returns only safe effective limits after checking both manifest
-// intent and the current active grant. It is intentionally absent for an app
-// that did not request llm.chat or no longer has an active grant.
+// Discovery returns only safe effective limits after resolving the current
+// reactive host and app policy. It is absent whenever the server cannot supply
+// chat to this authenticated app.
 func (s *Service) Discovery(ctx context.Context, auth appauth.AuthorizationContext) (Discovery, bool) {
-	if s == nil || s.Repository == nil || auth == nil || !auth.LLMChatRequested() {
+	if s == nil || s.Repository == nil || auth == nil {
 		return Discovery{}, false
 	}
 	app, _, _, err := capabilities.Scope(auth)
@@ -176,11 +176,7 @@ func (s *Service) Complete(ctx context.Context, auth appauth.AuthorizationContex
 	if ctx == nil || auth == nil {
 		return Response{}, ErrUnauthorized
 	}
-	// A sealed gateway authorization context is valid even when this app did
-	// not request chat. Keep that capability boundary distinct from anonymous
-	// access: callers learn only that chat is unavailable, never a provider
-	// detail, and no repository/provider work can occur.
-	if !auth.LLMChatRequested() || s == nil || s.Repository == nil {
+	if s == nil || s.Repository == nil {
 		return Response{}, ErrCapabilityUnavailable
 	}
 	appID, viewerID, _, err := capabilities.Scope(auth)
@@ -199,7 +195,10 @@ func (s *Service) Complete(ctx context.Context, auth appauth.AuthorizationContex
 	// its transaction; a concurrent change is denied rather than using stale
 	// policy.
 	limits, err := s.Repository.AdmissionLimits(ctx, appID)
-	if err != nil || !validLimits(limits) {
+	if err != nil {
+		return Response{}, stable(err)
+	}
+	if !validLimits(limits) {
 		return Response{}, ErrCapabilityUnavailable
 	}
 	if err := validateRequest(request, limits); err != nil {

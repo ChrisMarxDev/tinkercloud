@@ -33,7 +33,7 @@ const MaxBody = 1 << 20
 var ErrPolicyRevision = errors.New("policy revision conflict")
 var ErrDeployerRevision = errors.New("deployer allowlist revision conflict")
 
-// ErrLLMRevision deliberately carries no profile, grant, provider, or
+// ErrLLMRevision deliberately carries no profile, policy, provider, or
 // persistence detail to a browser. It only tells the control UI to reload its
 // server-derived safe read model before an operator retries a mutation.
 var ErrLLMRevision = errors.New("llm capability revision conflict")
@@ -228,7 +228,7 @@ type DashboardView struct {
 	LLMKeyManagementReady bool
 	LLMProfiles           []LLMProfile
 	LLMModelCatalog       []LLMModelOption
-	LLMGrants             []LLMGrant
+	LLMHostPolicy         LLMHostPolicy
 	// PublicGate is operator-only current state. The dashboard deliberately
 	// displays it without offering a browser mutation path.
 	PublicGate DashboardPublicGate
@@ -247,10 +247,16 @@ type LLMProfile struct {
 	ViewerRequests, AppRequests     int
 	RateWindowMS                    int64
 	ConcurrencyLimit                int
-	MonthlyTokenLimit               int
+	IsDefault                       bool
 }
-type LLMGrant struct {
-	AppSlug, ProfileID, Status           string
+type LLMHostPolicy struct {
+	Status            string
+	MonthlyTokenLimit int
+	Revision          uint64
+}
+type LLMAppPolicy struct {
+	AppSlug, Status, QuotaMode           string
+	MonthlyTokenLimit                    int
 	Revision                             uint64
 	UsedTokens, ReservedTokens, InFlight int
 }
@@ -260,9 +266,9 @@ type DashboardApp struct {
 	Releases                             []DashboardRelease
 	Tokens                               []DashboardToken
 	Insights                             DashboardInsights
-	// LLMGrant is a credential-free operator-only read model. It is attached
-	// to the app rather than selected from a browser-provided app identifier.
-	LLMGrant *LLMGrant
+	// LLMPolicy is a credential-free operator-only read model attached to the
+	// server-selected app rather than a browser-provided identifier.
+	LLMPolicy *LLMAppPolicy
 }
 
 // DashboardInsights is a bounded, aggregate-only view. It deliberately has
@@ -294,7 +300,7 @@ type LLMProfileInput struct {
 	TimeoutMS                                   int64
 	ViewerRequests, AppRequests                 int
 	RateWindowMS                                int64
-	ConcurrencyLimit, MonthlyTokenLimit         int
+	ConcurrencyLimit                            int
 	ExpectedRevision                            uint64
 }
 type DashboardAccess struct {

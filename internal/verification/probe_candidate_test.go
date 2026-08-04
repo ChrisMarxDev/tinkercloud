@@ -12,9 +12,9 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
-func TestProbeCandidatePrivateLLMChatRelease(t *testing.T) {
+func TestProbeCandidatePrivateRelease(t *testing.T) {
 	root := t.TempDir()
-	record := realisticPrivateCandidate(t, root, true)
+	record := realisticPrivateCandidate(t, root)
 	// Activation receives the durable JSON reconstruction rather than the
 	// in-memory value produced directly by YAML parsing.
 	raw, err := json.Marshal(record.Manifest)
@@ -39,7 +39,7 @@ func TestProbeCandidatePrivateLLMChatRelease(t *testing.T) {
 
 func TestProbeCandidatePrivateReleaseProvesAssetAndReservedDenials(t *testing.T) {
 	root := t.TempDir()
-	record := realisticPrivateCandidate(t, root, false)
+	record := realisticPrivateCandidate(t, root)
 	probe, err := ProbeCandidate(context.Background(), config.Config{
 		Domain:        "tinker.test",
 		SessionCookie: "__Host-tinker_app",
@@ -57,7 +57,7 @@ func TestProbeCandidatePrivateReleaseProvesAssetAndReservedDenials(t *testing.T)
 
 func TestProbeCandidatePrivateSingleFileReleaseDoesNotRequireAssetEvidence(t *testing.T) {
 	root := t.TempDir()
-	record := realisticPrivateCandidateFiles(t, root, false, false)
+	record := realisticPrivateCandidateFiles(t, root, false)
 	probe, err := ProbeCandidate(context.Background(), config.Config{
 		Domain:        "tinker.test",
 		SessionCookie: "__Host-tinker_app",
@@ -70,9 +70,9 @@ func TestProbeCandidatePrivateSingleFileReleaseDoesNotRequireAssetEvidence(t *te
 	}
 }
 
-func TestProbeCandidatePrivateLLMChatRejectsAlteredReleaseEvidence(t *testing.T) {
+func TestProbeCandidatePrivateRejectsAlteredReleaseEvidence(t *testing.T) {
 	root := t.TempDir()
-	record := realisticPrivateCandidate(t, root, true)
+	record := realisticPrivateCandidate(t, root)
 	record.Files[0].Hash = "altered"
 
 	if probe, err := ProbeCandidate(context.Background(), config.Config{
@@ -83,30 +83,14 @@ func TestProbeCandidatePrivateLLMChatRejectsAlteredReleaseEvidence(t *testing.T)
 	}
 }
 
-func TestProbeCandidatePrivateLLMChatRejectsCapabilityMismatch(t *testing.T) {
-	root := t.TempDir()
-	record := realisticPrivateCandidate(t, root, true)
-	record.Manifest.LLMChat = false
-
-	if probe, err := ProbeCandidate(context.Background(), config.Config{
-		Domain:        "tinker.test",
-		SessionCookie: "__Host-tinker_app",
-	}, root, record); err == nil || probe.Passed() || CandidateProbeStage(err) != CandidateProbeReleaseEvidence {
-		t.Fatalf("capability mismatch reached a passing probe: probe=%+v err=%v", probe, err)
-	}
+func realisticPrivateCandidate(t *testing.T, dataRoot string) deployments.Record {
+	return realisticPrivateCandidateFiles(t, dataRoot, true)
 }
 
-func realisticPrivateCandidate(t *testing.T, dataRoot string, llmChat bool) deployments.Record {
-	return realisticPrivateCandidateFiles(t, dataRoot, llmChat, true)
-}
-
-func realisticPrivateCandidateFiles(t *testing.T, dataRoot string, llmChat, withAssets bool) deployments.Record {
+func realisticPrivateCandidateFiles(t *testing.T, dataRoot string, withAssets bool) deployments.Record {
 	t.Helper()
 	staging := t.TempDir()
-	manifest := "version: 2\nname: llm-chat\nbuild:\n  output: dist\naccess:\n  mode: private\ncapabilities:\n  llm:\n    chat: true\n"
-	if !llmChat {
-		manifest = "version: 2\nname: llm-chat\nbuild:\n  output: dist\naccess:\n  mode: private\n"
-	}
+	manifest := "version: 2\nname: llm-chat\nbuild:\n  output: dist\naccess:\n  mode: private\n"
 	files := map[string][]byte{
 		"index.html":  []byte("<!doctype html><title>LLM chat</title><main>private candidate marker</main>"),
 		"tinker.yaml": []byte(manifest),

@@ -22,7 +22,6 @@ type AuthorizationContext interface {
 	KVEnabled() bool
 	BlobsEnabled() bool
 	RealtimeEnabled() bool
-	LLMChatRequested() bool
 	Identity() identity.Identity
 	SessionID() string
 	PolicyRevision() uint64
@@ -79,7 +78,6 @@ func (c authorizationContext) SPAFallback() bool           { return c.app.SPAFal
 func (c authorizationContext) KVEnabled() bool             { return c.app.KVEnabled }
 func (c authorizationContext) BlobsEnabled() bool          { return c.app.BlobsEnabled }
 func (c authorizationContext) RealtimeEnabled() bool       { return c.app.RealtimeEnabled }
-func (c authorizationContext) LLMChatRequested() bool      { return c.app.LLMChatRequested }
 func (c authorizationContext) Identity() identity.Identity { return c.session.Identity }
 func (c authorizationContext) SessionID() string           { return c.session.ID }
 func (c authorizationContext) PolicyRevision() uint64      { return c.revision }
@@ -183,7 +181,7 @@ func (a Authorizer) Authorize(ctx context.Context, app apps.App, token, requestI
 // and a release with no browser capability.  All failures are denial.
 func (a Authorizer) AuthorizeStatic(ctx context.Context, app apps.App, token, requestID string) (StaticAccessContext, error) {
 	gateStore, ok := a.Policies.(policies.PublicGateStore)
-	if ok && !app.KVEnabled && !app.BlobsEnabled && !app.RealtimeEnabled && !app.LLMChatRequested && app.DeploymentID != "" && app.ReleaseRoot != "" && app.ReleaseEvidence.Hash != "" {
+	if ok && !app.KVEnabled && !app.BlobsEnabled && !app.RealtimeEnabled && app.DeploymentID != "" && app.ReleaseRoot != "" && app.ReleaseEvidence.Hash != "" {
 		p, err := a.Policies.Current(ctx, app.ID)
 		if err == nil && p.Valid && p.AppID == app.ID && p.Mode == "public" {
 			gate, err := gateStore.CurrentPublicGate(ctx)

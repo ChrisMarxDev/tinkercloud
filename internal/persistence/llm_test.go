@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
 )
 
@@ -28,10 +29,11 @@ func setupLLM(t *testing.T, r LLMRepository) {
 	if e := r.CreateConnection(ctx, LLMConnectionInput{ID: "conn", DisplayName: "operator connection", Provider: llm.ProviderAnthropic, Secret: []byte("super-secret"), KeyVersion: 1, ActorID: "u"}); e != nil {
 		t.Fatal(e)
 	}
-	if e := r.CreateProfile(ctx, LLMProfileInput{ID: "profile", ConnectionID: "conn", Model: "claude-test", Limits: llmLimits(), ConcurrencyLimit: 1, MonthlyTokenLimit: 100, ActorID: "u"}); e != nil {
+	if e := r.CreateProfile(ctx, LLMProfileInput{ID: "profile", ConnectionID: "conn", Model: "claude-test", Limits: llmLimits(), ConcurrencyLimit: 1, ActorID: "u"}); e != nil {
 		t.Fatal(e)
 	}
-	if e := r.SetGrant(ctx, LLMGrantInput{AppID: "a", ProfileID: "profile", OperatorID: "u", Status: "approved", Revision: 1}); e != nil {
+	limit := 100
+	if e := r.UpdateHostPolicy(ctx, "enabled", &limit, "u", 1); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -59,25 +61,40 @@ func TestLLMEncryptedConnectionAndAdmission(t *testing.T) {
 		t.Fatal(meta, e)
 	}
 }
-func TestLLMGrantAndBudgetDenyBeforeDecrypt(t *testing.T) {
+func TestLLMAppDisableAndStalePolicyDenyBeforeDecrypt(t *testing.T) {
 	r, s := llmRepo(t)
 	defer s.Close()
 	setupLLM(t, r)
-	if _, e := s.DB.Exec("UPDATE app_capability_grants SET status='revoked'"); e != nil {
+	if e := r.UpdateAppPolicy(context.Background(), "a", "disabled", "inherit", nil, "u", 0); e != nil {
 		t.Fatal(e)
 	}
 	if _, e := r.Admit(context.Background(), "a", "i", 1, 1, time.Now()); !errors.Is(e, llm.ErrCapabilityUnavailable) {
-		t.Fatalf("revoked=%v", e)
+		t.Fatalf("disabled=%v", e)
 	}
-	if e := r.SetGrant(context.Background(), LLMGrantInput{AppID: "a", ProfileID: "profile", OperatorID: "u", Status: "approved", Revision: 2}); !errors.Is(e, llm.ErrCapabilityUnavailable) {
-		t.Fatalf("terminal revoke set=%v", e)
+	if e := r.UpdateAppPolicy(context.Background(), "a", "enabled", "unlimited", nil, "u", 0); !errors.Is(e, controlapi.ErrLLMRevision) {
+		t.Fatalf("stale create=%v", e)
 	}
-	if e := r.UpdateGrant(context.Background(), LLMGrantInput{AppID: "a", ProfileID: "profile", OperatorID: "u", Status: "approved"}, 1); e == nil {
-		t.Fatal("current control update revived a revoked grant")
+	if e := r.UpdateAppPolicy(context.Background(), "a", "enabled", "unlimited", nil, "u", 1); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := r.Admit(context.Background(), "a", "i", 1, 1, time.Now()); e != nil {
+		t.Fatalf("enabled unlimited app denied: %v", e)
+	}
+}
+
+func TestLLMHostDisableDeniesWithoutChangingConnection(t *testing.T) {
+	r, s := llmRepo(t)
+	defer s.Close()
+	setupLLM(t, r)
+	if err := r.UpdateHostPolicy(context.Background(), "disabled", nil, "u", 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Admit(context.Background(), "a", "i", 1, 1, time.Now()); !errors.Is(err, llm.ErrCapabilityUnavailable) {
+		t.Fatalf("host disable did not deny: %v", err)
 	}
 	var status string
-	if e := s.DB.QueryRow("SELECT status FROM app_capability_grants WHERE app_id='a'").Scan(&status); e != nil || status != "revoked" {
-		t.Fatalf("grant status=%q err=%v", status, e)
+	if err := s.DB.QueryRow("SELECT status FROM provider_connections WHERE id='conn'").Scan(&status); err != nil || status != "active" {
+		t.Fatalf("host disable changed connection status=%q err=%v", status, err)
 	}
 }
 func TestLLMConcurrencyAndAmbiguousReservation(t *testing.T) {
@@ -107,10 +124,11 @@ func TestLLMAdmissionUsesProfileOutputWhenRequestOmitsIt(t *testing.T) {
 	if e := r.CreateConnection(ctx, LLMConnectionInput{ID: "conn", DisplayName: "operator connection", Provider: llm.ProviderAnthropic, Secret: []byte("super-secret"), KeyVersion: 1, ActorID: "u"}); e != nil {
 		t.Fatal(e)
 	}
-	if e := r.CreateProfile(ctx, LLMProfileInput{ID: "profile", ConnectionID: "conn", Model: "claude-test", Limits: l, ConcurrencyLimit: 1, MonthlyTokenLimit: 6, ActorID: "u"}); e != nil {
+	if e := r.CreateProfile(ctx, LLMProfileInput{ID: "profile", ConnectionID: "conn", Model: "claude-test", Limits: l, ConcurrencyLimit: 1, ActorID: "u"}); e != nil {
 		t.Fatal(e)
 	}
-	if e := r.SetGrant(ctx, LLMGrantInput{AppID: "a", ProfileID: "profile", OperatorID: "u", Status: "approved", Revision: 1}); e != nil {
+	limit := 6
+	if e := r.UpdateHostPolicy(ctx, "enabled", &limit, "u", 1); e != nil {
 		t.Fatal(e)
 	}
 	b, e := r.Admit(ctx, "a", "i", 1, 0, time.Now())
@@ -151,6 +169,39 @@ func TestLLMUsageAboveReservationStillReleasesConcurrency(t *testing.T) {
 	var reserved, flight int
 	if e = s.DB.QueryRow("SELECT reserved_tokens,in_flight FROM llm_usage").Scan(&reserved, &flight); e != nil || reserved != 0 || flight != 0 {
 		t.Fatalf("stuck usage reserved=%d flight=%d err=%v", reserved, flight, e)
+	}
+}
+
+func TestLLMDefaultSwitchDoesNotResetAppUsageOrFallback(t *testing.T) {
+	r, s := llmRepo(t)
+	defer s.Close()
+	setupLLM(t, r)
+	ctx := context.Background()
+	b, err := r.Admit(ctx, "a", "i", 1, 1, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Reconcile(ctx, b, llm.Usage{InputTokens: 3, OutputTokens: 2}, llm.OutcomeSucceeded, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.CreateProfile(ctx, LLMProfileInput{ID: "profile-two", ConnectionID: "conn", Model: "claude-new", Limits: llmLimits(), ConcurrencyLimit: 1, ActorID: "u"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetDefaultProfile(ctx, "profile-two", "u", 1); err != nil {
+		t.Fatal(err)
+	}
+	limit := 6
+	if err := r.UpdateAppPolicy(ctx, "a", "enabled", "specific", &limit, "u", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Admit(ctx, "a", "i", 1, 1, time.Now()); !errors.Is(err, llm.ErrQuotaExhausted) {
+		t.Fatalf("profile switch reset app usage: %v", err)
+	}
+	if _, err := s.DB.Exec("UPDATE llm_chat_profiles SET status='disabled' WHERE id='profile-two'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.AdmissionLimits(ctx, "a"); !errors.Is(err, llm.ErrCapabilityUnavailable) {
+		t.Fatalf("unavailable default fell back: %v", err)
 	}
 }
 

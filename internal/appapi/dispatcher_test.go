@@ -40,7 +40,7 @@ func authForLLM(t *testing.T, appID string) appauth.AuthorizationContext {
 	v := identity.Identity{ID: "viewer", Email: "v@example.com"}
 	s := sessions.NewMemoryStore()
 	token, _, _ := s.Create(appID, v, time.Now().Add(time.Hour))
-	a, e := appauth.Authorizer{Sessions: s, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{appID: {AppID: appID, OwnerIdentityID: "viewer", Valid: true}}}}.Authorize(context.Background(), apps.App{ID: appID, LLMChatRequested: true}, token, "req_safe")
+	a, e := appauth.Authorizer{Sessions: s, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{appID: {AppID: appID, OwnerIdentityID: "viewer", Valid: true}}}}.Authorize(context.Background(), apps.App{ID: appID}, token, "req_safe")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -97,10 +97,6 @@ func TestLLMDiscoveryExposesOnlyEffectiveSafeLimits(t *testing.T) {
 	w := request(d, authForLLM(t, "a"), http.MethodGet, "/_tinker/api/v1/capabilities", "", false)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"disclosure"`) || !strings.Contains(w.Body.String(), `"max_output_tokens":10`) || strings.Contains(w.Body.String(), `"model":99`) {
 		t.Fatalf("discovery=%d %s", w.Code, w.Body.String())
-	}
-	w = request(d, authFor(t, "a"), http.MethodGet, "/_tinker/api/v1/capabilities", "", false)
-	if strings.Contains(w.Body.String(), "llm.chat") {
-		t.Fatalf("unrequested llm leaked into discovery: %s", w.Body.String())
 	}
 }
 

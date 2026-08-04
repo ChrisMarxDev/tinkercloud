@@ -954,7 +954,7 @@ func TestPublicExampleAssetsAreTrackedAndCapabilityFree(t *testing.T) {
 		t.Fatal(err)
 	}
 	parsed, err := releases.ParseManifest(manifest)
-	if err != nil || parsed.Name != publicExampleSlug || parsed.AccessMode != "public" || !parsed.Indexing || parsed.KV || parsed.Realtime || parsed.Blobs || parsed.LLMChat {
+	if err != nil || parsed.Name != publicExampleSlug || parsed.AccessMode != "public" || !parsed.Indexing || parsed.KV || parsed.Realtime || parsed.Blobs {
 		t.Fatalf("public example manifest=%#v err=%v", parsed, err)
 	}
 }

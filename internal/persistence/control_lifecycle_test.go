@@ -70,9 +70,9 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 	seedActiveRelease(t, s)
 	for _, statement := range []string{
 		"INSERT INTO provider_connections(id,display_name,provider_kind,credential_envelope,credential_key_version,status,created_at,updated_at) VALUES('conn','test','anthropic',X'01',1,'active',datetime('now'),datetime('now'))",
-		"INSERT INTO llm_chat_profiles(id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,monthly_token_limit,status,revision,created_at,updated_at) VALUES('profile','conn','test',1,1,1,1,1000,1,1,1000,1,1,'active',1,datetime('now'),datetime('now'))",
-		"INSERT INTO app_capability_grants(app_id,capability,version,profile_id,status,revision,created_at,updated_at) VALUES('a','llm.chat',1,'profile','approved',1,datetime('now'),datetime('now'))",
-		"INSERT INTO llm_usage(app_id,profile_id,period_start,used_tokens,reserved_tokens,in_flight,updated_at) VALUES('a','profile','2026-07-01T00:00:00Z',0,1,1,datetime('now'))",
+		"INSERT INTO llm_chat_profiles(id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,is_default,status,revision,created_at,updated_at) VALUES('profile','conn','test',1,1,1,1,1000,1,1,1000,1,1,'active',1,datetime('now'),datetime('now'))",
+		"INSERT INTO app_llm_policies(app_id,status,quota_mode,monthly_token_limit,revision,updated_by,created_at,updated_at) VALUES('a','enabled','inherit',NULL,1,'u',datetime('now'),datetime('now'))",
+		"INSERT INTO llm_usage(app_id,period_start,used_tokens,reserved_tokens,in_flight,updated_at) VALUES('a','2026-07-01T00:00:00Z',0,1,1,datetime('now'))",
 		"INSERT INTO llm_reservations(id,app_id,profile_id,identity_id,period_start,reserved_tokens,status,created_at) VALUES('reservation','a','profile','i','2026-07-01T00:00:00Z',1,'calling',datetime('now'))",
 		"INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now'))",
 		"INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_at) VALUES('rule','a',1,'email','viewer@example.com',datetime('now'))",
@@ -109,7 +109,7 @@ func TestControlDeleteAppPurgesOwnedStateAndPrivateBytes(t *testing.T) {
 		"SELECT COUNT(*) FROM applications WHERE id='a'",
 		"SELECT COUNT(*) FROM llm_reservations WHERE app_id='a'",
 		"SELECT COUNT(*) FROM llm_usage WHERE app_id='a'",
-		"SELECT COUNT(*) FROM app_capability_grants WHERE app_id='a'",
+		"SELECT COUNT(*) FROM app_llm_policies WHERE app_id='a'",
 		"SELECT COUNT(*) FROM api_tokens WHERE app_id='a'",
 		"SELECT COUNT(*) FROM sessions WHERE app_id='a'",
 		"SELECT COUNT(*) FROM deployment_files WHERE deployment_id='d'",

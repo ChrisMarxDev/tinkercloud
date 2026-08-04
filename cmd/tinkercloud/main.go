@@ -239,12 +239,6 @@ func buildHandler(c config.Config, secrets config.Secrets, store *persistence.SQ
 		llmService = llm.New(repository, map[llm.Provider]llm.Adapter{llm.ProviderAnthropic: anthropicAdapter, llm.ProviderGemini: geminiAdapter})
 		llmValidator = llmCredentialValidator{providers: map[llm.Provider]llm.CredentialValidator{llm.ProviderAnthropic: anthropicAdapter, llm.ProviderGemini: geminiAdapter}}
 	}
-	deploy.CapabilityReady = func(ctx context.Context, record deployments.Record) bool {
-		// A release which does not request the capability retains the existing
-		// activation behavior. A requesting release must have a currently active
-		// operator binding before it can replace the prior active release.
-		return !record.Manifest.LLMChat || llmRepository != nil && llmRepository.Available(ctx, record.AppID)
-	}
 	controlAuth := persistence.ControlAuthenticator{Store: store, RevokeChildren: func(refs []persistence.AppSessionRef) {
 		for _, ref := range refs {
 			hub.Revoke(ref.AppID, ref.SessionID)

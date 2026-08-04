@@ -239,7 +239,7 @@ func (g Gateway) isEffectivePublic(ctx context.Context, app apps.App) bool {
 	if g.Authorizer.Policies == nil {
 		return false
 	}
-	if app.DeploymentID == "" || app.KVEnabled || app.BlobsEnabled || app.RealtimeEnabled || app.LLMChatRequested {
+	if app.DeploymentID == "" || app.KVEnabled || app.BlobsEnabled || app.RealtimeEnabled {
 		return false
 	}
 	p, err := g.Authorizer.Policies.Current(ctx, app.ID)

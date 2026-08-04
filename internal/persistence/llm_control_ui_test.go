@@ -7,9 +7,7 @@ import (
 	"testing"
 
 	"github.com/ChrisMarxDev/tinkercloud/internal/controlapi"
-	"github.com/ChrisMarxDev/tinkercloud/internal/deployments"
 	"github.com/ChrisMarxDev/tinkercloud/internal/llm"
-	"github.com/ChrisMarxDev/tinkercloud/internal/releases"
 )
 
 type controlLLMValidator struct {
@@ -39,10 +37,10 @@ func (v *controlLLMValidator) ListModels(_ context.Context, provider llm.Provide
 }
 
 func llmProfileForm(connection string, revision uint64) controlapi.LLMProfileInput {
-	return controlapi.LLMProfileInput{ConnectionID: connection, Model: "fixed-model", MaxMessages: 2, MaxMessageBytes: 20, MaxInputBytes: 40, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 2, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 20, ExpectedRevision: revision}
+	return controlapi.LLMProfileInput{ConnectionID: connection, Model: "fixed-model", MaxMessages: 2, MaxMessageBytes: 20, MaxInputBytes: 40, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 2, RateWindowMS: 1000, ConcurrencyLimit: 1, ExpectedRevision: revision}
 }
 
-func TestControlLLMCreateRotateProfileAndGrantUseDerivedTargets(t *testing.T) {
+func TestControlLLMCreateRotateProfileAndPolicyUseDerivedTargets(t *testing.T) {
 	repo, store := llmRepo(t)
 	defer store.Close()
 	validator := &controlLLMValidator{}
@@ -67,20 +65,19 @@ func TestControlLLMCreateRotateProfileAndGrantUseDerivedTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	var profile string
-	if err := store.DB.QueryRow("SELECT id FROM llm_chat_profiles").Scan(&profile); err != nil || len(profile) != 32 {
-		t.Fatalf("profile=%q err=%v", profile, err)
+	var isDefault bool
+	if err := store.DB.QueryRow("SELECT id,is_default FROM llm_chat_profiles").Scan(&profile, &isDefault); err != nil || len(profile) != 32 || !isDefault {
+		t.Fatalf("profile=%q default=%v err=%v", profile, isDefault, err)
 	}
-	if err := service.ApproveLLMGrant(context.Background(), operator, "alpha", profile, 0); err != nil {
+	limit := 20
+	if err := service.UpdateAppLLMPolicy(context.Background(), operator, "alpha", "enabled", "specific", &limit, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetLLMGrantStatus(context.Background(), operator, "alpha", "revoked", 1); err != nil {
-		t.Fatal(err)
+	if err := service.UpdateAppLLMPolicy(context.Background(), operator, "alpha", "disabled", "inherit", nil, 0); !errors.Is(err, controlapi.ErrLLMRevision) {
+		t.Fatalf("stale app policy=%v", err)
 	}
-	if err := service.SetLLMGrantStatus(context.Background(), operator, "alpha", "disabled", 1); !errors.Is(err, controlapi.ErrLLMRevision) {
-		t.Fatalf("stale grant=%v", err)
-	}
-	if err := service.ApproveLLMGrant(context.Background(), operator, "missing", profile, 0); err == nil {
-		t.Fatal("browser-selected missing app gained a grant")
+	if err := service.UpdateAppLLMPolicy(context.Background(), operator, "missing", "enabled", "inherit", nil, 0); err == nil {
+		t.Fatal("browser-selected missing app gained a policy")
 	}
 	if err := service.CreateLLMConnection(context.Background(), controlapi.Actor{ID: "u", Role: "deployer", Active: true}, "anthropic", "key"); err == nil {
 		t.Fatal("deployer created an operator connection")
@@ -154,15 +151,12 @@ func TestControlLLMProfileRevisionAndConnectionStateFailClosed(t *testing.T) {
 	}
 }
 
-func TestLLMGrantRejectsDisabledConnectionAndDashboardOmitsUnselectableProfile(t *testing.T) {
+func TestLLMDashboardOmitsProfileWithDisabledConnection(t *testing.T) {
 	repo, store := llmRepo(t)
 	defer store.Close()
 	setupLLM(t, repo)
 	if _, err := store.DB.Exec("UPDATE provider_connections SET status='disabled' WHERE id='conn'"); err != nil {
 		t.Fatal(err)
-	}
-	if err := repo.UpdateGrant(context.Background(), LLMGrantInput{AppID: "a", ProfileID: "profile", OperatorID: "u", Status: "disabled"}, 1); !errors.Is(err, controlapi.ErrLLMRevision) {
-		t.Fatalf("disabled connection grant update=%v", err)
 	}
 	if _, err := store.DB.Exec("INSERT INTO users(id,normalized_email,role,status,created_at) VALUES('op','operator@example.test','operator','active',datetime('now')); INSERT INTO access_policies(app_id,revision,mode,created_at) VALUES('a',1,'private',datetime('now')),('b',1,'private',datetime('now'))"); err != nil {
 		t.Fatal(err)
@@ -232,37 +226,5 @@ func TestOperatorModelCatalogOmitsUndecryptableAndInvalidProviderResults(t *test
 	catalog, err = repo.OperatorModelCatalog(context.Background(), validator)
 	if err != nil || len(catalog) != 0 || len(validator.keys) != 0 {
 		t.Fatalf("undecryptable connection reached provider or catalog: %#v keys=%#v err=%v", catalog, validator.keys, err)
-	}
-}
-
-func TestLLMActivationGateReadsCurrentProductionGrantAndConnectionState(t *testing.T) {
-	for name, mutate := range map[string]func(*SQLiteStore){
-		"disabled grant": func(s *SQLiteStore) {
-			_, _ = s.DB.Exec("UPDATE app_capability_grants SET status='disabled' WHERE app_id='a'")
-		},
-		"revoked grant": func(s *SQLiteStore) {
-			_, _ = s.DB.Exec("UPDATE app_capability_grants SET status='revoked' WHERE app_id='a'")
-		},
-		"disabled connection": func(s *SQLiteStore) {
-			_, _ = s.DB.Exec("UPDATE provider_connections SET status='disabled' WHERE id='conn'")
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			repo, store := llmRepo(t)
-			defer store.Close()
-			setupLLM(t, repo)
-			mutate(store)
-			memory := &deployments.MemoryRepository{Records: map[string]deployments.Record{}, Current: map[string]string{}}
-			old := deployments.Record{Deployment: releases.Deployment{ID: "old", AppID: "a", State: releases.Active}, OwnerID: "u", Manifest: releases.Manifest{Name: "alpha"}}
-			next := deployments.Record{Deployment: releases.Deployment{ID: "next", AppID: "a", State: releases.Verified}, OwnerID: "u", Manifest: releases.Manifest{Name: "alpha", LLMChat: true}}
-			memory.Records[old.ID], memory.Records[next.ID], memory.Current["a"] = old, next, old.ID
-			service := &deployments.Service{Repo: memory, Gates: deployments.GateFuncs{PolicyFunc: func(context.Context, deployments.Record) bool { return true }, CertificateFunc: func(context.Context, deployments.Record) bool { return true }, ProbeFunc: func(context.Context, deployments.Record) bool { return true }}, CapabilityReady: func(ctx context.Context, r deployments.Record) bool { return repo.Available(ctx, r.AppID) }}
-			if err := service.Activate(context.Background(), deployments.Actor{ID: "u", Active: true}, "next", "request"); err == nil {
-				t.Fatal("inactive LLM binding activated deployment")
-			}
-			if memory.Current["a"] != "old" || memory.Records["next"].State != releases.Verified {
-				t.Fatalf("activation pointer mutated: %#v", memory)
-			}
-		})
 	}
 }
