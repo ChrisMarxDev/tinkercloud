@@ -34,8 +34,8 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	seedLLMGatewayApp(t, store, "app-a", "alpha", true)
-	seedLLMGatewayApp(t, store, "app-b", "beta", true)
+	seedLLMGatewayApp(t, store, "app-a", "alpha")
+	seedLLMGatewayApp(t, store, "app-b", "beta")
 	viewer := identity.Identity{ID: "viewer", Email: "viewer@example.com"}
 	if _, err := store.DB.Exec("INSERT INTO identities(id,normalized_email,created_at) VALUES(?,?,datetime('now'))", viewer.ID, viewer.Email); err != nil {
 		t.Fatal(err)
@@ -57,10 +57,11 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	if err := repo.CreateConnection(ctx, persistence.LLMConnectionInput{ID: "connection", DisplayName: "test connection", Provider: llm.ProviderAnthropic, Secret: []byte("provider-secret"), KeyVersion: 1, ActorID: "owner-app-a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.CreateProfile(ctx, persistence.LLMProfileInput{ID: "profile", ConnectionID: "connection", Model: "hidden-test-model", Limits: limits, ConcurrencyLimit: 1, MonthlyTokenLimit: 100, ActorID: "owner-app-a"}); err != nil {
+	if err := repo.CreateProfile(ctx, persistence.LLMProfileInput{ID: "profile", ConnectionID: "connection", Model: "hidden-test-model", Limits: limits, ConcurrencyLimit: 1, ActorID: "owner-app-a"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.UpdateGrant(ctx, persistence.LLMGrantInput{AppID: "app-a", ProfileID: "profile", OperatorID: "owner-app-a", Status: "approved"}, 0); err != nil {
+	hostLimit := 100
+	if err := repo.UpdateHostPolicy(ctx, "enabled", &hostLimit, "owner-app-a", 1); err != nil {
 		t.Fatal(err)
 	}
 	adapter := &llmGatewayAdapter{}
@@ -104,8 +105,8 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	if status, body := request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/capabilities", aToken, ""); status != http.StatusOK || !strings.Contains(body, `"llm.chat"`) || !strings.Contains(body, `"disclosure"`) || !strings.Contains(body, `"max_output_tokens":10`) || strings.Contains(body, "hidden-test-model") || strings.Contains(body, "provider-secret") || strings.Contains(body, "anthropic") {
 		t.Fatalf("unsafe app A discovery status=%d body=%q", status, body)
 	}
-	if status, body := request(http.MethodGet, "beta.apps.tinker.test", "/_tinker/api/v1/capabilities", bToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") || strings.Contains(body, "profile") || strings.Contains(body, "connection") {
-		t.Fatalf("ungranted app B discovery status=%d body=%q", status, body)
+	if status, body := request(http.MethodGet, "beta.apps.tinker.test", "/_tinker/api/v1/capabilities", bToken, ""); status != http.StatusOK || !strings.Contains(body, "llm.chat") || strings.Contains(body, "profile") || strings.Contains(body, "connection") {
+		t.Fatalf("reactive app B discovery status=%d body=%q", status, body)
 	}
 
 	prompt := "never persist this prompt"
@@ -114,14 +115,14 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status, body := request(http.MethodPost, "beta.apps.tinker.test", "/_tinker/api/v1/llm/chat", bToken, string(payload)); status != http.StatusForbidden || strings.Contains(body, "app-a") || strings.Contains(body, "grant") || adapter.Count() != 0 {
+	if status, body := request(http.MethodPost, "beta.apps.tinker.test", "/_tinker/api/v1/llm/chat", bToken, string(payload)); status != http.StatusOK || strings.Contains(body, "app-a") || strings.Contains(body, "grant") || adapter.Count() != 1 {
 		t.Fatalf("app B invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
-	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusOK || !strings.Contains(body, completion) || adapter.Count() != 1 {
+	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusOK || !strings.Contains(body, completion) || adapter.Count() != 2 {
 		t.Fatalf("app A invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
 	var used, reserved, inFlight int
-	if err := store.DB.QueryRow("SELECT used_tokens,reserved_tokens,in_flight FROM llm_usage WHERE app_id='app-a' AND profile_id='profile'").Scan(&used, &reserved, &inFlight); err != nil || used != 5 || reserved != 0 || inFlight != 0 {
+	if err := store.DB.QueryRow("SELECT used_tokens,reserved_tokens,in_flight FROM llm_usage WHERE app_id='app-a'").Scan(&used, &reserved, &inFlight); err != nil || used != 5 || reserved != 0 || inFlight != 0 {
 		t.Fatalf("usage used=%d reserved=%d in_flight=%d err=%v", used, reserved, inFlight, err)
 	}
 	var visibleAudit string
@@ -133,14 +134,14 @@ func TestLLMGatewaySQLiteTwoAppBoundary(t *testing.T) {
 		t.Fatalf("plaintext credential rows=%d err=%v", secretRows, err)
 	}
 
-	if err := repo.UpdateGrant(ctx, persistence.LLMGrantInput{AppID: "app-a", ProfileID: "profile", OperatorID: "owner-app-a", Status: "revoked"}, 1); err != nil {
+	if err := repo.UpdateAppPolicy(ctx, "app-a", "disabled", "inherit", nil, "owner-app-a", 0); err != nil {
 		t.Fatal(err)
 	}
 	if status, body := request(http.MethodGet, "alpha.apps.tinker.test", "/_tinker/api/v1/capabilities", aToken, ""); status != http.StatusOK || strings.Contains(body, "llm.chat") {
-		t.Fatalf("revoked discovery status=%d body=%q", status, body)
+		t.Fatalf("disabled discovery status=%d body=%q", status, body)
 	}
-	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusForbidden || adapter.Count() != 1 {
-		t.Fatalf("revoked invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
+	if status, body := request(http.MethodPost, "alpha.apps.tinker.test", "/_tinker/api/v1/llm/chat", aToken, string(payload)); status != http.StatusForbidden || adapter.Count() != 2 {
+		t.Fatalf("disabled invocation status=%d calls=%d body=%q", status, adapter.Count(), body)
 	}
 }
 
@@ -157,7 +158,7 @@ func (a *llmGatewayAdapter) Complete(context.Context, llm.Binding, llm.Request) 
 }
 func (a *llmGatewayAdapter) Count() int { a.mu.Lock(); defer a.mu.Unlock(); return a.calls }
 
-func seedLLMGatewayApp(t *testing.T, store *persistence.SQLiteStore, id, slug string, requestLLM bool) {
+func seedLLMGatewayApp(t *testing.T, store *persistence.SQLiteStore, id, slug string) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	owner := "owner-" + id
@@ -173,7 +174,7 @@ func seedLLMGatewayApp(t *testing.T, store *persistence.SQLiteStore, id, slug st
 	if _, err := store.DB.Exec("INSERT INTO access_rules(id,app_id,policy_revision,kind,normalized_value,created_by,created_at) VALUES(?, ?,1,'email','viewer@example.com',?,?)", "rule-"+id, id, owner, now); err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := json.Marshal(releases.Manifest{Version: 1, Name: slug, LLMChat: requestLLM})
+	manifest, err := json.Marshal(releases.Manifest{Version: 1, Name: slug})
 	if err != nil {
 		t.Fatal(err)
 	}

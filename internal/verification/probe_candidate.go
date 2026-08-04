@@ -154,7 +154,7 @@ func ProbeCandidate(ctx context.Context, cfg config.Config, dataRoot string, r d
 	// Candidate verification proves the release posture and bytes. The durable
 	// policy transition already owns acknowledgement and gate authorization.
 	ps := &policies.MemoryStore{Policies: map[string]policies.Policy{r.AppID: {AppID: r.AppID, OwnerIdentityID: v.ID, Revision: 1, Mode: mode, Valid: true, Emails: map[string]struct{}{}, Domains: map[string]struct{}{}}}, Gate: policies.PublicGate{Enabled: mode == "public", Revision: 1, Valid: true}}
-	app := apps.App{ID: r.AppID, Slug: r.AppSlug, DeploymentID: r.ID, Status: apps.Active, ReleaseRoot: root, ReleaseEvidence: releases.FileManifest{Files: r.Files, Hash: r.ReleaseHash}, SPAFallback: r.Manifest.SPAFallback != "", KVEnabled: r.Manifest.KV, BlobsEnabled: r.Manifest.Blobs, RealtimeEnabled: r.Manifest.Realtime, LLMChatRequested: r.Manifest.LLMChat, PublicIndexing: r.Manifest.Indexing}
+	app := apps.App{ID: r.AppID, Slug: r.AppSlug, DeploymentID: r.ID, Status: apps.Active, ReleaseRoot: root, ReleaseEvidence: releases.FileManifest{Files: r.Files, Hash: r.ReleaseHash}, SPAFallback: r.Manifest.SPAFallback != "", KVEnabled: r.Manifest.KV, BlobsEnabled: r.Manifest.Blobs, RealtimeEnabled: r.Manifest.Realtime, PublicIndexing: r.Manifest.Indexing}
 	protected, preauth := &protectedProbeSpy{}, &preAuthProbeSpy{}
 	g := gateway.Gateway{Config: cfg, Apps: apps.NewMemoryRepository(app), Authorizer: appauth.Authorizer{Sessions: ss, Policies: ps}, Protected: protected, PreAuth: preauth}
 	host := r.AppSlug + "." + cfg.AppSuffix()

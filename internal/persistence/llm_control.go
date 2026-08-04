@@ -20,10 +20,17 @@ type LLMProfileView struct {
 	ID, ConnectionID, Model, Status, CreatedAt, UpdatedAt string
 	Revision                                              uint64
 	Limits                                                llm.Limits
-	ConcurrencyLimit, MonthlyTokenLimit                   int
+	ConcurrencyLimit                                      int
+	IsDefault                                             bool
 }
-type LLMGrantView struct {
-	AppID, AppSlug, ProfileID, Status, UpdatedAt string
+type LLMHostPolicyView struct {
+	Status            string
+	MonthlyTokenLimit int
+	Revision          uint64
+}
+type LLMAppPolicyView struct {
+	AppID, AppSlug, Status, QuotaMode, UpdatedAt string
+	MonthlyTokenLimit                            int
 	Revision                                     uint64
 	UsedTokens, ReservedTokens, InFlight         int
 }
@@ -35,39 +42,39 @@ type llmModelCataloger interface {
 	ListModels(context.Context, llm.Provider, []byte) ([]string, error)
 }
 
-func (r LLMRepository) OperatorViews(ctx context.Context) ([]LLMConnectionView, []LLMProfileView, []LLMGrantView, error) {
+func (r LLMRepository) OperatorViews(ctx context.Context) ([]LLMConnectionView, []LLMProfileView, LLMHostPolicyView, []LLMAppPolicyView, error) {
 	if r.Store == nil {
-		return nil, nil, nil, llm.ErrCapabilityUnavailable
+		return nil, nil, LLMHostPolicyView{}, nil, llm.ErrCapabilityUnavailable
 	}
 	connections := []LLMConnectionView{}
 	rows, err := r.Store.DB.QueryContext(ctx, `SELECT id,display_name,provider_kind,status,created_at,updated_at FROM provider_connections ORDER BY display_name,id LIMIT 100`)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
 	for rows.Next() {
 		var v LLMConnectionView
 		if err := rows.Scan(&v.ID, &v.DisplayName, &v.Provider, &v.Status, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			rows.Close()
-			return nil, nil, nil, err
+			return nil, nil, LLMHostPolicyView{}, nil, err
 		}
 		connections = append(connections, v)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
 	rows.Close()
 	profiles := []LLMProfileView{}
-	rows, err = r.Store.DB.QueryContext(ctx, `SELECT id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,monthly_token_limit,status,revision,created_at,updated_at FROM llm_chat_profiles ORDER BY created_at DESC,id LIMIT 100`)
+	rows, err = r.Store.DB.QueryContext(ctx, `SELECT id,connection_id,model,max_messages,max_message_bytes,max_input_bytes,max_output_tokens,timeout_ms,viewer_requests,app_requests,rate_window_ms,concurrency_limit,is_default,status,revision,created_at,updated_at FROM llm_chat_profiles ORDER BY is_default DESC,created_at DESC,id LIMIT 100`)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
 	for rows.Next() {
 		var v LLMProfileView
 		var timeout, window int64
-		if err := rows.Scan(&v.ID, &v.ConnectionID, &v.Model, &v.Limits.MaxMessages, &v.Limits.MaxMessageBytes, &v.Limits.MaxInputBytes, &v.Limits.MaxOutputTokens, &timeout, &v.Limits.ViewerRequests, &v.Limits.AppRequests, &window, &v.ConcurrencyLimit, &v.MonthlyTokenLimit, &v.Status, &v.Revision, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err := rows.Scan(&v.ID, &v.ConnectionID, &v.Model, &v.Limits.MaxMessages, &v.Limits.MaxMessageBytes, &v.Limits.MaxInputBytes, &v.Limits.MaxOutputTokens, &timeout, &v.Limits.ViewerRequests, &v.Limits.AppRequests, &window, &v.ConcurrencyLimit, &v.IsDefault, &v.Status, &v.Revision, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			rows.Close()
-			return nil, nil, nil, err
+			return nil, nil, LLMHostPolicyView{}, nil, err
 		}
 		v.Limits.Timeout = time.Duration(timeout) * time.Millisecond
 		v.Limits.RateWindow = time.Duration(window) * time.Millisecond
@@ -75,26 +82,38 @@ func (r LLMRepository) OperatorViews(ctx context.Context) ([]LLMConnectionView, 
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
 	rows.Close()
-	grants := []LLMGrantView{}
-	rows, err = r.Store.DB.QueryContext(ctx, `SELECT g.app_id,a.slug,g.profile_id,g.status,g.revision,g.updated_at,COALESCE(u.used_tokens,0),COALESCE(u.reserved_tokens,0),COALESCE(u.in_flight,0) FROM app_capability_grants g JOIN applications a ON a.id=g.app_id LEFT JOIN llm_usage u ON u.app_id=g.app_id AND u.profile_id=g.profile_id AND u.period_start=? ORDER BY a.slug LIMIT 100`, monthStart(r.now()))
+	var host LLMHostPolicyView
+	var hostLimit sql.NullInt64
+	if err := r.Store.DB.QueryRowContext(ctx, `SELECT status,monthly_token_limit,revision FROM llm_host_policy WHERE id=1`).Scan(&host.Status, &hostLimit, &host.Revision); err != nil {
+		return nil, nil, LLMHostPolicyView{}, nil, err
+	}
+	if hostLimit.Valid {
+		host.MonthlyTokenLimit = int(hostLimit.Int64)
+	}
+	policies := []LLMAppPolicyView{}
+	rows, err = r.Store.DB.QueryContext(ctx, `SELECT a.id,a.slug,COALESCE(p.status,'enabled'),COALESCE(p.quota_mode,'inherit'),p.monthly_token_limit,COALESCE(p.revision,0),COALESCE(p.updated_at,''),COALESCE(u.used_tokens,0),COALESCE(u.reserved_tokens,0),COALESCE(u.in_flight,0) FROM applications a LEFT JOIN app_llm_policies p ON p.app_id=a.id LEFT JOIN llm_usage u ON u.app_id=a.id AND u.period_start=? ORDER BY a.slug LIMIT 100`, monthStart(r.now()))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
 	for rows.Next() {
-		var v LLMGrantView
-		if err := rows.Scan(&v.AppID, &v.AppSlug, &v.ProfileID, &v.Status, &v.Revision, &v.UpdatedAt, &v.UsedTokens, &v.ReservedTokens, &v.InFlight); err != nil {
+		var v LLMAppPolicyView
+		var limit sql.NullInt64
+		if err := rows.Scan(&v.AppID, &v.AppSlug, &v.Status, &v.QuotaMode, &limit, &v.Revision, &v.UpdatedAt, &v.UsedTokens, &v.ReservedTokens, &v.InFlight); err != nil {
 			rows.Close()
-			return nil, nil, nil, err
+			return nil, nil, LLMHostPolicyView{}, nil, err
 		}
-		grants = append(grants, v)
+		if limit.Valid {
+			v.MonthlyTokenLimit = int(limit.Int64)
+		}
+		policies = append(policies, v)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, LLMHostPolicyView{}, nil, err
 	}
-	return connections, profiles, grants, nil
+	return connections, profiles, host, policies, nil
 }
 
 // OperatorModelCatalog decrypts only active connection credentials and clears
@@ -235,12 +254,12 @@ func (r LLMRepository) DisableConnectionAs(ctx context.Context, id, actor string
 }
 
 func (r LLMRepository) UpdateProfile(ctx context.Context, in LLMProfileInput, expected uint64) error {
-	if r.Store == nil || in.ID == "" || in.ActorID == "" || expected < 1 || !validModel(in.Model) || in.ConcurrencyLimit < 1 || in.MonthlyTokenLimit < 1 || !validLLMLimits(in.Limits) {
+	if r.Store == nil || in.ID == "" || in.ActorID == "" || expected < 1 || !validModel(in.Model) || in.ConcurrencyLimit < 1 || !validLLMLimits(in.Limits) {
 		return llm.ErrInvalidRequest
 	}
 	l := in.Limits
 	return r.Store.Write(ctx, func(tx *sql.Tx) error {
-		result, err := tx.ExecContext(ctx, `UPDATE llm_chat_profiles SET connection_id=?,model=?,max_messages=?,max_message_bytes=?,max_input_bytes=?,max_output_tokens=?,timeout_ms=?,viewer_requests=?,app_requests=?,rate_window_ms=?,concurrency_limit=?,monthly_token_limit=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND status='active' AND EXISTS(SELECT 1 FROM provider_connections WHERE id=? AND status='active')`, in.ConnectionID, in.Model, l.MaxMessages, l.MaxMessageBytes, l.MaxInputBytes, l.MaxOutputTokens, l.Timeout.Milliseconds(), l.ViewerRequests, l.AppRequests, l.RateWindow.Milliseconds(), in.ConcurrencyLimit, in.MonthlyTokenLimit, r.now().Format(time.RFC3339Nano), in.ID, expected, in.ConnectionID)
+		result, err := tx.ExecContext(ctx, `UPDATE llm_chat_profiles SET connection_id=?,model=?,max_messages=?,max_message_bytes=?,max_input_bytes=?,max_output_tokens=?,timeout_ms=?,viewer_requests=?,app_requests=?,rate_window_ms=?,concurrency_limit=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND status='active' AND EXISTS(SELECT 1 FROM provider_connections WHERE id=? AND status='active')`, in.ConnectionID, in.Model, l.MaxMessages, l.MaxMessageBytes, l.MaxInputBytes, l.MaxOutputTokens, l.Timeout.Milliseconds(), l.ViewerRequests, l.AppRequests, l.RateWindow.Milliseconds(), in.ConcurrencyLimit, r.now().Format(time.RFC3339Nano), in.ID, expected, in.ConnectionID)
 		if err != nil {
 			return err
 		}
@@ -255,38 +274,78 @@ func (r LLMRepository) UpdateProfile(ctx context.Context, in LLMProfileInput, ex
 	})
 }
 
-// UpdateGrant creates at revision one only when expected is zero; otherwise it
-// changes the exact current revision. This prevents a stale operator page from
-// silently reviving a revoked app grant.
-func (r LLMRepository) UpdateGrant(ctx context.Context, in LLMGrantInput, expected uint64) error {
-	if r.Store == nil || in.AppID == "" || in.ProfileID == "" || in.OperatorID == "" || (in.Status != "approved" && in.Status != "disabled" && in.Status != "revoked") {
+func (r LLMRepository) SetDefaultProfile(ctx context.Context, id, actor string, expected uint64) error {
+	if r.Store == nil || id == "" || actor == "" || expected < 1 {
+		return llm.ErrInvalidRequest
+	}
+	now := r.now().Format(time.RFC3339Nano)
+	return r.Store.Write(ctx, func(tx *sql.Tx) error {
+		var active, current bool
+		if err := tx.QueryRowContext(ctx, `SELECT status='active' AND EXISTS(SELECT 1 FROM provider_connections c WHERE c.id=p.connection_id AND c.status='active'),is_default=1 FROM llm_chat_profiles p WHERE id=? AND revision=?`, id, expected).Scan(&active, &current); err != nil || !active {
+			return controlapi.ErrLLMRevision
+		}
+		if current {
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE llm_chat_profiles SET is_default=0,revision=revision+1,updated_at=? WHERE is_default=1`, now); err != nil {
+			return err
+		}
+		result, err := tx.ExecContext(ctx, `UPDATE llm_chat_profiles SET is_default=1,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND status='active'`, now, id, expected)
+		if err != nil {
+			return err
+		}
+		n, err := result.RowsAffected()
+		if err != nil || n != 1 {
+			return controlapi.ErrLLMRevision
+		}
+		return r.operatorAudit(ctx, tx, actor, "llm.profile.defaulted", "llm_profile", id)
+	})
+}
+
+func (r LLMRepository) UpdateHostPolicy(ctx context.Context, status string, monthlyTokenLimit *int, actor string, expected uint64) error {
+	if r.Store == nil || actor == "" || expected < 1 || status != "enabled" && status != "disabled" || monthlyTokenLimit != nil && *monthlyTokenLimit < 1 {
+		return llm.ErrInvalidRequest
+	}
+	return r.Store.Write(ctx, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE llm_host_policy SET status=?,monthly_token_limit=?,revision=revision+1,updated_at=? WHERE id=1 AND revision=?`, status, monthlyTokenLimit, r.now().Format(time.RFC3339Nano), expected)
+		if err != nil {
+			return err
+		}
+		n, err := result.RowsAffected()
+		if err != nil || n != 1 {
+			return controlapi.ErrLLMRevision
+		}
+		return r.operatorAudit(ctx, tx, actor, "llm.host_policy.updated", "llm_host_policy", "1")
+	})
+}
+
+func (r LLMRepository) UpdateAppPolicy(ctx context.Context, appID, status, quotaMode string, monthlyTokenLimit *int, actor string, expected uint64) error {
+	validLimit := quotaMode == "specific" && monthlyTokenLimit != nil && *monthlyTokenLimit >= 1 || quotaMode != "specific" && monthlyTokenLimit == nil
+	if r.Store == nil || appID == "" || actor == "" || (status != "enabled" && status != "disabled") || (quotaMode != "inherit" && quotaMode != "unlimited" && quotaMode != "specific") || !validLimit {
 		return llm.ErrInvalidRequest
 	}
 	now := r.now().Format(time.RFC3339Nano)
 	return r.Store.Write(ctx, func(tx *sql.Tx) error {
 		if expected == 0 {
-			result, err := tx.ExecContext(ctx, `INSERT INTO app_capability_grants(app_id,capability,version,profile_id,status,revision,approved_by,created_at,updated_at) SELECT ?,'llm.chat',1,?,?,1,?,?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=?) AND EXISTS(SELECT 1 FROM llm_chat_profiles p JOIN provider_connections c ON c.id=p.connection_id WHERE p.id=? AND p.status='active' AND c.status='active')`, in.AppID, in.ProfileID, in.Status, in.OperatorID, now, now, in.AppID, in.ProfileID)
-			if err != nil {
-				return err
-			}
-			changed, err := result.RowsAffected()
-			if err != nil || changed != 1 {
-				return controlapi.ErrLLMRevision
-			}
-		} else {
-			result, err := tx.ExecContext(ctx, `UPDATE app_capability_grants SET profile_id=?,status=?,revision=revision+1,approved_by=?,updated_at=? WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=? AND status != 'revoked' AND EXISTS(SELECT 1 FROM llm_chat_profiles p JOIN provider_connections c ON c.id=p.connection_id WHERE p.id=? AND p.status='active' AND c.status='active')`, in.ProfileID, in.Status, in.OperatorID, now, in.AppID, expected, in.ProfileID)
+			result, err := tx.ExecContext(ctx, `INSERT INTO app_llm_policies(app_id,status,quota_mode,monthly_token_limit,revision,updated_by,created_at,updated_at) SELECT ?,?,?,?,1,?,?,? WHERE EXISTS(SELECT 1 FROM applications WHERE id=?) ON CONFLICT(app_id) DO NOTHING`, appID, status, quotaMode, monthlyTokenLimit, actor, now, now, appID)
 			if err != nil {
 				return err
 			}
 			n, err := result.RowsAffected()
+			if err != nil || n != 1 {
+				return controlapi.ErrLLMRevision
+			}
+		} else {
+			result, err := tx.ExecContext(ctx, `UPDATE app_llm_policies SET status=?,quota_mode=?,monthly_token_limit=?,revision=revision+1,updated_by=?,updated_at=? WHERE app_id=? AND revision=?`, status, quotaMode, monthlyTokenLimit, actor, now, appID, expected)
 			if err != nil {
 				return err
 			}
-			if n != 1 {
+			n, err := result.RowsAffected()
+			if err != nil || n != 1 {
 				return controlapi.ErrLLMRevision
 			}
 		}
-		return r.operatorAudit(ctx, tx, in.OperatorID, "llm.grant."+in.Status, "app", in.AppID)
+		return r.operatorAudit(ctx, tx, actor, "llm.app_policy.updated", "app", appID)
 	})
 }
 

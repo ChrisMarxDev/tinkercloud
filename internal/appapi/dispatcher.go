@@ -85,7 +85,7 @@ func (d Dispatcher) Dispatch(auth appauth.AuthorizationContext, w http.ResponseW
 	case path == apiPrefix+"/me" && r.Method == http.MethodGet:
 		d.me(auth, w)
 	case path == apiPrefix+"/app" && r.Method == http.MethodGet:
-		d.app(auth, w)
+		d.app(r.Context(), auth, w)
 	case path == apiPrefix+"/capabilities" && r.Method == http.MethodGet:
 		caps := []Capability{}
 		for _, c := range d.Capabilities {
@@ -146,12 +146,12 @@ func compatibleSDKVersion(version string) bool {
 func compatibleAPIVersion(version string) bool {
 	return version == "" || version == compatibility.AppAPIVersion
 }
-func (d Dispatcher) app(auth appauth.AuthorizationContext, w http.ResponseWriter) {
+func (d Dispatcher) app(ctx context.Context, auth appauth.AuthorizationContext, w http.ResponseWriter) {
 	if d.AppSlug == nil || d.AppSlug(auth) == "" {
 		writeError(w, 503, "temporarily_unavailable", "Tinkercloud is temporarily unavailable.", auth.RequestID())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"slug": d.AppSlug(auth), "features": map[string]bool{"kv": auth.KVEnabled(), "db": auth.KVEnabled() && d.Collections != nil, "blobs": auth.BlobsEnabled() && d.Blobs != nil, "realtime": auth.RealtimeEnabled(), "llm_chat": d.LLM != nil && auth.LLMChatRequested()}})
+	writeJSON(w, http.StatusOK, map[string]any{"slug": d.AppSlug(auth), "features": map[string]bool{"kv": auth.KVEnabled(), "db": auth.KVEnabled() && d.Collections != nil, "blobs": auth.BlobsEnabled() && d.Blobs != nil, "realtime": auth.RealtimeEnabled(), "llm_chat": d.LLM != nil && d.LLM.Available(ctx, auth)}})
 }
 func (d Dispatcher) llmChat(auth appauth.AuthorizationContext, w http.ResponseWriter, r *http.Request) {
 	if d.LLM == nil {

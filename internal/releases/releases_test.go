@@ -13,13 +13,13 @@ func TestActivationRequiresAllEvidence(t *testing.T) {
 }
 
 func TestGenerateManifestIsDeterministicAndRoundTrips(t *testing.T) {
-	m := Manifest{Version: 1, Name: "demo", Description: "Useful dashboard", BuildOutput: "dist", Emails: []string{"Zebra@example.com", "alice@example.com"}, Domains: []string{"Example.com"}, KV: true, Realtime: true, LLMChat: true, SPAFallback: "index.html"}
+	m := Manifest{Version: 1, Name: "demo", Description: "Useful dashboard", BuildOutput: "dist", Emails: []string{"Zebra@example.com", "alice@example.com"}, Domains: []string{"Example.com"}, KV: true, Realtime: true, SPAFallback: "index.html"}
 	first, err := GenerateManifest(m)
 	if err != nil {
 		t.Fatal(err)
 	}
 	parsed, err := ParseManifest(first)
-	if err != nil || parsed.Name != "demo" || len(parsed.Emails) != 2 || parsed.Emails[0] != "Zebra@example.com" || !parsed.LLMChat {
+	if err != nil || parsed.Name != "demo" || len(parsed.Emails) != 2 || parsed.Emails[0] != "Zebra@example.com" {
 		t.Fatalf("parsed=%#v err=%v", parsed, err)
 	}
 	second, err := GenerateManifest(parsed)
@@ -86,10 +86,9 @@ func TestGenerateManifestAlwaysEmitsV2(t *testing.T) {
 		t.Fatalf("generated manifest=%s parsed=%#v err=%v", b, m, err)
 	}
 }
-func TestManifestAcceptsLogicalLLMChatRequestOnly(t *testing.T) {
-	m, err := ParseManifest([]byte("version: 1\nname: chat\ncapabilities:\n  llm:\n    chat: true\n"))
-	if err != nil || !m.LLMChat {
-		t.Fatalf("manifest=%+v err=%v", m, err)
+func TestManifestRejectsLegacyLLMChatRequest(t *testing.T) {
+	if _, err := ParseManifest([]byte("version: 1\nname: chat\ncapabilities:\n  llm:\n    chat: true\n")); err == nil {
+		t.Fatal("legacy LLM manifest request was accepted")
 	}
 }
 func TestManifestAcceptsCanonicalAccessRules(t *testing.T) {

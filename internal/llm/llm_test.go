@@ -15,14 +15,14 @@ import (
 	"github.com/ChrisMarxDev/tinkercloud/internal/sessions"
 )
 
-func authWithLLM(t *testing.T, app, viewer string, requested bool) appauth.AuthorizationContext {
+func authWithLLM(t *testing.T, app, viewer string) appauth.AuthorizationContext {
 	t.Helper()
 	ss := sessions.NewMemoryStore()
 	tok, _, e := ss.Create(app, identity.Identity{ID: viewer, Email: viewer + "@example.test"}, time.Now().Add(time.Hour))
 	if e != nil {
 		t.Fatal(e)
 	}
-	a, e := (appauth.Authorizer{Sessions: ss, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{app: {AppID: app, OwnerIdentityID: viewer, Valid: true}}}}).Authorize(context.Background(), apps.App{ID: app, LLMChatRequested: requested}, tok, "request")
+	a, e := (appauth.Authorizer{Sessions: ss, Policies: &policies.MemoryStore{Policies: map[string]policies.Policy{app: {AppID: app, OwnerIdentityID: viewer, Valid: true}}}}).Authorize(context.Background(), apps.App{ID: app}, tok, "request")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -30,7 +30,7 @@ func authWithLLM(t *testing.T, app, viewer string, requested bool) appauth.Autho
 }
 
 func auth(t *testing.T, app, viewer string) appauth.AuthorizationContext {
-	return authWithLLM(t, app, viewer, true)
+	return authWithLLM(t, app, viewer)
 }
 
 type fakeRepo struct {
@@ -96,16 +96,9 @@ func TestInvalidInputNeverReachesRepository(t *testing.T) {
 	}
 }
 
-func TestUnrequestedChatIsUnavailableForAuthorizedViewerButNilAuthIsUnauthorized(t *testing.T) {
-	r := &fakeRepo{}
-	s := New(r, nil)
+func TestNilAuthIsUnauthorized(t *testing.T) {
+	s := New(&fakeRepo{}, nil)
 	request := Request{Messages: []Message{{Role: "user", Content: "hi"}}}
-	if _, err := s.Complete(context.Background(), authWithLLM(t, "a", "v", false), request); !errors.Is(err, ErrCapabilityUnavailable) {
-		t.Fatalf("authorized unrequested chat error=%v", err)
-	}
-	if r.calls != 0 {
-		t.Fatalf("unrequested chat reached repository %d times", r.calls)
-	}
 	if _, err := s.Complete(context.Background(), nil, request); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("nil auth error=%v", err)
 	}

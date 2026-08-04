@@ -409,45 +409,35 @@ func (s ControlService) UpdateLLMProfile(ctx context.Context, a controlapi.Actor
 }
 
 func llmProfileInput(id, actor string, in controlapi.LLMProfileInput) LLMProfileInput {
-	return LLMProfileInput{ID: id, ConnectionID: in.ConnectionID, Model: in.Model, ActorID: actor, Limits: llm.Limits{MaxMessages: in.MaxMessages, MaxMessageBytes: in.MaxMessageBytes, MaxInputBytes: in.MaxInputBytes, MaxOutputTokens: in.MaxOutputTokens, Timeout: time.Duration(in.TimeoutMS) * time.Millisecond, ViewerRequests: in.ViewerRequests, AppRequests: in.AppRequests, RateWindow: time.Duration(in.RateWindowMS) * time.Millisecond}, ConcurrencyLimit: in.ConcurrencyLimit, MonthlyTokenLimit: in.MonthlyTokenLimit}
+	return LLMProfileInput{ID: id, ConnectionID: in.ConnectionID, Model: in.Model, ActorID: actor, Limits: llm.Limits{MaxMessages: in.MaxMessages, MaxMessageBytes: in.MaxMessageBytes, MaxInputBytes: in.MaxInputBytes, MaxOutputTokens: in.MaxOutputTokens, Timeout: time.Duration(in.TimeoutMS) * time.Millisecond, ViewerRequests: in.ViewerRequests, AppRequests: in.AppRequests, RateWindow: time.Duration(in.RateWindowMS) * time.Millisecond}, ConcurrencyLimit: in.ConcurrencyLimit}
 }
 
-func (s ControlService) ApproveLLMGrant(ctx context.Context, a controlapi.Actor, slug, profileID string, expected uint64) error {
-	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || profileID == "" {
+func (s ControlService) SetDefaultLLMProfile(ctx context.Context, a controlapi.Actor, profileID string, expected uint64) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" || profileID == "" || expected == 0 {
 		return ErrUnavailable
 	}
-	appID, err := s.appIDForLLMGrant(ctx, slug)
+	return s.LLM.SetDefaultProfile(ctx, profileID, a.ID, expected)
+}
+
+func (s ControlService) UpdateLLMHostPolicy(ctx context.Context, a controlapi.Actor, status string, monthlyTokenLimit *int, expected uint64) error {
+	if s.LLM == nil || !a.Active || a.Role != "operator" || expected == 0 {
+		return ErrUnavailable
+	}
+	return s.LLM.UpdateHostPolicy(ctx, status, monthlyTokenLimit, a.ID, expected)
+}
+
+func (s ControlService) UpdateAppLLMPolicy(ctx context.Context, a controlapi.Actor, slug, status, quotaMode string, monthlyTokenLimit *int, expected uint64) error {
+	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) {
+		return ErrUnavailable
+	}
+	appID, err := s.appIDForLLMPolicy(ctx, slug)
 	if err != nil {
 		return ErrUnavailable
 	}
-	if expected > 0 {
-		var status string
-		if err := s.Store.DB.QueryRowContext(ctx, `SELECT status FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&status); err != nil {
-			return controlapi.ErrLLMRevision
-		}
-		if status == "revoked" {
-			return ErrUnavailable
-		}
-	}
-	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: "approved"}, expected)
+	return s.LLM.UpdateAppPolicy(ctx, appID, status, quotaMode, monthlyTokenLimit, a.ID, expected)
 }
 
-func (s ControlService) SetLLMGrantStatus(ctx context.Context, a controlapi.Actor, slug, status string, expected uint64) error {
-	if s.LLM == nil || s.Store == nil || !a.Active || a.Role != "operator" || !releases.ValidSlug(slug) || (status != "disabled" && status != "revoked") || expected == 0 {
-		return ErrUnavailable
-	}
-	appID, err := s.appIDForLLMGrant(ctx, slug)
-	if err != nil {
-		return ErrUnavailable
-	}
-	var profileID string
-	if err := s.Store.DB.QueryRowContext(ctx, `SELECT profile_id FROM app_capability_grants WHERE app_id=? AND capability='llm.chat' AND version=1 AND revision=?`, appID, expected).Scan(&profileID); err != nil {
-		return controlapi.ErrLLMRevision
-	}
-	return s.LLM.UpdateGrant(ctx, LLMGrantInput{AppID: appID, ProfileID: profileID, OperatorID: a.ID, Status: status}, expected)
-}
-
-func (s ControlService) appIDForLLMGrant(ctx context.Context, slug string) (string, error) {
+func (s ControlService) appIDForLLMPolicy(ctx context.Context, slug string) (string, error) {
 	var appID string
 	err := s.Store.DB.QueryRowContext(ctx, `SELECT id FROM applications WHERE slug=? AND status IN ('active','suspended')`, slug).Scan(&appID)
 	return appID, err
@@ -994,7 +984,7 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		// safe metadata reader. Operators can see a truthful unavailable state
 		// without learning whether an encryption root exists or its value.
 		v.LLMKeyManagementReady = s.LLM.Envelope != nil && s.LLMValidator != nil
-		connections, profiles, grants, err := s.LLM.OperatorViews(ctx)
+		connections, profiles, hostPolicy, appPolicies, err := s.LLM.OperatorViews(ctx)
 		if err != nil {
 			return v, err
 		}
@@ -1018,21 +1008,21 @@ func (s ControlService) Dashboard(ctx context.Context, a controlapi.Actor) (cont
 		}
 		for _, x := range profiles {
 			// The dashboard read model, not template filtering, determines which
-			// profiles may be selected for a new app grant.
+			// profiles may become the host default.
 			if x.Status != "active" || !activeConnections[x.ConnectionID] {
 				continue
 			}
-			v.LLMProfiles = append(v.LLMProfiles, controlapi.LLMProfile{ID: x.ID, ConnectionID: x.ConnectionID, Model: x.Model, Status: x.Status, Revision: x.Revision, MaxMessages: x.Limits.MaxMessages, MaxMessageBytes: x.Limits.MaxMessageBytes, MaxInputBytes: x.Limits.MaxInputBytes, MaxOutputTokens: x.Limits.MaxOutputTokens, TimeoutMS: x.Limits.Timeout.Milliseconds(), ViewerRequests: x.Limits.ViewerRequests, AppRequests: x.Limits.AppRequests, RateWindowMS: x.Limits.RateWindow.Milliseconds(), ConcurrencyLimit: x.ConcurrencyLimit, MonthlyTokenLimit: x.MonthlyTokenLimit})
+			v.LLMProfiles = append(v.LLMProfiles, controlapi.LLMProfile{ID: x.ID, ConnectionID: x.ConnectionID, Model: x.Model, Status: x.Status, Revision: x.Revision, MaxMessages: x.Limits.MaxMessages, MaxMessageBytes: x.Limits.MaxMessageBytes, MaxInputBytes: x.Limits.MaxInputBytes, MaxOutputTokens: x.Limits.MaxOutputTokens, TimeoutMS: x.Limits.Timeout.Milliseconds(), ViewerRequests: x.Limits.ViewerRequests, AppRequests: x.Limits.AppRequests, RateWindowMS: x.Limits.RateWindow.Milliseconds(), ConcurrencyLimit: x.ConcurrencyLimit, IsDefault: x.IsDefault})
 		}
-		grantsBySlug := make(map[string]controlapi.LLMGrant, len(grants))
-		for _, x := range grants {
-			grant := controlapi.LLMGrant{AppSlug: x.AppSlug, ProfileID: x.ProfileID, Status: x.Status, Revision: x.Revision, UsedTokens: x.UsedTokens, ReservedTokens: x.ReservedTokens, InFlight: x.InFlight}
-			v.LLMGrants = append(v.LLMGrants, grant)
-			grantsBySlug[x.AppSlug] = grant
+		v.LLMHostPolicy = controlapi.LLMHostPolicy{Status: hostPolicy.Status, MonthlyTokenLimit: hostPolicy.MonthlyTokenLimit, Revision: hostPolicy.Revision}
+		policiesBySlug := make(map[string]controlapi.LLMAppPolicy, len(appPolicies))
+		for _, x := range appPolicies {
+			policy := controlapi.LLMAppPolicy{AppSlug: x.AppSlug, Status: x.Status, QuotaMode: x.QuotaMode, MonthlyTokenLimit: x.MonthlyTokenLimit, Revision: x.Revision, UsedTokens: x.UsedTokens, ReservedTokens: x.ReservedTokens, InFlight: x.InFlight}
+			policiesBySlug[x.AppSlug] = policy
 		}
 		for i := range v.Apps {
-			if grant, ok := grantsBySlug[v.Apps[i].Slug]; ok {
-				v.Apps[i].LLMGrant = &grant
+			if policy, ok := policiesBySlug[v.Apps[i].Slug]; ok {
+				v.Apps[i].LLMPolicy = &policy
 			}
 		}
 	}
@@ -1478,11 +1468,11 @@ func (s ControlService) DeleteApp(ctx context.Context, a controlapi.Actor, slug,
 			"DELETE FROM app_insight_visitors WHERE app_id=?",
 			"DELETE FROM app_insight_days WHERE app_id=?",
 			// LLM usage and reservations refer to both the app and a profile. They
-			// must go before the grant and application row; connection/profile
+			// must go before app policy and application row; connection/profile
 			// records are operator-owned and intentionally remain reusable.
 			"DELETE FROM llm_reservations WHERE app_id=?",
 			"DELETE FROM llm_usage WHERE app_id=?",
-			"DELETE FROM app_capability_grants WHERE app_id=?",
+			"DELETE FROM app_llm_policies WHERE app_id=?",
 			"DELETE FROM deployment_files WHERE deployment_id IN (SELECT id FROM deployments WHERE app_id=?)",
 			"DELETE FROM deployments WHERE app_id=?",
 			"DELETE FROM access_rules WHERE app_id=?",

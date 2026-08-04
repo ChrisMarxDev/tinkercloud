@@ -189,12 +189,24 @@ func (a *uiActions) UpdateLLMProfile(_ context.Context, _ Actor, id string, inpu
 	a.profileInputs = append(a.profileInputs, input)
 	return a.err
 }
-func (a *uiActions) ApproveLLMGrant(_ context.Context, _ Actor, slug, profile string, revision uint64) error {
-	a.calls = append(a.calls, "llm-grant-approve:"+slug+":"+profile+":"+strconv.FormatUint(revision, 10))
+func (a *uiActions) SetDefaultLLMProfile(_ context.Context, _ Actor, profile string, revision uint64) error {
+	a.calls = append(a.calls, "llm-profile-default:"+profile+":"+strconv.FormatUint(revision, 10))
 	return a.err
 }
-func (a *uiActions) SetLLMGrantStatus(_ context.Context, _ Actor, slug, status string, revision uint64) error {
-	a.calls = append(a.calls, "llm-grant-"+status+":"+slug+":"+strconv.FormatUint(revision, 10))
+func (a *uiActions) UpdateLLMHostPolicy(_ context.Context, _ Actor, status string, limit *int, revision uint64) error {
+	value := "unlimited"
+	if limit != nil {
+		value = strconv.Itoa(*limit)
+	}
+	a.calls = append(a.calls, "llm-host-policy:"+status+":"+value+":"+strconv.FormatUint(revision, 10))
+	return a.err
+}
+func (a *uiActions) UpdateAppLLMPolicy(_ context.Context, _ Actor, slug, status, mode string, limit *int, revision uint64) error {
+	value := "none"
+	if limit != nil {
+		value = strconv.Itoa(*limit)
+	}
+	a.calls = append(a.calls, "llm-app-policy:"+slug+":"+status+":"+mode+":"+value+":"+strconv.FormatUint(revision, 10))
 	return a.err
 }
 
@@ -849,15 +861,16 @@ func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T
 	profileID := "fedcba9876543210fedcba9876543210"
 	actions := &uiActions{}
 	p := Platform{Auth: uiAuth{actor: Actor{ID: "op", Role: "operator", Active: true}}, Actions: actions, Views: &uiViews{value: DashboardView{
-		Apps:                  []DashboardApp{{Slug: "alpha", LLMGrant: &LLMGrant{AppSlug: "alpha", ProfileID: profileID, Status: "approved", Revision: 7}}},
+		Apps:                  []DashboardApp{{Slug: "alpha", LLMPolicy: &LLMAppPolicy{AppSlug: "alpha", Status: "enabled", QuotaMode: "inherit", Revision: 7}}},
 		LLMKeyManagementReady: true,
 		LLMConnections:        []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
 		LLMProfileConnections: []LLMConnection{{ID: connectionID, DisplayName: "Team provider", Provider: "anthropic", Status: "active"}},
 		LLMModelCatalog:       []LLMModelOption{{Choice: connectionID + ":claude-current", ConnectionID: connectionID, ConnectionName: "Team provider", Provider: "anthropic", Model: "claude-current"}},
-		LLMProfiles:           []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1, MonthlyTokenLimit: 10}},
+		LLMProfiles:           []LLMProfile{{ID: profileID, ConnectionID: connectionID, Model: "model", Status: "active", Revision: 3, MaxMessages: 2, MaxMessageBytes: 10, MaxInputBytes: 20, MaxOutputTokens: 4, TimeoutMS: 1000, ViewerRequests: 1, AppRequests: 1, RateWindowMS: 1000, ConcurrencyLimit: 1}},
+		LLMHostPolicy:         LLMHostPolicy{Status: "enabled", Revision: 1},
 	}}}
 	page := uiRequest(t, p, http.MethodGet, "/dashboard", "")
-	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "API keys") || !strings.Contains(page.Body.String(), "LLM chat") || !strings.Contains(page.Body.String(), "claude-current") || !strings.Contains(page.Body.String(), "Use a custom model identifier") || strings.Contains(page.Body.String(), `name="display_name"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/grant/revoke"`) {
+	if page.Code != http.StatusOK || strings.Contains(page.Body.String(), "super-secret") || !strings.Contains(page.Body.String(), "API keys") || !strings.Contains(page.Body.String(), "LLM chat") || !strings.Contains(page.Body.String(), "claude-current") || !strings.Contains(page.Body.String(), "Use a custom model identifier") || strings.Contains(page.Body.String(), `name="display_name"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/connections/`+connectionID+`/rotate"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/profiles/`+profileID+`/default"`) || !strings.Contains(page.Body.String(), `action="/dashboard/llm/policy"`) || !strings.Contains(page.Body.String(), `action="/apps/alpha/llm/policy"`) || strings.Contains(page.Body.String(), "LLM chat grant") {
 		t.Fatalf("llm UI missing/write-only: %d %s", page.Code, page.Body.String())
 	}
 	var csrf *http.Cookie
@@ -893,9 +906,17 @@ func TestPlatformUILLMOperatorFormsStayWriteOnlyAndUseServerTargets(t *testing.T
 	if w.Code != http.StatusBadRequest || len(actions.calls) != 1 {
 		t.Fatalf("disable confirmation = %d %#v", w.Code, actions.calls)
 	}
-	w = uiSameOriginRequest(t, p, http.MethodPost, "/apps/alpha/llm/grant/revoke", url.Values{"csrf": {csrf.Value}, "expected_revision": {"7"}, "confirmation": {"revoked:grant:alpha"}}.Encode(), csrf)
-	if w.Code != http.StatusSeeOther || strings.Join(actions.calls, ",") != "llm-rotate:"+connectionID+",llm-grant-revoked:alpha:7" {
-		t.Fatalf("grant revoke = %d %#v", w.Code, actions.calls)
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/profiles/"+profileID+"/default", url.Values{"csrf": {csrf.Value}, "expected_revision": {"3"}}.Encode(), csrf)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("default profile = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/dashboard/llm/policy", url.Values{"csrf": {csrf.Value}, "expected_revision": {"1"}, "status": {"disabled"}, "quota_mode": {"unlimited"}}.Encode(), csrf)
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("host policy = %d %#v", w.Code, actions.calls)
+	}
+	w = uiSameOriginRequest(t, p, http.MethodPost, "/apps/alpha/llm/policy", url.Values{"csrf": {csrf.Value}, "expected_revision": {"7"}, "status": {"disabled"}, "quota_mode": {"unlimited"}}.Encode(), csrf)
+	if w.Code != http.StatusSeeOther || strings.Join(actions.calls, ",") != "llm-rotate:"+connectionID+",llm-profile-default:"+profileID+":3,llm-host-policy:disabled:unlimited:1,llm-app-policy:alpha:disabled:unlimited:none:7" {
+		t.Fatalf("app policy = %d %#v", w.Code, actions.calls)
 	}
 }
 
